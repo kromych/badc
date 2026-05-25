@@ -613,21 +613,12 @@ impl Compiler {
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
                         self.symbols[id_idx].was_referenced = true;
                         self.emit_op(Op::Jsr);
-                        // Record a fixup so the operand gets re-resolved
-                        // after the callee's body lands. `val == 0`
-                        // means the body hasn't been parsed yet (the
-                        // symbol is from a forward declaration); the
-                        // value we emit now is a placeholder. After
-                        // every function body is parsed we walk this
-                        // list and rewrite each operand to the
-                        // post-body `ent_pc` of its callee. Calls that
-                        // already see a non-zero `val` (the callee's
-                        // body lands before the call, the common case)
-                        // still record an entry but the post-body walk
-                        // re-emits the same value -- a no-op rather
-                        // than a bug.
-                        let operand_pc = self.text.len();
-                        self.fn_call_fixups.push((operand_pc, id_idx));
+                        // Operand placeholder for the bytecode tape;
+                        // the walker resolves the matching
+                        // `Inst::Call::target_pc` through
+                        // `live_fun_val` and the linker's
+                        // `extern_call_refs` channel, so the
+                        // bytecode operand is no longer consulted.
                         self.emit_val(self.symbols[id_idx].val);
                     } else if self.symbols[id_idx].class == Token::Loc as i64
                         || self.symbols[id_idx].class == Token::Glo as i64
@@ -742,13 +733,11 @@ impl Compiler {
                 // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
                 self.emit_op(Op::Imm);
-                let operand_pc = self.text.len();
-                self.fn_call_fixups.push((operand_pc, id_idx));
-                // Record the operand_pc so the native codegen knows
-                // this Imm carries (CODE_BASE + bc_pc) -- otherwise
-                // a user constant that happens to land in the
-                // [CODE_BASE, CODE_BASE + text.len()) range would be
-                // misclassified as a function-pointer literal.
+                // Bytecode-tape placeholder; the walker's
+                // `imm_code_extern` / `imm_code` emit
+                // resolves the function-pointer literal on the
+                // SSA side, so the operand here is no longer
+                // consulted by the codegen.
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
@@ -761,23 +750,26 @@ impl Compiler {
                 // matching `imm_code(val)`.
                 self.ast_emit_ident(id_idx as u32, self.ty);
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare libc reference -- `fp = readlink;`. We can't
-                // fold in the real GOT/IAT address at compile time,
-                // so we point the value at a per-Sys trampoline (a
+                // Bare libc reference -- `fp = readlink;`. There
+                // is no compile-time GOT/IAT address to fold in,
+                // so the value points at a per-Sys trampoline (a
                 // tiny synthetic c5 function that re-dispatches
-                // through `Op::JsrExt`). `apply_fn_call_fixups`
-                // then patches this `Imm` operand to
-                // `CODE_BASE + trampoline_pc` once
-                // [`Self::emit_sys_trampolines`] has placed the
-                // trampolines at the tail of `text`. The
-                // accompanying `code_imm_positions` entry tells the
-                // codegen this Imm carries a code pointer so it
-                // emits the right ADRP/ADD (or RIP-relative LEA)
-                // sequence.
+                // through `Op::JsrExt`). The walker emits
+                // `Inst::ImmCode` keyed on the trampoline's live
+                // `Symbol::val`, which
+                // [`Self::emit_sys_trampolines`] sets to the
+                // trampoline body's `bc_pc`. The codegen lowers
+                // `Inst::ImmCode` to the right ADRP/ADD
+                // (aarch64) or RIP-relative LEA (x86_64)
+                // pointing at the trampoline.
                 let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
                 self.emit_op(Op::Imm);
-                let operand_pc = self.text.len();
-                self.fn_call_fixups.push((operand_pc, tr_idx));
+                // Bytecode-tape placeholder; the walker reads
+                // the trampoline's live `Symbol::val` through
+                // `imm_code` post-`emit_sys_trampolines` and
+                // emits the matching `Inst::ImmCode`. The
+                // operand here is no longer consulted by the
+                // codegen.
                 self.emit_val(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
                 // Dual-emit: the trampoline symbol is Token::Fun

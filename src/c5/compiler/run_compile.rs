@@ -404,17 +404,20 @@ impl Compiler {
                         }
                         // Leave `val` untouched. For a first-time
                         // prototype it stays at the Symbol default
-                        // (0); calls before the body see that 0 as
-                        // a placeholder, and `apply_fn_call_fixups`
-                        // rewrites them once the body sets `val =
-                        // ent_pc`. For a redeclaration after the
-                        // body has been emitted, `val` already
-                        // points at the real `ent_pc` and we must
-                        // *not* clobber it -- a previous version
-                        // of this code wrote `val = self.text.len()`
-                        // whenever val was 0, which silently broke
-                        // any function whose body legitimately
-                        // started at PC 0.
+                        // (0); the walker reads the live
+                        // `Symbol::val` through `live_fun_val`
+                        // when it lowers a call to this name, so
+                        // a call placed before the body simply
+                        // sees the post-body `ent_pc` once the
+                        // body has been parsed. For a
+                        // redeclaration after the body has been
+                        // emitted, `val` already points at the
+                        // real `ent_pc` and must not be
+                        // clobbered -- a previous version of this
+                        // code wrote `val = self.text.len()`
+                        // whenever val was 0, which silently
+                        // broke any function whose body
+                        // legitimately started at PC 0.
                     }
                     // Only warn on user-vs-user redeclarations.
                     // Sys symbols (the per-target header's libc

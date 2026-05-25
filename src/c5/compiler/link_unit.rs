@@ -4,21 +4,13 @@
 //! Live only under the `linker` feature -- single-TU consumers
 //! get the existing `compile() -> Program` path unchanged.
 //!
-//! Three behaviours diverge from a regular [`Compiler::compile`]:
+//! Two behaviours diverge from a regular [`Compiler::compile`]:
 //!
-//!   1. `fn_call_fixups` entries whose target symbol is an
-//!      undefined extern are dropped; the walker has already
-//!      recorded the cross-TU reference on the matching
-//!      `FunctionSsa::extern_call_refs` /
-//!      `extern_imm_code_refs` entry, which `resolve_extern_refs`
-//!      patches against the merged symbol table. Locally-defined
-//!      targets resolve in place via `apply_fn_call_fixups` the
-//!      same way they do for single-TU compiles.
-//!   2. `code_relocs` / `code_reloc_sym_idx` entries whose
+//!   1. `code_relocs` / `code_reloc_sym_idx` entries whose
 //!      target is an undefined extern become
 //!      `RelocKind::DataCodeAbs64` relocations -- their
 //!      `target_bc_pc` field would otherwise be left at `0`.
-//!   3. `glo_imm_refs` entries (recorded at every `Op::Imm
+//!   2. `glo_imm_refs` entries (recorded at every `Op::Imm
 //!      <data_offset>` emit for a `Token::Glo` symbol) whose
 //!      target is an undefined extern are dropped; the
 //!      walker's `extern_imm_data_refs` (or
@@ -217,23 +209,6 @@ impl Compiler {
             }
         }
 
-        // Filter fn_call_fixups down to locally-defined targets.
-        // External undefined fn references are resolved through
-        // the walker-tier `extern_call_refs` /
-        // `extern_imm_code_refs` channels recorded on each
-        // `FunctionSsa`; the bytecode-tape `Op::Jsr` /
-        // `Op::Imm` operands for those sites stay at their
-        // forward-decl placeholder (0) and are not consumed by
-        // the post-link codegen.
-        let fn_fixups = core::mem::take(&mut self.fn_call_fixups);
-        let local_fn_fixups: Vec<(usize, usize)> = fn_fixups
-            .into_iter()
-            .filter(|(_, sym_idx)| {
-                let sym = &self.symbols[*sym_idx];
-                !(sym.linkage == Linkage::External && !sym.defined_here)
-            })
-            .collect();
-
         // Partition code_relocs (data-segment function-ptr
         // slots) similarly.
         let mut local_code_relocs: Vec<crate::c5::program::CodeReloc> = Vec::new();
@@ -253,7 +228,6 @@ impl Compiler {
         }
         self.code_relocs = local_code_relocs;
         self.code_reloc_sym_idx = local_code_reloc_sym_idx;
-        self.fn_call_fixups = local_fn_fixups;
 
         // Partition data_relocs (data-segment address-of-data
         // slots) similarly. Entries whose originating symbol
@@ -287,7 +261,7 @@ impl Compiler {
         // Now run the standard local-fixup pass so resolved
         // intra-TU references get their operand bytes /
         // code_reloc target_bc_pc filled in.
-        self.apply_fn_call_fixups()?;
+        self.resolve_code_relocs()?;
 
         // Diagnose unsupported cross-TU `_Thread_local` Glo
         // references. The walker's `extern_tls_refs` channel

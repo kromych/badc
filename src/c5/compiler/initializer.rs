@@ -566,16 +566,16 @@ impl Compiler {
             // Forward-referenced function pointer in a static
             // initializer: dispatch tables that list functions
             // defined later in the same TU. The post-parse
-            // `apply_fn_call_fixups` pass already resolves
-            // `target_bc_pc` from each symbol's final `val`, so
-            // we bind the identifier as `Token::Fun` with val=0
-            // here and let the fixup pass patch both the data
-            // bytes and the CodeReloc entry once the body has
-            // been emitted. The forward-ref heuristic only
-            // fires when the next token is `,` / `}` -- i.e.,
-            // the identifier is the entire init slot, not the
-            // start of an expression that happens to use an
-            // undeclared name.
+            // [`Compiler::resolve_code_relocs`] pass rewrites
+            // each `code_relocs[i].target_bc_pc` from the
+            // originating symbol's now-resolved `Symbol::val`,
+            // so we bind the identifier as `Token::Fun` with
+            // val=0 here and let the resolve pass fill in the
+            // CodeReloc once the body has been emitted. The
+            // forward-ref heuristic only fires when the next
+            // token is `,` / `}` -- i.e., the identifier is the
+            // entire init slot, not the start of an expression
+            // that happens to use an undeclared name.
             if class == 0
                 && (self.lex.peek_after_whitespace(b',') || self.lex.peek_after_whitespace(b'}'))
             {

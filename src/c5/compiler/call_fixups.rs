@@ -1,13 +1,14 @@
-//! Forward-call backpatching and synthetic libc-trampoline emission.
+//! Code-reloc backpatching and synthetic libc-trampoline emission.
 //!
 //! Two passes that close out compilation:
 //!
-//!   * [`Compiler::apply_fn_call_fixups`] walks the linear table of
-//!     `(operand_pc, sym_idx)` pairs recorded by every `Jsr` /
-//!     bare-function-reference site and rewrites the operand to
-//!     the callee's now-resolved bytecode PC. The same pass also
-//!     drives `code_relocs` (static-initializer function-pointer
-//!     slots) using the parallel `code_reloc_sym_idx` shadow.
+//!   * [`Compiler::resolve_code_relocs`] rewrites every recorded
+//!     static-initializer function-pointer slot
+//!     (`code_relocs[i].target_bc_pc`) to the originating
+//!     symbol's post-body `Symbol::val` using the parallel
+//!     `code_reloc_sym_idx` shadow. The native writers walk
+//!     `Program::code_relocs` to lay down the per-target dynamic
+//!     relocation for each slot.
 //!
 //!   * [`Compiler::ensure_sys_trampoline_sym`] +
 //!     [`Compiler::emit_sys_trampolines`] handle the
@@ -26,48 +27,20 @@ use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::op::Op;
 use super::super::token::Token;
-use super::CODE_BASE;
 use super::Compiler;
 
 impl Compiler {
-    /// Rewrite every recorded forward-call placeholder so each
-    /// `Jsr` / fn-pointer-literal operand points at its callee's
-    /// final bytecode PC. The c5 model lets a function be *called*
-    /// before its body is parsed: the call-site emit only knows the
-    /// callee's `Symbol` index, not its `val` (which is the
-    /// bytecode PC the body will eventually land at). We stash the
-    /// `(operand_pc, sym_idx)` pair in `fn_call_fixups` at the
-    /// call-site emit; this pass walks the list and updates each
-    /// operand once every body has been emitted. The bias on
-    /// bare-function-reference emits (`CODE_BASE + val`) is
-    /// detected by reading the op preceding the operand: `Op::Imm`
-    /// means a value-context reference (fp = name) so the operand
-    /// carries the `CODE_BASE` bias; otherwise the op is `Op::Jsr`
-    /// and the operand is a raw bytecode PC.
-    pub(super) fn apply_fn_call_fixups(&mut self) -> Result<(), C5Error> {
-        for &(operand_pc, sym_idx) in &self.fn_call_fixups {
-            let target = self.symbols[sym_idx].val;
-            let op = self.text[operand_pc - 1];
-            if op == Op::Imm as i64 {
-                self.text[operand_pc] = CODE_BASE as i64 + target;
-            } else {
-                self.text[operand_pc] = target;
-            }
-        }
-        // Static-initializer function-pointer entries (vtables /
-        // function-pointer struct fields, e.g. dispatch tables of
-        // libc callbacks). Each `CodeReloc` was recorded at parse
-        // time with the
-        // symbol's prototype-time `val` (often 0); the parallel
-        // `code_reloc_sym_idx` tracks the originating symbol so
-        // we can read its post-body `val` here. We rewrite both
-        // the `target_bc_pc` and the matching little-endian
-        // bytes in `data` -- both are sourced from the same
-        // value at write time, so both must agree post-fixup.
+    /// Rewrite every `code_relocs[i].target_bc_pc` to the
+    /// originating symbol's post-body `val`. Walker-tier
+    /// `Inst::Call` / `Inst::ImmCode` references read the live
+    /// `Symbol::val` directly through `live_fun_val` and need no
+    /// post-parse fixup; only the data-segment function-pointer
+    /// initializers reach this pass.
+    pub(super) fn resolve_code_relocs(&mut self) -> Result<(), C5Error> {
         // The two arrays must be the same length (one symbol idx
         // per code reloc); a length mismatch is a bug in a
-        // CodeReloc-emitting site that forgot to record its
-        // sym idx.
+        // CodeReloc-emitting site that forgot to record its sym
+        // idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -83,13 +56,13 @@ impl Compiler {
             .iter_mut()
             .zip(self.code_reloc_sym_idx.iter())
         {
-            let new_target = self.symbols[sym_idx].val as u64;
-            reloc.target_bc_pc = new_target;
-            // Don't rewrite the data bytes -- the VM and per-target
-            // writers walk `code_relocs` and lay down their own
-            // bias (`CODE_BASE + target_bc_pc` for the VM; native
-            // VA for ELF / Mach-O / PE). They read `target_bc_pc`,
-            // not the placeholder bytes.
+            // The placeholder bytes in `self.data` stay
+            // unmodified: the VM and per-target writers walk
+            // `code_relocs` and lay down their own bias
+            // (`CODE_BASE + target_bc_pc` for the VM; native VA
+            // for ELF / Mach-O / PE). They read
+            // `target_bc_pc`, not the data bytes.
+            reloc.target_bc_pc = self.symbols[sym_idx].val as u64;
         }
         Ok(())
     }

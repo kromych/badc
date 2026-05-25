@@ -746,25 +746,15 @@ pub struct Compiler {
     /// Name of the C function whose body is currently being
     /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
     current_function_name: String,
-    /// Forward-call backpatch list. Each entry pairs a `Jsr`
-    /// operand's text position with the symbol it called. The
-    /// emit site stores `0` as a placeholder when the callee
-    /// hasn't seen its body yet (`Symbol::val == 0`); when the
-    /// body finally lands and `val` updates to the new `ent_pc`,
-    /// we walk this list and rewrite the placeholders. Without
-    /// this fixup pass any code that calls a function declared
-    /// in a header but defined further down jumps to PC 0 --
-    /// the binary's `main` entry -- and recurses into garbage.
-    fn_call_fixups: Vec<(usize, usize)>,
     /// Parallel symbol index for each entry in `code_relocs`.
     /// `parse_constant_init_value` records a CodeReloc with the
     /// callee's `Symbol::val` at parse time -- which is `0` for
     /// any function whose body hasn't been emitted yet (e.g. a
     /// dispatch table that names every callback before any
-    /// callback's body lands). The `apply_fn_call_fixups` pass
-    /// uses this index to rewrite each CodeReloc's
-    /// `target_bc_pc` and the matching data-segment bytes once
-    /// every body has been parsed.
+    /// callback's body lands). [`Compiler::resolve_code_relocs`]
+    /// reads this index post-parse and rewrites each CodeReloc's
+    /// `target_bc_pc` to the originating symbol's now-resolved
+    /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
     /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
     /// emitted as a `Token::Glo` address-of -- the data
@@ -795,9 +785,11 @@ pub struct Compiler {
     /// c5 function that re-pushes its parameters and re-dispatches
     /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
     /// fresh synthetic-symbol idx whose `.val` carries the
-    /// trampoline's `bc_pc`; the existing `apply_fn_call_fixups`
-    /// machinery then patches every recorded data slot or
-    /// `Imm` operand to `CODE_BASE + bc_pc`. Trampolines are
+    /// trampoline's `bc_pc`; the walker reads that live `val`
+    /// through `live_fun_val` when it emits the matching
+    /// `Inst::ImmCode` for the address-of site, and
+    /// `resolve_code_relocs` patches any data-slot CodeReloc
+    /// against the same `Symbol::val`. Trampolines are
     /// emitted in [`Self::emit_sys_trampolines`] after every
     /// real function body lands so they never split a caller
     /// mid-emission.
@@ -1000,7 +992,6 @@ impl Compiler {
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             current_function_name: String::new(),
-            fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
@@ -1119,11 +1110,15 @@ impl Compiler {
             return Err(e);
         }
         self.run_compile()?;
-        // Trampolines must land before fixups so their bc_pcs are
-        // resolved when `apply_fn_call_fixups` walks the recorded
-        // operands and `target_bc_pc` slots.
+        // Trampolines must land before the code-reloc resolve
+        // pass: every static-init function-pointer site that
+        // names a libc symbol references its trampoline by
+        // sym idx, and `resolve_code_relocs` reads the
+        // trampoline's `Symbol::val` (set during
+        // `emit_sys_trampolines`) to backfill each CodeReloc's
+        // `target_bc_pc`.
         self.emit_sys_trampolines();
-        self.apply_fn_call_fixups()?;
+        self.resolve_code_relocs()?;
         // Cross-TU function imports. Every extern-declared
         // `Token::Fun` symbol with no body in this TU gets a
         // unique placeholder bc_pc (past `text.len()`), then has

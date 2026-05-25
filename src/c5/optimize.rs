@@ -183,7 +183,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         code_imm_positions: in_code_imm_positions,
         tls_data,
         tls_init_size,
-        variadic_functions: in_variadic_functions,
         data_relocs,
         code_relocs,
         exports,
@@ -416,25 +415,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
-    // Variadic-function PCs are unit-local `Op::Ent` indices into
-    // `text`. The decode/encode round-trip can shift those PCs
-    // (DCE can drop a function entirely; peephole fusions shorten
-    // the body but leave the `Op::Ent` itself in place). Remap each
-    // entry through the same pc-to-idx-to-new-pc chain as the
-    // other per-PC side tables; entries whose function was removed
-    // get filtered out.
-    let remapped_variadic_functions: alloc::collections::BTreeSet<usize> = in_variadic_functions
-        .iter()
-        .filter_map(|&old_pc| {
-            let idx = *pc_at_idx_for_pc.get(&(old_pc as u64))?;
-            let new_bc_pc = new_pc.get(idx).copied()?;
-            if new_bc_pc == usize::MAX {
-                return None;
-            }
-            Some(new_bc_pc)
-        })
-        .collect();
-
     // Remap each FinishedFunction's `ent_pc` through the same
     // pre-opt -> post-opt PC table. The parser captured ent_pc
     // at the original `Op::Ent` PC; DCE and peephole fusions
@@ -592,7 +572,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         code_imm_positions,
         tls_data,
         tls_init_size,
-        variadic_functions: remapped_variadic_functions,
         data_relocs,
         code_relocs: remapped_code_relocs,
         exports,
@@ -1477,7 +1456,6 @@ mod tests {
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
-            variadic_functions: alloc::collections::BTreeSet::new(),
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
@@ -1796,7 +1774,6 @@ mod tests {
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
-            variadic_functions: alloc::collections::BTreeSet::new(),
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),

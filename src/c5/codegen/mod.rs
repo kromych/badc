@@ -262,12 +262,12 @@ pub(super) fn pc_extent_for_lowering(
 /// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
 /// Walks the bytecode once linearly; the parameter-count scan
 /// bounds at the next `Op::Ent` so the total cost is O(text.len()).
-/// The variadic flag comes from `program.variadic_functions`,
-/// populated by the compiler at declarator time and survived
-/// through the bytecode optimizer's PC remap (a byte-pattern
-/// match on `Psh; Imm 8; Mul` from the c5 `va_start` macro
-/// expansion would not survive the optimizer's immediate-arith
-/// fusion).
+/// `is_variadic` defaults to false; `lift_program` (the only
+/// caller of this path) runs solely against bytecode-only
+/// `Program` shapes produced by optimizer unit tests and codegen
+/// writer fixtures, whose programs never define a variadic
+/// function. The walker carries `is_variadic` per-function
+/// through `FunctionSsa::is_variadic` for every real compile.
 pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usize, FuncMeta> {
     let text = &program.text;
     let mut funcs = ssa_emit_common::FxIntMap::default();
@@ -282,7 +282,7 @@ pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usi
                 pc,
                 FuncMeta {
                     n_params: param_count_for_func(text, pc),
-                    is_variadic: program.variadic_functions.contains(&pc),
+                    is_variadic: false,
                 },
             );
         }

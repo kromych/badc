@@ -719,7 +719,6 @@ mod tests {
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
-            variadic_functions: alloc::collections::BTreeSet::new(),
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),

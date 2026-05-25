@@ -203,8 +203,7 @@ enum FpCmpNanFix {
 /// Map an FP comparison [`BinOp`] to the x86_64 condition code the
 /// matching `ucomisd` + `setcc` pair should use plus the NaN-fix
 /// needed after the `setcc`. Returns `None` for any non-FP-compare
-/// op. Mirrors the pool path's `emit_fp_cmp` / `emit_fp_cmp_ordered`
-/// / `emit_fp_cmp_ne` split in `super::x86_64`.
+/// op.
 fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
     Some(match op {
         BinOp::Feq => (Cc::E, FpCmpNanFix::AndNotP),
@@ -916,10 +915,10 @@ fn emit_inst(
 
 /// `Op::TlsLea` lowering. Routes through the per-target TLS
 /// access shape. Linux variant-2 layout: `var = fs:[0] - (tls_total
-/// - offset)`. The Windows path mirrors the pool emit -- TEB
-/// `gs:[0x58]` table indexed by `_tls_index` plus a final `lea` --
-/// and pushes the writer fixup so the linker can patch the
-/// `_tls_index` slot's RVA.
+/// - offset)`. The Windows path emits a TEB `gs:[0x58]` table
+/// lookup indexed by `_tls_index` plus a final `lea`, and pushes
+/// the writer fixup so the linker can patch the `_tls_index`
+/// slot's RVA.
 fn emit_tls_addr(
     code: &mut Vec<u8>,
     dst: Place,
@@ -972,13 +971,11 @@ fn emit_tls_addr(
             }
             // PE/x86_64 TLS reads gs:[0x58] (the TEB) for the TLS
             // array, indexes it by `_tls_index`, and adds the
-            // per-variable offset. The SSA allocator's pool covers
-            // rax + r11; the pool emitter's open-coded sequence
-            // uses rax + rcx as scratches, both reachable for the
-            // allocator. Use SCRATCH_R10 (r10, outside the pool)
-            // for the TEB pointer and `rd` itself for the index
-            // load -- the index is only live across one mov so
-            // reusing the destination is safe.
+            // per-variable offset. The SSA allocator covers rax /
+            // r11 / etc.; use SCRATCH_R10 (r10, outside the
+            // allocator's pool) for the TEB pointer and `rd`
+            // itself for the index load -- the index is only live
+            // across one mov so reusing the destination is safe.
             //
             // mov r10, gs:[0x58]           ; TEB
             // mov rd_w, [rip+disp32]       ; _tls_index slot
@@ -1440,11 +1437,10 @@ fn emit_store(
     true
 }
 
-/// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit of an f64. The
-/// pool path uses an `xorpd` against a sign-bit mask loaded into
-/// xmm1; here we build the mask on the fly into `SCRATCH_XMM15`
-/// (movq xmm, r10 after loading the 1 << 63 immediate into r10)
-/// and xor in place.
+/// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit of an f64.
+/// Builds the `1 << 63` sign-bit mask on the fly into
+/// `SCRATCH_XMM15` (movq xmm, r10 after loading the immediate
+/// into r10) and xors in place.
 fn emit_fneg(code: &mut Vec<u8>, dst: Place, value: u32, alloc: &Allocation, frame: Frame) -> bool {
     let src_place = alloc
         .places
@@ -1592,8 +1588,7 @@ fn emit_binop(
     // / 6.5.8p6 require `==`, `<`, `<=` to yield 0 on NaN and
     // `!=` to yield 1, so the cc-only `setb` / `sete` / `setbe`
     // / `setne` paths get an explicit AND-with-`setnp` /
-    // OR-with-`setp` fixup. Mirrors `emit_fp_cmp_ordered` /
-    // `emit_fp_cmp_ne` in the pool path.
+    // OR-with-`setp` fixup.
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
         let dn = match materialize_fp(code, lhs_place, SCRATCH_XMM14, frame) {
             Some(r) => r,
@@ -1620,12 +1615,12 @@ fn emit_binop(
             FpCmpNanFix::None => {}
             FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
                 // Need a 64-bit scratch distinct from `rd` for the
-                // parity-fix setcc. SCRATCH_R10 is outside the pool;
-                // pick rcx as a fallback when `rd` already aliases
-                // SCRATCH_R10 (the Place::Spill case). rcx is the
-                // 4th SysV int arg reg and the 1st Win64 one, but
-                // we're not at a call site so no live arg can
-                // occupy it.
+                // parity-fix setcc. SCRATCH_R10 is outside the
+                // allocator's register pool; pick rcx as a
+                // fallback when `rd` already aliases SCRATCH_R10
+                // (the Place::Spill case). rcx is the 4th SysV
+                // int arg reg and the 1st Win64 one, but we're
+                // not at a call site so no live arg can occupy it.
                 let scratch = if rd.0 == SCRATCH_R10.0 {
                     Reg(1)
                 } else {
@@ -2141,9 +2136,8 @@ fn emit_call(
     // prologue (`emit_prologue`) spills `int_arg_regs[0..n_params]`
     // into the c5 cdecl slots without distinguishing FP / int
     // params, so an FP arg routed through xmm would land in an
-    // uninitialised slot. The pool path follows the same shape at
-    // `Op::Jsr` / `Op::Jsri`. `fp_arg_mask = 0` keeps
-    // `plan_call_args` on the int-reg path.
+    // uninitialised slot. `fp_arg_mask = 0` keeps `plan_call_args`
+    // on the int-reg path.
     let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
@@ -2257,8 +2251,8 @@ fn emit_call_ext(
     // must hold the number of XMM argument registers used (printf
     // and friends consult `al` in their prologue to decide whether
     // to spill xmm0..xmm7 into the va-save area). Non-variadic
-    // SysV callees treat `al` as don't-care; zero it to match the
-    // pool path. Win64 has no such requirement and clears
+    // SysV callees treat `al` as don't-care; zero it for
+    // determinism. Win64 has no such requirement and clears
     // `variadic_zero_xmm_count` in its `Abi`.
     if abi.variadic_zero_xmm_count {
         if imp.is_variadic {

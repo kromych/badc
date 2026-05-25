@@ -598,8 +598,7 @@ fn collect_subprograms(
     // next function's emission (or `total_native` for the last).
     // A function's source name lives at
     // `program.source_functions[bc_pc]`, indexed by the bytecode
-    // entry-PC; empty when the optimizer dropped the map or for
-    // synthesised trampolines.
+    // entry-PC; empty for synthesised trampolines.
     let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
     ent_pcs.sort_unstable_by_key(|&pc| {
         build

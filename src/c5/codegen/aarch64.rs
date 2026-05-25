@@ -68,20 +68,17 @@ impl Reg {
     /// and we don't otherwise touch it.
     pub const X18: Reg = Reg(18);
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
-    /// Base of the callee-saved pseudo-stack pool used by the
-    /// native optimizer. Slot N (in [`PoolBank::Callee`]) maps to
-    /// `Reg(CALLEE_POOL_BASE.0 + N)` -- x20..x27. All eight regs
-    /// are AAPCS64 callee-saved, so the prologue only has to save
-    /// the prefix the function actually uses
-    /// (per [`regalloc::FunctionPlan::callee_depth`]).
+    /// Base of the SSA allocator's callee-saved register bank
+    /// (x20..x27). All eight regs are AAPCS64 callee-saved, so
+    /// the prologue only has to save the prefix the function
+    /// actually uses.
     pub const CALLEE_POOL_BASE: Reg = Reg(20);
-    /// Base of the caller-saved pseudo-stack pool. Slot N (in
-    /// [`PoolBank::Caller`]) maps to `Reg(CALLER_POOL_BASE.0 + N)`
-    /// -- x9..x15. AAPCS64 marks these caller-saved, so a `bl` /
-    /// `blr` would clobber them; the regalloc analyzer guarantees a
-    /// caller-bank slot is *never* live across a call op, so no
-    /// spill is needed. The prologue / epilogue likewise saves none
-    /// of these.
+    /// Base of the SSA allocator's caller-saved register bank
+    /// (x9..x15). AAPCS64 marks these caller-saved, so a `bl` /
+    /// `blr` would clobber them; the allocator guarantees a
+    /// caller-bank value is never live across a call, so no
+    /// spill is needed. The prologue / epilogue likewise saves
+    /// none of these.
     pub const CALLER_POOL_BASE: Reg = Reg(9);
     pub const X29: Reg = Reg(29); // frame pointer (fp)
     pub const X30: Reg = Reg(30); // link register (lr)

@@ -5,14 +5,6 @@
 //! (`ssa_emit_x86_64.rs`, `ssa_emit_aarch64.rs`) don't carry
 //! parallel copies.
 
-/// Hash map keyed by a small integer (bytecode PC, function id,
-/// symbol index). Uses `FxHash` -- the hasher rustc itself uses
-/// for its internal id-keyed maps -- so the codegen hot paths
-/// avoid the std `SipHash` cost on the dominant `usize` /
-/// `u32` key shape. Iteration order is not stable; only use
-/// where order does not matter.
-pub(super) type FxIntMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
-
 /// Whether the `BADC_TIME_PASSES` environment variable is set.
 /// Gates the wall-clock timer instrumentation in the codegen
 /// pipeline so a default release build pays no per-pass

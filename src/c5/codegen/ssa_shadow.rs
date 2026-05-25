@@ -91,7 +91,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     Ok(out)
 }
 
-/// SSA-source pick for the codegen backends and the Vm. Three
+/// SSA-source pick for the codegen backends and the Vm. Two
 /// sources, in priority order:
 ///
 ///   1. `program.finished_functions` non-empty -> walk_program
@@ -105,10 +105,8 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 ///      `.o` produced after the walker became canonical takes
 ///      this branch.
 ///
-///   3. Neither populated -> `lift_program` rebuilds SSA from
-///      the bytecode tape. Reached by the Vm's hand-built test
-///      fixtures and by optimizer unit tests that exercise the
-///      Vm on raw bytecode.
+/// Programs with neither populated (the empty-text writer
+/// fixtures) return an empty `Vec`.
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
@@ -133,10 +131,7 @@ pub(crate) fn produce_ssa_funcs(
         out.sort_by_key(|f| f.ent_pc);
         return Ok(out);
     }
-    if program.text.is_empty() {
-        return Ok(Vec::new());
-    }
-    super::ssa::lift_program(program)
+    Ok(Vec::new())
 }
 
 /// Maximum param slot the function reads or writes. C5's

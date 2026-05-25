@@ -30,7 +30,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::error::C5Error;
-use super::op::Op;
 use super::program::Program;
 
 mod aarch64;
@@ -42,7 +41,6 @@ mod elf_reloc;
 mod jit;
 mod mach_o;
 mod pe;
-pub(crate) mod ssa;
 mod ssa_alloc;
 pub(crate) mod ssa_build;
 #[cfg(feature = "std")]
@@ -207,20 +205,6 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
-/// Per-function metadata extracted from the bytecode tape for
-/// the `lift_program` path. Indexed by the function's `Op::Ent`
-/// PC. The walker carries equivalent metadata directly on
-/// `FunctionSsa`; this struct is reached only by hand-built
-/// bytecode-only test fixtures.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct FuncMeta {
-    /// Declared parameter count, recovered by scanning the body's
-    /// `Op::Lea / Op::LdLocI / Op::LdLocC` operands. The c5 parser
-    /// hands the i'th declared parameter the slot index `i + 2`,
-    /// so the max operand `>= 2` seen minus one is the count.
-    pub(crate) n_params: usize,
-}
-
 /// Upper bound on bc_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `bytecode_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
@@ -248,61 +232,6 @@ pub(super) fn pc_extent_for_lowering(
         .max()
         .unwrap_or(0);
     program.text.len().max(from_ssa).max(from_imports)
-}
-
-/// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
-/// Walks the bytecode once linearly; the parameter-count scan
-/// bounds at the next `Op::Ent` so the total cost is O(text.len()).
-pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usize, FuncMeta> {
-    let text = &program.text;
-    let mut funcs = ssa_emit_common::FxIntMap::default();
-    let mut pc = 0usize;
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            funcs.insert(
-                pc,
-                FuncMeta {
-                    n_params: param_count_for_func(text, pc),
-                },
-            );
-        }
-        pc += op.word_size();
-    }
-    funcs
-}
-
-/// Number of parameter slots a function actually reads. The c5
-/// parser hands param `i` (0-indexed) the slot index `i + 2`; the
-/// optimizer's local-load fusion rewrites `Lea N; Li` / `Lea N; Lc`
-/// into `LdLocI N` / `LdLocC N`, so all three opcodes count. Walks
-/// the function body until the next `Op::Ent` (or end-of-text).
-pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
-    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
-        return 0;
-    }
-    let mut max_param_offset: Option<i64> = None;
-    let mut pc = ent_pc + Op::Ent.word_size();
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            break;
-        }
-        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
-            let off = text[pc + 1];
-            if off >= 2 {
-                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
-            }
-        }
-        pc += op.word_size();
-    }
-    max_param_offset.map_or(0, |off| (off - 1) as usize)
 }
 
 /// Where a single call argument lands on the host ABI. Produced

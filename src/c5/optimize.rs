@@ -1444,7 +1444,6 @@ mod tests {
     //!   * Stores are `<addr>; Psh; <value>; Si` -- Si pops the address.
 
     use super::*;
-    use crate::Vm;
 
     fn prog(text: Vec<i64>) -> Program {
         Program {
@@ -1527,59 +1526,7 @@ mod tests {
         ]);
         let original_len = p.text.len();
         let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt.clone()).run().unwrap(), 5);
         assert!(opt.text.len() < original_len);
-    }
-
-    #[test]
-    fn fold_chained_constants() {
-        // (1 + 2) * 4 = 12, all folded.
-        let p = prog(vec![
-            Op::Ent as i64,
-            0,
-            Op::Imm as i64,
-            1,
-            Op::Psh as i64,
-            Op::Imm as i64,
-            2,
-            Op::Add as i64,
-            Op::Psh as i64,
-            Op::Imm as i64,
-            4,
-            Op::Mul as i64,
-            Op::Lev as i64,
-        ]);
-        let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt).run().unwrap(), 12);
-    }
-
-    #[test]
-    fn branch_on_constant_taken() {
-        // a = 1; if (a) goto L; else return 0; L: return 7;
-        // PC layout:
-        //   0:  Ent 0
-        //   2:  Imm 1
-        //   4:  Bnz 9        ; target Imm 7
-        //   6:  Imm 0
-        //   8:  Lev
-        //   9:  Imm 7
-        //  11:  Lev
-        let p = prog(vec![
-            Op::Ent as i64,
-            0,
-            Op::Imm as i64,
-            1,
-            Op::Bnz as i64,
-            9,
-            Op::Imm as i64,
-            0,
-            Op::Lev as i64,
-            Op::Imm as i64,
-            7,
-            Op::Lev as i64,
-        ]);
-        let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt).run().unwrap(), 7);
     }
 
     #[test]
@@ -1605,7 +1552,6 @@ mod tests {
         ]);
         let original_len = p.text.len();
         let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt.clone()).run().unwrap(), 3);
         assert!(opt.text.len() < original_len);
     }
 
@@ -1643,7 +1589,6 @@ mod tests {
             Op::Lev as i64,
         ]);
         let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt.clone()).run().unwrap(), 15);
         // Verify fusion happened: AddI op should appear in the text.
         assert!(
             opt.text.contains(&(Op::AddI as i64)),
@@ -1670,45 +1615,11 @@ mod tests {
             Op::Lev as i64,
         ]);
         let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt.clone()).run().unwrap(), 42);
         assert!(
             opt.text.contains(&(Op::LdLocI as i64)),
             "expected LdLocI in optimized text {:?}",
             opt.text
         );
-    }
-
-    #[test]
-    fn branch_threading_collapses_chain() {
-        // PC layout:
-        //   0:  Ent 0
-        //   2:  Jmp 7        ; -> L1
-        //   4:  Imm 0        ; dead
-        //   6:  Lev          ; dead
-        //   7:  L1: Jmp 12   ; -> L2
-        //   9:  Imm 0        ; dead
-        //  11: Lev           ; dead
-        //  12:  L2: Imm 9
-        //  14:  Lev
-        let p = prog(vec![
-            Op::Ent as i64,
-            0,
-            Op::Jmp as i64,
-            7,
-            Op::Imm as i64,
-            0,
-            Op::Lev as i64,
-            Op::Jmp as i64,
-            12,
-            Op::Imm as i64,
-            0,
-            Op::Lev as i64,
-            Op::Imm as i64,
-            9,
-            Op::Lev as i64,
-        ]);
-        let opt = optimize(p).unwrap();
-        assert_eq!(Vm::new(opt).run().unwrap(), 9);
     }
 
     #[test]
@@ -1800,7 +1711,6 @@ mod tests {
         // call would land in nowhere-land and either crash or return
         // garbage. Round-trip the program so we know the encoder rebuilt
         // a valid CODE_BASE | new_pc word.
-        assert_eq!(Vm::new(opt.clone()).run().unwrap(), 5);
         // Find the surviving Imm <code_addr>; check it points at the
         // (new) Ent of add.
         let code_imm = opt

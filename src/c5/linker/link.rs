@@ -17,21 +17,23 @@
 //!    own defined / undefined sets. Loop until convergence.
 //! 4. Refuse the link if any external reference is still
 //!    undefined.
-//! 5. Concatenate every unit's `text`, `data`, and `tls_data`
-//!    into the merged program, recording per-unit base
-//!    offsets.
-//! 6. Walk every word in `text` that holds a bc_pc or a
-//!    data-segment offset (intra-unit references the compiler
-//!    already resolved) and add the unit's base offset. Walk
-//!    `data_relocs` / `code_relocs` and re-base both endpoints.
-//! 7. Apply cross-TU relocations -- each [`Reloc`] points at a
-//!    location whose final value depends on the resolved
-//!    target symbol's merged-program position.
+//! 5. Concatenate every unit's `data` and `tls_data` into the
+//!    merged program, recording per-unit base offsets.
+//!    `Program::text` stays empty for multi-TU links; the SSA
+//!    tier consumes `FunctionSsa` directly and the bytecode
+//!    tape has no merged-program consumer.
+//! 6. Walk the per-unit `data_relocs` / `code_relocs` and
+//!    re-base both endpoints by the unit's data-base offset.
+//! 7. Apply cross-TU `Reloc` entries (data-segment kinds only;
+//!    the text-segment kinds retired alongside the bytecode-
+//!    tape resolver). Each entry points at a `data` slot whose
+//!    final value depends on the resolved target symbol's
+//!    merged-program position.
 //! 8. Merge the per-unit metadata: dylib + binding table
-//!    (remapping `Op::JsrExt` / `Op::TailExt` operands to the
-//!    merged binding index), source-file table (remapping
-//!    `source_file_indices`), struct registry, exports, the
-//!    chosen entry symbol, etc.
+//!    (each unit's `Inst::CallExt::binding_idx` /
+//!    `Terminator::TailExt(idx)` are remapped through
+//!    `binding_remap_per_unit[i]`), struct registry, exports,
+//!    the chosen entry symbol, etc.
 //! 9. Construct the final [`Program`] and return it ready for
 //!    `emit_native_with_options`.
 
@@ -285,7 +287,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut tls_init_cum = 0usize;
     for unit in &units {
         text_base.push(text_cum);
-        text_cum += unit.text.len();
+        text_cum += unit.text_size;
         // Pad data to 8 alignment between units so each unit's
         // own intra-segment offsets stay valid after the base
         // shift.
@@ -300,8 +302,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
 
     // Now lay out merged_data + merged_tls (init prefix) so
     // their actual byte content matches the pre-computed
-    // offsets. The text pass below populates merged_text into
-    // the matching text_base slots.
+    // offsets.
     for (i, unit) in units.iter().enumerate() {
         while merged_data.len() < data_base[i] {
             merged_data.push(0);
@@ -445,7 +446,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // file + line inline through `inst_src`, so no parallel
         // line / file columns are needed here.
         merged_source_functions.extend(unit.source_functions.iter().cloned());
-        let want = text_base[ui] + unit.text.len();
+        let want = text_base[ui] + unit.text_size;
         if merged_source_functions.len() < want {
             merged_source_functions.resize(want, String::new());
         }

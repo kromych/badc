@@ -855,6 +855,7 @@ fn cross_tu_call_through_secondary_dylib() {
     };
     let mut lib_unit = LinkUnit {
         text: lib_text.clone(),
+        text_size: lib_text.len(),
         dylibs: alloc::vec![
             DylibSpec {
                 name: "libc".to_string(),
@@ -891,6 +892,7 @@ fn cross_tu_call_through_secondary_dylib() {
     let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
     let mut other_unit = LinkUnit {
         text: unit2_text.clone(),
+        text_size: unit2_text.len(),
         dylibs: alloc::vec![DylibSpec {
             name: "libc".to_string(),
             path: "libc.so.6".to_string(),

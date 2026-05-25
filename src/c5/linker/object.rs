@@ -1817,6 +1817,7 @@ impl<'a> Reader<'a> {
         for chunk in text_bytes.chunks_exact(8) {
             text_words.push(i64::from_le_bytes(chunk.try_into().unwrap()));
         }
+        unit.text_size = text_words.len();
         unit.text = text_words;
 
         // .data

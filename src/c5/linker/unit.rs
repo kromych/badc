@@ -36,6 +36,13 @@ use super::symbol::LinkSymbol;
 pub struct LinkUnit {
     // ---- Bytecode and static data (mirror of Program) ----
     pub text: Vec<i64>,
+    /// Number of i64 words the parser emitted into this unit's
+    /// bytecode tape. Decoupled from `text.len()` so the
+    /// per-unit bc_pc base offset survives the eventual retire
+    /// of the bytecode-tape content. Set to `text.len()` by
+    /// every constructor today; future commits will let
+    /// `.o`-round-trip drop the bytes while keeping the size.
+    pub text_size: usize,
     pub data: Vec<u8>,
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,

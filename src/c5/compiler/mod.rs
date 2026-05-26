@@ -415,6 +415,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// builds `Expr::BitfieldAssign { rhs: Binop(read, op, rhs) }`
     /// per C99 6.5.16.2 (`E1 OP= E2` == `E1 = E1 OP E2`).
     pub bf_compound_assign: Option<(crate::c5::ast::ExprId, crate::c5::ir::BinOp)>,
+
+    /// True while the trailing emit is an indirect-call shape
+    /// (`Op::Jsri`, optionally followed by `Op::Adj N`). Set at
+    /// the indirect-call site, preserved across the matching Adj
+    /// cleanup, cleared by any non-Adj emit. Read by
+    /// `Self::last_emit_was_indirect_call` to suppress the
+    /// type-warning on `T x = fp();` shapes where c5 can't see
+    /// the callee's return type.
+    pub last_emit_was_indirect_call: bool,
 }
 
 impl Default for Pending {
@@ -441,6 +450,7 @@ impl Default for Pending {
             last_loaded_local_prior_pending: Vec::new(),
             bf_assign_rhs: None,
             bf_compound_assign: None,
+            last_emit_was_indirect_call: false,
         }
     }
 }

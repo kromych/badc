@@ -76,6 +76,16 @@ impl Compiler {
         if is_scalar_load_op_val(op as i64) {
             self.pending.last_loaded_local = None;
         }
+        // Indirect-call tracker. `Op::Jsri` sets the flag;
+        // `Op::Adj` (the post-call stack-cleanup op that follows
+        // Jsri with N arg slots) preserves it; any other op
+        // clears. See `last_emit_was_indirect_call` for the read
+        // side.
+        match op {
+            Op::Jsri => self.pending.last_emit_was_indirect_call = true,
+            Op::Adj => {}
+            _ => self.pending.last_emit_was_indirect_call = false,
+        }
         self.text.push(op as i64);
         self.push_recent_emit(op as i64);
         // AST hook -- ops whose shape is determined by `op` alone
@@ -243,14 +253,7 @@ impl Compiler {
     /// `Op::Adj N` (cleanup of pushed args) since that's the standard
     /// Jsri tail.
     pub(super) fn last_emit_was_indirect_call(&self) -> bool {
-        // Trailing `Op::Jsri` (no Adj follows), or the
-        // 3-word `Op::Jsri, Op::Adj, N` cleanup tail.
-        if self.recent_emits_len >= 1 && self.recent_emits[2] == Op::Jsri as i64 {
-            return true;
-        }
-        self.recent_emits_len >= 3
-            && self.recent_emits[1] == Op::Adj as i64
-            && self.recent_emits[0] == Op::Jsri as i64
+        self.pending.last_emit_was_indirect_call
     }
 
     /// If the most recently emitted op is a scalar load (`Op::Lc`

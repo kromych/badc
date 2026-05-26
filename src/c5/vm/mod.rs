@@ -76,9 +76,8 @@ impl<H: Host> Vm<H> {
     /// where there's no default; convenient in `std` for tests that
     /// want to stub IO. Trace defaults to off.
     pub fn with_host(program: Program, host: H) -> Self {
-        // Lift the program to SSA up front -- cheap relative to
-        // running the VM and lets `Vm::run` dispatch into the
-        // SSA interpreter when `BADC_VM_SSA=1`. Failures here
+        // Lift the program to SSA up front so `Vm::run` can
+        // dispatch into the interpreter directly. Failures here
         // (walker compile errors, etc.) are deferred to `run`
         // because `with_host` doesn't return `Result`.
         let ssa_funcs = super::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::host());
@@ -148,10 +147,13 @@ impl<H: Host> Vm<H> {
         self
     }
 
-    /// Execute the program. Consumes the VM because `run` mutates `text`
-    /// (appending the bootstrap), `data` (staging argv), and the recorded
-    /// `static_end`/heap state -- invoking it twice would corrupt those
-    /// invariants. Build a fresh `Vm` for each run.
+    /// Execute the program. Consumes the VM because `run` moves
+    /// `data`, `host`, and the pre-lifted `ssa_funcs` into the
+    /// interpreter; the resulting heap state is not retained
+    /// on the `Vm` instance, so reusing it would re-run from
+    /// the program's static initialisers and double-invoke the
+    /// host's TLS / atexit hooks. Build a fresh `Vm` for each
+    /// run.
     pub fn run(mut self) -> Result<i64, C5Error> {
         // `with_host` already pre-lifted every function into
         // `ssa_funcs`; surface lift errors here so callers see a

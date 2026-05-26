@@ -1202,7 +1202,6 @@ impl Compiler {
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {
-            text: self.text,
             data: self.data,
             entry_pc,
             warnings: self.warnings,

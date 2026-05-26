@@ -264,7 +264,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
 
     // Reserve the leading 8-byte zero pad in `.data` (the
     // NULL-pointer guard rail the single-TU compile uses).
-    let merged_text: Vec<i64> = Vec::new();
     let mut merged_data: Vec<u8> = alloc::vec![0u8; 8];
     let mut merged_tls: Vec<u8> = Vec::new();
     let mut merged_tls_init: usize = 0;
@@ -598,7 +597,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     }
 
     Ok(Program {
-        text: merged_text,
         data: merged_data,
         entry_pc,
         warnings: merged_warnings,

@@ -960,7 +960,6 @@ mod tests {
 
     fn empty_program(path: &str) -> Program {
         Program {
-            text: Vec::new(),
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),

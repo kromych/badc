@@ -2413,7 +2413,6 @@ mod tests {
     /// the structural invariants the tests check.
     fn tiny_program() -> Program {
         Program {
-            text: Vec::new(),
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),

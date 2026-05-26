@@ -1170,12 +1170,10 @@ fn err(msg: &str) -> C5Error {
 }
 
 /// Per-unit PC extent: the max `end_pc` across every SSA-func
-/// vector the unit carries. Equivalent to `self.text.len()` at
-/// the parser's LinkUnit construction, since every function
-/// (user + sys-trampoline) records its post-body `text.len()`
-/// as `end_pc`. Used by the merge to compute each unit's
-/// PC-base shift in the merged image without referencing the
-/// retired `LinkUnit::text_size`.
+/// vector the unit carries. The merge adds this to the running
+/// `text_cum` to compute the next unit's `text_base`, keeping
+/// every function's ent_pc / end_pc identifier unique across the
+/// merged program.
 fn unit_text_extent(unit: &LinkUnit) -> usize {
     let mut max_pc = 0usize;
     for f in &unit.finished_functions {

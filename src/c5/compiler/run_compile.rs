@@ -610,27 +610,17 @@ impl Compiler {
                     self.ast_reset();
 
                     let ent_pc = self.text.len();
-                    // Now that the body is being emitted, point the
-                    // symbol at the real `ent_pc`. Forward-declared
-                    // callers embedded `0` (the prototype-time
-                    // `text.len()`); the fixup pass at end of
-                    // run_compile rewrites their operands to this
-                    // post-body PC.
+                    // Point the symbol at the real `ent_pc`. The
+                    // walker reads Symbol::val through live_fun_val
+                    // when it lowers a call to this name, so any
+                    // call placed before the body sees the post-body
+                    // ent_pc once parsing reaches here.
                     self.symbols[id_idx].val = ent_pc as i64;
                     self.symbols[id_idx].defined_here = true;
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now
                     // defined in this translation unit.
                     self.symbols[id_idx].is_extern_decl = false;
-                    self.emit_op(Op::Ent);
-                    self.emit_val(0); // patched below
-                    // Placeholder AllocaInit. If the function body
-                    // emits any `Op::Intrinsic(Alloca)`, the
-                    // function-end fixup pass writes the
-                    // alloca-top slot index here. Otherwise the 0
-                    // stays and codegen treats the op as a no-op.
-                    self.emit_op(Op::AllocaInit);
-                    self.emit_val(0);
 
                     // Struct-value parameters: the caller pushed
                     // the struct's *address* into the param slot

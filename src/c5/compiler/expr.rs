@@ -78,9 +78,8 @@ impl Cmp {
         }
     }
 
-    /// Return the (signed, unsigned, FP, name) tuple of bytecode
-    /// ops + diagnostic spelling for this comparison. Same shape
-    /// the per-arm code emitted before the collapse.
+    /// Return the (signed, unsigned, FP, name) tuple of `Op`
+    /// tags + diagnostic spelling for this comparison.
     fn ops(self) -> (Op, Op, Op, &'static str) {
         match self {
             Cmp::Lt => (Op::Lt, Op::Ult, Op::Flt, "<"),
@@ -346,8 +345,7 @@ impl Compiler {
                     // Dual-emit `Expr::Intrinsic { kind, args, ty }`.
                     // The walker dispatches by `kind` to the matching
                     // `Inst::Intrinsic` op. Args carry through in
-                    // source order regardless of the c5 stack/acc
-                    // shuffle the bytecode tier did.
+                    // source order.
                     let intr_ty = self.ty;
                     let pos = self.ast_src_pos();
                     let id = self.ast.push_expr(
@@ -870,11 +868,10 @@ impl Compiler {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
-                    // Dual-emit: the bytecode `Lea / data-Imm` +
-                    // scalar load collapses into a single AST
-                    // `Expr::Ident` keyed on the symbol-table
-                    // index. The address-of / assignment paths
-                    // re-interpret the same node as an lvalue.
+                    // The AST node is a single `Expr::Ident` keyed
+                    // on the symbol-table index. The address-of /
+                    // assignment paths re-interpret the same node
+                    // as an lvalue.
                     self.ast_emit_ident(id_idx as u32, self.ty);
                     if identifier_is_local {
                         // Tentative: the load survives by default,
@@ -883,8 +880,8 @@ impl Compiler {
                         // `was_read` and `pending_stores` to their
                         // prior state (preserving genuine earlier
                         // reads and prior dead-store entries) if
-                        // they remove the load from the bytecode
-                        // before it executes. `last_loaded_local`
+                        // they retract the load before it
+                        // executes. `last_loaded_local`
                         // lets those helpers know which symbol the
                         // trailing load belonged to.
                         self.pending.last_loaded_local = Some(id_idx);
@@ -1107,9 +1104,9 @@ impl Compiler {
                 }
                 self.ty = t;
                 // Overwrite the AST acc with a canonical Cast
-                // node so the intermediate Binary nodes the
-                // bytecode conversion emit pushed don't surface as
-                // the cast's value. The dropped nodes have no
+                // node so any intermediate Binary nodes the
+                // conversion-shaping sequence pushed don't surface
+                // as the cast's value. The dropped nodes have no
                 // consumers; the SSA walker won't visit them.
                 if let Some(child) = cast_child_ast {
                     self.ast_emit_cast(child, t);
@@ -1472,14 +1469,12 @@ impl Compiler {
                 Op::Sub
             });
             self.emit_op(store_op_for(self.ty, self.target));
-            // Dual-emit: the bytecode tier just ran the six-op
-            // increment sequence; collapse it into one
-            // `Expr::PreInc` whose `by` is signed by the op
-            // direction so the walker can route to a single
-            // `binop_imm(Add, lvalue, by)` rather than match the
-            // sign separately. The lvalue producer is already on
-            // the parser-side vstack from the trailing-load
-            // rewrite.
+            // Build the AST `Expr::PreInc` whose `by` is signed
+            // by the op direction so the walker routes to a
+            // single `binop_imm(Add, lvalue, by)` rather than
+            // matching the sign separately. The lvalue producer
+            // is already on the parser-side vstack from the
+            // trailing-load rewrite.
             let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
             let pre_inc_ty = self.ty;
             if let Some(lvalue) = pre_inc_lvalue {
@@ -1514,10 +1509,10 @@ impl Compiler {
             self.pending.last_array_decay_bytes = 0;
             if self.lex.tk == '(' {
                 // Snapshot the callee AST + vstack depth before
-                // any of the call's bytecode emit sites perturb
-                // the dual-emit state. The indirect-call dual-
-                // emit at the end of this branch builds an
-                // `Expr::Call { callee, args, ty }` from these.
+                // any of the call's per-arg emit sites perturb
+                // the state. The Expr::Call build at the end of
+                // this branch combines them into a single
+                // `Expr::Call { callee, args, ty }`.
                 let callee_ast = self.ast_acc;
                 let ast_vstack_snapshot = self.ast_vstack.len();
                 let mut indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>> =
@@ -1894,10 +1889,10 @@ impl Compiler {
                 if let Some(idx) = assigned_local {
                     self.record_local_store(idx, line);
                 }
-                // Dual-emit `Expr::CompoundAssign`. Map the
-                // selected bytecode `Op` to the matching `BinOp`
-                // so the walker can reproduce the binop without
-                // re-running the FP-vs-int dispatch.
+                // Build `Expr::CompoundAssign`. Map the selected
+                // `Op` to the matching `BinOp` so the walker
+                // reproduces the binop without re-running the
+                // FP-vs-int dispatch.
                 use super::super::ir::BinOp as B;
                 let ast_binop = match op {
                     Op::Add => Some(B::Add),
@@ -1942,9 +1937,7 @@ impl Compiler {
                 // walker preserves the lhs side effects; without
                 // the chain, only the rhs reaches the Ternary AST
                 // and the lhs's stores / calls disappear at the
-                // walker tier. The bytecode side has the same
-                // ordering naturally because the parser already
-                // emitted the lhs's ops before resuming here.
+                // walker tier.
                 let mut then_ast = self.ast_acc;
                 while self.lex.tk == ',' {
                     self.next()?;
@@ -1971,10 +1964,9 @@ impl Compiler {
                 self.flush_pending_stores();
                 self.expr(Token::Cond as i64)?;
                 let else_ast = self.ast_acc;
-                // Dual-emit Expr::Ternary. The branch fixups above
-                // resolve forward into the bytecode; the AST
-                // captures the three sub-expressions for the
-                // walker to lower with branch + phi-like join.
+                // Build Expr::Ternary so the walker lowers the
+                // three sub-expressions with branch + phi-like
+                // join.
                 if let (Some(cond), Some(then_e), Some(else_e)) = (cond_ast, then_ast, else_ast) {
                     let pos = self.ast_src_pos();
                     let ty = self.ty;
@@ -2313,16 +2305,17 @@ impl Compiler {
                     // 0xFFFFFFFFFFFFFFFF instead of 0xFFFFFFFF.
                     let common = usual_arith_common_ty(t, self.ty, self.target);
                     if is_unsigned_ty(common) {
-                        // The masking sequence emits bytecode-only
+                        // The masking sequence routes intermediate
                         // ops (`Op::StLocI`, `Op::Or`,
-                        // `Op::And + mask`) that route through
-                        // `ast_track_emit_op` and corrupt the AST
-                        // vstack/accumulator. Snapshot the AST
-                        // operands first, save the rest of the AST
-                        // vstack, run the emit sequence against a
-                        // sentinel-padded vstack so the inner
-                        // `Op::Divu`'s embedded pop consumes the
-                        // sentinel rather than an outer expression's
+                        // `Op::And + mask`) through
+                        // `ast_track_emit_op`, which would
+                        // corrupt the AST vstack / accumulator.
+                        // Snapshot the AST operands first, save
+                        // the rest of the AST vstack, run the
+                        // emit sequence against a sentinel-padded
+                        // vstack so the inner `Op::Divu`'s
+                        // embedded pop consumes the sentinel
+                        // rather than an outer expression's
                         // lvalue, then rebuild the Binary node
                         // manually. The walker re-derives the
                         // masking from the operand type.
@@ -2430,12 +2423,10 @@ impl Compiler {
                 } else {
                     Op::Add
                 });
-                // Dual-emit `Expr::PostInc { lvalue, by, ty }`.
-                // The bytecode left the post-update bias in the
-                // accumulator; the AST replaces that with the
-                // canonical post-inc node so the walker emits
-                // load -> binop_imm(Add, by) -> store -> return
-                // the pre-update value per C99 6.5.2.4p3.
+                // Build `Expr::PostInc { lvalue, by, ty }` so
+                // the walker emits load -> binop_imm(Add, by) ->
+                // store -> return the pre-update value per C99
+                // 6.5.2.4p3.
                 let post_step = self.pointee_step(self.ty);
                 let post_signed = if self.lex.tk == Token::Inc {
                     post_step
@@ -2541,11 +2532,9 @@ impl Compiler {
                     if !elem_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }
-                    // Dual-emit a canonical `Expr::Index { array,
-                    // idx, ty }`. The bytecode tier ran the scale
-                    // + Add + load sequence; the AST collapses to
-                    // one node so the walker emits a single
-                    // address+load through `Expr::Index`.
+                    // Build a canonical `Expr::Index { array,
+                    // idx, ty }` so the walker emits a single
+                    // address+load.
                     if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
                         let idx_ty = self.ty;
                         self.ast_emit_index(array, idx, idx_ty);
@@ -2643,8 +2632,8 @@ impl Compiler {
                         self.ast_vstack.truncate(bf_vstack_depth);
                     }
                     self.ast_acc = None;
-                    // Dual-emit the AST shape now that the
-                    // bytecode-side bitfield-emit has run.
+                    // Build the AST shape now that the
+                    // bitfield-emit helper has run.
                     if let Some(obj) = obj_ast {
                         if is_bf_assign {
                             // The rhs was parsed inside

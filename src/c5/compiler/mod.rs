@@ -717,10 +717,6 @@ pub struct Compiler {
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
 
-    /// Per-bytecode-PC current function name, parallel to
-    /// `text`. Empty string for top-level emit (data
-    /// initializers, file-scope decls).
-    source_functions: Vec<String>,
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
     /// `(file, line)` state (i.e. crossing a GNU line marker on
@@ -988,7 +984,6 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
-            source_functions: Vec::new(),
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),

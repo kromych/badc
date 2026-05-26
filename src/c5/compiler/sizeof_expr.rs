@@ -142,14 +142,8 @@ impl Compiler {
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
-            // Drop the operand's emitted code. Keep the parallel
-            // `source_functions` column in lockstep with `text`
-            // -- if it grows past `text`, every subsequent
-            // `emit_op` attributes its bytecode PC to the wrong
-            // function name, and DWARF subprogram DIEs land on
-            // the previous function's name.
+            // Drop the operand's emitted code.
             self.text.truncate(saved_text_len);
-            self.source_functions.truncate(saved_text_len);
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;

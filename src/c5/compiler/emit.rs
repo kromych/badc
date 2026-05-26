@@ -92,13 +92,11 @@ impl Compiler {
             _ => {}
         }
         self.text.push(op as i64);
-        // Mirror text.len() one-for-one in source_functions so a
-        // bc_pc lookup is a direct index. Operand slots inherit
-        // the op's source function. intern_source_file keeps
-        // the `source_files` table fresh for the DWARF emitter.
+        // Refresh the `source_files` table so the DWARF emitter
+        // sees every file the lexer crossed; the function-name
+        // column tied to bytecode PCs retired with
+        // `Program::source_functions`.
         let _ = self.intern_source_file();
-        self.source_functions
-            .push(self.current_function_name.clone());
         // Dual-emit hook -- keep the AST in lockstep with the
         // bytecode for ops whose AST shape is determined by `op`
         // alone (push / pop of the parser-side vstack, arithmetic
@@ -114,8 +112,6 @@ impl Compiler {
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
         let _ = self.intern_source_file();
-        self.source_functions
-            .push(self.current_function_name.clone());
     }
 
     /// Look up the lexer's current `(file)` in `source_files`,
@@ -309,12 +305,6 @@ impl Compiler {
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
-            // Keep the parallel `source_functions` column in
-            // sync with `text`. Without the matching pop, the
-            // column's tail drifts past `text.len()` and every
-            // later `emit_op` attributes its bytecode PC to the
-            // wrong function name.
-            self.source_functions.pop();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the
             // tentative `was_read` the identifier-rvalue path

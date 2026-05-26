@@ -338,7 +338,9 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                                     bss_off,
                                 );
                             }
-                            NativeSymSection::Undef | NativeSymSection::Abs => {
+                            NativeSymSection::Undef
+                            | NativeSymSection::Abs
+                            | NativeSymSection::Common => {
                                 return Err(err(&format!(
                                     "link_native_objects: defined entry for `{}` has \
                                      non-progbits section {:?}",
@@ -398,6 +400,18 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         sym.name,
                     )));
                 }
+                NativeSymSection::Common => {
+                    // SHN_COMMON symbol -- C99 6.9.2 tentative
+                    // definition still awaiting coalescing into
+                    // `.bss`. Allocation happens in the SHN_COMMON
+                    // coalescer pass; until that lands, refuse
+                    // to apply relocs that haven't been resolved.
+                    return Err(link_err(&format!(
+                        "reloc against unresolved SHN_COMMON symbol `{}` \
+                         (tentative-definition coalescing not yet wired)",
+                        sym.name,
+                    )));
+                }
             }
         }
     }
@@ -437,6 +451,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 NativeSymSection::Abs => {
                     return Err(err(&format!(
                         "link_native_objects: .rela.data points at ABS symbol `{}`",
+                        sym.name,
+                    )));
+                }
+                NativeSymSection::Common => {
+                    return Err(link_err(&format!(
+                        ".rela.data points at SHN_COMMON symbol `{}` \
+                         (tentative-definition coalescing not yet wired)",
                         sym.name,
                     )));
                 }

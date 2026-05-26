@@ -44,6 +44,7 @@ const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
+const SHN_COMMON: u16 = 0xfff2;
 
 const ELF64_EHDR_SIZE: usize = 64;
 const ELF64_SHDR_SIZE: usize = 64;
@@ -71,6 +72,13 @@ pub enum NativeSymSection {
     /// `SHN_ABS` -- absolute symbol, typically the file symbol.
     /// The linker doesn't relocate these.
     Abs,
+    /// `SHN_COMMON` -- C99 6.9.2 tentative definition. The
+    /// symbol carries a size (`NativeSymbol::size`) and a
+    /// requested byte alignment (`NativeSymbol::value`); the
+    /// linker coalesces multi-unit definitions of the same name
+    /// into a single `.bss`-resident slot with the largest size
+    /// and strictest alignment.
+    Common,
 }
 
 /// One entry from the unit's `.symtab`. Section symbols (the
@@ -528,6 +536,13 @@ fn section_of_shndx(
     }
     if shndx == SHN_ABS {
         return (NativeSymSection::Abs, 0);
+    }
+    if shndx == SHN_COMMON {
+        // st_value is the requested alignment for SHN_COMMON
+        // symbols; the symbol decoder preserves it in
+        // NativeSymbol::value (no rebasing -- there is no
+        // backing section to concatenate into yet).
+        return (NativeSymSection::Common, 0);
     }
     let i = shndx as usize;
     if let Some(&(_, base)) = text_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
@@ -1172,6 +1187,145 @@ mod tests {
         assert_eq!(r.offset, 6);
         assert_eq!(r.sym_idx, 3);
         assert_eq!(r.addend, -4);
+    }
+
+    /// Clang under `-fcommon` (the pre-clang-11 default and gcc's
+    /// default for C without `-fno-common`) emits uninitialised
+    /// global definitions (`int uninit;`) as STB_GLOBAL with
+    /// `st_shndx = SHN_COMMON`: per ELF, `st_size` is the
+    /// symbol's byte size and `st_value` is the requested
+    /// alignment. The parser surfaces these as `Common` so the
+    /// linker can coalesce multi-unit definitions into a single
+    /// `.bss` slot (C99 6.9.2 tentative-definition rules).
+    #[test]
+    fn common_symbol_surfaces_with_size_and_alignment() {
+        const SHN_COMMON_LOCAL: u16 = 0xfff2;
+        let shstr_names: &[&str] = &["", ".shstrtab", ".strtab", ".symtab", ".text"];
+        let mut shstrtab: Vec<u8> = Vec::new();
+        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
+        for n in shstr_names {
+            shstr_off.push(shstrtab.len() as u32);
+            shstrtab.extend_from_slice(n.as_bytes());
+            shstrtab.push(0);
+        }
+        let mut strtab: Vec<u8> = vec![0];
+        let uninit_name_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"uninit_int\0");
+        // Symtab:
+        //   [0] null
+        //   [1] STB_GLOBAL STT_OBJECT SHN_COMMON, value=4 (alignment), size=4 (bytes)
+        let mut symtab: Vec<u8> = Vec::new();
+        let push_sym =
+            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
+                out.extend_from_slice(&name.to_le_bytes());
+                out.push(info);
+                out.push(0);
+                out.extend_from_slice(&shndx.to_le_bytes());
+                out.extend_from_slice(&value.to_le_bytes());
+                out.extend_from_slice(&size.to_le_bytes());
+            };
+        push_sym(&mut symtab, 0, 0, 0, 0, 0);
+        push_sym(&mut symtab, uninit_name_off, 0x11, SHN_COMMON_LOCAL, 4, 4);
+
+        const N_SECTIONS: usize = 5;
+        const HDR_SIZE: usize = 64;
+        const SHDR_SIZE: usize = 64;
+        let sec_bytes: Vec<&[u8]> = vec![&[], &shstrtab, &strtab, &symtab, &[]];
+        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
+        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
+        for body in &sec_bytes {
+            sec_offs.push(cursor);
+            cursor += body.len();
+        }
+        let mut bytes = vec![0u8; cursor];
+        bytes[0..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = ELF_CLASS_64;
+        bytes[5] = ELF_DATA_LSB;
+        bytes[6] = 1;
+        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
+        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
+        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
+        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
+        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
+        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
+        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
+        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
+
+        let write_shdr = |bytes: &mut [u8],
+                          i: usize,
+                          name_off: u32,
+                          sh_type: u32,
+                          off: usize,
+                          size: usize,
+                          link: u32,
+                          info: u32,
+                          entsize: usize| {
+            let base = HDR_SIZE + i * SHDR_SIZE;
+            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
+            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
+            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
+            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
+            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
+            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
+            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
+        };
+        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+        write_shdr(
+            &mut bytes,
+            1,
+            shstr_off[1],
+            SHT_STRTAB,
+            sec_offs[1],
+            shstrtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            2,
+            shstr_off[2],
+            SHT_STRTAB,
+            sec_offs[2],
+            strtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            3,
+            shstr_off[3],
+            SHT_SYMTAB,
+            sec_offs[3],
+            symtab.len(),
+            2,
+            1,
+            ELF64_SYM_SIZE,
+        );
+        write_shdr(
+            &mut bytes,
+            4,
+            shstr_off[4],
+            SHT_PROGBITS,
+            sec_offs[4],
+            0,
+            0,
+            0,
+            0,
+        );
+        for (i, body) in sec_bytes.iter().enumerate() {
+            let off = sec_offs[i];
+            bytes[off..off + body.len()].copy_from_slice(body);
+        }
+
+        let obj = parse_native_elf(&bytes).expect("parse SHN_COMMON fixture");
+        assert_eq!(obj.symbols.len(), 2);
+        let s = &obj.symbols[1];
+        assert!(matches!(s.section, NativeSymSection::Common));
+        assert_eq!(s.name, "uninit_int");
+        assert_eq!(s.size, 4, "byte size from st_size");
+        assert_eq!(s.value, 4, "alignment from st_value");
     }
 
     /// Clang/gcc `-fdata-sections` shape: per-variable `.data.<var>`

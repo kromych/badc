@@ -1960,7 +1960,6 @@ impl Compiler {
                 let cond_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bz);
-                let b_else = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Assign as i64)?;
                 // Comma operator in the middle of a ternary:
@@ -2001,9 +2000,7 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
                 }
-                let _ = b_else;
                 self.emit_op(Op::Jmp);
-                let _b_end = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
                 let else_ast = self.ast_acc;
@@ -2029,7 +2026,6 @@ impl Compiler {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bnz);
-                let _b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Lan as i64)?;
                 let rhs_ast = self.ast_acc;
@@ -2046,7 +2042,6 @@ impl Compiler {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bz);
-                let _b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::OrOp as i64)?;
                 let rhs_ast = self.ast_acc;

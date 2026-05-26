@@ -132,18 +132,14 @@ impl Compiler {
             None
         };
         self.emit_op(Op::Bz);
-        let end_jmp_pc = self.text.len();
         self.emit_val(0);
 
         self.emit_op(Op::Jmp);
-        let body_jmp_pc = self.text.len();
         self.emit_val(0);
 
         self.consume(b';', "semicolon expected after for-cond")?;
 
-        // Step (optional). Compiled before the body so the body can jump
-        // back to it; the body itself is reached via the `body_jmp_pc`
-        // patched a few lines below. Comma operator: `i++, k--`.
+        // Step (optional). Comma operator: `i++, k--`.
         let step_pc = self.text.len();
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
             self.parse_full_expr()?;
@@ -155,8 +151,6 @@ impl Compiler {
 
         self.consume(b')', "close paren expected")?;
 
-        // Body -- patched to start at the current PC.
-        let _ = body_jmp_pc;
         self.enter_loop();
         let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
@@ -165,7 +159,6 @@ impl Compiler {
         self.patch_loop_continues(step_pc);
         self.emit_jmp(step_pc as i64);
 
-        let _ = end_jmp_pc;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
 
@@ -214,7 +207,6 @@ impl Compiler {
 
         // Jump past the body to the dispatcher emitted at the end.
         self.emit_op(Op::Jmp);
-        let disp_pc_patch = self.text.len();
         self.emit_val(0);
 
         self.switch_cases.push(Vec::new());
@@ -227,16 +219,10 @@ impl Compiler {
 
         // Fall-through past the body skips the dispatcher entirely.
         self.emit_op(Op::Jmp);
-        let end_switch_patch = self.text.len();
         self.emit_val(0);
 
-        // Dispatcher block.
-        let _ = disp_pc_patch;
-        // The pair was pushed by the matching `switch_cases.push` /
-        // `switch_defaults.push(None)` just before `enter_switch`
-        // above, so a missing entry would be an internal parser
-        // bug; `unwrap_or_default` + `flatten` keep the codegen
-        // forward-progressing in that case rather than panicking.
+        // Dispatcher block. `switch_cases` / `switch_defaults`
+        // were primed by the matching pushes above.
         let cases = self.switch_cases.pop().unwrap_or_default();
         let default_pc = self.switch_defaults.pop().flatten();
 
@@ -254,7 +240,6 @@ impl Compiler {
             self.emit_jmp(0);
         }
 
-        let _ = end_switch_patch;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
         if let Some(disc) = disc_ast {
@@ -598,14 +583,12 @@ impl Compiler {
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
-            let _b = self.text.len();
             self.emit_val(0);
             let then_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
                 self.emit_op(Op::Jmp);
-                let _b_else = self.text.len();
                 self.emit_val(0);
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
@@ -626,7 +609,6 @@ impl Compiler {
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
-            let bz_pc = self.text.len();
             self.emit_val(0);
 
             self.enter_loop();
@@ -637,7 +619,6 @@ impl Compiler {
 
             self.emit_jmp(cond_pc as i64);
 
-            let _ = bz_pc;
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
             if let Some(cond) = cond_id {

@@ -108,30 +108,6 @@ impl Compiler {
         self.ast_track_emit_op(op);
     }
 
-    /// Emit a non-terminal control-flow op (`Op::Jmp`, `Op::Bz`,
-    /// `Op::Bnz`, `Op::Jsr`, `Op::JsrExt`, `Op::Jsri`).
-    /// Conservatively drops the dead-store tracker's pending
-    /// entries: a store straddling a branch / call may be live in
-    /// a successor the intra-block analysis can't follow.
-    pub(super) fn emit_cf_op(&mut self, op: Op) {
-        debug_assert!(matches!(
-            op,
-            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr | Op::JsrExt | Op::Jsri,
-        ));
-        self.flush_pending_stores();
-        self.emit_op(op);
-    }
-
-    /// Emit a function-terminating op (`Op::Lev`, `Op::TailExt`).
-    /// Emits one diagnostic per dead store before clearing the
-    /// tracker: no successor exists, so every pending entry is
-    /// unambiguously dead.
-    pub(super) fn emit_terminator_op(&mut self, op: Op) {
-        debug_assert!(matches!(op, Op::Lev | Op::TailExt));
-        self.emit_dead_stores_and_flush();
-        self.emit_op(op);
-    }
-
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
         self.push_recent_emit(val);

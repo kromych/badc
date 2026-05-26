@@ -25,7 +25,6 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::lexer;
-use super::super::op::Op;
 use super::super::token::Token;
 use super::Compiler;
 
@@ -235,8 +234,13 @@ impl Compiler {
             //   which matches what real-world dispatch-table
             //   consumers already do.
             if fixed_nargs == 0 && !is_variadic {
-                self.emit_terminator_op(Op::TailExt);
-                self.emit_val(binding_idx);
+                // The SSA-tier trampoline body is fully built by
+                // SsaBuilder above; bump the parser PC counter by
+                // one so the synthesised function's `end_pc`
+                // stays strictly greater than its `ent_pc`, which
+                // is what the linker and DWARF range builder
+                // require.
+                self.text.push(0);
                 self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
                 continue;
             }
@@ -261,30 +265,16 @@ impl Compiler {
                 fixed_nargs
             };
 
-            self.emit_op(Op::Ent);
-            self.emit_val(0);
-            // c5 uses cdecl push order: the first declared arg
-            // ends up on top of the stack (lowest address) so
-            // JsrExt can load arg-K from `sp + K*16`. We re-emit
-            // the pushes right-to-left -- last declared arg
-            // first -- so the trampoline's own JsrExt sees the
-            // same shape its caller passed in.
-            for i in (0..nargs).rev() {
-                self.emit_lea((i + 2) as i64);
-                self.emit_op(Op::Li);
-                self.ast_psh();
-            }
-            self.emit_cf_op(Op::JsrExt);
-            self.emit_val(binding_idx);
-            if nargs > 0 {
-                self.emit_op(Op::Adj);
-                self.emit_val(nargs as i64);
-            }
-            self.emit_terminator_op(Op::Lev);
-            // Pin the synthesised SSA entry's `end_pc` to one
-            // past the last emitted bytecode op so callers that
-            // key off `[ent_pc, end_pc)` (DWARF range builder,
-            // linker rebase) see the trampoline body's PC range.
+            // SSA body fully built by SsaBuilder above. Reserve a
+            // single PC unit so the trampoline's `end_pc` is
+            // strictly greater than `ent_pc`, satisfying the
+            // linker / DWARF range invariant. The cdecl
+            // right-to-left arg push, JsrExt + binding, Adj
+            // cleanup and Lev epilogue used to be tape ops here;
+            // the matching SSA insts live on
+            // `synthetic_ssa_funcs[synth_idx]` and drive the codegen.
+            let _ = (nargs, binding_idx);
+            self.text.push(0);
             self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
         }
     }

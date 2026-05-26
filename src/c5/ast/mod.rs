@@ -422,10 +422,10 @@ pub(crate) enum Decl {
 pub(crate) struct FinishedFunction {
     pub ast: Ast,
     pub ent_pc: usize,
-    /// One-past-the-last ent_pc the function's bytecode body
-    /// reached. Set at parser-emit close so the SSA tier does
-    /// not have to bound the function's PC range against
-    /// `program.text.len()` post hoc.
+    /// One-past-the-last ent_pc reserved for this function.
+    /// Set at parser-emit close so the SSA tier knows the
+    /// function's PC range without consulting a parser-side
+    /// counter post hoc.
     pub end_pc: usize,
     pub n_params: usize,
     pub is_variadic: bool,

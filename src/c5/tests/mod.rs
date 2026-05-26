@@ -2,7 +2,7 @@
 //!
 //! - [`lexer`]    -- drives `Lexer::next` directly and inspects the token stream.
 //! - [`parser`]   -- feeds malformed C to the compiler and asserts on errors.
-//! - [`codegen`]  -- compiles valid C and inspects `program.text`.
+//! - [`codegen`]  -- compiles valid C and inspects post-link program metadata.
 //! - [`programs`] -- end-to-end: load a `.c` fixture, compile, run, assert exit code.
 //!
 //! Tests that contain meaningful C source load it from `tests/fixtures/c/<name>.c`

@@ -116,9 +116,9 @@ impl SsaBuilder {
 
     /// One-past-the-last ent_pc the source function spans.
     /// Callers driving `walk_function` from the parser-side
-    /// `FinishedFunction::end_pc` set this so the SSA tier no
-    /// longer has to bound the range against `program.text.len()`
-    /// post-walk.
+    /// `FinishedFunction::end_pc` set this so the SSA tier knows
+    /// the function's PC range without consulting a parser-side
+    /// counter post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
     }

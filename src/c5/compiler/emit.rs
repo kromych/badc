@@ -85,17 +85,11 @@ impl Compiler {
         if is_scalar_load_op_val(op as i64) {
             self.pending.last_loaded_local = None;
         }
-        // Indirect-call tracker. `Op::Jsri` sets the flag;
-        // `Op::Adj` (the post-call stack-cleanup op that follows
-        // Jsri with N arg slots) preserves it; any other op
-        // clears. See `last_emit_was_indirect_call` for the read
-        // side.
-        match op {
-            Op::Jsri => self.pending.last_emit_was_indirect_call = true,
-            Op::Adj => {}
-            _ => self.pending.last_emit_was_indirect_call = false,
-        }
-        self.text.push(op as i64);
+        // No caller routes Op::Jsri / Op::Adj through emit_op
+        // any more (the indirect-call sites set the flag inline
+        // via the call-site path); every op that reaches here
+        // clears the flag.
+        self.pending.last_emit_was_indirect_call = false;
         self.push_recent_emit(op as i64);
         // AST hook -- ops whose shape is determined by `op` alone
         // (vstack push / pop, arithmetic and comparison binops,

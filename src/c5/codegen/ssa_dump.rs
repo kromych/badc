@@ -78,7 +78,7 @@ fn fmt_inst(inst: &Inst) -> String {
     match inst {
         Imm(v) => format!("Imm({v})"),
         ImmData(v) => format!("ImmData({v})"),
-        ImmCode(pc) => format!("ImmCode(bc_pc={pc})"),
+        ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
         Load { addr, kind } => format!("Load {{ addr=v{addr}, kind={} }}", fmt_load_kind(*kind)),

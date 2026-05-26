@@ -594,11 +594,11 @@ fn collect_subprograms(
 
     // Iterate the per-function ent_pcs the lowering recorded
     // in emission order. Native start is
-    // `pc_to_native[bc_pc]`; native end is the start of the
+    // `pc_to_native[ent_pc]`; native end is the start of the
     // next function's emission (or `total_native` for the last).
     // A function's source name comes from `build.func_names`
     // (populated by the per-arch emit from `FunctionSsa::name`),
-    // with `Program::source_functions[bc_pc]` as a fallback for
+    // with `Program::source_functions[ent_pc]` as a fallback for
     // archive-reloaded units. The per-arch emit pushes
     // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name`
     // map covers the sort-by-native-offset reorder below.
@@ -676,7 +676,7 @@ fn collect_subprograms(
 
         // Pull this subprogram's locals + parameters from
         // `program.variables`. Captured by the c5 frontend at
-        // function-body close, indexed by the Ent's bytecode pc
+        // function-body close, indexed by the Ent's ent_pc
         // so a simple equality check groups them.
         let function_bc_pc = ent_pc as u64;
         let variables = program

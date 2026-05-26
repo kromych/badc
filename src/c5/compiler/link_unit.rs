@@ -149,7 +149,7 @@ impl Compiler {
             return Err(e);
         }
         self.run_compile()?;
-        // Trampolines land before fixups so their bc_pcs are
+        // Trampolines land before fixups so their ent_pcs are
         // resolved when the local fixup pass runs.
         self.emit_sys_trampolines();
         // Re-classify `extern T x;` Glo declarations whose
@@ -400,7 +400,7 @@ impl Compiler {
                 ent_pc: 0,
             })
             .collect::<Vec<_>>();
-        // Resolve each export's bytecode PC against the now-
+        // Resolve each export's ent_pc against the now-
         // finalised symbol table. Mirrors `resolve_exports`.
         let mut resolved_exports = Vec::with_capacity(exports.len());
         for e in exports {
@@ -426,7 +426,7 @@ impl Compiler {
         }
 
         // DllMain: if a user-defined DllMain function is in
-        // scope, record its bytecode PC.
+        // scope, record its ent_pc.
         let dllmain_pc = crate::c5::lexer::find_symbol(
             &self.symbols,
             &self.symbol_index,

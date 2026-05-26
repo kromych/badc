@@ -1565,7 +1565,7 @@ fn target_for_ext(abi: super::Abi) -> Target {
     }
 }
 
-/// Direct call to a c5 user function at bytecode pc `target_pc`.
+/// Direct call to a c5 user function at ent_pc `target_pc`.
 /// Marshalls args into the host-ABI int arg registers (the FP
 /// path isn't part of the thin slice yet -- bail out on any FP-
 /// kind arg), copies overflow args onto the host stack, BL the

@@ -1827,7 +1827,7 @@ impl<'a> Walker<'a> {
     /// Address-of for an identifier. Locals lower to a
     /// `local_addr` against the symbol's slot offset; globals to
     /// an `imm_data` against the symbol's data offset; functions
-    /// to an `imm_code` against the function's bytecode PC.
+    /// to an `imm_code` against the function's ent_pc.
     /// Token::Sys and TLS variants surface as unsupported until
     /// their walker arms land.
     fn ident_address(

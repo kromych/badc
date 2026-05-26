@@ -114,7 +114,7 @@ impl SsaBuilder {
         self.func.locals = n;
     }
 
-    /// One-past-the-last bytecode PC the source function spans.
+    /// One-past-the-last ent_pc the source function spans.
     /// Callers driving `walk_function` from the parser-side
     /// `FinishedFunction::end_pc` set this so the SSA tier no
     /// longer has to bound the range against `program.text.len()`

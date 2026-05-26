@@ -757,7 +757,7 @@ impl Compiler {
                 // `Inst::ImmCode` keyed on the trampoline's live
                 // `Symbol::val`, which
                 // [`Self::emit_sys_trampolines`] sets to the
-                // trampoline body's `bc_pc`. The codegen lowers
+                // trampoline body's `ent_pc`. The codegen lowers
                 // `Inst::ImmCode` to the right ADRP/ADD
                 // (aarch64) or RIP-relative LEA (x86_64)
                 // pointing at the trampoline.

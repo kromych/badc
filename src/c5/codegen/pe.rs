@@ -923,7 +923,7 @@ pub(super) fn write(
     let entry_rva = if let Some(pc) = build.dllmain_pc.filter(|_| is_dll) {
         let off = build.pc_to_native.get(pc).copied().ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "PE writer: user-defined DllMain at bytecode PC {pc} \
+                "PE writer: user-defined DllMain at ent_pc {pc} \
                      has no entry in pc_to_native -- the lowering \
                      dropped the function?"
             )))
@@ -1076,15 +1076,15 @@ pub(super) fn write(
         // so the Windows loader adds the slide delta when ASLR
         // moves the image.
         for r in &build.code_relocs {
-            let bc_pc = r.target_ent_pc as usize;
+            let ent_pc = r.target_ent_pc as usize;
             let native_off = build
                 .pc_to_native
-                .get(bc_pc)
+                .get(ent_pc)
                 .copied()
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("PE: code reloc references missing bytecode pc {bc_pc}"),
+                    &format!("PE: code reloc references missing ent_pc {ent_pc}"),
                 )));
             }
             let preferred_va =

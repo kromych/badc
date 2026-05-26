@@ -297,15 +297,15 @@ mod jit_impl {
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
-                let bc_pc = r.target_ent_pc as usize;
+                let ent_pc = r.target_ent_pc as usize;
                 let native_off = build
                     .pc_to_native
-                    .get(bc_pc)
+                    .get(ent_pc)
                     .copied()
                     .unwrap_or(usize::MAX);
                 if native_off == usize::MAX {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!("JIT: code reloc references missing bytecode pc {bc_pc}"),
+                        &format!("JIT: code reloc references missing ent_pc {ent_pc}"),
                     )));
                 }
                 let absolute = code_vmaddr + native_off as u64;

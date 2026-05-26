@@ -55,10 +55,10 @@ pub(super) enum InitElemReloc {
     /// to convert `Some(sym)` entries against undefined
     /// externals into `DataDataAbs64` relocations.
     Data(Option<usize>),
-    /// Value is a function bytecode PC; needs a CodeReloc. The
+    /// Value is a function ent_pc; needs a CodeReloc. The
     /// payload is the function's symbol index, captured at parse
     /// time so the post-body fixup pass can look up the
-    /// resolved bytecode PC and patch both the data bytes and
+    /// resolved ent_pc and patch both the data bytes and
     /// the matching `Program::code_relocs` entry.
     Code(usize),
     /// Value is an IEEE-754 f64 bit pattern produced by a float
@@ -80,7 +80,7 @@ impl Compiler {
     ///   * `Data`        -- data-segment offset, push a DataReloc
     ///                      so the per-format writer can patch the
     ///                      slot to the runtime address.
-    ///   * `Code(sym)`   -- function bytecode PC, push a CodeReloc
+    ///   * `Code(sym)`   -- function ent_pc, push a CodeReloc
     ///                      and stash the symbol index for the
     ///                      post-body fixup pass.
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
@@ -543,9 +543,9 @@ impl Compiler {
                 let class = self.symbols[target_idx].class;
                 if class == Token::Fun as i64 {
                     self.symbols[target_idx].was_referenced = true;
-                    let bc_pc = self.symbols[target_idx].val;
+                    let ent_pc = self.symbols[target_idx].val;
                     self.next()?;
-                    return Ok((bc_pc, InitElemReloc::Code(target_idx)));
+                    return Ok((ent_pc, InitElemReloc::Code(target_idx)));
                 }
                 if class == Token::Glo as i64 {
                     let off = self.symbols[target_idx].val;
@@ -587,9 +587,9 @@ impl Compiler {
             }
             if class == Token::Fun as i64 {
                 self.symbols[idx].was_referenced = true;
-                let bc_pc = self.symbols[idx].val;
+                let ent_pc = self.symbols[idx].val;
                 self.next()?;
-                return Ok((bc_pc, InitElemReloc::Code(idx)));
+                return Ok((ent_pc, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
                 // Integer constant -- either a bare enum / macro
@@ -610,7 +610,7 @@ impl Compiler {
                 // c5 function that re-pushes its declared args and
                 // re-dispatches via `Op::JsrExt`). The CodeReloc
                 // points at the trampoline's synthetic symbol; its
-                // `.val` holds the trampoline's `bc_pc` once
+                // `.val` holds the trampoline's `ent_pc` once
                 // [`Compiler::emit_sys_trampolines`] runs in the
                 // post-parse fixup pass. From the call site's view
                 // -- e.g., a vtable consumer reading

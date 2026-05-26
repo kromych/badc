@@ -551,7 +551,7 @@ fn user_ssa_funcs_threaded_through_link_with_pc_rebase() {
     );
     // Every merged ent_pc is unique and bounds a non-empty
     // `[ent_pc, end_pc)` range. The linker rebases per-unit
-    // bc_pcs by `text_base[i]`, so two units' functions cannot
+    // ent_pcs by `text_base[i]`, so two units' functions cannot
     // share an ent_pc after the shift; a wrongly-rebased entry
     // would collide with a sibling's range or wrap to PC 0.
     let mut seen: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();

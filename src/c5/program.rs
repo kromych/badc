@@ -116,13 +116,13 @@ pub struct Program {
     /// Function-pointer initializers in the data segment. Each
     /// entry says "byte `data_offset` of the data segment must
     /// hold the runtime code address of the function whose first
-    /// instruction is at bytecode PC `target_ent_pc`". Per-format
+    /// instruction is at ent_pc `target_ent_pc`". Per-format
     /// writer handling mirrors `data_relocs` -- see [`CodeReloc`]
     /// for the per-format strategy.
     pub code_relocs: Vec<CodeReloc>,
     /// Functions the program asked to expose externally via
     /// `#pragma export(<name>)`. Each entry pairs the source
-    /// name with the function's bytecode PC -- the
+    /// name with the function's ent_pc -- the
     /// shared-object writers (Mach-O dylib, ELF .so, PE DLL)
     /// promote each entry to a real export-table record so
     /// callers in another image can resolve the symbol via
@@ -254,7 +254,7 @@ pub struct Program {
     /// for the `-c` (`OutputKind::Relocatable`) path. Each
     /// entry is `(placeholder_pc, symbol_name)`:
     /// the parser assigned `placeholder_pc` as a unique
-    /// out-of-range `bc_pc` to every extern-declared function
+    /// out-of-range `ent_pc` to every extern-declared function
     /// with no body in this TU. The walker forwards it
     /// through `live_fun_val`, so the matching `Inst::Call`
     /// carries that PC. The native codegen detects it (PC
@@ -270,7 +270,7 @@ pub struct Program {
 /// A single local variable or formal parameter belonging to a
 /// specific c5-emitted function, captured for DWARF emission.
 /// The function is identified by `function_bc_pc` --
-/// the bytecode PC of its `Op::Ent`, which the DWARF emitter
+/// the ent_pc of its `Op::Ent`, which the DWARF emitter
 /// already uses to find the matching subprogram DIE.
 #[derive(Debug, Clone)]
 pub struct VariableInfo {

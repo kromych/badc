@@ -655,10 +655,10 @@ pub struct Compiler {
     /// Function-pointer relocations for static initializers like
     /// `static const VTable v = { .xClose = my_close };`. Each
     /// entry is the byte offset in `data` of an 8-byte slot plus
-    /// the bytecode PC of the function to point at; the per-format
+    /// the ent_pc of the function to point at; the per-format
     /// writers patch the slot to the real code address at write or
     /// load time. The VM reads the slot directly because c5
-    /// function pointers carry the small `CODE_BASE + bc_pc` bias
+    /// function pointers carry the small `CODE_BASE + ent_pc` bias
     /// and `Op::Jsri` recognises that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Names from `#pragma export(<name>)` directives, in
@@ -666,7 +666,7 @@ pub struct Compiler {
     /// [`Self::run_compile`] -- each must resolve to a
     /// `Token::Fun` symbol -- and copied onto
     /// `Program::exports` together with the function's
-    /// bytecode PC. Empty for executables that don't reach
+    /// ent_pc. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
     /// Return type of the function whose body is currently being
@@ -821,7 +821,7 @@ pub struct Compiler {
     /// c5 function that re-pushes its parameters and re-dispatches
     /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
     /// fresh synthetic-symbol idx whose `.val` carries the
-    /// trampoline's `bc_pc`; the walker reads that live `val`
+    /// trampoline's `ent_pc`; the walker reads that live `val`
     /// through `live_fun_val` when it emits the matching
     /// `Inst::ImmCode` for the address-of site, and
     /// `resolve_code_relocs` patches any data-slot CodeReloc
@@ -1068,7 +1068,7 @@ impl Compiler {
         }
     }
 
-    /// Resolve the bytecode PCs for the program entry point
+    /// Resolve the ent_pcs for the program entry point
     /// (`main` or the `#pragma entrypoint(<name>)` override) and
     /// for an optional user-defined `DllMain`.
     ///
@@ -1088,7 +1088,7 @@ impl Compiler {
     /// A user-defined `DllMain` (any source-level function with
     /// that exact name) overrides the boilerplate `mov eax, 1;
     /// ret` DllMain stub the PE shared-library writer otherwise
-    /// emits. We record the bytecode PC here unconditionally --
+    /// emits. We record the ent_pc here unconditionally --
     /// the VM / JIT / non-PE writers ignore it, and the PE writer
     /// only consults it for `--shared` builds. No signature
     /// validation: c5 trusts user `main` the same way and DllMain
@@ -1189,7 +1189,7 @@ impl Compiler {
         self.resolve_code_relocs()?;
         // Cross-TU function imports. Every extern-declared
         // `Token::Fun` symbol with no body in this TU gets a
-        // unique placeholder bc_pc (past `text.len()`), then has
+        // unique placeholder ent_pc (past `text.len()`), then has
         // `Symbol::val` rewritten to that PC. The walker reads
         // `Symbol::val` through `live_fun_val` when lowering an
         // `Inst::Call`, so the matching call site carries the
@@ -1245,7 +1245,7 @@ impl Compiler {
             // row whose source symbol is an extern function so
             // the ET_REL writer can identify it as a cross-TU
             // reference. Local code_relocs already carry the
-            // function's bytecode PC and keep it.
+            // function's ent_pc and keep it.
             for (reloc, &sym_idx) in self
                 .code_relocs
                 .iter_mut()

@@ -118,7 +118,7 @@ pub(crate) enum Inst {
     Fneg(ValueId),
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
-    /// Direct call to a c5 user function at bytecode PC `target_pc`.
+    /// Direct call to a c5 user function at ent_pc `target_pc`.
     /// The call site marshals `args` per the host ABI; the per-arch
     /// emit picks per-arg placements. The instruction's defined
     /// value is the call's return slot.

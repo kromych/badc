@@ -205,7 +205,7 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
-/// Upper bound on bc_pcs the lowering needs to look up. The
+/// Upper bound on ent_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `pc_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
 /// the SSA emit produces lands in range.
@@ -779,7 +779,7 @@ pub(crate) struct Build {
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
     pub func_fixups: Vec<FuncFixup>,
-    /// Sparse map from bytecode PC (index into `Program::text`) to
+    /// Sparse map from ent_pc (index into `Program::text`) to
     /// the byte offset within `Build::text` where that op's emitted
     /// instructions start. `usize::MAX` for indices that aren't a
     /// bytecode instruction's first word (operand slots, etc.). The
@@ -891,7 +891,7 @@ pub(crate) struct Build {
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
     /// Function-pointer initializers in the data segment. Mirror
     /// of [`Program::code_relocs`]. Each entry pairs a data-segment
-    /// slot with the bytecode PC of a function; the per-format
+    /// slot with the ent_pc of a function; the per-format
     /// writer translates the PC to the native code offset via
     /// `pc_to_native` and patches the slot to the runtime
     /// code address.

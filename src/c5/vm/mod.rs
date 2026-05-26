@@ -92,7 +92,7 @@ impl<H: Host> Vm<H> {
         // captured before the TLS bytes are appended.
         let mut data = program.data;
         // Apply CodeReloc entries: function-pointer initializers in
-        // the data segment store `CODE_BASE + bc_pc` so Op::Jsri
+        // the data segment store `CODE_BASE + ent_pc` so Op::Jsri
         // recognises the slot's value as a code address. The
         // compiler can't bake this in directly because the VM's
         // CODE_BASE constant lives in this crate; we patch each

@@ -158,7 +158,7 @@ pub(super) fn is_dead_pure(
 }
 
 /// Record the native byte offset of a block's first
-/// instruction against its bytecode PC. Skips the entry block
+/// instruction against its ent_pc. Skips the entry block
 /// because the outer codegen walk already pinned the
 /// function's `Op::Ent` PC to the prologue start; overwriting
 /// it would redirect every `bl <function>` to land past the
@@ -172,10 +172,10 @@ pub(super) fn record_block_start_pc(
     // Skip `block_start_pc == 0` to avoid clobbering the
     // function-entry slot (`pc_to_native[ent_pc]`)
     // written before this routine runs. The lift's inner
-    // blocks always carry a non-zero bytecode PC (the entry
+    // blocks always carry a non-zero ent_pc (the entry
     // block holds 0 but `block_idx > 0` filters it). The
     // walker leaves `start_pc` at 0 for every block because
-    // its IR doesn't have bytecode PCs at all -- without the
+    // its IR doesn't have ent_pcs at all -- without the
     // 0-guard, walker output would overwrite
     // `pc_to_native[0]` once per inner block and the
     // post-emit entry-offset resolution would land in the

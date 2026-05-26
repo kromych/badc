@@ -1110,11 +1110,11 @@ pub(super) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
     emit(code, enc_mov_reg(rd, rn));
 }
 
-// ---- Branch fixups. Bytecode branches target absolute bytecode PCs;
+// ---- Branch fixups. Bytecode branches target absolute ent_pcs;
 //      the native PC of those targets isn't known until after the
 //      whole function body is laid out. Two-pass approach: emit a
 //      placeholder branch instruction, record (its native offset, the
-//      target bytecode PC, the kind), then patch the placeholder
+//      target ent_pc, the kind), then patch the placeholder
 //      after lowering completes.
 
 #[derive(Debug, Clone, Copy)]
@@ -1206,12 +1206,12 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
-    // Upper bound on bc_pcs the lowering will reference. The
-    // walker stamps `ent_pc` / `end_pc` against the bytecode PC
+    // Upper bound on ent_pcs the lowering will reference. The
+    // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds
     // every reachable PC.
-    let bc_pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
-    let mut pc_to_native: Vec<usize> = vec![usize::MAX; bc_pc_extent + 1];
+    let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
+    let mut pc_to_native: Vec<usize> = vec![usize::MAX; pc_extent + 1];
     // Per-callee variadic flag, derived from FunctionSsa::is_variadic
     // for locally-defined callees and from `Symbol::is_variadic`
     // for cross-TU extern-declared callees. Each call site reads
@@ -1311,10 +1311,10 @@ pub(super) fn lower(
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
     }
-    pc_to_native[bc_pc_extent] = code.len();
+    pc_to_native[pc_extent] = code.len();
 
     // Cross-TU user-function imports surfaced by the parser as
-    // placeholder bc_pcs past `text.len()`. Each `Inst::Call`
+    // placeholder ent_pcs past `text.len()`. Each `Inst::Call`
     // emits a `Fixup::Bl` with `target_ent_pc` equal to the
     // placeholder; we partition those out before
     // `apply_fixups` and re-emit them as
@@ -1350,7 +1350,7 @@ pub(super) fn lower(
         &mut code,
         &resolved_fixups,
         &pc_to_native,
-        bc_pc_extent,
+        pc_extent,
     )?;
 
     // Append one PLT trampoline per import. Every BL/B
@@ -1399,7 +1399,7 @@ pub(super) fn lower(
     // keeps that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_ent_pc) in pending_func_fixups {
-        // Cross-TU target: the placeholder bc_pc has no entry
+        // Cross-TU target: the placeholder ent_pc has no entry
         // in `pc_to_native`. Route to the same named-
         // symbol channel that data extern refs use; the linker
         // resolves the ADRP+ADD pair to `text_vaddr + target`
@@ -1411,7 +1411,7 @@ pub(super) fn lower(
             });
             continue;
         }
-        if target_ent_pc > bc_pc_extent {
+        if target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: function pointer target {target_ent_pc} past end of bytecode"
@@ -1492,11 +1492,11 @@ pub(super) fn lower(
 fn apply_fixups(
     code: &mut [u8],
     fixups: &[Fixup],
-    bc_to_native: &[usize],
-    bc_len: usize,
+    pc_to_native: &[usize],
+    pc_extent: usize,
 ) -> Result<(), C5Error> {
     for f in fixups {
-        if f.target_ent_pc > bc_len {
+        if f.target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: branch target {} past end of bytecode",
@@ -1504,7 +1504,7 @@ fn apply_fixups(
                 ),
             )));
         }
-        let target = bc_to_native[f.target_ent_pc];
+        let target = pc_to_native[f.target_ent_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(

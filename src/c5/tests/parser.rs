@@ -55,7 +55,7 @@ fn duplicate_global_definition() {
 #[test]
 fn prototype_after_definition_at_pc_zero() {
     // A prototype following a function definition used to
-    // clobber the symbol's val (= bytecode pc) when val happened
+    // clobber the symbol's val (= ent_pc) when val happened
     // to be 0 -- exactly the case for the *first* function in
     // the source. The reset would point every later call site
     // at the buffer's current pc, sending the call to a stale

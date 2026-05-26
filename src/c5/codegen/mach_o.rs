@@ -2288,15 +2288,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // (text vmaddr + native code offset). dyld adds the slide
     // delta when it walks the rebase opcode stream below.
     for r in &build.code_relocs {
-        let bc_pc = r.target_ent_pc as usize;
+        let ent_pc = r.target_ent_pc as usize;
         let native_off = build
             .pc_to_native
-            .get(bc_pc)
+            .get(ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: code reloc references missing bytecode pc {bc_pc}"),
+                &format!("Mach-O: code reloc references missing ent_pc {ent_pc}"),
             )));
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
@@ -2306,7 +2306,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             std::eprintln!(
                 "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
                 r.data_offset,
-                bc_pc,
+                ent_pc,
                 native_off,
                 preferred_va,
             );

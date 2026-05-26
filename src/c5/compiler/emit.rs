@@ -3,7 +3,7 @@
 //!
 //! Everything in here pushes onto `self.text` (the bytecode
 //! stream) and the parallel `source_functions` column so a
-//! bc_pc lookup is a direct index. The fn-pointer chain tracker
+//! ent_pc lookup is a direct index. The fn-pointer chain tracker
 //! (`fn_ptr_chain_depth`) is invalidated by every `emit_op`;
 //! identifier-loads and unary `*` re-seed it inside `expr()`.
 //!
@@ -95,7 +95,7 @@ impl Compiler {
         self.push_recent_emit(op as i64);
         // Refresh the `source_files` table so the DWARF emitter
         // sees every file the lexer crossed; the function-name
-        // column tied to bytecode PCs retired with
+        // column tied to ent_pcs retired with
         // `Program::source_functions`.
         let _ = self.intern_source_file();
         // Dual-emit hook -- keep the AST in lockstep with the
@@ -179,7 +179,7 @@ impl Compiler {
     }
 
     /// Emit `Op::Jmp <target_pc>` -- direct branch to a known
-    /// bytecode PC. The placeholder shape (Jmp + 0 operand whose
+    /// ent_pc. The placeholder shape (Jmp + 0 operand whose
     /// PC is captured for a later patch) doesn't fit this helper
     /// and stays inline at its handful of sites.
     pub(super) fn emit_jmp(&mut self, target_pc: i64) {

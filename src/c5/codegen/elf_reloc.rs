@@ -237,14 +237,14 @@ pub(super) fn write_relocatable(
     // points at the first GLOBAL entry.
 
     // Function symbols. The build records each emitted function's
-    // entry bc_pc in `func_ent_pcs`; the matching native offset
+    // entry ent_pc in `func_ent_pcs`; the matching native offset
     // lives at `pc_to_native[ent_pc]`. The function name --
     // when available -- comes from `program.source_functions`
     // via the existing DWARF builder's path. Here we synthesise
     // a `fn_<ent_pc>` placeholder; the real name plumbing lands
     // next.
     // Function names come from `program.source_functions`,
-    // indexed by bc_pc; empty entries fall back to a
+    // indexed by ent_pc; empty entries fall back to a
     // `fn_<ent_pc>` placeholder so every symbol has a non-zero
     // name regardless of whether the parser tracked it.
     //
@@ -300,7 +300,7 @@ pub(super) fn write_relocatable(
         }
     }
     // `code_relocs` targeting an extern function (the
-    // `extern_function_imports` map; placeholder bc_pcs past
+    // `extern_function_imports` map; placeholder ent_pcs past
     // `text.len()`) also need a named UNDEF entry in `.symtab`
     // so the `.rela.data` row below can point at it. Fold
     // those names into the same dedup list.
@@ -781,13 +781,13 @@ pub(super) fn write_relocatable(
     // `.text` section symbol. The linker resolves to
     // `text_vaddr + target_offset`.
     for r in &build.code_relocs {
-        let bc_pc = r.target_ent_pc as usize;
+        let ent_pc = r.target_ent_pc as usize;
         // Cross-TU target: emit against the named UNDEF
         // function symbol so the linker resolves it against
         // the sibling unit's defined entry. `r_addend = 0`
         // since the named symbol carries the target's text
         // offset directly.
-        if let Some(&name) = extern_fn_by_pc.get(&bc_pc) {
+        if let Some(&name) = extern_fn_by_pc.get(&ent_pc) {
             let pos = user_extern_names
                 .iter()
                 .position(|n| *n == name)
@@ -803,12 +803,12 @@ pub(super) fn write_relocatable(
         }
         let native_off = build
             .pc_to_native
-            .get(bc_pc)
+            .get(ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("elf_reloc: code reloc references missing bytecode pc {bc_pc}",),
+                &format!("elf_reloc: code reloc references missing ent_pc {ent_pc}",),
             )));
         }
         let rela = Elf64Rela {

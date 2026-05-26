@@ -145,15 +145,15 @@ impl Compiler {
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
-            let bc_pc = self.text.len();
-            self.symbols[tr_idx].val = bc_pc as i64;
+            let ent_pc = self.text.len();
+            self.symbols[tr_idx].val = ent_pc as i64;
             // C99 6.9 has no notion of synthetic helpers, but
             // a trampoline body is emitted into this TU's text,
             // so its symbol is `defined here` for the linker
             // concat: the rebase loop in `linker::link` shifts
             // every `Token::Fun` sym with `defined_here = true`
             // by `text_base[i]` so post-link callers find the
-            // body at the post-link bc_pc.
+            // body at the post-link ent_pc.
             self.symbols[tr_idx].defined_here = true;
 
             let fixed_nargs = self.symbols[sys_idx].params.len();
@@ -182,7 +182,7 @@ impl Compiler {
             // re-derived by `Inst::CallExt` lowering, so flipping
             // the trampoline's flag to `false` leaves the libc-
             // side `al = xmm_count` setup intact.
-            let mut sb = SsaBuilder::new(bc_pc, nargs_ssa, false);
+            let mut sb = SsaBuilder::new(ent_pc, nargs_ssa, false);
             sb.set_locals(0);
             // Synthetic trampoline body forwarding to the libc
             // binding `self.symbols[sys_idx].name`; tag the
@@ -203,11 +203,11 @@ impl Compiler {
             let r = sb.call_ext(binding_idx, arg_vals, 0);
             sb.return_(r);
             let mut func = sb.finish();
-            // SsaBuilder doesn't know the bc_pc until the
+            // SsaBuilder doesn't know the ent_pc until the
             // bytecode emit below runs. Patch `end_pc` after
             // the bytecode emit so the DWARF emitter's per-
             // function range covers the trampoline body.
-            func.end_pc = bc_pc; // patched after the bytecode emit
+            func.end_pc = ent_pc; // patched after the bytecode emit
             let _ = NO_VALUE; // keep import non-warning
             self.synthetic_ssa_funcs.push(func);
             let synth_idx = self.synthetic_ssa_funcs.len() - 1;

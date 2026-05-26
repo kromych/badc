@@ -634,8 +634,7 @@ impl Compiler {
                             self.emit_lea(self.symbols[id_idx].val);
                         } else {
                             self.emit_data_imm(self.symbols[id_idx].val);
-                            let operand_pc = self.text.len() - 1;
-                            self.glo_imm_refs.push((operand_pc, id_idx));
+                            self.glo_imm_refs.push(id_idx);
                         }
                         self.emit_op(Op::Li);
                         self.emit_op(Op::Jsri);
@@ -797,8 +796,7 @@ impl Compiler {
                     self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
-                    let operand_pc = self.text.len() - 1;
-                    self.glo_imm_refs.push((operand_pc, id_idx));
+                    self.glo_imm_refs.push(id_idx);
                 } else {
                     return Err(self
                         .compile_err(format!("undefined variable {}", self.symbols[id_idx].name)));

@@ -256,7 +256,7 @@ impl Compiler {
         // `_Thread_local` global requires per-target rebase
         // bookkeeping that has not landed (TODO).
         let glo_imm_refs = core::mem::take(&mut self.glo_imm_refs);
-        for (_operand_pc, sym_idx) in glo_imm_refs {
+        for sym_idx in glo_imm_refs {
             let sym = &self.symbols[sym_idx];
             let is_external_undefined = sym.class == Token::Glo as i64
                 && sym.linkage == Linkage::External

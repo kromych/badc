@@ -795,7 +795,13 @@ pub struct Compiler {
     /// shapes (cross-TU TLS) before the walker's
     /// `extern_imm_data_refs` / `extern_tls_refs` channels
     /// take over resolution.
-    pub(super) glo_imm_refs: alloc::vec::Vec<(usize, usize)>,
+    /// Parser-symbol indices for every `Op::Imm` emit whose
+    /// operand carries a global's tentative address. `link_unit`
+    /// walks the list at construction time to flag cross-TU
+    /// references to `_Thread_local` globals (which c5 doesn't
+    /// support yet). Only the sym_idx is read; the operand PC
+    /// retired with the bytecode tape.
+    pub(super) glo_imm_refs: alloc::vec::Vec<usize>,
     /// Per-`data_relocs` originating symbol index. Tracks the
     /// `Token::Glo` whose address an initializer like
     /// `int *p = &x;` baked into the data segment. Cross-TU

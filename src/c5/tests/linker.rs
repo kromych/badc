@@ -857,7 +857,7 @@ fn cross_tu_call_through_secondary_dylib() {
         extern_imm_data_refs: alloc::vec::Vec::new(),
         extern_tls_refs: alloc::vec::Vec::new(),
     };
-    let mut lib_unit = LinkUnit {
+    let lib_unit = LinkUnit {
         text_size: lib_text.len(),
         dylibs: alloc::vec![
             DylibSpec {
@@ -885,7 +885,6 @@ fn cross_tu_call_through_secondary_dylib() {
         synthetic_ssa_funcs: alloc::vec![lib_synthetic],
         ..Default::default()
     };
-    lib_unit.source_functions = alloc::vec![String::new(); lib_text.len()];
     let _ = lib_text;
 
     // Unit 2: only references libc (two new bindings). If the
@@ -893,7 +892,7 @@ fn cross_tu_call_through_secondary_dylib() {
     // operand resolution, the flat index 2 now lands inside
     // libc -- not libutil.
     let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
-    let mut other_unit = LinkUnit {
+    let other_unit = LinkUnit {
         text_size: unit2_text.len(),
         dylibs: alloc::vec![DylibSpec {
             name: "libc".to_string(),
@@ -910,7 +909,7 @@ fn cross_tu_call_through_secondary_dylib() {
         }],
         ..Default::default()
     };
-    other_unit.source_functions = alloc::vec![String::new(); unit2_text.len()];
+    let _ = unit2_text;
 
     let program = link_units(
         alloc::vec![other_unit, lib_unit],

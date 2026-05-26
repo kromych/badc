@@ -347,7 +347,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // for the .o round-trip (the on-disk artifact still carries
     // it) but no merged-program consumer reads its contents.
 
-    let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_files: Vec<String> = Vec::new();
     let mut source_file_offset_per_unit: Vec<u16> = Vec::with_capacity(n);
     let mut merged_variables: Vec<crate::c5::program::VariableInfo> = Vec::new();
@@ -439,16 +438,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let text_off = text_base[ui];
         let data_off = data_base[ui];
 
-        // PC-indexed source_functions parallel to the per-unit
-        // bytecode tape. DWARF / disasm look this up by
-        // post-merge bc_pc. The walker carries the per-Inst
-        // file + line inline through `inst_src`, so no parallel
-        // line / file columns are needed here.
-        merged_source_functions.extend(unit.source_functions.iter().cloned());
-        let want = text_base[ui] + unit.text_size;
-        if merged_source_functions.len() < want {
-            merged_source_functions.resize(want, String::new());
-        }
         // Variables: shift function_bc_pc.
         for v in &unit.variables {
             merged_variables.push(crate::c5::program::VariableInfo {

@@ -474,7 +474,6 @@ impl Compiler {
             data: self.data,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
-            source_functions: alloc::vec::Vec::new(),
             source_files: self.source_files,
             variables: self.variables,
             data_relocs: self.data_relocs,

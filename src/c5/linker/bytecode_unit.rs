@@ -46,10 +46,6 @@ pub struct LinkUnit {
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
 
-    /// Per-bytecode-PC function names, parallel to `text`. The
-    /// merge concatenates these so disasm / DWARF can attribute
-    /// each PC to a function name.
-    pub source_functions: Vec<String>,
     /// Filename table for the unit. The linker merges per-unit
     /// tables into a single global file table; the walker
     /// stamps per-Inst file indices through `inst_src`, which

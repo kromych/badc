@@ -650,7 +650,6 @@ const TAG_DATA_IMM_POSITIONS: u8 = 2;
 const TAG_CODE_IMM_POSITIONS: u8 = 3;
 const TAG_CALL_FP_ARG_MASKS: u8 = 4;
 const TAG_SOURCE_LINES: u8 = 5;
-const TAG_SOURCE_FUNCTIONS: u8 = 6;
 const TAG_SOURCE_FILES: u8 = 7;
 const TAG_SOURCE_FILE_INDICES: u8 = 8;
 const TAG_VARIABLES: u8 = 9;
@@ -688,11 +687,6 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     write_tag_u64(&mut buf, TAG_TLS_INIT_SIZE, unit.tls_init_size as u64);
     write_tag_u64(&mut buf, TAG_TEXT_SIZE, unit.text_size as u64);
 
-    {
-        let body_len = u32_string_vec_len(&unit.source_functions);
-        write_tag_header(&mut buf, TAG_SOURCE_FUNCTIONS, body_len);
-        write_string_vec(&mut buf, &unit.source_functions);
-    }
     {
         let body_len = u32_string_vec_len(&unit.source_files);
         write_tag_header(&mut buf, TAG_SOURCE_FILES, body_len);
@@ -2145,7 +2139,6 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                 // carry these tags; skip silently to preserve
                 // forward compatibility.
             }
-            TAG_SOURCE_FUNCTIONS => unit.source_functions = read_string_vec(body)?,
             TAG_SOURCE_FILES => unit.source_files = read_string_vec(body)?,
             TAG_VARIABLES => {
                 if body.len() < 4 {

@@ -671,21 +671,12 @@ const TAG_WARNINGS: u8 = 19;
 /// reconstructs the FunctionSsa via `SsaBuilder`.
 const TAG_SYNTHETIC_SSA_FUNCS: u8 = 20;
 const TAG_USER_SSA_FUNCS: u8 = 21;
-/// Number of i64 words in the per-unit bytecode tape. Linker
-/// merge consumes this through `LinkUnit::text_size` to compute
-/// the per-unit bc_pc base offset. The bytecode bytes
-/// themselves are not serialized into the `.text` section any
-/// more; only the size survives, which is what every remaining
-/// merged-program consumer needs.
-const TAG_TEXT_SIZE: u8 = 22;
-
 fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     let mut buf = Vec::new();
     buf.extend_from_slice(META_MAGIC);
     buf.extend_from_slice(&META_VERSION.to_le_bytes());
 
     write_tag_u64(&mut buf, TAG_TLS_INIT_SIZE, unit.tls_init_size as u64);
-    write_tag_u64(&mut buf, TAG_TEXT_SIZE, unit.text_size as u64);
 
     {
         let body_len = u32_string_vec_len(&unit.source_files);
@@ -1840,12 +1831,7 @@ impl<'a> Reader<'a> {
             text.sh_size as usize,
             ".badc.text",
         )?;
-        // `text_size` ships in the META section's
-        // `TAG_TEXT_SIZE` tag now that the bytecode bytes have
-        // retired; fall back to the decoded word count for
-        // backward compatibility with `.o` files written before
-        // the tag landed.
-        unit.text_size = text_bytes.len() / 8;
+        let _ = text_bytes;
 
         // .data
         unit.data = slice_of(
@@ -2123,12 +2109,6 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     return Err(err("tls_init_size body too short"));
                 }
                 unit.tls_init_size = u64_at(body, 0) as usize;
-            }
-            TAG_TEXT_SIZE => {
-                if body.len() < 8 {
-                    return Err(err("text_size body too short"));
-                }
-                unit.text_size = u64_at(body, 0) as usize;
             }
             TAG_DATA_IMM_POSITIONS
             | TAG_CODE_IMM_POSITIONS

@@ -286,7 +286,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut tls_init_cum = 0usize;
     for unit in &units {
         text_base.push(text_cum);
-        text_cum += unit.text_size;
+        text_cum += unit_text_extent(unit);
         // Pad data to 8 alignment between units so each unit's
         // own intra-segment offsets stay valid after the base
         // shift.
@@ -1206,4 +1206,31 @@ fn link_err(msg: &str) -> C5Error {
 /// link path; keep the ICE marker.
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
+}
+
+/// Per-unit PC extent: the max `end_pc` across every SSA-func
+/// vector the unit carries. Equivalent to `self.text.len()` at
+/// the parser's LinkUnit construction, since every function
+/// (user + sys-trampoline) records its post-body `text.len()`
+/// as `end_pc`. Used by the merge to compute each unit's
+/// PC-base shift in the merged image without referencing the
+/// retired `LinkUnit::text_size`.
+fn unit_text_extent(unit: &LinkUnit) -> usize {
+    let mut max_pc = 0usize;
+    for f in &unit.finished_functions {
+        if f.end_pc > max_pc {
+            max_pc = f.end_pc;
+        }
+    }
+    for f in &unit.synthetic_ssa_funcs {
+        if f.end_pc > max_pc {
+            max_pc = f.end_pc;
+        }
+    }
+    for f in &unit.user_ssa_funcs {
+        if f.end_pc > max_pc {
+            max_pc = f.end_pc;
+        }
+    }
+    max_pc
 }

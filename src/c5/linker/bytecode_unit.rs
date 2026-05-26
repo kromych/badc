@@ -41,7 +41,6 @@ pub struct LinkUnit {
     /// longer carried on `LinkUnit` -- every merged-program
     /// consumer reads SSA via `user_ssa_funcs` /
     /// `synthetic_ssa_funcs` instead.
-    pub text_size: usize,
     pub data: Vec<u8>,
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,

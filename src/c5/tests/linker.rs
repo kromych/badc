@@ -244,11 +244,6 @@ fn object_round_trip_through_elf_wrapper() {
         "object bytes should at least contain an ELF header"
     );
     let parsed = read_object(&bytes).expect("read_object");
-    // Bytecode bytes no longer travel through `.o`; the linker
-    // consumes `text_size` (the per-unit bc_pc range count) and
-    // walker-tier `FunctionSsa` entries instead. Round-trip on
-    // the size is what matters.
-    assert_eq!(parsed.text_size, a.text_size, "text_size round-trip");
     assert_eq!(parsed.data, a.data, "data round-trip");
     assert_eq!(parsed.dylibs.len(), a.dylibs.len(), "dylib count");
     assert_eq!(parsed.structs.len(), a.structs.len(), "struct count");
@@ -823,20 +818,13 @@ fn cross_tu_call_through_secondary_dylib() {
     };
 
     // Unit 1: declares libc {printf, malloc} + libutil {do_work},
-    // body of `lib_call` is `Op::JsrExt 2; Op::Lev`, which under
-    // the parser's flat-index scheme names libutil's `do_work`
+    // body of `lib_call` calls binding flat-index 2, which under
+    // the parser's scheme names libutil's `do_work`
     // (sum(libc.bindings)=2, plus position 0 within libutil).
-    let lib_text = alloc::vec![
-        Op::Ent as i64,
-        0,
-        Op::JsrExt as i64,
-        2, // libutil::do_work in unit 1's view
-        Op::Lev as i64,
-    ];
     let lib_synthetic = crate::c5::ir::FunctionSsa {
         name: alloc::string::String::new(),
         ent_pc: 0,
-        end_pc: lib_text.len(),
+        end_pc: 5,
         locals: 0,
         n_params: 0,
         is_variadic: false,
@@ -858,7 +846,6 @@ fn cross_tu_call_through_secondary_dylib() {
         extern_tls_refs: alloc::vec::Vec::new(),
     };
     let lib_unit = LinkUnit {
-        text_size: lib_text.len(),
         dylibs: alloc::vec![
             DylibSpec {
                 name: "libc".to_string(),
@@ -885,15 +872,12 @@ fn cross_tu_call_through_secondary_dylib() {
         synthetic_ssa_funcs: alloc::vec![lib_synthetic],
         ..Default::default()
     };
-    let _ = lib_text;
 
     // Unit 2: only references libc (two new bindings). If the
     // merge appends these to the merged libc *before* unit 1's
     // operand resolution, the flat index 2 now lands inside
     // libc -- not libutil.
-    let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
     let other_unit = LinkUnit {
-        text_size: unit2_text.len(),
         dylibs: alloc::vec![DylibSpec {
             name: "libc".to_string(),
             path: "libc.so.6".to_string(),
@@ -909,7 +893,6 @@ fn cross_tu_call_through_secondary_dylib() {
         }],
         ..Default::default()
     };
-    let _ = unit2_text;
 
     let program = link_units(
         alloc::vec![other_unit, lib_unit],

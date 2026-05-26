@@ -468,9 +468,7 @@ impl Compiler {
             remap(&mut func.extern_tls_refs);
         }
 
-        let text_size = self.text.len();
         Ok(LinkUnit {
-            text_size,
             data: self.data,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,

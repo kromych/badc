@@ -404,10 +404,9 @@ impl Compiler {
             _ => (Op::Li, Op::Si),
         };
         if self.lex.tk == Token::Assign {
-            // Bitfield write: `s.f = expr`. The c5 stack discipline
-            // is delicate here -- we need the storage address
-            // available for the final Si, so push it now and reload
-            // through indirection later.
+            // Bitfield write: `s.f = expr`. The storage address
+            // must remain available for the final Si; push it now
+            // and reload through indirection later.
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
             self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr

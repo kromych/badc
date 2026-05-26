@@ -1395,8 +1395,8 @@ impl Compiler {
         } else if self.lex.tk == Token::SubOp {
             self.next()?;
             // Constant-fold `-<int-literal>` into `Imm -N`. Float
-            // literals don't qualify -- we want Op::Fneg to apply
-            // to the parsed f64 bit pattern, not a sign flip on the
+            // literals don't qualify -- Op::Fneg must apply to the
+            // parsed f64 bit pattern, not a sign flip on the
             // integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;

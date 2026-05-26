@@ -1866,10 +1866,10 @@ pub(super) fn write(
 
     // [N+2..N+6] DWARF debug sections (file-only metadata, no
     // SHF_ALLOC so the loader skips them). `.debug_frame`
-    // carries the CFI a debugger / unwinder reads to walk through
-    // optimised frames without prologue heuristics. Suppressed
-    // when `--no-debug` was passed -- the section table
-    // simply omits these five entries; nothing else in the file
+    // carries the CFI a debugger / unwinder reads to walk
+    // through optimised frames without prologue heuristics.
+    // Suppressed when `--no-debug` was passed -- the section
+    // table omits these five entries; nothing else in the file
     // image references them.
     if emit_dwarf {
         let dwarf_section_specs: &[(u32, u64, u64)] = &[

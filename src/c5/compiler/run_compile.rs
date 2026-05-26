@@ -407,9 +407,9 @@ impl Compiler {
                         // (0); the walker reads the live
                         // `Symbol::val` through `live_fun_val`
                         // when it lowers a call to this name, so
-                        // a call placed before the body simply
-                        // sees the post-body `ent_pc` once the
-                        // body has been parsed. For a
+                        // a call placed before the body sees the
+                        // post-body `ent_pc` once the body has
+                        // been parsed. For a
                         // redeclaration after the body has been
                         // emitted, `val` already points at the
                         // real `ent_pc` and must not be

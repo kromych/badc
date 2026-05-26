@@ -1555,7 +1555,7 @@ fn apply_fixups(
 #[derive(Debug, Clone, Copy)]
 pub(super) struct PltCallFixup {
     /// Byte offset within the lower-pass `code` of the BL/B
-    /// instruction whose `imm26` we need to backfill.
+    /// instruction whose `imm26` the fixup pass backfills.
     pub(super) instr_offset: usize,
     /// Import slot the call should reach via its trampoline.
     pub(super) import_index: usize,

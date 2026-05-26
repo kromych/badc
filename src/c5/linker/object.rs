@@ -761,7 +761,8 @@ mod tests {
             obj.text[off + 2],
             obj.text[off + 3],
         ]);
-        // imm26 occupies bits 0..26; we want them all zero.
+        // imm26 occupies bits 0..26 and must be zero in the
+        // raw BL/B placeholder.
         let imm26 = instr & 0x03ff_ffff;
         assert_eq!(
             imm26, 0,

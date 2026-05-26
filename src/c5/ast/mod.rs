@@ -1,10 +1,10 @@
 //! Per-function AST.
 //!
 //! Built by the parser (`c5::compiler`) one function at a time and
-//! consumed by `c5::ast::walk` (a separate file once added) to drive
-//! `c5::codegen::ssa_build::SsaBuilder`. Replaces the stack-machine
-//! bytecode tier as the canonical function-shaped IR; a follow-on
-//! patch wires the parser onto it and retires the bytecode lift.
+//! consumed by `c5::ast::walk` to drive
+//! `c5::codegen::ssa_build::SsaBuilder`. The canonical
+//! function-shaped IR the walker descends to produce
+//! `FunctionSsa`.
 //!
 //! Layout follows the same indexed-arena shape `FunctionSsa` uses:
 //! every node lives in a flat `Vec`, references are `u32` indices.
@@ -256,9 +256,8 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// Compiler-builtin call (alloca, memset, setjmp, longjmp,
-    /// ...). `kind` is the same integer tag the bytecode tier
-    /// uses for `Op::Intrinsic`; the walker forwards it to
-    /// `Inst::Intrinsic`.
+    /// ...). `kind` is the `Op::Intrinsic` discriminant; the
+    /// walker forwards it to `Inst::Intrinsic`.
     Intrinsic {
         kind: i64,
         args: Vec<ExprId>,
@@ -321,8 +320,7 @@ pub(crate) enum Stmt {
     /// `label: body` (C99 6.8.1) -- the goto target.
     Labeled { label: LabelId, body: StmtId },
     /// Inline assembly. `text` is the assembler source; `clobbers`
-    /// is the comma-separated clobber list. c5's asm shape stays
-    /// the same as the bytecode tier carried.
+    /// is the comma-separated clobber list.
     Asm {
         text: alloc::string::String,
         clobbers: alloc::string::String,
@@ -356,9 +354,9 @@ pub(crate) struct RuntimeInitElement {
 ///   `store_local`.
 /// * `Aggregate { src_data_off, size_bytes }` -- a brace-list
 ///   initializer whose every element folded to a compile-time
-///   constant. The bytecode tier staged the bytes at
-///   `src_data_off` inside `Program.data`; the walker emits
-///   `Inst::Mcpy` to copy them into the local's slot.
+///   constant. The parser stages the bytes at `src_data_off`
+///   inside `Program.data`; the walker emits `Inst::Mcpy` to
+///   copy them into the local's slot.
 /// * `Runtime { zero_init, elements }` -- a brace-list
 ///   initializer with at least one non-constant element. C99
 ///   6.7.8p13. `zero_init` is the optional Mcpy-from-staged-zero
@@ -404,20 +402,21 @@ pub(crate) enum Decl {
     Vla { sym: u32, dim: ExprId },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
-    /// be constant). The bytecode tier promotes the symbol to
-    /// the `Glo` class with persistent storage in `.data`; the
-    /// initializer is staged at TU load time, not at the
-    /// declaration site. The AST records the binding for
-    /// completeness; the walker emits nothing because the
-    /// storage + init live outside the function body.
+    /// be constant). The parser promotes the symbol to the `Glo`
+    /// class with persistent storage in `.data`; the initializer
+    /// is staged at TU load time, not at the declaration site.
+    /// The AST records the binding for completeness; the walker
+    /// emits nothing because the storage + init live outside the
+    /// function body.
     StaticLocal { sym: u32 },
 }
 
 /// Per-function AST snapshot captured at function-end. Carries
 /// the metadata the SSA walker needs alongside the node arenas:
-/// the bytecode entry PC for symbol-PC remapping, the param
-/// count + variadic flag for the function prologue, and the
-/// post-parse local slot high-water mark for frame sizing.
+/// the function's ent_pc identifier for symbol-PC remapping,
+/// the param count + variadic flag for the function prologue,
+/// and the post-parse local slot high-water mark for frame
+/// sizing.
 #[derive(Debug, Clone)]
 pub(crate) struct FinishedFunction {
     pub ast: Ast,
@@ -576,16 +575,16 @@ impl Ast {
     }
 
     /// Linker-side fixup for multi-TU builds: shift every
-    /// `Token::Fun` ident's `val` (the callee's pre-link `Op::Ent`
-    /// PC) by `text_base`, matching how the bytecode's `Op::Jsr`
-    /// operands are rebased through `apply_reloc`. The walker
-    /// reads `val` directly when the merged `Symbol` table is
-    /// empty (the multi-TU path), so without this fixup an
-    /// in-unit `Expr::Call` to a defined-in-the-same-unit
-    /// function lowers to `Inst::Call { target_pc = pre-link PC }`
-    /// and the SSA emit's `pc_to_native[target_pc]` lookup
-    /// hits an unmapped slot. Cross-unit references (forward
-    /// `extern` calls into another unit) carry `val == 0` and are
+    /// `Token::Fun` ident's `val` (the callee's pre-link
+    /// `ent_pc`) by `text_base`, mirroring the rebase the linker
+    /// applies elsewhere through `apply_reloc`. The walker reads
+    /// `val` directly when the merged `Symbol` table is empty
+    /// (the multi-TU path), so without this fixup an in-unit
+    /// `Expr::Call` to a defined-in-the-same-unit function
+    /// lowers to `Inst::Call { target_pc = pre-link PC }` and
+    /// the SSA emit's `pc_to_native[target_pc]` lookup hits an
+    /// unmapped slot. Cross-unit references (forward `extern`
+    /// calls into another unit) carry `val == 0` and are
     /// handled by the symbol-table fixup pass on the linker side.
     pub(crate) fn rebase_function_pcs(&mut self, text_base: i64) {
         use crate::c5::token::Token;
@@ -628,10 +627,8 @@ impl Ast {
     /// Linker-side fixup: remap every `Token::Sys` ident's `val`
     /// from the unit-local `#pragma binding` flat index to the
     /// merged binding flat index produced by `linker::link::merge`.
-    /// The bytecode side rewrites `Op::JsrExt` / `Op::TailExt`
-    /// operands through the same `binding_remap` table; the
-    /// walker reads `val` straight off the AST snapshot, so the
-    /// snapshot needs the same rewrite or the emitted
+    /// The walker reads `val` straight off the AST snapshot, so
+    /// the snapshot needs the rewrite or the emitted
     /// `Inst::CallExt::binding_idx` reaches the wrong libc
     /// import.
     pub(crate) fn rebase_sys_binding_indices(&mut self, remap: &[i64]) {
@@ -659,11 +656,6 @@ impl Ast {
     /// walker's `struct_size(ty)` indexes the wrong entry and
     /// emits the wrong `Inst::Mcpy` byte count for struct
     /// assignments / returns / struct-by-value params.
-    ///
-    /// The bytecode tier sidesteps this because the parser bakes
-    /// `Op::Mcpy <size>` at parse time with `size_of_type(ty)`;
-    /// the bytecode never re-consults the struct table after
-    /// linking.
     /// Linker-side fixup for multi-TU builds: shift every
     /// `SrcPos::file` carried on the parallel `expr_src` /
     /// `stmt_src` / `decl_src` arrays by `file_offset`. The

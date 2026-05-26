@@ -273,11 +273,11 @@ impl Compiler {
 
         // Lower every parser-finished function to FunctionSsa
         // up-front so the symbol-table build below can gate
-        // undefined-external entries against walker-tier refs
-        // as well as bytecode-tier relocations. Object-file
-        // round-trips ship the FunctionSsa vector verbatim, so
-        // the codegen reads SSA from `user_ssa_funcs` for both
-        // fresh compiles and reloads.
+        // undefined-external entries against the walker's
+        // call / ImmCode / ImmData refs. Object-file round-trips
+        // ship the FunctionSsa vector verbatim, so the codegen
+        // reads SSA from `user_ssa_funcs` for both fresh compiles
+        // and reloads.
         let mut user_ssa_funcs = walker_funcs_for(
             &self.finished_functions,
             &self.symbols,

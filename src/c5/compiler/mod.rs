@@ -569,9 +569,9 @@ pub struct Compiler {
     /// Number of currently-open `break`-eligible scopes
     /// (`while` / `for` / `do-while` bodies, plus `switch`
     /// bodies). Used to flag `break` outside any such scope.
-    /// The old per-scope Vec of jmp-pc lists retired when the
-    /// bytecode tape backpatches went away; only the depth
-    /// counter survives.
+    /// The walker handles branch-target resolution from the
+    /// AST; only the depth counter survives here for the
+    /// "break outside loop / switch" check.
     loop_break_depth: usize,
     /// Number of currently-open `continue`-eligible scopes
     /// (loops only; `switch` doesn't open one).
@@ -784,11 +784,11 @@ pub struct Compiler {
     /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
 
-    /// Ring buffer of the 3 most-recently-emitted `text` words
-    /// (op and operand slots in `emit_op` / `emit_val` order).
-    /// Replaces direct `self.text[n - 1]` peeks in the trailing-
-    /// op detectors so the parser-internal peephole doesn't
-    /// depend on the bytecode tape's storage layout.
+    /// Ring buffer of the 3 most-recently-emitted op ids /
+    /// operand values (in `emit_op` / `emit_val` call order).
+    /// Backs the trailing-op peek detectors
+    /// (`last_emit_is_zero`, `pop_trailing_scalar_load`,
+    /// `rewrite_trailing_load_as_psh`); no tape underlies it.
     recent_emits: [i64; 3],
     /// Count of valid entries in `recent_emits` (saturates at 3).
     /// Lets the detectors reject false positives on a fresh
@@ -808,8 +808,7 @@ pub struct Compiler {
     /// operand carries a global's tentative address. `link_unit`
     /// walks the list at construction time to flag cross-TU
     /// references to `_Thread_local` globals (which c5 doesn't
-    /// support yet). Only the sym_idx is read; the operand PC
-    /// retired with the bytecode tape.
+    /// support yet).
     pub(super) glo_imm_refs: alloc::vec::Vec<usize>,
     /// Per-`data_relocs` originating symbol index. Tracks the
     /// `Token::Glo` whose address an initializer like

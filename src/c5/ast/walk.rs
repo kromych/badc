@@ -55,10 +55,10 @@ impl WalkError {
 /// Run a per-function AST through `SsaBuilder` and return the
 /// resulting `FunctionSsa`. `n_params` and `is_variadic` come from
 /// the function's declarator; `n_locals` is the post-parse local
-/// slot count (`max_loc_offs`). `ent_pc` is the function's
-/// bytecode-tier entry PC -- the SSA emit threads it through so
-/// the post-link codegen can resolve call-site fixups against
-/// the same PC the linker rebased.
+/// slot count (`max_loc_offs`). `ent_pc` is the function's entry
+/// identifier -- the SSA emit threads it through so the
+/// post-link codegen can resolve call-site fixups against the
+/// same identifier the linker rebased.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
     ast: &super::Ast,
@@ -93,12 +93,12 @@ pub(crate) fn walk_function(
     if effective_locals != 0 {
         b.set_locals(effective_locals);
     }
-    // Mirror the bytecode tier's per-function `Op::AllocaInit`.
+    // Per-function alloca-arena bookkeeping setup.
     // `alloca_top_slot == 0` means the body has no `alloca` call;
     // the per-arch emit short-circuits a zero slot without
     // writing native code. A non-zero slot tells the codegen to
     // reserve the per-frame arena and store the running top into
-    // the named local slot per the bytecode-tier shape.
+    // the named local slot.
     b.alloca_init(alloca_top_slot);
     // C99 6.5.2.2 + the c5 calling convention: for each
     // struct-by-value parameter, the caller passes the
@@ -226,9 +226,7 @@ struct Walker<'a> {
     /// True when the function's declared return type is a struct
     /// value. `return s;` lowers as: load the hidden out-pointer
     /// from `slot 2`, Mcpy `return_struct_size` bytes from `s`'s
-    /// address into it, then return the out-pointer -- matching
-    /// the bytecode-tier shape the parser emits in
-    /// `Stmt::Return`.
+    /// address into it, then return the out-pointer.
     returns_struct: bool,
     /// Byte size of the struct return type when `returns_struct`
     /// is true. Zero otherwise.

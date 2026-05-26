@@ -272,16 +272,19 @@ impl Compiler {
     /// `last() / last_mut() / Op::Psh` triple keeps the four
     /// call sites in sync when new load-op variants are added.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
-        // Single `last_mut()?` recovers the trailing op as a
-        // mutable slot; if `is_scalar_load_op_val` rejects it we
-        // bail without touching anything, otherwise we capture the
-        // reload op and overwrite the slot in place.
-        let slot = self.text.last_mut()?;
-        if !is_scalar_load_op_val(*slot) {
+        // Read the trailing op out of the recent-emit window;
+        // if it isn't a scalar load, bail. Otherwise capture the
+        // matching reload op and rewrite the cached trailing
+        // entry so downstream peeks see the new shape.
+        if self.recent_emits_len == 0 {
             return None;
         }
-        let reload_op = reemit_scalar_load(*slot);
-        *slot = Op::Psh as i64;
+        let trailing = self.recent_emits[2];
+        if !is_scalar_load_op_val(trailing) {
+            return None;
+        }
+        let reload_op = reemit_scalar_load(trailing);
+        self.recent_emits[2] = Op::Psh as i64;
         // Dual-emit: the bytecode rewrite turns `<addr>; Li` into
         // `<addr>; Psh`, meaning the address producer's value
         // ends up on the c5 stack. Mirror that move on the AST
@@ -331,13 +334,13 @@ impl Compiler {
     /// success. Used by `&expr` to convert an rvalue load chain
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
-        if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
+        if self.recent_emits_len > 0 && is_scalar_load_op_val(self.recent_emits[2]) {
             self.text.pop();
-            // Pop-mirror in the recent-emit buffer. After the
-            // load drops we don't know the previous word offhand;
-            // the next emit reseeds the buffer correctly because
-            // every caller of `pop_trailing_scalar_load` follows
-            // up with at least one emit before any peek runs.
+            // After the load drops we don't know the previous
+            // word offhand; the next emit reseeds the buffer
+            // correctly because every caller of
+            // `pop_trailing_scalar_load` follows up with at
+            // least one emit before any peek runs.
             self.clear_recent_emits();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the

@@ -1568,9 +1568,13 @@ impl Compiler {
                 // pointer level so the spill below sees the actual
                 // function pointer.
                 if !is_pointer_ty(self.ty) {
-                    let last = self.text.last().copied();
+                    let trailing = if self.recent_emits_len > 0 {
+                        Some(self.recent_emits[2])
+                    } else {
+                        None
+                    };
                     let is_load = matches!(
-                        last,
+                        trailing,
                         Some(x) if x == Op::Li as i64
                             || x == Op::Lc as i64
                             || x == Op::Lw as i64

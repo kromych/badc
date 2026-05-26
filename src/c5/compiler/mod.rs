@@ -457,7 +457,13 @@ pub struct Compiler {
     symbol_index: lexer::SymbolIndex,
 
     // --- Codegen state ---
-    text: Vec<i64>,
+    /// Stand-in for the retired bytecode tape. Tracks the
+    /// parser's next-PC counter so existing `self.text.push(_)`
+    /// / `pop()` / `truncate(n)` / `len()` call sites keep
+    /// working without storing the actual op words. The trailing
+    /// op detectors read recent emits from `recent_emits`
+    /// instead.
+    text: TextPc,
     data: Vec<u8>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
@@ -815,6 +821,38 @@ pub struct Compiler {
     next_compound_literal_id: usize,
 }
 
+/// Parser-internal PC counter standing in for the retired
+/// bytecode tape (`Vec<i64>`). Implements the `Vec` shape the
+/// parser uses (`push` / `pop` / `truncate` / `len`) on a
+/// `usize` since no code reads tape content anymore -- trailing-
+/// op detectors read from `Compiler::recent_emits`.
+#[derive(Debug, Clone, Default)]
+pub(super) struct TextPc {
+    pc: usize,
+}
+
+impl TextPc {
+    pub(super) fn push(&mut self, _val: i64) {
+        self.pc += 1;
+    }
+    pub(super) fn pop(&mut self) -> Option<i64> {
+        if self.pc == 0 {
+            None
+        } else {
+            self.pc -= 1;
+            Some(0)
+        }
+    }
+    pub(super) fn truncate(&mut self, n: usize) {
+        if n < self.pc {
+            self.pc = n;
+        }
+    }
+    pub(super) fn len(&self) -> usize {
+        self.pc
+    }
+}
+
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -957,7 +995,7 @@ impl Compiler {
             deferred_error,
             dylibs,
             target,
-            text: Vec::new(),
+            text: TextPc::default(),
             data,
             ty: 0,
             loc_offs: 0,

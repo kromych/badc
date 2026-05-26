@@ -1263,7 +1263,7 @@ const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPO
 /// All RVAs in the directory are image-relative; the
 /// `text_prologue_rva` is `text_rva + stub_len`, the byte
 /// where `build.text` starts. Each export's runtime RVA is
-/// `text_prologue_rva + bytecode_to_native[bytecode_pc]`.
+/// `text_prologue_rva + bytecode_to_native[ent_pc]`.
 fn build_export_directory(
     edata_rva: u32,
     text_prologue_rva: u32,
@@ -1308,7 +1308,7 @@ fn build_export_directory(
     // AddressOfFunctions -- RVA of each function.
     for exp in exports {
         let native_off = bytecode_to_native
-            .get(exp.bytecode_pc)
+            .get(exp.ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
@@ -1316,7 +1316,7 @@ fn build_export_directory(
                 &format!(
                     "PE: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                    exp.name, exp.bytecode_pc
+                    exp.name, exp.ent_pc
                 ),
             )));
         }

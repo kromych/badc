@@ -335,9 +335,9 @@ fn pragma_export_records_function_on_program() {
     assert!(
         p.finished_functions
             .iter()
-            .any(|f| f.ent_pc == p.exports[0].bytecode_pc),
+            .any(|f| f.ent_pc == p.exports[0].ent_pc),
         "exported PC {} should match one of the finished functions' ent_pc values: {:?}",
-        p.exports[0].bytecode_pc,
+        p.exports[0].ent_pc,
         p.finished_functions
             .iter()
             .map(|f| (&f.name, f.ent_pc))

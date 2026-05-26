@@ -468,7 +468,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         for e in &unit.exports {
             merged_exports.push(ExportedFunction {
                 name: e.name.clone(),
-                bytecode_pc: e.bytecode_pc + text_off,
+                ent_pc: e.ent_pc + text_off,
             });
         }
 

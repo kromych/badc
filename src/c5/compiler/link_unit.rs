@@ -397,7 +397,7 @@ impl Compiler {
             .into_iter()
             .map(|name| crate::c5::program::ExportedFunction {
                 name,
-                bytecode_pc: 0,
+                ent_pc: 0,
             })
             .collect::<Vec<_>>();
         // Resolve each export's bytecode PC against the now-
@@ -421,7 +421,7 @@ impl Compiler {
             }
             resolved_exports.push(crate::c5::program::ExportedFunction {
                 name: e.name,
-                bytecode_pc: self.symbols[idx].val as usize,
+                ent_pc: self.symbols[idx].val as usize,
             });
         }
 

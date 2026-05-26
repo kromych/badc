@@ -1461,7 +1461,7 @@ pub(super) fn write(
         .map(|exp| {
             let native_off = build
                 .bytecode_to_native
-                .get(exp.bytecode_pc)
+                .get(exp.ent_pc)
                 .copied()
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {

@@ -1897,7 +1897,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         let n_strx = str_indices[n_locals + i];
         let native_off = build
             .bytecode_to_native
-            .get(exp.bytecode_pc)
+            .get(exp.ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
@@ -1905,7 +1905,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 &format!(
                     "Mach-O: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                    exp.name, exp.bytecode_pc
+                    exp.name, exp.ent_pc
                 ),
             )));
         }

@@ -716,7 +716,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         write_u32(&mut buf, unit.exports.len() as u32);
         for e in &unit.exports {
             write_string(&mut buf, &e.name);
-            write_u64(&mut buf, e.bytecode_pc as u64);
+            write_u64(&mut buf, e.ent_pc as u64);
         }
     }
     {
@@ -2397,7 +2397,7 @@ fn read_exports(body: &[u8]) -> Result<Vec<crate::c5::program::ExportedFunction>
         cursor += 8;
         out.push(crate::c5::program::ExportedFunction {
             name,
-            bytecode_pc: bc,
+            ent_pc: bc,
         });
     }
     Ok(out)

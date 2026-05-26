@@ -1165,7 +1165,7 @@ impl Compiler {
             }
             exports.push(crate::c5::program::ExportedFunction {
                 name,
-                bytecode_pc: self.symbols[idx].val as usize,
+                ent_pc: self.symbols[idx].val as usize,
             });
         }
         Ok(exports)

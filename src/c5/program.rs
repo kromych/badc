@@ -5,10 +5,10 @@ use super::preprocessor::DylibSpec;
 
 /// One `#pragma export(<name>)` resolved against the
 /// compiled program: the externally visible name plus the
-/// function's bytecode PC (i.e., the byte offset within
-/// `Program::text` of the function's first instruction).
-/// Shared-object writers map this to a per-format export
-/// entry whose runtime address is `text_vmaddr + bytecode_pc`.
+/// function's `ent_pc` identifier. Shared-object writers
+/// translate the identifier to a code-segment offset via
+/// `Build::bytecode_to_native[ent_pc]` and then to a runtime
+/// address by adding the code segment's vmaddr base.
 #[derive(Debug, Clone)]
 pub struct ExportedFunction {
     /// External name as written in `#pragma export(...)`.
@@ -16,11 +16,10 @@ pub struct ExportedFunction {
     /// underscore (Mach-O `_foo`) at emit time; the c5-side
     /// name stays as the user wrote it.
     pub name: String,
-    /// Bytecode PC of the function's first instruction. The
-    /// writer translates this to a code-segment offset via
-    /// `Build::bytecode_to_native`, then to a runtime address
-    /// by adding the code segment's vmaddr base.
-    pub bytecode_pc: usize,
+    /// `ent_pc` identifier of the function's entry. Indexes
+    /// into `Build::bytecode_to_native` to recover the native
+    /// code-segment offset.
+    pub ent_pc: usize,
 }
 
 /// A pointer-to-global initializer that needs run-time

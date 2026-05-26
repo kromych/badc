@@ -49,7 +49,10 @@ use super::bytecode_unit::LinkUnit;
 /// version on a backward-incompatible meta change forces a clear
 /// "linker too old / object file too new" error.
 const META_MAGIC: &[u8; 8] = b"BADCMTA\0";
-const META_VERSION: u32 = 1;
+// Bump to 2 when the user-SSA wire format grew a `name` string
+// per function (right after the variadic byte). Older `.o` files
+// reject cleanly at meta-decode time.
+const META_VERSION: u32 = 2;
 
 /// Sentinel placed by the writer right after the ELF header so
 /// the reader can refuse a file that looks like an ELF object
@@ -999,6 +1002,7 @@ fn write_string(buf: &mut Vec<u8>, s: &str) {
 // Per-function header (variable-width):
 //   u64 ent_pc, u64 end_pc, i64 locals,
 //   u32 n_params, u8 is_variadic,
+//   (u32 name_len, name_len name bytes),
 //   u32 n_insts,         inst body * n_insts,
 //   u32 n_inst_src_rows, (u32 line, u32 file_idx) * n_inst_src_rows,
 //   u32 n_blocks,        block body * n_blocks.
@@ -1409,6 +1413,11 @@ fn write_ssa_func_inner(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa, remap
     write_i64(buf, f.locals);
     write_u32(buf, f.n_params as u32);
     buf.push(u8::from(f.is_variadic));
+    // Source-level function name. Empty for SSA built outside
+    // the parser (sys-trampolines stay synthesised on the
+    // reader side; their name is empty here and re-derived
+    // from binding_idx in `read_synthetic_ssa_funcs`).
+    write_string(buf, &f.name);
 
     write_u32(buf, f.insts.len() as u32);
     for inst in &f.insts {
@@ -1502,6 +1511,16 @@ impl<'a> SsaReader<'a> {
 
     fn i64(&mut self) -> Result<i64, C5Error> {
         Ok(self.u64()? as i64)
+    }
+
+    fn string(&mut self) -> Result<String, C5Error> {
+        let len = self.u32()? as usize;
+        self.need(len)?;
+        let s = core::str::from_utf8(&self.body[self.cursor..self.cursor + len])
+            .map_err(|e| err(&format!("ssa decoder: utf-8 in name: {e}")))?
+            .to_string();
+        self.cursor += len;
+        Ok(s)
     }
 
     fn value_ids(&mut self) -> Result<Vec<crate::c5::ir::ValueId>, C5Error> {
@@ -1671,6 +1690,7 @@ pub(crate) fn read_ssa_func(
     let locals = r.i64()?;
     let n_params = r.u32()? as usize;
     let is_variadic = r.u8()? != 0;
+    let name = r.string()?;
 
     let n_insts = r.u32()? as usize;
     let mut insts = Vec::with_capacity(n_insts);
@@ -1720,11 +1740,7 @@ pub(crate) fn read_ssa_func(
 
     *cursor = r.cursor;
     Ok(crate::c5::ir::FunctionSsa {
-        // Archive-reload doesn't carry the source-level function
-        // name yet; the consumers fall back to `fn_<ent_pc>`.
-        // The codegen's name lookup chain treats an empty name
-        // here as "no walker output, use the fallback".
-        name: alloc::string::String::new(),
+        name,
         ent_pc,
         end_pc,
         locals,

@@ -611,12 +611,7 @@ fn build_elf_sym_index_map(unit: &LinkUnit) -> Vec<u32> {
 
 const TAG_END: u8 = 0;
 const TAG_TLS_INIT_SIZE: u8 = 1;
-const TAG_DATA_IMM_POSITIONS: u8 = 2;
-const TAG_CODE_IMM_POSITIONS: u8 = 3;
-const TAG_CALL_FP_ARG_MASKS: u8 = 4;
-const TAG_SOURCE_LINES: u8 = 5;
 const TAG_SOURCE_FILES: u8 = 7;
-const TAG_SOURCE_FILE_INDICES: u8 = 8;
 const TAG_VARIABLES: u8 = 9;
 const TAG_DATA_RELOCS: u8 = 10;
 const TAG_CODE_RELOCS: u8 = 11;
@@ -2039,15 +2034,6 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     return Err(err("tls_init_size body too short"));
                 }
                 unit.tls_init_size = u64_at(body, 0) as usize;
-            }
-            TAG_DATA_IMM_POSITIONS
-            | TAG_CODE_IMM_POSITIONS
-            | TAG_CALL_FP_ARG_MASKS
-            | TAG_SOURCE_LINES
-            | TAG_SOURCE_FILE_INDICES => {
-                // Retired side-tables. Older `.o` files still
-                // carry these tags; skip silently to preserve
-                // forward compatibility.
             }
             TAG_SOURCE_FILES => unit.source_files = read_string_vec(body)?,
             TAG_VARIABLES => {

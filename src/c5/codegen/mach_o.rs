@@ -2288,7 +2288,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // (text vmaddr + native code offset). dyld adds the slide
     // delta when it walks the rebase opcode stream below.
     for r in &build.code_relocs {
-        let bc_pc = r.target_bc_pc as usize;
+        let bc_pc = r.target_ent_pc as usize;
         let native_off = build
             .pc_to_native
             .get(bc_pc)
@@ -2304,7 +2304,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         #[cfg(feature = "std")]
         if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
             std::eprintln!(
-                "[code_reloc] data_off={:#x} target_bc_pc={} native_off={:#x} preferred_va={:#x}",
+                "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
                 r.data_offset,
                 bc_pc,
                 native_off,

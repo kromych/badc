@@ -792,7 +792,7 @@ fn emit_inst(
             }
             true
         }
-        Inst::ImmCode(target_bc_pc) => {
+        Inst::ImmCode(target_ent_pc) => {
             let rd = match int_or_spill_scratch(dst, scratch) {
                 Some(r) => r,
                 None => return false,
@@ -800,7 +800,7 @@ fn emit_inst(
             let adrp_offset = code.len();
             emit(code, enc_adrp(Reg(19), 0));
             emit(code, enc_add_imm(Reg(19), Reg(19), 0));
-            pending_func_fixups.push((adrp_offset, *target_bc_pc));
+            pending_func_fixups.push((adrp_offset, *target_ent_pc));
             if rd.0 != 19 {
                 emit(code, enc_mov_reg(rd, Reg(19)));
             }

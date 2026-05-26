@@ -297,7 +297,7 @@ mod jit_impl {
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
-                let bc_pc = r.target_bc_pc as usize;
+                let bc_pc = r.target_ent_pc as usize;
                 let native_off = build
                     .pc_to_native
                     .get(bc_pc)

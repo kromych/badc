@@ -460,7 +460,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         for r in &unit.code_relocs {
             merged_code_relocs.push(CodeReloc {
                 data_offset: r.data_offset + data_off as u64,
-                target_bc_pc: r.target_bc_pc + text_off as u64,
+                target_ent_pc: r.target_ent_pc + text_off as u64,
             });
         }
 
@@ -1106,7 +1106,7 @@ fn apply_reloc(
             }
             merged_code_relocs.push(CodeReloc {
                 data_offset: slot as u64,
-                target_bc_pc: resolved as u64,
+                target_ent_pc: resolved as u64,
             });
         }
     }

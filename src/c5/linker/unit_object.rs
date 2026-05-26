@@ -658,7 +658,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         write_u32(&mut buf, unit.code_relocs.len() as u32);
         for r in &unit.code_relocs {
             write_u64(&mut buf, r.data_offset);
-            write_u64(&mut buf, r.target_bc_pc);
+            write_u64(&mut buf, r.target_ent_pc);
         }
     }
     {
@@ -2070,7 +2070,7 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     }
                     out.push(crate::c5::program::CodeReloc {
                         data_offset: u64_at(body, local),
-                        target_bc_pc: u64_at(body, local + 8),
+                        target_ent_pc: u64_at(body, local + 8),
                     });
                     local += 16;
                 }

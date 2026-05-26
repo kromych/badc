@@ -1557,19 +1557,19 @@ pub(super) fn lower(
     // their fn-pointer fixups also land on the body, which keeps
     // that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
-    for (instr_offset, target_bc_pc) in pending_func_fixups {
-        if target_bc_pc > bc_pc_extent {
+    for (instr_offset, target_ent_pc) in pending_func_fixups {
+        if target_ent_pc > bc_pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen (x86_64): function pointer target {target_bc_pc} past end of bytecode"
+                    "native codegen (x86_64): function pointer target {target_ent_pc} past end of bytecode"
                 ),
             )));
         }
-        let target = pc_to_native[target_bc_pc];
+        let target = pc_to_native[target_ent_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
+                    "native codegen (x86_64): function pointer target {target_ent_pc} did not land on an instruction"
                 ),
             )));
         }

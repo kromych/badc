@@ -55,7 +55,7 @@ pub struct LinkUnit {
     /// `data_offset[unit]`.
     pub data_relocs: Vec<DataReloc>,
     /// Intra-unit function-pointer slot initializers. The
-    /// `target_bc_pc` is unit-local and re-based by
+    /// `target_ent_pc` is unit-local and re-based by
     /// `text_offset[unit]`; the `data_offset` is re-based by
     /// `data_offset[unit]`.
     pub code_relocs: Vec<CodeReloc>,

@@ -1076,7 +1076,7 @@ pub(super) fn write(
         // so the Windows loader adds the slide delta when ASLR
         // moves the image.
         for r in &build.code_relocs {
-            let bc_pc = r.target_bc_pc as usize;
+            let bc_pc = r.target_ent_pc as usize;
             let native_off = build
                 .pc_to_native
                 .get(bc_pc)

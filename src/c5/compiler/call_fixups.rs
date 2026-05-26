@@ -4,7 +4,7 @@
 //!
 //!   * [`Compiler::resolve_code_relocs`] rewrites every recorded
 //!     static-initializer function-pointer slot
-//!     (`code_relocs[i].target_bc_pc`) to the originating
+//!     (`code_relocs[i].target_ent_pc`) to the originating
 //!     symbol's post-body `Symbol::val` using the parallel
 //!     `code_reloc_sym_idx` shadow. The native writers walk
 //!     `Program::code_relocs` to lay down the per-target dynamic
@@ -30,7 +30,7 @@ use super::super::token::Token;
 use super::Compiler;
 
 impl Compiler {
-    /// Rewrite every `code_relocs[i].target_bc_pc` to the
+    /// Rewrite every `code_relocs[i].target_ent_pc` to the
     /// originating symbol's post-body `val`. Walker-tier
     /// `Inst::Call` / `Inst::ImmCode` references read the live
     /// `Symbol::val` directly through `live_fun_val` and need no
@@ -59,10 +59,10 @@ impl Compiler {
             // The placeholder bytes in `self.data` stay
             // unmodified: the VM and per-target writers walk
             // `code_relocs` and lay down their own bias
-            // (`CODE_BASE + target_bc_pc` for the VM; native VA
+            // (`CODE_BASE + target_ent_pc` for the VM; native VA
             // for ELF / Mach-O / PE). They read
-            // `target_bc_pc`, not the data bytes.
-            reloc.target_bc_pc = self.symbols[sym_idx].val as u64;
+            // `target_ent_pc`, not the data bytes.
+            reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
         Ok(())
     }

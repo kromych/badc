@@ -1552,7 +1552,7 @@ pub(super) fn write(
     // means no slide so the bytes hold the final VA -- no
     // .rela.dyn entries needed.
     for r in &build.code_relocs {
-        let bc_pc = r.target_bc_pc as usize;
+        let bc_pc = r.target_ent_pc as usize;
         let native_off = build
             .pc_to_native
             .get(bc_pc)

@@ -24,7 +24,7 @@ pub enum RelocKind {
     /// `static const VTable v = { .xClose = ... };`
     /// dispatch-table shape). The merged program's
     /// `code_relocs` list gains one entry
-    /// (`data_offset = location`, `target_bc_pc = symbol.value
+    /// (`data_offset = location`, `target_ent_pc = symbol.value
     /// + addend`). Symbol must be `Function`.
     DataCodeAbs64 = 5,
 }

@@ -903,8 +903,8 @@ fn emit_inst(
             imports,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
-        Inst::ImmCode(target_bc_pc) => {
-            emit_imm_code(code, dst, *target_bc_pc, pending_func_fixups, frame)
+        Inst::ImmCode(target_ent_pc) => {
+            emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
         }
         Inst::Mcpy {
             dst: d,
@@ -2637,7 +2637,7 @@ fn emit_imm_data(
 fn emit_imm_code(
     code: &mut Vec<u8>,
     dst: Place,
-    target_bc_pc: usize,
+    target_ent_pc: usize,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     frame: Frame,
 ) -> bool {
@@ -2646,7 +2646,7 @@ fn emit_imm_code(
         return false;
     };
     let instr_offset = code.len();
-    pending_func_fixups.push((instr_offset, target_bc_pc));
+    pending_func_fixups.push((instr_offset, target_ent_pc));
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true

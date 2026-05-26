@@ -127,7 +127,7 @@ impl Compiler {
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.code_relocs.push(crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
-                target_bc_pc: bc_pc as u64,
+                target_ent_pc: bc_pc as u64,
             });
             self.code_reloc_sym_idx.push(sym_idx);
             return Ok(());

@@ -99,7 +99,7 @@ impl<H: Host> Vm<H> {
         // slot here at VM construction time.
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
-            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_bc_pc);
+            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_ent_pc);
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
         let tls_base = data.len();

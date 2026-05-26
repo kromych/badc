@@ -771,7 +771,7 @@ pub struct Compiler {
     /// dispatch table that names every callback before any
     /// callback's body lands). [`Compiler::resolve_code_relocs`]
     /// reads this index post-parse and rewrites each CodeReloc's
-    /// `target_bc_pc` to the originating symbol's now-resolved
+    /// `target_ent_pc` to the originating symbol's now-resolved
     /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
 
@@ -1184,7 +1184,7 @@ impl Compiler {
         // sym idx, and `resolve_code_relocs` reads the
         // trampoline's `Symbol::val` (set during
         // `emit_sys_trampolines`) to backfill each CodeReloc's
-        // `target_bc_pc`.
+        // `target_ent_pc`.
         self.emit_sys_trampolines();
         self.resolve_code_relocs()?;
         // Cross-TU function imports. Every extern-declared
@@ -1239,7 +1239,7 @@ impl Compiler {
             }
             // Function-pointer initializers (`int (*const fp)
             // (...) = some_fn;`) recorded a `code_relocs` row
-            // whose `target_bc_pc` was the symbol's val at
+            // whose `target_ent_pc` was the symbol's val at
             // parse time -- before the loop above assigned
             // placeholder PCs to extern callees. Refresh each
             // row whose source symbol is an extern function so
@@ -1259,7 +1259,7 @@ impl Compiler {
                     && !sym.defined_here
                     && sym.linkage == Linkage::External
                 {
-                    reloc.target_bc_pc = sym.val as u64;
+                    reloc.target_ent_pc = sym.val as u64;
                 }
             }
             imports

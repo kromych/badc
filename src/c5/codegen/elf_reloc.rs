@@ -310,7 +310,7 @@ pub(super) fn write_relocatable(
         .map(|(pc, name)| (*pc, name.as_str()))
         .collect();
     for r in &build.code_relocs {
-        if let Some(&name) = extern_fn_by_pc.get(&(r.target_bc_pc as usize))
+        if let Some(&name) = extern_fn_by_pc.get(&(r.target_ent_pc as usize))
             && !user_extern_names.contains(&name)
         {
             user_extern_names.push(name);
@@ -781,7 +781,7 @@ pub(super) fn write_relocatable(
     // `.text` section symbol. The linker resolves to
     // `text_vaddr + target_offset`.
     for r in &build.code_relocs {
-        let bc_pc = r.target_bc_pc as usize;
+        let bc_pc = r.target_ent_pc as usize;
         // Cross-TU target: emit against the named UNDEF
         // function symbol so the linker resolves it against
         // the sibling unit's defined entry. `r_addend = 0`

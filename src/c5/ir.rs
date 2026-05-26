@@ -39,7 +39,7 @@ pub(crate) enum Inst {
     /// the page-relative immediate against `__data + offset`.
     ImmData(i64),
     /// `Op::Imm` whose operand is a function-pointer literal
-    /// (`CODE_BASE + target_bc_pc`). The per-arch lowering
+    /// (`CODE_BASE + target_ent_pc`). The per-arch lowering
     /// emits an `adrp + add` placeholder pair and records a
     /// pending func-fixup so the writer can patch against the
     /// callee's body offset.

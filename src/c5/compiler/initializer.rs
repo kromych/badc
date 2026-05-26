@@ -96,7 +96,7 @@ impl Compiler {
             InitElemReloc::Code(sym_idx) => {
                 self.code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: here as u64,
-                    target_bc_pc: value as u64,
+                    target_ent_pc: value as u64,
                 });
                 self.code_reloc_sym_idx.push(sym_idx);
             }
@@ -567,7 +567,7 @@ impl Compiler {
             // initializer: dispatch tables that list functions
             // defined later in the same TU. The post-parse
             // [`Compiler::resolve_code_relocs`] pass rewrites
-            // each `code_relocs[i].target_bc_pc` from the
+            // each `code_relocs[i].target_ent_pc` from the
             // originating symbol's now-resolved `Symbol::val`,
             // so we bind the identifier as `Token::Fun` with
             // val=0 here and let the resolve pass fill in the

@@ -9,7 +9,7 @@
 //!   1. `code_relocs` / `code_reloc_sym_idx` entries whose
 //!      target is an undefined extern become
 //!      `RelocKind::DataCodeAbs64` relocations -- their
-//!      `target_bc_pc` field would otherwise be left at `0`.
+//!      `target_ent_pc` field would otherwise be left at `0`.
 //!   2. `glo_imm_refs` entries (recorded at every `Op::Imm
 //!      <data_offset>` emit for a `Token::Glo` symbol) whose
 //!      target is an undefined extern are dropped; the
@@ -246,7 +246,7 @@ impl Compiler {
         self.data_reloc_sym_idx = local_data_reloc_sym_idx;
         // Now run the standard local-fixup pass so resolved
         // intra-TU references get their operand bytes /
-        // code_reloc target_bc_pc filled in.
+        // code_reloc target_ent_pc filled in.
         self.resolve_code_relocs()?;
 
         // Diagnose unsupported cross-TU `_Thread_local` Glo

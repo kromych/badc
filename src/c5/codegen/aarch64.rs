@@ -1142,10 +1142,10 @@ pub(super) struct Fixup {
     pub(super) kind: BranchKind,
 }
 
-/// Lower a bytecode [`Program`] to AArch64 machine code. Walks the
-/// bytecode once, emitting native code for each op; control-flow ops
-/// emit a placeholder branch and record a fixup to be patched after
-/// the whole layout is known.
+/// Lower a [`Program`]'s SSA functions to AArch64 machine code.
+/// Walks every Inst once, emitting native code; control-flow
+/// terminators emit a placeholder branch and record a fixup to be
+/// patched after the whole layout is known.
 ///
 /// Calling convention (Phase 1):
 /// * VM accumulator `a` lives in `x19` (callee-saved across calls).
@@ -1414,7 +1414,7 @@ pub(super) fn lower(
         if target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen: function pointer target {target_ent_pc} past end of bytecode"
+                    "native codegen: function pointer target {target_ent_pc} past end of PC space"
                 ),
             )));
         }
@@ -1437,7 +1437,7 @@ pub(super) fn lower(
         .copied()
         .ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: entry_pc {} is out of bytecode range",
+                "native codegen: entry_pc {} is out of PC range",
                 program.entry_pc
             )))
         })?;
@@ -1499,7 +1499,7 @@ fn apply_fixups(
         if f.target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen: branch target {} past end of bytecode",
+                    "native codegen: branch target {} past end of PC space",
                     f.target_ent_pc
                 ),
             )));

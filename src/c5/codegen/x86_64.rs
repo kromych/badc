@@ -1334,8 +1334,9 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 }
 
 // ------------------------------------------------------------------
-// Lowering pass. Walks the bytecode once, emits native code per Op,
-// records branch fixups for later patching. Mirrors aarch64::lower.
+// Lowering pass. Walks every SSA function once, emits native code
+// per Inst, and records branch fixups for later patching. Mirrors
+// aarch64::lower.
 // ------------------------------------------------------------------
 
 pub(super) fn lower(
@@ -1561,7 +1562,7 @@ pub(super) fn lower(
         if target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen (x86_64): function pointer target {target_ent_pc} past end of bytecode"
+                    "native codegen (x86_64): function pointer target {target_ent_pc} past end of PC space"
                 ),
             )));
         }
@@ -1638,7 +1639,7 @@ fn apply_fixups(
         if f.target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen (x86_64): branch target {} past end of bytecode",
+                    "native codegen (x86_64): branch target {} past end of PC space",
                     f.target_ent_pc
                 ),
             )));

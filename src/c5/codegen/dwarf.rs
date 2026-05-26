@@ -337,7 +337,8 @@ pub(crate) fn emit(
         source_path
     });
 
-    // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
+    // Walk the SSA function list, collect one `Subprog` per
+    // function.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
     // Emit one `PltSub` per import. Lets gdb / lldb resolve a
@@ -636,7 +637,7 @@ fn collect_subprograms(
     // the legitimate first-occurrence keeps the bare name and
     // `b name` resolves to one location. The upstream c5
     // tracking is a separate fix (the suffixed names still
-    // point at real bytecode, so backtraces inside the
+    // point at real code, so backtraces inside the
     // mis-attributed regions are no worse than they were).
     let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
@@ -2177,10 +2178,10 @@ fn build_debug_line(
     (out, 0)
 }
 
-/// Walk the bytecode, emit one row per (live) op whose source line
-/// is known. The DWARF state machine starts at `(address=0,
-/// line=1, file=1, is_stmt=true)`; we open with a
-/// `DW_LNE_set_address` to anchor at `code_vmaddr` and end with a
+/// Walk the SSA-tier line table, emit one row per (live) PC whose
+/// source line is known. The DWARF state machine starts at
+/// `(address=0, line=1, file=1, is_stmt=true)`; the emit opens with
+/// a `DW_LNE_set_address` to anchor at `code_vmaddr` and ends with
 /// `DW_LNE_end_sequence` row past the last byte.
 fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_vmaddr: u64) {
     // Anchor address at the start of code.

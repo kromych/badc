@@ -93,27 +93,20 @@ impl Compiler {
         }
         self.text.push(op as i64);
         self.push_recent_emit(op as i64);
-        // Refresh the `source_files` table so the DWARF emitter
-        // sees every file the lexer crossed; the function-name
-        // column tied to ent_pcs retired with
-        // `Program::source_functions`.
-        let _ = self.intern_source_file();
-        // Dual-emit hook -- keep the AST in lockstep with the
-        // bytecode for ops whose AST shape is determined by `op`
-        // alone (push / pop of the parser-side vstack, arithmetic
-        // and comparison binops, unary fneg). Ops that carry an
-        // operand word (Imm, Lea, ...) wire their AST through the
-        // helper that owns the operand value (`emit_imm`,
-        // `emit_lea`, ...); control-flow ops (Jmp / Bz / Bnz /
-        // Jsr / Lev / ...) wire at the stmt parser sites that
-        // know the matching AST shape.
+        // AST hook -- ops whose shape is determined by `op` alone
+        // (vstack push / pop, arithmetic and comparison binops,
+        // unary fneg). Ops that carry an operand word (Imm, Lea,
+        // ...) wire their AST through the helper that owns the
+        // operand value (`emit_imm`, `emit_lea`, ...);
+        // control-flow ops (Jmp / Bz / Bnz / Jsr / Lev / ...)
+        // wire at the stmt parser sites that know the matching
+        // AST shape.
         self.ast_track_emit_op(op);
     }
 
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
         self.push_recent_emit(val);
-        let _ = self.intern_source_file();
     }
 
     /// Append to the 3-deep ring buffer of recently-emitted

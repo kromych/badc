@@ -37,7 +37,7 @@ use crate::c5::codegen::{
     ResolvedImports, Target, write_native_image,
 };
 use crate::c5::error::C5Error;
-use crate::c5::program::{CodeReloc, DataReloc, Program};
+use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::link::{MergedNative, PltTrampoline};
 use super::object::{NativeMachine, NativeSymSection};
@@ -69,7 +69,8 @@ fn synth_program_and_build(
     let (got_fixups, data_fixups, func_fixups) = synth_fixups(merged, plt)?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt);
-    let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs);
+    let exports = synth_exports(merged);
+    let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs, &exports);
 
     let program = Program {
         data: Vec::new(),
@@ -79,7 +80,7 @@ fn synth_program_and_build(
         tls_init_size: 0,
         data_relocs: data_relocs.clone(),
         code_relocs: code_relocs.clone(),
-        exports: Vec::new(),
+        exports: exports.clone(),
         dylibs: Vec::new(),
         dllmain_pc: None,
         source_files: Vec::new(),
@@ -118,7 +119,7 @@ fn synth_program_and_build(
         macho_tlv_descriptors: Vec::new(),
         data_relocs,
         code_relocs,
-        exports: Vec::new(),
+        exports: exports.clone(),
         output_kind: OutputKind::Executable,
         dllmain_pc: None,
         debug_info: false,
@@ -384,22 +385,31 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
     (data_relocs, code_relocs)
 }
 
-/// `code_relocs` reference functions by `target_ent_pc`. The writer
-/// indexes `pc_to_native` with that PC to recover the native code
-/// offset. For the synthesizer the PC is already the byte offset
-/// within merged text, so the table is identity over the entries
-/// each code-reloc references. Builds a sparse-enough Vec keyed by
-/// the maximum PC actually referenced; entries outside the referenced
-/// set stay zero and will surface as a "missing ent_pc" error if the
-/// writer reaches them.
-fn synth_pc_to_native(text: &[u8], code_relocs: &[CodeReloc]) -> Vec<usize> {
-    if code_relocs.is_empty() {
+/// `code_relocs` and `exports` reference functions by `ent_pc`.
+/// The writer indexes `pc_to_native` with that PC to recover the
+/// native code offset. For the synthesizer the PC is already the
+/// byte offset within merged text, so the table is identity over
+/// the entries each consumer references. Builds a Vec keyed by the
+/// maximum PC actually referenced; entries outside the referenced
+/// set stay `usize::MAX` and surface as a "missing ent_pc" error
+/// if the writer reaches them.
+fn synth_pc_to_native(
+    text: &[u8],
+    code_relocs: &[CodeReloc],
+    exports: &[ExportedFunction],
+) -> Vec<usize> {
+    if code_relocs.is_empty() && exports.is_empty() {
         return Vec::new();
     }
     let mut max_pc = 0u64;
     for r in code_relocs {
         if r.target_ent_pc > max_pc {
             max_pc = r.target_ent_pc;
+        }
+    }
+    for e in exports {
+        if (e.ent_pc as u64) > max_pc {
+            max_pc = e.ent_pc as u64;
         }
     }
     let len = (max_pc as usize).saturating_add(1).max(text.len());
@@ -410,7 +420,36 @@ fn synth_pc_to_native(text: &[u8], code_relocs: &[CodeReloc]) -> Vec<usize> {
             table[pc] = pc;
         }
     }
+    for e in exports {
+        if e.ent_pc < table.len() {
+            table[e.ent_pc] = e.ent_pc;
+        }
+    }
     table
+}
+
+/// Surface user-defined Text-section symbols as ExportedFunction
+/// entries so the per-format writer emits them into the static
+/// symbol table (`nm` / `lldb image lookup`). This is the .o link
+/// path's equivalent of the LinkUnit AOT path's func_names; per-
+/// function source-position metadata (DWARF .debug_line, variable
+/// records) isn't recovered yet -- a follow-up. The synthesizer
+/// includes every Text-section merged symbol regardless of whether
+/// the program asked for `#pragma export`, so the resulting
+/// executable carries the same names the AOT path would dump under
+/// `nm -a`.
+fn synth_exports(merged: &MergedNative) -> Vec<ExportedFunction> {
+    let mut exports: Vec<ExportedFunction> = Vec::new();
+    for (name, sym) in &merged.defined {
+        if !matches!(sym.section, NativeSymSection::Text) {
+            continue;
+        }
+        exports.push(ExportedFunction {
+            name: name.clone(),
+            ent_pc: sym.value as usize,
+        });
+    }
+    exports
 }
 
 fn synth_plt_offsets(merged: &MergedNative, plt: &[PltTrampoline]) -> Vec<usize> {
@@ -502,6 +541,35 @@ mod tests {
         merged.imports = alloc::vec!["malloc".to_string()];
         let imports = synth_imports(&merged, Target::LinuxAarch64);
         assert_eq!(imports.imports[0].real_symbol, "malloc");
+    }
+
+    #[test]
+    fn synth_exports_lists_every_text_defined_symbol() {
+        let mut merged = tiny_aarch64_main();
+        merged.defined.insert(
+            "helper".to_string(),
+            MergedSymbol {
+                section: NativeSymSection::Text,
+                value: 0x40,
+                size: 16,
+            },
+        );
+        merged.defined.insert(
+            "g_count".to_string(),
+            MergedSymbol {
+                section: NativeSymSection::Data,
+                value: 0,
+                size: 4,
+            },
+        );
+        let exports = synth_exports(&merged);
+        let names: alloc::vec::Vec<&str> = exports.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"main"), "main missing from exports");
+        assert!(names.contains(&"helper"), "helper missing from exports");
+        assert!(
+            !names.contains(&"g_count"),
+            "data symbol surfaced as text export"
+        );
     }
 }
 

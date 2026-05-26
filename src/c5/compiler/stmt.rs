@@ -159,7 +159,6 @@ impl Compiler {
         self.close_loop_continues();
         self.emit_jmp(step_pc as i64);
 
-        let _end_pc = self.text.len();
         self.close_loop_breaks();
 
         // C99 6.8.5.3: a `for` with no controlling expression has
@@ -243,7 +242,6 @@ impl Compiler {
         let _ = had_default;
         self.emit_jmp(0);
 
-        let _end_pc = self.text.len();
         self.close_loop_breaks();
         if let Some(disc) = disc_ast {
             self.ast_emit_switch(disc, body_s);
@@ -622,7 +620,6 @@ impl Compiler {
 
             self.emit_jmp(cond_pc as i64);
 
-            let _end_pc = self.text.len();
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
                 self.ast_emit_while(cond, body_s);
@@ -642,7 +639,6 @@ impl Compiler {
                 return Err(self.compile_err("while expected after do"));
             }
 
-            let _cond_pc = self.text.len();
             self.close_loop_continues();
 
             self.consume(b'(', "open paren expected")?;
@@ -655,7 +651,6 @@ impl Compiler {
 
             self.consume(b';', "semicolon expected after do-while")?;
 
-            let _end_pc = self.text.len();
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
                 self.ast_emit_do_while(body_s, cond);

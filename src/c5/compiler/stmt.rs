@@ -130,11 +130,7 @@ impl Compiler {
             self.emit_imm(1);
             None
         };
-        self.emit_cf_op(Op::Bz);
-        self.emit_val(0);
-
-        self.emit_cf_op(Op::Jmp);
-        self.emit_val(0);
+        self.flush_pending_stores();
 
         self.consume(b';', "semicolon expected after for-cond")?;
 
@@ -145,7 +141,7 @@ impl Compiler {
         } else {
             None
         };
-        self.emit_jmp(0);
+        self.flush_pending_stores();
 
         self.consume(b')', "close paren expected")?;
 
@@ -155,7 +151,7 @@ impl Compiler {
         let body_s = self.ast_wrap_stmts_since(body_before);
 
         self.close_loop_continues();
-        self.emit_jmp(0);
+        self.flush_pending_stores();
 
         self.close_loop_breaks();
 

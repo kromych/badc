@@ -180,15 +180,6 @@ impl Compiler {
         self.emit_val(slot_off);
     }
 
-    /// Emit `Op::Jmp <target_pc>` -- direct branch to a known
-    /// ent_pc. The placeholder shape (Jmp + 0 operand whose
-    /// PC is captured for a later patch) doesn't fit this helper
-    /// and stays inline at its handful of sites.
-    pub(super) fn emit_jmp(&mut self, target_pc: i64) {
-        self.emit_cf_op(Op::Jmp);
-        self.emit_val(target_pc);
-    }
-
     /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
     /// "apply `op` to the accumulator with `val` as the right-
     /// hand operand". Consolidates the parser sites that emit

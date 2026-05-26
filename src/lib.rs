@@ -9,9 +9,9 @@
 //! [`emit_native`] / [`emit_native_with_options`] lower it to bytes
 //! you can write to disk; [`jit_run`] / [`jit_run_with_options`]
 //! load and execute it in-process; [`Vm::new(program).run`]
-//! interprets the bytecode under a watchful pointer-tracking
-//! runtime. [`optimize`] sits between compile and any of those
-//! when you want it.
+//! interprets the pre-lifted SSA functions under a
+//! pointer-tracking runtime. [`optimize`] sits between compile
+//! and any of those when you want it.
 //!
 //! Started as a Rust port of c4; over time the dialect grew structs,
 //! a real preprocessor with `#include` / `#define` / `#pragma binding`,

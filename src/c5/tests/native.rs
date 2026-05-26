@@ -720,7 +720,7 @@ fn fixture_parity_native_optimized() {
 ///
 /// Verifies the entire shared-library pipeline -- including
 /// that the Mach-O symbol-table entry's `n_value` is the
-/// function's runtime VA, not its bytecode-PC offset.
+/// function's runtime VA, not its ent_pc identifier.
 #[test]
 fn dylib_export_dlopen_call_returns_42() {
     use crate::{NativeOptions, emit_native_with_options};

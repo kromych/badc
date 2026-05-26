@@ -399,7 +399,7 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
     // Same as above but with the native optimizer on. c4.c is the
     // most complex program in the fixture set; if anything in the
     // register-pool lowering or cmp+branch fusion breaks under
-    // heavy bytecode load, this is the test that catches it first.
+    // heavy code-emit load, this is the test that catches it first.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("fixtures");

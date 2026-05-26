@@ -5,7 +5,7 @@ use super::compile_fixture_bare;
 #[test]
 fn entry_pc_points_at_main() {
     // `main` is the first (and only) function in this fixture, so its
-    // bytecode starts at PC 0.
+    // ent_pc is 0.
     let program = compile_fixture_bare("ir_translation_simple.c");
     assert_eq!(program.entry_pc, 0);
 }

@@ -585,12 +585,12 @@ fn main() {
 
     // Embedded runtime sources -- compiled to LinkUnits and
     // appended to `units` so cross-target builds (Mac Mach-O,
-    // Windows PE, plus the bytecode `link_units` path on Linux
-    // when applicable) pick up `__c5_exit`, `environ`, and
-    // anything else `lib/*.c` provides. The Linux native ELF
-    // path injects the same registry through a parallel loop
-    // in the native-link block below; both paths see the same
-    // runtime image.
+    // Windows PE, plus the `link_units` path on Linux when
+    // applicable) pick up `__c5_exit`, `environ`, and anything
+    // else `lib/*.c` provides. The Linux native ELF path injects
+    // the same registry through a parallel loop in the
+    // native-link block below; both paths see the same runtime
+    // image.
     if mode != Mode::DumpPp {
         for (name, body) in badc::embedded_runtime() {
             let copts = badc::CompileOptions::default().with_source_label((*name).to_string());

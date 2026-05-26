@@ -85,7 +85,7 @@ pub fn compile_str(src: &str) -> Program {
 
 /// Compile inline source WITHOUT the standard prelude. Used by the
 /// codegen tests that assert byte-for-byte equality on the emitted
-/// bytecode -- those tests can't tolerate the lazy-stream helper
+/// native code -- those tests can't tolerate the lazy-stream helper
 /// (or any future prelude-only function) appearing in the output.
 pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()

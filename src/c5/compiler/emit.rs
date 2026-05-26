@@ -276,13 +276,13 @@ impl Compiler {
     pub(super) fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
         self.ast_psh();
         self.emit_imm(val);
-        // emit_imm is the low-level bytecode primitive and does
-        // not touch the AST. Seed `ast_acc` with the matching
-        // IntLit so the next emit_op's binop sees a paired rhs.
-        // The synthetic literal is always C99 `int`-typed --
-        // pointer scaling / mask / shift step constants all fit
-        // in the 32-bit signed range C99 6.4.4.1 gives an
-        // unsuffixed decimal literal.
+        // emit_imm is the low-level tag primitive and does not
+        // touch the AST. Seed `ast_acc` with the matching IntLit
+        // so the next binop sees a paired rhs. The synthetic
+        // literal is always C99 `int`-typed -- pointer scaling /
+        // mask / shift step constants all fit in the 32-bit
+        // signed range C99 6.4.4.1 gives an unsuffixed decimal
+        // literal.
         self.ast_emit_int_lit(val, Ty::Int as i64);
         self.emit_op(op);
     }
@@ -359,14 +359,14 @@ impl Compiler {
         }
         let reload_op = reemit_scalar_load(trailing);
         self.recent_emits[2] = Op::Psh as i64;
-        // Dual-emit: the bytecode rewrite turns `<addr>; Li` into
-        // `<addr>; Psh`, meaning the address producer's value
-        // ends up on the c5 stack. Mirror that move on the AST
-        // side -- push the current `ast_acc` slot onto the
-        // parser vstack and clear the accumulator. `None` here
-        // represents an address producer whose AST counterpart
-        // hasn't been wired yet; the downstream store op then
-        // sees a `None` lvalue and skips the Assign build.
+        // The tag rewrite turns `<addr>; Li` into `<addr>; Psh`,
+        // meaning the address producer's value ends up on the c5
+        // stack. Mirror that move on the AST side -- push the
+        // current `ast_acc` slot onto the parser vstack and clear
+        // the accumulator. `None` here represents an address
+        // producer whose AST counterpart hasn't been wired yet;
+        // the downstream store op then sees a `None` lvalue and
+        // skips the Assign build.
         self.ast_vstack.push(self.ast_acc.take());
         Some(reload_op)
     }
@@ -427,7 +427,7 @@ impl Compiler {
             if let Some(idx) = self.take_last_loaded_local() {
                 self.symbols[idx].address_escaped = true;
             }
-            // Dual-emit: the bytecode drops the trailing load so
+            // The tag drop removes the trailing scalar load so
             // the address producer's value stays in the
             // accumulator; the AST wraps that producer in
             // `Expr::Unary { op: AddrOf, child }` so the walker
@@ -645,14 +645,11 @@ impl Compiler {
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
     }
 
-    // ---- AST dual-emit helpers ----
+    // ---- AST helpers ----
     //
-    // The parser's Op::* emit sites pair with the AST helpers below
-    // so a function's bytecode and AST are produced in lockstep.
-    // The walker is the production SSA source; the bytecode tier
-    // is kept alive only for the VM tape and for Sys-trampoline
-    // synthesis. See `project_bridge_burn_plan` for the plan to
-    // retire the bytecode emit entirely.
+    // The parser's `ast_*` calls (plus the small number of
+    // remaining `emit_op(Op::*)` tag sites) populate the per-
+    // function AST that the walker descends to produce SSA.
 
     /// Reset the AST + parser-side value stack at the start of a
     /// function body. The arena drops the previous function's
@@ -720,9 +717,8 @@ impl Compiler {
     }
 
     /// Push an integer-literal expression and stash it in
-    /// `ast_acc`. Pairs with the bytecode tier's
-    /// `emit_imm(self.lex.ival)` at the integer-literal /
-    /// enum-constant / `Token::Num`-class identifier sites.
+    /// `ast_acc`. Called at the integer-literal / enum-constant /
+    /// `Token::Num`-class identifier sites.
     pub(super) fn ast_emit_int_lit(&mut self, val: i64, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::IntLit { val, ty }, pos);
@@ -756,15 +752,13 @@ impl Compiler {
         id
     }
 
-    /// Push an identifier reference. The bytecode emits a
-    /// `Lea / data-Imm` address producer followed by a scalar
-    /// load; the AST collapses that into a single `Expr::Ident`
-    /// whose `sym` indexes the symbol table and whose `ty` matches
-    /// what the load would have left in `self.ty`. The address-of
-    /// (`&x`) and assignment (`x = ...`) paths look up the same
-    /// `Ident` node and switch lvalue / rvalue interpretation at
-    /// the surrounding parent node -- C99 6.3.2.1 lvalue-to-rvalue
-    /// conversion is implicit in the AST shape.
+    /// Push an identifier reference. The AST node is a single
+    /// `Expr::Ident` whose `sym` indexes the symbol table and
+    /// whose `ty` matches the C99 6.3.2.1 lvalue-to-rvalue
+    /// conversion result. The address-of (`&x`) and assignment
+    /// (`x = ...`) paths look up the same `Ident` node and switch
+    /// lvalue / rvalue interpretation at the surrounding parent
+    /// node -- the conversion is implicit in the AST shape.
     pub(super) fn ast_emit_ident(&mut self, sym: u32, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
         let s = &self.symbols[sym as usize];
@@ -788,13 +782,10 @@ impl Compiler {
     }
 
     /// Push an `Expr::PreInc` node and set it as the new
-    /// `ast_acc`. The bytecode tier emits the six-op increment
-    /// sequence (rewrite + reload + Psh + Imm step + Add/Sub +
-    /// store_op) before this call lands; the AST collapses the
-    /// shape into one node whose `lvalue` is the just-popped
-    /// vstack entry. `by` is the step value the parser already
-    /// scaled for pointers (+sizeof(*p) / -sizeof(*p)) so the
-    /// walker doesn't have to recompute it.
+    /// `ast_acc`. `lvalue` is the just-popped vstack entry.
+    /// `by` is the step value the parser already scaled for
+    /// pointers (+sizeof(*p) / -sizeof(*p)) so the walker doesn't
+    /// have to recompute it.
     pub(super) fn ast_emit_pre_inc(&mut self, lvalue: ExprId, by: i64, ty: i64) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::PreInc { lvalue, by, ty }, pos);
@@ -811,10 +802,10 @@ impl Compiler {
     }
 
     /// Push `Expr::Cast { child, to_ty }`. Called from the C-style
-    /// cast site once `(type)expr` finishes parsing; the bytecode
-    /// tier's conversion ops (Fcvtif / Fcvtfi / Shl / Shr / And)
-    /// already left intermediate Binary nodes on `ast_acc`. The
-    /// Cast overwrites those with a single canonical node whose
+    /// cast site once `(type)expr` finishes parsing; any
+    /// intermediate Binary nodes the conversion-shaping sequence
+    /// (Fcvtif / Fcvtfi / Shl / Shr / And) left on `ast_acc` are
+    /// overwritten with a single canonical Cast node whose
     /// `child` is the pre-cast expression captured by the caller.
     pub(super) fn ast_emit_cast(&mut self, child: ExprId, to_ty: i64) {
         let pos = self.ast_src_pos();
@@ -824,11 +815,9 @@ impl Compiler {
 
     /// Wrap the current `ast_acc` in an `Expr::Cast { to_ty }`.
     /// Used by `convert_assign_rhs` and other implicit-conversion
-    /// sites where the bytecode tier already emitted the FP
-    /// conversion op (`Fcvtif` / `Fcvtfi`) and the AST needs the
-    /// matching `Expr::Cast` so the walker emits the right
-    /// `Inst::FpCast`. No-op when the accumulator is empty (the
-    /// child expression hadn't been wired by the dual-emit yet).
+    /// sites so the walker emits the right `Inst::FpCast`. No-op
+    /// when the accumulator is empty (the child expression
+    /// hadn't been wired yet).
     pub(super) fn ast_apply_assign_conv(&mut self, to_ty: i64) {
         let Some(child) = self.ast_acc.take() else {
             return;
@@ -983,13 +972,13 @@ impl Compiler {
     }
 
     /// Push an `Expr::Call` and set it as the new accumulator.
-    /// Called by the function-call parser site after the bytecode
-    /// sequence (per-arg temp store + reverse push + Jsr/JsrExt
-    /// /Jsri + Adj cleanup) lands. `callee` is the callee's AST
-    /// expression (synthesised here for direct calls via
-    /// `ast.push_expr(Ident { ... })`; the indirect-call path
-    /// passes the already-built function-pointer ExprId). `args`
-    /// holds each declared argument's ExprId in source order;
+    /// Called by the function-call parser site after the per-arg
+    /// temp store + reverse push + call dispatch lands. `callee`
+    /// is the callee's AST expression (synthesised here for
+    /// direct calls via `ast.push_expr(Ident { ... })`; the
+    /// indirect-call path passes the already-built function-
+    /// pointer ExprId). `args` holds each declared argument's
+    /// ExprId in source order;
     /// `None` slots mean the argument's AST wasn't captured.
     /// If any slot is `None` the helper drops the Call build and
     /// resets `ast_acc` to `None` -- the walker would otherwise
@@ -1250,11 +1239,11 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Default { body }, pos)
     }
 
-    /// Allocate a fresh AST label slot. The bytecode tier tracks
-    /// goto fixups by name in `self.labels` / `self.unresolved_gotos`;
-    /// the AST mirror keeps a flat per-function id space tied back
-    /// through `Compiler::ast_label_by_name` so both sides see the
-    /// same label.
+    /// Allocate a fresh AST label slot. `self.labels` /
+    /// `self.unresolved_gotos` track names for the goto-vs-label
+    /// diagnostics; the AST mirror keeps a flat per-function id
+    /// space tied back through `Compiler::ast_label_by_name` so
+    /// `goto` resolves to the labelled statement.
     pub(super) fn ast_label_by_name(&mut self, name: &str) -> super::super::ast::LabelId {
         for (lname, lid) in &self.ast_labels {
             if lname == name {
@@ -1269,12 +1258,12 @@ impl Compiler {
 
     /// Push a `Stmt::Return(value)` node into the per-function
     /// AST. Called from the explicit-return statement parser
-    /// site (stmt.rs) right before the bytecode `Op::Lev`. The
-    /// `value` is `Some(ast_acc)` when the source spelled out a
-    /// value and `None` for a bare `return;` in a void function;
-    /// caller decides by passing the right shape. The Stmt's id
-    /// is returned in case a future parent (a labelled stmt, a
-    /// surrounding compound block) wants to chain it.
+    /// site (stmt.rs). The `value` is `Some(ast_acc)` when the
+    /// source spelled out a value and `None` for a bare
+    /// `return;` in a void function; the caller picks the shape.
+    /// The Stmt's id is returned in case a future parent
+    /// (a labelled stmt, a surrounding compound block) wants to
+    /// chain it.
     pub(super) fn ast_emit_return(
         &mut self,
         value: Option<super::super::ast::ExprId>,
@@ -1325,8 +1314,8 @@ impl Compiler {
             }
             Op::Fneg => self.ast_apply_unary(super::super::ast::UnOp::Neg),
             // Integer arithmetic + comparison. Each case maps the
-            // bytecode op to the matching `ir::BinOp`; the AST
-            // walker uses the same enum.
+            // `Op` tag to the matching `ir::BinOp`; the walker
+            // uses the same enum on the SSA side.
             Op::Add => self.ast_apply_binop(B::Add),
             Op::Sub => self.ast_apply_binop(B::Sub),
             Op::Mul => self.ast_apply_binop(B::Mul),
@@ -1618,8 +1607,8 @@ mod tests {
 
     /// `int main(int a) { ++a; return a; }` -- the prefix `++`
     /// collapses into a single `Expr::PreInc{lvalue: Ident, by: 1}`.
-    /// Confirms the bytecode's six-op increment sequence leaves
-    /// the AST with exactly one PreInc node.
+    /// Confirms the increment sequence leaves the AST with
+    /// exactly one PreInc node.
     #[test]
     fn pre_inc_local_captures_pre_inc() {
         use super::super::super::ast::Expr;
@@ -1739,11 +1728,10 @@ mod tests {
         }
     }
 
-    /// `int add(int a, int b) { return a + b; }` -- the bytecode
-    /// emits `Lea 2; Li; Psh; Lea 3; Li; Add; [mask]` for the body.
-    /// The dual-emit should land two distinct `Expr::Ident` nodes
-    /// (one per parameter), with an outer `Binary{Add, Ident, Ident}`
-    /// that reaches the rhs Ident through the post-Add width-mask
+    /// `int add(int a, int b) { return a + b; }` -- the AST
+    /// should land two distinct `Expr::Ident` nodes (one per
+    /// parameter), with an outer `Binary{Add, Ident, Ident}`
+    /// reaching the rhs Ident through the post-Add width-mask
     /// chain.
     #[test]
     fn ident_load_captures_two_params() {

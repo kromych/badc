@@ -282,7 +282,7 @@ impl Compiler {
                             ast_intrinsic_args.push(a);
                         }
                         if is_floating_scalar(self.ty) {
-                            self.emit_op(Op::Fcvtfi);
+                            self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
                     } else {
@@ -295,7 +295,7 @@ impl Compiler {
                         // and SetjmpAArch64 are both pointer-shape
                         // inputs).
                         if is_floating_scalar(self.ty) {
-                            self.emit_op(Op::Fcvtfi);
+                            self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
                     }
@@ -1048,9 +1048,9 @@ impl Compiler {
                 let target_is_fp = is_floating_scalar(t);
                 let source_is_fp = is_floating_scalar(self.ty);
                 if target_is_fp && !source_is_fp {
-                    self.emit_op(Op::Fcvtif);
+                    self.ast_fpcast();
                 } else if !target_is_fp && source_is_fp {
-                    self.emit_op(Op::Fcvtfi);
+                    self.ast_fpcast();
                 } else if !target_is_fp
                     && !source_is_fp
                     && !is_pointer_ty(t)

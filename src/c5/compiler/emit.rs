@@ -210,6 +210,21 @@ impl Compiler {
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
     }
 
+    /// Tag-only state mgmt for an FP cast (`Op::Fcvtif` /
+    /// `Op::Fcvtfi`). The AST counterpart is wired by the
+    /// surrounding call site through `ast_apply_assign_conv` (for
+    /// the assignment-conversion case) or skipped entirely (when
+    /// the walker re-derives the conversion from the intrinsic /
+    /// cast signature). This helper clears the parser-state flags
+    /// emit_op used to reset and pushes a non-Imm sentinel into
+    /// recent_emits so the trailing peek detectors don't read a
+    /// stale `Op::Imm 0` shape across the conversion.
+    pub(super) fn ast_fpcast(&mut self) {
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.push_recent_emit(BINOP_SENTINEL);
+    }
+
     /// Build an `Expr::Assign` from the vstack-top (lvalue
     /// address producer) + accumulator (rvalue), leaving the
     /// assigned value in the accumulator per C99 6.5.16p3.

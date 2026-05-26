@@ -39,7 +39,7 @@ impl Compiler {
         let dest_is_fp = is_floating_scalar(dest_ty);
         let src_is_fp = is_floating_scalar(self.ty);
         if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
-            self.emit_op(Op::Fcvtif);
+            self.ast_fpcast();
             // Dual-emit: wrap the accumulator in an
             // `Expr::Cast` so the walker emits the matching
             // `Inst::FpCast(IntToFp)`. The walker keys on the
@@ -48,7 +48,7 @@ impl Compiler {
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
-            self.emit_op(Op::Fcvtfi);
+            self.ast_fpcast();
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         }

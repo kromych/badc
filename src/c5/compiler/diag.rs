@@ -304,7 +304,7 @@ impl Compiler {
             return Ok(());
         }
         if lhs_is_fp && !rhs_is_fp {
-            self.emit_op(Op::Fcvtif);
+            self.ast_fpcast();
             self.ty = lhs;
             // Dual-emit: wrap `ast_acc` in an `Expr::Cast { to_ty
             // = lhs }` so the walker sees the implicit lift and
@@ -341,7 +341,7 @@ impl Compiler {
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.
         self.emit_imm(0);
         self.ast_binop(Op::Or);
-        self.emit_op(Op::Fcvtif);
+        self.ast_fpcast();
         self.ast_psh();
         // Reload RHS into `a`.
         self.emit_lea(rhs_temp);

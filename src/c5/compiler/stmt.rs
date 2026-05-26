@@ -223,12 +223,12 @@ impl Compiler {
         // Dispatcher block. `switch_cases` / `switch_defaults`
         // were primed by the matching pushes above.
         let cases = self.switch_cases.pop().unwrap_or_default();
-        let had_default = self.switch_defaults.pop().unwrap_or(false);
+        self.switch_defaults.pop();
 
         // Dispatcher: one Eq + Bnz emit per case for tape /
         // recent-emit accounting. The Bnz operand is the case
-        // body's PC -- now dead state, so emit 0. The walker
-        // reads the case set off the AST node, not these emits.
+        // body's PC -- dead state, so emit 0. The walker reads
+        // the case set off the AST node, not these emits.
         for val in cases {
             self.emit_lea(switch_val_offset);
             self.emit_op(Op::Li);
@@ -237,9 +237,6 @@ impl Compiler {
             self.emit_val(0);
         }
 
-        // `had_default` only signals whether a default arm exists;
-        // its body position retired with the bytecode tape.
-        let _ = had_default;
         self.emit_jmp(0);
 
         self.close_loop_breaks();

@@ -210,7 +210,7 @@ impl Compiler {
         self.emit_val(0);
 
         self.switch_cases.push(Vec::new());
-        self.switch_defaults.push(None);
+        self.switch_defaults.push(false);
         self.enter_switch();
 
         let body_before = self.ast_stmts_snapshot();
@@ -224,21 +224,24 @@ impl Compiler {
         // Dispatcher block. `switch_cases` / `switch_defaults`
         // were primed by the matching pushes above.
         let cases = self.switch_cases.pop().unwrap_or_default();
-        let default_pc = self.switch_defaults.pop().flatten();
+        let had_default = self.switch_defaults.pop().unwrap_or(false);
 
-        for (val, pc) in cases {
+        // Dispatcher: one Eq + Bnz emit per case for tape /
+        // recent-emit accounting. The Bnz operand is the case
+        // body's PC -- now dead state, so emit 0. The walker
+        // reads the case set off the AST node, not these emits.
+        for val in cases {
             self.emit_lea(switch_val_offset);
             self.emit_op(Op::Li);
             self.emit_binop_with_imm(Op::Eq, val);
             self.emit_op(Op::Bnz);
-            self.emit_val(pc as i64);
+            self.emit_val(0);
         }
 
-        if let Some(dpc) = default_pc {
-            self.emit_jmp(dpc as i64);
-        } else {
-            self.emit_jmp(0);
-        }
+        // `had_default` only signals whether a default arm exists;
+        // its body position retired with the bytecode tape.
+        let _ = had_default;
+        self.emit_jmp(0);
 
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
@@ -672,7 +675,7 @@ impl Compiler {
             let Some(cases) = self.switch_cases.last_mut() else {
                 return Err(self.compile_err("case outside switch"));
             };
-            cases.push((val, self.text.len()));
+            cases.push(val);
             let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
@@ -683,7 +686,7 @@ impl Compiler {
             let Some(def) = self.switch_defaults.last_mut() else {
                 return Err(self.compile_err("default outside switch"));
             };
-            *def = Some(self.text.len());
+            *def = true;
             let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);

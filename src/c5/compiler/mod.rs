@@ -588,8 +588,14 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    switch_cases: Vec<Vec<(i64, usize)>>,
-    switch_defaults: Vec<Option<usize>>,
+    /// Per nested `switch` body: the list of case values seen
+    /// so far. Used both by the AST emitter (each case carries
+    /// its constant in the resulting AST node) and by the
+    /// parser's bytecode dispatcher emit loop.
+    switch_cases: Vec<Vec<i64>>,
+    /// Per nested `switch` body: `true` once a `default:` label
+    /// was seen.
+    switch_defaults: Vec<bool>,
 
     /// Defined struct types, indexed by struct id.
     pub(super) structs: Vec<StructDef>,

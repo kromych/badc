@@ -440,14 +440,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_warnings.push(w.clone());
         }
 
-        // Bytecode-tape merge is a pure concat. Every operand
-        // (PC, data offset, function-pointer literal, TLS
-        // offset, binding index, plain integer) survives the
-        // merge unchanged. The merged tape's contents are only
-        // consumed by disasm; the SSA tier handles cross-unit
-        // references through walker-recorded `extern_*_refs` +
-        // `binding_remap_per_unit` applied to
-        // `synthetic_ssa_funcs` / `user_ssa_funcs` below.
         // Apply intra-unit data_relocs (shift both endpoints).
         for r in &unit.data_relocs {
             merged_data_relocs.push(DataReloc {
@@ -472,7 +464,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             });
         }
 
-        // Exports: rebase bytecode_pc onto the merged text.
+        // Exports: rebase the function's ent_pc onto the merged unit's PC space.
         for e in &unit.exports {
             merged_exports.push(ExportedFunction {
                 name: e.name.clone(),
@@ -542,11 +534,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // Struct registry: union all units' struct lists. This is
     // a soft merge -- two units may define the same struct via
     // a shared header; we keep one copy by name. The type tag
-    // encoding embeds a struct id per unit, but since c5 bakes
-    // member offsets into the bytecode at the parser site,
-    // cross-TU type-tag identity isn't required for runtime
-    // correctness. The merged list is consumed only by the
-    // DWARF emitter.
+    // encoding embeds a struct id per unit, but since c5 resolves
+    // each member's offset at parser time, cross-TU type-tag
+    // identity isn't required for runtime correctness. The merged
+    // list is consumed only by the DWARF emitter.
     let mut merged_structs: Vec<crate::c5::compiler::StructDef> = Vec::new();
     // Per-unit struct-id remap: `struct_remap_per_unit[i][unit_local_id]`
     // is the index this struct lands at in `merged_structs`. The
@@ -592,9 +583,8 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // codegen can drive SSA from the walker. Each unit's
         // `finished_functions` has unit-local `ent_pc`s; rebase
         // by the unit's `text_base` so the codegen-side ent_pc
-        // stays consistent with the merged bytecode. Single-unit
-        // links are the immediate target and concatenate
-        // verbatim.
+        // stays consistent with the merged unit's PC space.
+        // Single-unit links concatenate verbatim.
         finished_functions: {
             // Cumulative sym-base per unit so multi-TU AST
             // snapshots see the merged `parser_symbols` table.
@@ -732,7 +722,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             //    `live_fun_val(sym)` resolves cross-unit
             //    archive-defined callees instead of returning 0
             //    (which collides with the first function in the
-            //    merged bytecode -- usually `main`).
+            //    merged PC space -- usually `main`).
             use crate::c5::symbol::Linkage;
             let mut fun_def_by_name: alloc::collections::BTreeMap<alloc::string::String, i64> =
                 alloc::collections::BTreeMap::new();
@@ -884,11 +874,11 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         // points at the merged segment. Cross-TU
                         // externs arrive as 0 (walker has no live
                         // val); leave those for the resolver to
-                        // patch from the linker-rewritten bytecode
-                        // operand. Inst::Call::target_pc and
-                        // Inst::ImmCode hold unit-local function PCs
-                        // -> shift by `text_off`; ImmData / TlsAddr
-                        // hold unit-local data / TLS offsets.
+                        // patch through `extern_fun_refs` /
+                        // `extern_imm_data_refs`. Inst::Call::target_pc
+                        // and Inst::ImmCode hold unit-local function
+                        // PCs -> shift by `text_off`; ImmData /
+                        // TlsAddr hold unit-local data / TLS offsets.
                         Inst::Call { target_pc, .. } if *target_pc != 0 => {
                             *target_pc += text_off;
                         }
@@ -1124,7 +1114,7 @@ fn apply_reloc(
 }
 
 /// Resolve the program's entry function. Returns the entry's
-/// bytecode PC plus the resolved symbol name (e.g. `wmain` /
+/// `ent_pc` plus the resolved symbol name (e.g. `wmain` /
 /// `WinMain` / `main`). The PE writer reads
 /// `Program::entry_name` to pick between `__getmainargs` and
 /// `__wgetmainargs` -- a single-TU `Compiler::compile` records

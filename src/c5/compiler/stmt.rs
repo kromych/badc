@@ -561,7 +561,7 @@ impl Compiler {
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.labels.push((name.clone(), self.text.len()));
+            self.labels.push(name.clone());
             let label = self.ast_label_by_name(&name);
             self.next()?; // consume Id
             self.next()?; // consume ':'
@@ -697,12 +697,10 @@ impl Compiler {
             self.next()?;
 
             self.emit_op(Op::Jmp);
-            let pc = self.text.len();
             self.emit_val(0);
 
-            match self.labels.iter().find(|(n, _)| n == &target_name) {
-                Some(_) => {}
-                None => self.unresolved_gotos.push((target_name.clone(), pc)),
+            if !self.labels.iter().any(|n| n == &target_name) {
+                self.unresolved_gotos.push(target_name.clone());
             }
 
             self.consume(b';', "semicolon expected after goto")?;

@@ -842,12 +842,9 @@ impl Compiler {
                     self.current_function_name.clear();
                     self.current_func_returns_void = false;
 
-                    for (name, _pc) in &self.unresolved_gotos {
-                        match self.labels.iter().find(|(n, _)| n == name) {
-                            Some(_) => {}
-                            None => {
-                                return Err(self.compile_err(format!("unresolved label: {}", name)));
-                            }
+                    for name in &self.unresolved_gotos {
+                        if !self.labels.iter().any(|n| n == name) {
+                            return Err(self.compile_err(format!("unresolved label: {}", name)));
                         }
                     }
 

@@ -578,8 +578,16 @@ pub struct Compiler {
     /// at every function start), so it stays small -- typically 0-2
     /// entries even in code that uses `goto`. Linear scan beats
     /// pulling in `HashMap` (which would force `std`).
-    labels: Vec<(String, usize)>,
-    unresolved_gotos: Vec<(String, usize)>,
+    /// Names of `label:` statements seen in the current function;
+    /// `Compiler::run_compile` validates every `goto` target
+    /// against this list at function end. Cleared at every
+    /// function start.
+    labels: Vec<String>,
+    /// Names of `goto label` statements whose target wasn't yet
+    /// defined when the goto was parsed. Each name is rechecked
+    /// against `labels` at function end; an unresolved entry is
+    /// a compile error.
+    unresolved_gotos: Vec<String>,
     switch_cases: Vec<Vec<(i64, usize)>>,
     switch_defaults: Vec<Option<usize>>,
 

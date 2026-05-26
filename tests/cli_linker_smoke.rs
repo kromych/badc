@@ -5,10 +5,12 @@
 //! `--ar` + `-L`/`-l`, and confirms the produced native
 //! executable runs and returns the expected exit status.
 //!
-//! Tests that exec the produced binary are gated on
-//! `target_os = "linux"`: the native exec writer is ELF64-only
-//! today, and the macOS host can't run a Linux binary even
-//! when the writer succeeds.
+//! Tests that exec the produced binary are gated on the host
+//! target matching what's being emitted: linux-{aarch64,x86_64}
+//! runs an ELF directly; macos-aarch64 runs a Mach-O directly;
+//! windows-{aarch64,x86_64} runs natively on a matching Windows
+//! host, and via wine on a matching Linux host when
+//! `BADC_RUN_WINE=1` is set.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -977,6 +979,91 @@ fn windows_aarch64_native_link_two_sources_with_libc() {
     run(
         Command::new(badc())
             .arg("--target=windows-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let out = {
+        #[cfg(target_os = "windows")]
+        {
+            Command::new(&exe).output().expect("run prog")
+        }
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("/usr/bin/wine")
+                .arg(&exe)
+                .env("WINEDEBUG", "-all")
+                .output()
+                .expect("run prog under wine")
+        }
+    };
+    assert_eq!(out.status.code(), Some(0), "exit status mismatch");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("answer=42"),
+        "unexpected stdout: {stdout}"
+    );
+}
+
+// Windows x64 PE .o link path through the synthesizer. Mirror of
+// the arm64 variant. Runs natively on Windows x86_64; on
+// linux-x86_64 with `BADC_RUN_WINE=1` set, drives through wine.
+// macOS hosts can't exercise this lane locally -- wine64 under
+// Rosetta throws "rosetta error: invalid gdt selector index 5"
+// before the user code starts; CI's windows-2022 (x86_64) runner
+// is the canonical home for this test.
+#[cfg(any(
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "x86_64"),
+))]
+#[test]
+fn windows_x64_native_link_two_sources_with_libc() {
+    if cfg!(target_os = "linux")
+        && !matches!(std::env::var("BADC_RUN_WINE"), Ok(v) if !v.is_empty() && v != "0")
+    {
+        eprintln!("skipping: BADC_RUN_WINE not set");
+        return;
+    }
+    let dir = tempdir("windows-x64-native-link");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) { return x * 6; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         extern int helper(int);\n\
+         int main(void) {\n\
+             int r = helper(7);\n\
+             printf(\"answer=%d\\n\", r);\n\
+             return r - 42;\n\
+         }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--target=windows-x64")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--target=windows-x64")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-x64")
             .arg("-o")
             .arg(&exe)
             .arg(dir.join("main.o"))

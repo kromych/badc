@@ -22,6 +22,15 @@ use super::Compiler;
 use super::types::is_unsigned_ty;
 use super::types::{is_scalar_load_op_val, reemit_scalar_load};
 
+/// Sentinel pushed into the `recent_emits` ring by the AST-only
+/// emit helpers (`ast_binop`, `ast_unary`, `ast_assign`). Picks a
+/// value distinct from every `Op` discriminant so the trailing-
+/// op peek detectors (`last_emit_is_zero`,
+/// `pop_trailing_scalar_load`) don't false-match on it. Op
+/// discriminants are small positive integers; `-1` sits cleanly
+/// outside that range.
+const BINOP_SENTINEL: i64 = -1;
+
 impl Compiler {
     // ---- Lexer plumbing ----
 
@@ -140,6 +149,76 @@ impl Compiler {
         self.pending.last_emit_was_indirect_call = false;
         self.push_recent_emit(Op::Psh as i64);
         self.ast_vstack.push(self.ast_acc.take());
+    }
+
+    /// Apply a binary operator to the parser-side vstack-top (lhs)
+    /// + accumulator (rhs); the result lands in the accumulator.
+    /// Replaces `emit_op(Op::<binop>)` for every variant that maps
+    /// to an `ast_apply_binop` arm. Pushes a non-Imm sentinel into
+    /// the recent-emit ring so the `Imm + 0` peek of
+    /// `last_emit_is_zero` doesn't fire on the just-consumed
+    /// operand pair.
+    pub(super) fn ast_binop(&mut self, op: Op) {
+        use super::super::ir::BinOp as B;
+        let binop = match op {
+            Op::Add => B::Add,
+            Op::Sub => B::Sub,
+            Op::Mul => B::Mul,
+            Op::Div => B::Div,
+            Op::Mod => B::Mod,
+            Op::Divu => B::Divu,
+            Op::Modu => B::Modu,
+            Op::Or => B::Or,
+            Op::Xor => B::Xor,
+            Op::And => B::And,
+            Op::Shl => B::Shl,
+            Op::Shr => B::Shr,
+            Op::Shru => B::Shru,
+            Op::Eq => B::Eq,
+            Op::Ne => B::Ne,
+            Op::Lt => B::Lt,
+            Op::Gt => B::Gt,
+            Op::Le => B::Le,
+            Op::Ge => B::Ge,
+            Op::Ult => B::Ult,
+            Op::Ugt => B::Ugt,
+            Op::Ule => B::Ule,
+            Op::Uge => B::Uge,
+            Op::Fadd => B::Fadd,
+            Op::Fsub => B::Fsub,
+            Op::Fmul => B::Fmul,
+            Op::Fdiv => B::Fdiv,
+            Op::Feq => B::Feq,
+            Op::Fne => B::Fne,
+            Op::Flt => B::Flt,
+            Op::Fgt => B::Fgt,
+            Op::Fle => B::Fle,
+            Op::Fge => B::Fge,
+            _ => unreachable!("ast_binop called with non-binop {op:?}"),
+        };
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.push_recent_emit(BINOP_SENTINEL);
+        self.ast_apply_binop(binop);
+    }
+
+    /// Apply unary `Op::Fneg` to the accumulator.
+    pub(super) fn ast_fneg(&mut self) {
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.push_recent_emit(BINOP_SENTINEL);
+        self.ast_apply_unary(super::super::ast::UnOp::Neg);
+    }
+
+    /// Build an `Expr::Assign` from the vstack-top (lvalue
+    /// address producer) + accumulator (rvalue), leaving the
+    /// assigned value in the accumulator per C99 6.5.16p3.
+    /// Replaces `emit_op(Op::Si | Sc | Sh | Sw | Sf)`.
+    pub(super) fn ast_assign(&mut self) {
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.push_recent_emit(BINOP_SENTINEL);
+        self.ast_apply_assign();
     }
 
     /// Append to the 3-deep ring buffer of recently-emitted
@@ -422,7 +501,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr, old_value]
             self.emit_op(Op::Imm);
             self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
-            self.emit_op(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
+            self.ast_binop(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
             // Stash the rhs AST id before the trailing Op::Si
@@ -433,17 +512,17 @@ impl Compiler {
             self.pending.bf_assign_rhs = self.ast_acc;
             self.ast_psh(); // stack: [..., field_addr, cleared, new_value]
             self.emit_imm(mask);
-            self.emit_op(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
+            self.ast_binop(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
             if bit_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(bit_offset as i64);
-                self.emit_op(Op::Shl); // a = (new_value & mask) << bit_offset
+                self.ast_binop(Op::Shl); // a = (new_value & mask) << bit_offset
             }
             // a = shifted; stack: [..., field_addr, cleared].
             // Op::Or pops cleared, ORs into a. After: a = combined;
             // stack: [..., field_addr]. The trailing Si pops
             // field_addr as the destination.
-            self.emit_op(Op::Or);
+            self.ast_binop(Op::Or);
             self.emit_op(store_op); // pops field_addr, stores a (=combined).
             self.ty = Ty::Int as i64;
             Ok(())
@@ -515,7 +594,7 @@ impl Compiler {
             self.emit_op(Op::LdLocI);
             self.emit_val(ov_temp);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
-            self.emit_op(Op::Or); // pops shifted_new; a = cleared | shifted_new
+            self.ast_binop(Op::Or); // pops shifted_new; a = cleared | shifted_new
             self.emit_op(store_op); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
             Ok(())
@@ -532,11 +611,11 @@ impl Compiler {
             if bit_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(bit_offset as i64);
-                self.emit_op(Op::Shr); // a = (top >> bit_offset)
+                self.ast_binop(Op::Shr); // a = (top >> bit_offset)
             }
             self.ast_psh();
             self.emit_imm(mask);
-            self.emit_op(Op::And); // a = (...) & mask
+            self.ast_binop(Op::And); // a = (...) & mask
             if !is_unsigned_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
                 self.emit_binop_with_imm(Op::Shl, shift);

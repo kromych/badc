@@ -340,7 +340,7 @@ impl Compiler {
         self.emit_val(rhs_temp);
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.
         self.emit_imm(0);
-        self.emit_op(Op::Or);
+        self.ast_binop(Op::Or);
         self.emit_op(Op::Fcvtif);
         self.ast_psh();
         // Reload RHS into `a`.

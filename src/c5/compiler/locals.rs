@@ -768,7 +768,7 @@ impl Compiler {
                 // address loaded by Lea by `i * elem_size` bytes.
                 self.ast_psh();
                 self.emit_imm(i * elem_size);
-                self.emit_op(Op::Add);
+                self.ast_binop(Op::Add);
             }
             self.ast_psh();
             // Parse the element expression at assignment
@@ -796,7 +796,7 @@ impl Compiler {
             let is_fp = (ty & !UNSIGNED_BIT) == Ty::Float as i64
                 || (ty & !UNSIGNED_BIT) == Ty::Double as i64;
             if is_fp {
-                self.emit_op(Op::Si);
+                self.ast_assign();
             } else {
                 self.emit_op(store_op);
             }
@@ -912,7 +912,7 @@ impl Compiler {
             if total_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(total_offset);
-                self.emit_op(Op::Add);
+                self.ast_binop(Op::Add);
             }
             self.ast_psh();
             self.expr(Token::Assign as i64)?;

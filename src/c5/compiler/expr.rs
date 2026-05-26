@@ -543,7 +543,7 @@ impl Compiler {
                         // order regardless of the c5 right-to-left
                         // push.
                         ast_arg_ids.push(self.ast_acc);
-                        self.emit_op(Op::Si);
+                        self.ast_assign();
                         nargs += 1;
                         if self.lex.tk == ',' {
                             self.next()?;
@@ -1407,7 +1407,7 @@ impl Compiler {
             } else {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
-                    self.emit_op(Op::Fneg);
+                    self.ast_fneg();
                     // self.ty already matches the operand's FP type
                 } else {
                     // C99 6.5.3.3 paragraph 3: the integer promotions
@@ -1595,7 +1595,7 @@ impl Compiler {
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
                     indirect_arg_ids.push(self.ast_acc);
-                    self.emit_op(Op::Si);
+                    self.ast_assign();
                     if self.lex.tk == ',' {
                         self.next()?;
                     }
@@ -2033,7 +2033,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
-                self.emit_op(Op::Or);
+                self.ast_binop(Op::Or);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::XorOp {
                 // C99 6.5.11: same common-type rule as `|`.
@@ -2041,7 +2041,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
-                self.emit_op(Op::Xor);
+                self.ast_binop(Op::Xor);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::AndOp {
                 // C99 6.5.10: same common-type rule as `|`.
@@ -2049,7 +2049,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
-                self.emit_op(Op::And);
+                self.ast_binop(Op::And);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
@@ -2091,7 +2091,7 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                self.emit_op(Op::Shl);
+                self.ast_binop(Op::Shl);
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
                 // integer promotion. `char` / `short` (signed or
                 // unsigned, size 1 or 2) promote to signed `int`.
@@ -2116,11 +2116,11 @@ impl Compiler {
                 // The RHS is the shift count; only the LHS sign matters.
 
                 if is_unsigned_ty(t) {
-                    self.emit_op(Op::Shru);
+                    self.ast_binop(Op::Shru);
                     // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.
                     self.ty = t;
                 } else {
-                    self.emit_op(Op::Shr);
+                    self.ast_binop(Op::Shr);
                     self.ty = Ty::Int as i64;
                 }
             } else if self.lex.tk == Token::AddOp {
@@ -2129,7 +2129,7 @@ impl Compiler {
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
-                    self.emit_op(Op::Fadd);
+                    self.ast_binop(Op::Fadd);
                     self.ty = fp_result_ty(t, self.ty);
                 } else if !is_pointer_ty(t) && is_pointer_ty(self.ty) {
                     // `int + ptr`: result is the pointer type.
@@ -2167,12 +2167,12 @@ impl Compiler {
                         self.emit_op(Op::StLocI);
                         self.emit_val(rhs_temp);
                         self.emit_imm(0);
-                        self.emit_op(Op::Or);
+                        self.ast_binop(Op::Or);
                         self.emit_binop_with_imm(Op::Mul, scale);
                         self.ast_psh();
                         self.emit_lea(rhs_temp);
                         self.emit_op(Op::Li);
-                        self.emit_op(Op::Add);
+                        self.ast_binop(Op::Add);
                         self.ast_vstack.clear();
                         self.ast_vstack.extend(saved_vstack);
                         // Rebuild AST: `Binary { Add, Binary { Mul,
@@ -2212,7 +2212,7 @@ impl Compiler {
                             self.ast_acc = None;
                         }
                     } else {
-                        self.emit_op(Op::Add);
+                        self.ast_binop(Op::Add);
                         self.ty = rhs_ty;
                     }
                 } else {
@@ -2230,7 +2230,7 @@ impl Compiler {
                     } else {
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
-                    self.emit_op(Op::Add);
+                    self.ast_binop(Op::Add);
                     if !is_pointer_ty(t) {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
@@ -2241,14 +2241,14 @@ impl Compiler {
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
-                    self.emit_op(Op::Fsub);
+                    self.ast_binop(Op::Fsub);
                     self.ty = fp_result_ty(t, self.ty);
                 } else if is_pointer_ty(t) && t == self.ty {
                     // ptr - ptr -> element count (Int). Divide by
                     // the pointee size to convert raw byte distance
                     // into element distance (skipped for `char*`,
                     // where byte and element counts coincide).
-                    self.emit_op(Op::Sub);
+                    self.ast_binop(Op::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
                         self.emit_binop_with_imm(Op::Div, scale);
@@ -2257,7 +2257,7 @@ impl Compiler {
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale = self.pointee_size(t);
                     self.emit_binop_with_imm(Op::Mul, scale);
-                    self.emit_op(Op::Sub);
+                    self.ast_binop(Op::Sub);
                     self.ty = t;
                 } else {
                     let rhs_ty = self.ty;
@@ -2269,7 +2269,7 @@ impl Compiler {
                     } else {
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
-                    self.emit_op(Op::Sub);
+                    self.ast_binop(Op::Sub);
                     if !is_pointer_ty(t) {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
@@ -2280,7 +2280,7 @@ impl Compiler {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
-                    self.emit_op(Op::Fmul);
+                    self.ast_binop(Op::Fmul);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
                     let rhs_ty = self.ty;
@@ -2291,7 +2291,7 @@ impl Compiler {
                     // pre-conversion tag. Walker's post-op
                     // narrowing keys off `ty`.
                     self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
-                    self.emit_op(Op::Mul);
+                    self.ast_binop(Op::Mul);
                     self.maybe_mask_to_unsigned_width(t, rhs_ty);
                 }
             } else if self.lex.tk == Token::DivOp {
@@ -2300,7 +2300,7 @@ impl Compiler {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
-                    self.emit_op(Op::Fdiv);
+                    self.ast_binop(Op::Fdiv);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
                     // C99 6.3.1.8: when either operand is unsigned, the
@@ -2332,7 +2332,7 @@ impl Compiler {
                         let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                         self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
-                        self.emit_op(Op::Divu);
+                        self.ast_binop(Op::Divu);
                         self.ast_vstack.clear();
                         self.ast_vstack.extend(saved_vstack);
                         if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
@@ -2351,7 +2351,7 @@ impl Compiler {
                             self.ast_acc = None;
                         }
                     } else {
-                        self.emit_op(Op::Div);
+                        self.ast_binop(Op::Div);
                     }
                     self.ty = common;
                 }
@@ -2372,7 +2372,7 @@ impl Compiler {
                     let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                     self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
-                    self.emit_op(Op::Modu);
+                    self.ast_binop(Op::Modu);
                     self.ast_vstack.clear();
                     self.ast_vstack.extend(saved_vstack);
                     if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
@@ -2391,7 +2391,7 @@ impl Compiler {
                         self.ast_acc = None;
                     }
                 } else {
-                    self.emit_op(Op::Mod);
+                    self.ast_binop(Op::Mod);
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
@@ -2489,7 +2489,7 @@ impl Compiler {
                 }
                 if multi_dim_stride > 0 {
                     self.emit_binop_with_imm(Op::Mul, multi_dim_stride);
-                    self.emit_op(Op::Add);
+                    self.ast_binop(Op::Add);
                     // Multi-dim row pointer -- ty stays at the same
                     // pointer level; the innermost `[k]` decays it
                     // the regular way to a scalar element.
@@ -2529,7 +2529,7 @@ impl Compiler {
                     } else {
                         idx_ast
                     };
-                    self.emit_op(Op::Add);
+                    self.ast_binop(Op::Add);
                     self.ty = t - Ty::Ptr as i64;
                     // `xs[i]` where `xs` is a `struct Foo *` yields a
                     // struct value -- the address-as-value rule. Skip

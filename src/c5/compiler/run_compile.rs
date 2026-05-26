@@ -709,7 +709,7 @@ impl Compiler {
                         // The rounding is round-to-nearest-ties-to-
                         // even, matching `f64 as f32` in Rust and
                         // `cvtsd2ss` / `fcvt s, d` on the JIT path.
-                        self.emit_op(Op::Sf);
+                        self.ast_assign();
                         // Symbol now points at the f32-storage local.
                         self.symbols[idx].val = local_val;
                     }

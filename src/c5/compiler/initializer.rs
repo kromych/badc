@@ -1011,7 +1011,7 @@ impl Compiler {
             self.emit_op(Op::Mcpy);
             self.emit_val(self.size_of_type(ty) as i64);
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            self.emit_op(Op::Sc);
+            self.ast_assign();
         } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {
             // `float`-typed local: narrow the accumulator (an f64
             // bit pattern from the RHS) to single-precision and
@@ -1020,7 +1020,7 @@ impl Compiler {
             // word, so the upper 4 bytes stay whatever they were;
             // the matching `Op::Lf` reads only the low 4 and
             // widens them back to f64.
-            self.emit_op(Op::Sf);
+            self.ast_assign();
         } else {
             // Local int / long / pointer: the slot is a full c5
             // stack word (8 bytes), so a single `Si` writes the
@@ -1030,7 +1030,7 @@ impl Compiler {
             // a later 8-byte Li -- but no caller of this helper
             // re-reads via Li, so the wide store is fine and the
             // existing optimizer recognises Si patterns.
-            self.emit_op(Op::Si);
+            self.ast_assign();
         }
         Ok(())
     }

@@ -183,6 +183,44 @@ fn static_function_is_not_exported_cross_tu() {
 }
 
 #[test]
+fn unreferenced_static_function_is_dropped_from_object() {
+    // C99 6.2.2p3: a file-scope `static` function has internal
+    // linkage and is reachable only from the current TU. The
+    // parser already emits a `warn_unused_static_functions`
+    // diagnostic when no in-TU call site references it; the
+    // codegen also drops the body so the resulting object
+    // doesn't carry dead code. Verifies the
+    // `function_is_unreachable_static` gate in `walk_program`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         static int unused_helper(int x) {{ return x * 2; }}\n\
+         static int used_helper(int x) {{ return x + 1; }}\n\
+         int main(void) {{ return used_helper(41); }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    // Walk for the function names by byte-substring lookup; the
+    // strtab carries them as NUL-terminated entries among the
+    // section header / symbol-table bytes.
+    let has_used = bytes.windows(11).any(|w| w == b"used_helper");
+    let has_unused = bytes.windows(13).any(|w| w == b"unused_helper");
+    assert!(
+        has_used,
+        "reachable static helper must survive into the object"
+    );
+    assert!(
+        !has_unused,
+        "unreachable static helper must not appear in the object"
+    );
+}
+
+#[test]
 fn unresolved_external_function_errors_cleanly() {
     // TU references `foo` but no unit defines it.
     let only = compile_unit_bare(

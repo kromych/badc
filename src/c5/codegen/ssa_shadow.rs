@@ -23,6 +23,16 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
     for i in ordered {
         let f = &program.finished_functions[i];
+        if function_is_unreachable_static(program, &f.name) {
+            // C99 6.2.2p3: a file-scope `static` function is
+            // reachable only from the current TU. When the parser
+            // sees no in-TU call site (`Symbol::was_referenced`
+            // stays false) the body is dead code; drop it before
+            // SSA walk + codegen rather than emit + STB_LOCAL ship.
+            // Names starting with `_` and `main` are exempted to
+            // match the `warn_unused_static_functions` gate.
+            continue;
+        }
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::ast::walk::walk_function(
             &f.ast,
@@ -126,6 +136,41 @@ pub(crate) fn produce_ssa_funcs(
         return Ok(out);
     }
     Ok(Vec::new())
+}
+
+/// True when `name` resolves to a defined-in-this-TU symbol with
+/// internal linkage that the parser never recorded a call site
+/// against. Mirrors `Compiler::warn_unused_static_functions`'s
+/// gate. Excludes `main` (the program entry point) and names
+/// starting with `_` (the gcc / clang -Wunused-function
+/// convention -- treated as deliberately unused).
+fn function_is_unreachable_static(program: &Program, name: &str) -> bool {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    if name.is_empty() || name == "main" || name.starts_with('_') {
+        return false;
+    }
+    for sym in &program.symbols {
+        if sym.name != name {
+            continue;
+        }
+        if sym.class != Token::Fun as i64 {
+            return false;
+        }
+        if !sym.defined_here {
+            return false;
+        }
+        let unref = sym.linkage == Linkage::Internal && !sym.was_referenced;
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
+            std::eprintln!(
+                "[static_dce] name={} linkage={:?} was_referenced={} drop={}",
+                name, sym.linkage, sym.was_referenced, unref,
+            );
+        }
+        return unref;
+    }
+    false
 }
 
 /// Maximum param slot the function reads or writes. C5's

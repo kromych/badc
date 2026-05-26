@@ -1759,13 +1759,8 @@ impl<'a> Reader<'a> {
         let sec = |i: usize| {
             let off = e_shoff + i * 64;
             ShdrView {
-                sh_name: u32_at(bytes, off),
-                sh_type: u32_at(bytes, off + 4),
-                sh_flags: u64_at(bytes, off + 8),
                 sh_offset: u64_at(bytes, off + 24),
                 sh_size: u64_at(bytes, off + 32),
-                sh_link: u32_at(bytes, off + 40),
-                sh_info: u32_at(bytes, off + 44),
             }
         };
 
@@ -1846,15 +1841,9 @@ impl<'a> Reader<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 struct ShdrView {
-    sh_name: u32,
-    sh_type: u32,
-    sh_flags: u64,
     sh_offset: u64,
     sh_size: u64,
-    sh_link: u32,
-    sh_info: u32,
 }
 
 fn slice_of<'a>(bytes: &'a [u8], off: usize, len: usize, what: &str) -> Result<&'a [u8], C5Error> {

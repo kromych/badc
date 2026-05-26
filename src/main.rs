@@ -633,11 +633,23 @@ fn main() {
     // so routing those targets through it would write a Linux
     // image with the wrong container.
     // The native-link path runs on every target: ELF for Linux,
-    // and the MergedNative-to-Build synthesizer for Mach-O / PE.
-    // The synthesizer baseline excludes _Thread_local, shared
+    // the MergedNative-to-Build synthesizer for Mach-O / PE. The
+    // synthesizer baseline excludes _Thread_local, shared
     // libraries, variadic libc imports, and DWARF emit -- sources
     // with those still need to take the LinkUnit path below.
-    if mode == Mode::NativeExecutable && !compile_only {
+    //
+    // On macOS and Windows, only route through the synth path when
+    // there is at least one native `.o` / `.a` input the LinkUnit
+    // path cannot consume. Pure `.c` sources keep the LinkUnit +
+    // emit_native chain (auto-codesign on macOS, DWARF, exports,
+    // TLS) until the synthesizer covers those.
+    let take_native_link_path = match target {
+        Target::LinuxX64 | Target::LinuxAarch64 => true,
+        Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
+            !objects.is_empty() || !archives.is_empty()
+        }
+    };
+    if mode == Mode::NativeExecutable && !compile_only && take_native_link_path {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());

@@ -66,9 +66,10 @@ fn synth_program_and_build(
     check_target_machine(target, merged.machine)?;
     let entry_offset = resolve_entry_offset(merged, entry_name)?;
     let imports = synth_imports(merged, target);
-    let (got_fixups, data_fixups, func_fixups) = synth_fixups(merged)?;
+    let (got_fixups, data_fixups, func_fixups) = synth_fixups(merged, plt)?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt);
+    let pc_to_native = synth_pc_to_native(&merged.text, &code_relocs);
 
     let program = Program {
         data: Vec::new(),
@@ -101,7 +102,7 @@ fn synth_program_and_build(
         got_fixups,
         data_fixups,
         func_fixups,
-        pc_to_native: Vec::new(),
+        pc_to_native,
         func_ent_pcs: Vec::new(),
         func_names: Vec::new(),
         reloc_call_sites: Vec::new(),
@@ -209,29 +210,155 @@ fn target_real_symbol(target: Target, local: &str) -> String {
     }
 }
 
-/// Project [`MergedNative::pending_imports`] into the per-arch
-/// `(adrp, ldr/add)` paired fixup streams the writer consumes.
+/// Project [`MergedNative::pending_imports`] plus the matching PLT
+/// trampoline list into the per-arch fixup streams the writer
+/// consumes.
 ///
-/// MergedNative carries one entry per ELF relocation. aarch64
-/// address-of-symbol sequences are two relocations on consecutive
-/// instructions (ADRP at `text_offset`, ADD/LDR at
-/// `text_offset + 4`). The synthesizer pairs them by `adrp_offset`
-/// and emits one fixup per pair.
+/// aarch64 address-of-symbol sequences are two relocations on
+/// consecutive instructions: R_AARCH64_ADR_PREL_PG_HI21 at
+/// `text_offset` and R_AARCH64_ADD_ABS_LO12_NC at `text_offset + 4`.
+/// `patch_adrp_add` patches both halves from a single fixup, so the
+/// synthesizer keys on the ADRP entry and drops the ADD entry.
+///
+/// PLT trampolines emit_*_plt produced are at the tail of
+/// `merged.text`. Each is `adrp x16, 0; ldr x16, [x16]; br x16`
+/// pointing at GOT slot `import_index`; one GotFixup per trampoline
+/// lets the writer patch the adrp+ldr to reach `__got + slot * 8`.
 fn synth_fixups(
     merged: &MergedNative,
+    plt: &[PltTrampoline],
 ) -> Result<(Vec<GotFixup>, Vec<DataFixup>, Vec<FuncFixup>), C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
-    let _ = (&mut got_fixups, &mut data_fixups, &mut func_fixups, merged);
-    // TODO: pair pending_imports by (adrp_offset, ldr/add at adrp+4)
-    // and classify by target_section. Requires per-kind matching
-    // against R_AARCH64_ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC plus
-    // detecting the GOT-load variant introduced by the per-format
-    // PLT lowering. Tracked as a baseline blocker; the empty
-    // streams here let the rest of the synthesizer compile so the
-    // wire-up + smoke test land before the per-arch fixup work.
+
+    for tramp in plt {
+        got_fixups.push(GotFixup {
+            adrp_offset: tramp.text_offset,
+            import_index: tramp.import_index,
+        });
+    }
+
+    for reloc in &merged.pending_imports {
+        match merged.machine {
+            NativeMachine::Aarch64 => {
+                project_aarch64_pending(
+                    reloc,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut func_fixups,
+                )?;
+            }
+            NativeMachine::X86_64 => {
+                project_x86_64_pending(
+                    reloc,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut func_fixups,
+                )?;
+            }
+        }
+    }
+
     Ok((got_fixups, data_fixups, func_fixups))
+}
+
+// Reloc kind constants. Match the values link.rs uses (it keeps its
+// own private copies); duplicated here so the synthesizer doesn't
+// reach across the module boundary for a private constant.
+const R_X86_64_PC32: u32 = 2;
+const R_X86_64_PLT32: u32 = 4;
+const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
+const R_AARCH64_CALL26: u32 = 283;
+
+fn project_aarch64_pending(
+    reloc: &super::link::PendingImportReloc,
+    got_fixups: &mut Vec<GotFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    func_fixups: &mut Vec<FuncFixup>,
+) -> Result<(), C5Error> {
+    match reloc.rtype {
+        R_AARCH64_ADD_ABS_LO12_NC => {
+            // The matching ADRP entry owns the fixup; patch_adrp_add
+            // writes both halves from one DataFixup / FuncFixup /
+            // GotFixup record.
+            Ok(())
+        }
+        R_AARCH64_CALL26 => Err(synth_err(
+            "synthesizer: R_AARCH64_CALL26 still pending after PLT pass \
+             -- emit_aarch64_plt should have drained it",
+        )),
+        R_AARCH64_ADR_PREL_PG_HI21 => match reloc.target_section {
+            NativeSymSection::Data | NativeSymSection::Bss => {
+                data_fixups.push(DataFixup {
+                    adrp_offset: reloc.text_offset as usize,
+                    data_offset: reloc.addend as u64,
+                });
+                Ok(())
+            }
+            NativeSymSection::Text => {
+                func_fixups.push(FuncFixup {
+                    adrp_offset: reloc.text_offset as usize,
+                    target_native_offset: reloc.addend as usize,
+                });
+                Ok(())
+            }
+            NativeSymSection::Undef => {
+                got_fixups.push(GotFixup {
+                    adrp_offset: reloc.text_offset as usize,
+                    import_index: reloc.import_index,
+                });
+                Ok(())
+            }
+            other => Err(synth_err(&alloc::format!(
+                "synthesizer: aarch64 ADR_PREL_PG_HI21 targeting {other:?} not supported"
+            ))),
+        },
+        other => Err(synth_err(&alloc::format!(
+            "synthesizer: aarch64 rtype {other} not supported"
+        ))),
+    }
+}
+
+fn project_x86_64_pending(
+    reloc: &super::link::PendingImportReloc,
+    got_fixups: &mut Vec<GotFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    func_fixups: &mut Vec<FuncFixup>,
+) -> Result<(), C5Error> {
+    if reloc.rtype != R_X86_64_PC32 && reloc.rtype != R_X86_64_PLT32 {
+        return Err(synth_err(&alloc::format!(
+            "synthesizer: x86_64 rtype {} not supported",
+            reloc.rtype
+        )));
+    }
+    match reloc.target_section {
+        NativeSymSection::Data | NativeSymSection::Bss => {
+            data_fixups.push(DataFixup {
+                adrp_offset: reloc.text_offset as usize,
+                data_offset: reloc.addend as u64,
+            });
+            Ok(())
+        }
+        NativeSymSection::Text => {
+            func_fixups.push(FuncFixup {
+                adrp_offset: reloc.text_offset as usize,
+                target_native_offset: reloc.addend as usize,
+            });
+            Ok(())
+        }
+        NativeSymSection::Undef => {
+            got_fixups.push(GotFixup {
+                adrp_offset: reloc.text_offset as usize,
+                import_index: reloc.import_index,
+            });
+            Ok(())
+        }
+        other => Err(synth_err(&alloc::format!(
+            "synthesizer: x86_64 reloc targeting {other:?} not supported"
+        ))),
+    }
 }
 
 fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
@@ -255,6 +382,35 @@ fn synth_relocs(merged: &MergedNative) -> (Vec<DataReloc>, Vec<CodeReloc>) {
         }
     }
     (data_relocs, code_relocs)
+}
+
+/// `code_relocs` reference functions by `target_ent_pc`. The writer
+/// indexes `pc_to_native` with that PC to recover the native code
+/// offset. For the synthesizer the PC is already the byte offset
+/// within merged text, so the table is identity over the entries
+/// each code-reloc references. Builds a sparse-enough Vec keyed by
+/// the maximum PC actually referenced; entries outside the referenced
+/// set stay zero and will surface as a "missing ent_pc" error if the
+/// writer reaches them.
+fn synth_pc_to_native(text: &[u8], code_relocs: &[CodeReloc]) -> Vec<usize> {
+    if code_relocs.is_empty() {
+        return Vec::new();
+    }
+    let mut max_pc = 0u64;
+    for r in code_relocs {
+        if r.target_ent_pc > max_pc {
+            max_pc = r.target_ent_pc;
+        }
+    }
+    let len = (max_pc as usize).saturating_add(1).max(text.len());
+    let mut table = alloc::vec![usize::MAX; len];
+    for r in code_relocs {
+        let pc = r.target_ent_pc as usize;
+        if pc < table.len() {
+            table[pc] = pc;
+        }
+    }
+    table
 }
 
 fn synth_plt_offsets(merged: &MergedNative, plt: &[PltTrampoline]) -> Vec<usize> {

@@ -495,27 +495,26 @@ pub struct Compiler {
     /// function definition.
     uses_alloca_in_current_fn: bool,
 
-    /// Per-function AST built in parallel with the bytecode emit.
-    /// The arena is reset at every function entry. The SSA walker
-    /// reads from these snapshots at codegen entry.
+    /// Per-function AST. The arena is reset at every function
+    /// entry; the SSA walker reads from these snapshots at codegen
+    /// entry.
     pub(super) ast: super::ast::Ast,
 
-    /// ExprId of the value currently in the c5 accumulator, mirroring
-    /// the bytecode tier's invariant that every expression leaves
-    /// its result in `a`. `None` between statements or when the
-    /// expression site doesn't produce an AST node (bytecode-only
-    /// address producers that the call-site path consumes through
-    /// the bytecode tier only).
+    /// ExprId of the value currently in the c5 accumulator,
+    /// matching the parser's "every expression leaves its result
+    /// in `a`" invariant. `None` between statements or when the
+    /// expression site doesn't produce an AST node (address-only
+    /// producers that the call-site path consumes directly).
     pub(super) ast_acc: Option<super::ast::ExprId>,
 
     /// ExprIds matching values on the c5 stack-machine stack --
     /// the stack push (`Op::Psh`) records the current `ast_acc`
     /// here, arithmetic / store ops pop the top entry. `Option`
-    /// because some parser sites push bytecode-only addresses
-    /// (`Op::Lea <temp>`, `Op::Imm <data_off>` for an address
-    /// producer) that aren't AST-wired yet; pushing `None` keeps
-    /// the vstack depth in lockstep with the c5 stack so a
-    /// later pop hits the right slot rather than a stale value
+    /// because some parser sites push address-only producers
+    /// (`Op::Lea <temp>`, `Op::Imm <data_off>` for an address)
+    /// that aren't AST-wired yet; pushing `None` keeps the
+    /// vstack depth in lockstep with the c5 stack so a later pop
+    /// hits the right slot rather than a stale value
     /// from a previous statement. `Vec` is per-function, never
     /// grows past the deepest expression nesting in any one
     /// function.
@@ -535,9 +534,9 @@ pub struct Compiler {
     /// Per-function map from goto label name -> AST `LabelId`.
     /// Reset at every function entry (alongside `ast_reset`).
     /// Keeps the AST's flat per-function label-id space in sync
-    /// with the bytecode tier's name-keyed `self.labels` /
+    /// with the parser's name-keyed `self.labels` /
     /// `self.unresolved_gotos`, so `goto L; ... L:` resolves on
-    /// both sides regardless of source order.
+    /// the AST side regardless of source order.
     pub(super) ast_labels: Vec<(String, super::ast::LabelId)>,
 
     /// Cross-helper carry: `emit_local_init_store` stashes the
@@ -590,10 +589,10 @@ pub struct Compiler {
     /// against `labels` at function end; an unresolved entry is
     /// a compile error.
     unresolved_gotos: Vec<String>,
-    /// Per nested `switch` body: the list of case values seen
-    /// so far. Used both by the AST emitter (each case carries
-    /// its constant in the resulting AST node) and by the
-    /// parser's bytecode dispatcher emit loop.
+    /// Per nested `switch` body: drained at switch close. The
+    /// AST emitter records each case's constant on its `Stmt::Case`
+    /// node; this stack is the parser-side depth tracker that
+    /// gates `case` / `default` legality.
     switch_cases: Vec<Vec<i64>>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
@@ -1147,8 +1146,9 @@ impl Compiler {
         Ok(exports)
     }
 
-    /// Compile the source. On success, the returned `Program` contains the
-    /// bytecode, the static data segment, and the PC of `main`.
+    /// Compile the source. On success, the returned `Program`
+    /// carries the per-function SSA + static data segment + the
+    /// ent_pc of `main`.
     pub fn compile(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);

@@ -22,8 +22,8 @@
 //!   are the per-byte LE writers that record DataReloc / CodeReloc
 //!   entries for pointer-typed elements.
 //! * [`Compiler::emit_local_array_init`] / `emit_local_init_store`
-//!   emit the bytecode that drives array / scalar local initialisers
-//!   into their stack slot at runtime.
+//!   build the AST shape that drives array / scalar local
+//!   initialisers into their stack slot at runtime.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster only made
 //! sense as a unit once `collect_struct_initializer` started

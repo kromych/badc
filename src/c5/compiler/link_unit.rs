@@ -1,5 +1,5 @@
-//! Convert a finished [`Compiler`] (parsed source + emitted
-//! bytecode) into a [`LinkUnit`] suitable for cross-TU linking.
+//! Convert a finished [`Compiler`] (parsed source + per-function
+//! SSA snapshots) into a [`LinkUnit`] for cross-TU linking.
 //!
 //! Live only under the `linker` feature -- single-TU consumers
 //! get the existing `compile() -> Program` path unchanged.
@@ -82,13 +82,12 @@ fn walker_funcs_for(
     // initializer in this TU). Those tentative offsets land in
     // the .o's user_ssa_funcs as ImmData(<unit-local>) but the
     // real definition lives in another unit; without resetting
-    // them here, the linker's per-unit `data_off` shift plus
-    // the merge's resolver-from-bytecode patch loop both miss
-    // the case (post-shift the value is non-zero, so the
-    // resolver's "patch on 0" guard skips it). Zero out the
-    // ImmData for those symbols here so the resolver gets a
-    // clean placeholder slot to fill with the linker-resolved
-    // operand.
+    // them here, the linker's per-unit `data_off` shift plus the
+    // merge's symbol-resolution patch loop both miss the case
+    // (post-shift the value is non-zero, so the resolver's
+    // "patch on 0" guard skips it). Zero out the ImmData for
+    // those symbols here so the resolver gets a clean
+    // placeholder slot to fill with the linker-resolved operand.
     use crate::c5::ir::Inst;
     use crate::c5::symbol::Linkage;
     let stale_extern_offs: alloc::collections::BTreeSet<i64> = symbols

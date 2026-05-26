@@ -86,9 +86,10 @@ impl Compiler {
         }
     }
 
-    /// Record that a load of local symbol `idx` reached the
-    /// bytecode tail. Drops the symbol's pending-store list --
-    /// the value the most recent store wrote was just consumed.
+    /// Record that a load of local symbol `idx` tagged the
+    /// trailing scalar load. Drops the symbol's pending-store
+    /// list -- the value the most recent store wrote was just
+    /// consumed.
     pub(super) fn record_local_read(&mut self, idx: usize) {
         if !self.warn_dead_store {
             return;
@@ -281,9 +282,9 @@ impl Compiler {
     }
 
     /// Reconcile mixed int/float operands for an arithmetic /
-    /// comparison op so the matching FP op can run. Two
-    /// shapes need bytecode work:
-    ///   * LHS float, RHS int: RHS is in `a`; emit `Op::Fcvtif`
+    /// comparison op so the matching FP op can run. Two shapes
+    /// need a lift:
+    ///   * LHS float, RHS int: RHS is in `a`; apply `Op::Fcvtif`
     ///     in place to lift it to f64.
     ///   * LHS int, RHS float: LHS is on the c5 stack and `a`
     ///     holds the float RHS. Spill RHS to a temp via
@@ -316,13 +317,13 @@ impl Compiler {
         // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.
         // Snapshot the AST operands first: lhs is the int sitting
         // on the parser-side vstack, rhs is the float currently
-        // in `ast_acc`. The bytecode sequence emits `Op::StLocI` /
-        // `Op::Imm` / `Op::Or` / `Op::Fcvtif` / `Op::Psh` /
-        // `Op::Lea` / `Op::Li` -- OR / PSH / LI route through
-        // `ast_track_emit_op` and pop / push the AST vstack the
-        // outer call must preserve. Drain the outer vstack into a
-        // side buffer, push a single `None` sentinel for the
-        // inner ops to consume, emit the sequence, then restore.
+        // in `ast_acc`. The intermediate `Op::StLocI` / `Op::Imm`
+        // / `Op::Or` / `Op::Fcvtif` / `Op::Psh` / `Op::Lea` /
+        // `Op::Li` tags route through `ast_track_emit_op` and
+        // pop / push the AST vstack the outer call must preserve.
+        // Drain the outer vstack into a side buffer, push a
+        // single `None` sentinel for the inner ops to consume,
+        // run the sequence, then restore.
         // Finally rebuild the AST so the walker sees
         // `Expr::Cast { lhs_int_ast, to_ty = rhs_fp }` on the
         // vstack and the rhs float ast back on `ast_acc`.

@@ -149,8 +149,9 @@ impl Compiler {
                 //                                                 plus the optional
                 //                                                 Mcpy-zero prelude
                 //                                                 from `aggregate`)
-                // Static locals (promoted to Glo class) still skip
-                // -- their bytecode-side allocation diverges.
+                // Static locals (promoted to Glo class) skip --
+                // their storage is laid out in .data at TU-load
+                // time, not in the function's frame.
                 if self.symbols[loc_idx].class == Token::Loc as i64 {
                     let slot_off = self.symbols[loc_idx].val;
                     let scalar = self.pending_local_init_ast.take();

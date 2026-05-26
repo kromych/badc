@@ -183,6 +183,65 @@ fn static_function_is_not_exported_cross_tu() {
 }
 
 #[test]
+fn transitively_dead_static_chain_is_dropped_from_object() {
+    // A static helper `a` that calls another static `b`. Nothing
+    // in the TU references `a`, so `a`, `b`, and everything else
+    // reachable only from `a` should drop. The parser's lexical
+    // `was_referenced` flag would keep `b` alive (its callee
+    // reference is set when `a`'s body is parsed); the codegen's
+    // transitive reachability pass over `Inst::Call` /
+    // `Inst::ImmCode` recovers the dead status.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "\
+         static int dead_leaf(int x) { return x + 1; }\n\
+         static int dead_caller(int x) { return dead_leaf(x) * 2; }\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has_leaf = bytes.windows(9).any(|w| w == b"dead_leaf");
+    let has_caller = bytes.windows(11).any(|w| w == b"dead_caller");
+    assert!(!has_leaf, "transitively-dead leaf must drop");
+    assert!(!has_caller, "lexically-dead caller must drop");
+}
+
+#[test]
+fn address_taken_static_survives_dce() {
+    // A static function whose address is stored in a global
+    // function-pointer table must survive DCE: the table entry
+    // becomes a `program.code_relocs` root. Mirrors the vtable
+    // pattern (`static const VTable v = { .fp = doubled };`).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "\
+         static int doubled(int n) { return n + n; }\n\
+         typedef int (*fp_t)(int);\n\
+         const fp_t vtable[] = { doubled };\n\
+         int main(void) { return vtable[0](21); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has_doubled = bytes.windows(7).any(|w| w == b"doubled");
+    assert!(
+        has_doubled,
+        "address-taken static must survive DCE via code_relocs root"
+    );
+}
+
+#[test]
 fn unreferenced_static_function_is_dropped_from_object() {
     // C99 6.2.2p3: a file-scope `static` function has internal
     // linkage and is reachable only from the current TU. The

@@ -23,16 +23,6 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
     for i in ordered {
         let f = &program.finished_functions[i];
-        if function_is_unreachable_static(program, &f.name) {
-            // C99 6.2.2p3: a file-scope `static` function is
-            // reachable only from the current TU. When the parser
-            // sees no in-TU call site (`Symbol::was_referenced`
-            // stays false) the body is dead code; drop it before
-            // SSA walk + codegen rather than emit + STB_LOCAL ship.
-            // Names starting with `_` and `main` are exempted to
-            // match the `warn_unused_static_functions` gate.
-            continue;
-        }
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::ast::walk::walk_function(
             &f.ast,
@@ -92,7 +82,95 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         }
     }
     out.sort_by_key(|f| f.ent_pc);
+    drop_unreachable_statics(&mut out, program);
     Ok(out)
+}
+
+/// Drop every `FunctionSsa` whose ent_pc is unreachable from the
+/// program's static-DCE roots. Roots are the entry point (`main`),
+/// every externally-linked function (`Linkage::External` /
+/// `Linkage::None`), and every name starting with `_` (the gcc /
+/// clang -Wunused-function convention -- treated as deliberately
+/// retained, matching what `warn_unused_static_functions`
+/// exempts). Anything transitively reachable from a root via
+/// `Inst::Call` or `Inst::ImmCode` survives. `Inst::CallIndirect`
+/// is handled conservatively: any function whose address appears
+/// in `Inst::ImmCode` is already marked reachable, so an indirect
+/// dispatch cannot reach a function the marker hasn't seen.
+fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
+    use crate::c5::ir::Inst;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+
+    let mut linkage_by_name: alloc::collections::BTreeMap<&str, Linkage> =
+        alloc::collections::BTreeMap::new();
+    for sym in &program.symbols {
+        if sym.class == Token::Fun as i64 && !sym.name.is_empty() {
+            linkage_by_name.insert(sym.name.as_str(), sym.linkage);
+        }
+    }
+
+    let mut by_pc: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    for (i, f) in funcs.iter().enumerate() {
+        by_pc.insert(f.ent_pc, i);
+    }
+
+    let mut reachable: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    let mut queue: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+
+    for f in funcs.iter() {
+        let is_root = f.name == "main"
+            || f.name.starts_with('_')
+            || matches!(
+                linkage_by_name.get(f.name.as_str()).copied(),
+                Some(Linkage::External) | Some(Linkage::None)
+            );
+        if is_root {
+            queue.push(f.ent_pc);
+        }
+    }
+    // Static initialisers of the form `int (*fp)(int) = some_fn;`
+    // park the target's ent_pc in `program.code_relocs` (the slot
+    // is patched at link / load time). Treat each entry as a root
+    // so the function whose address sits in the data segment
+    // survives DCE even when it has no in-text call site.
+    for r in &program.code_relocs {
+        queue.push(r.target_ent_pc as usize);
+    }
+    // Every export name binds a function. Treat as a root so
+    // `#pragma export(<name>)` keeps the body around when the
+    // user's source has no in-image call site.
+    for e in &program.exports {
+        queue.push(e.ent_pc);
+    }
+
+    while let Some(pc) = queue.pop() {
+        if !reachable.insert(pc) {
+            continue;
+        }
+        let Some(&idx) = by_pc.get(&pc) else { continue };
+        for inst in &funcs[idx].insts {
+            match inst {
+                Inst::Call { target_pc, .. } => queue.push(*target_pc),
+                Inst::ImmCode(target_pc) => queue.push(*target_pc),
+                _ => {}
+            }
+        }
+    }
+
+    funcs.retain(|f| {
+        let keep = reachable.contains(&f.ent_pc);
+        #[cfg(feature = "std")]
+        if !keep && std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
+            std::eprintln!(
+                "[static_dce] dropping unreachable function `{}` ent_pc={}",
+                f.name, f.ent_pc,
+            );
+        }
+        keep
+    });
 }
 
 /// SSA-source pick for the codegen backends and the Vm. Two
@@ -136,41 +214,6 @@ pub(crate) fn produce_ssa_funcs(
         return Ok(out);
     }
     Ok(Vec::new())
-}
-
-/// True when `name` resolves to a defined-in-this-TU symbol with
-/// internal linkage that the parser never recorded a call site
-/// against. Mirrors `Compiler::warn_unused_static_functions`'s
-/// gate. Excludes `main` (the program entry point) and names
-/// starting with `_` (the gcc / clang -Wunused-function
-/// convention -- treated as deliberately unused).
-fn function_is_unreachable_static(program: &Program, name: &str) -> bool {
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
-    if name.is_empty() || name == "main" || name.starts_with('_') {
-        return false;
-    }
-    for sym in &program.symbols {
-        if sym.name != name {
-            continue;
-        }
-        if sym.class != Token::Fun as i64 {
-            return false;
-        }
-        if !sym.defined_here {
-            return false;
-        }
-        let unref = sym.linkage == Linkage::Internal && !sym.was_referenced;
-        #[cfg(feature = "std")]
-        if std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
-            std::eprintln!(
-                "[static_dce] name={} linkage={:?} was_referenced={} drop={}",
-                name, sym.linkage, sym.was_referenced, unref,
-            );
-        }
-        return unref;
-    }
-    false
 }
 
 /// Maximum param slot the function reads or writes. C5's

@@ -1138,7 +1138,7 @@ pub(super) struct Fixup {
     /// Byte offset within `code` where the placeholder branch lives.
     pub(super) native_offset: usize,
     /// Bytecode PC the branch is supposed to land on.
-    pub(super) target_bytecode_pc: usize,
+    pub(super) target_ent_pc: usize,
     pub(super) kind: BranchKind,
 }
 
@@ -1181,7 +1181,7 @@ pub(super) fn lower(
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk against
-    // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
+    // `bytecode_to_native`, so we record (adrp_offset, target_ent_pc)
     // here and rewrite into `Build::func_fixups` once the map is final.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
     // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
@@ -1315,7 +1315,7 @@ pub(super) fn lower(
 
     // Cross-TU user-function imports surfaced by the parser as
     // placeholder bc_pcs past `text.len()`. Each `Inst::Call`
-    // emits a `Fixup::Bl` with `target_bytecode_pc` equal to the
+    // emits a `Fixup::Bl` with `target_ent_pc` equal to the
     // placeholder; we partition those out before
     // `apply_fixups` and re-emit them as
     // `Build::user_extern_call_sites` entries that the writer
@@ -1333,7 +1333,7 @@ pub(super) fn lower(
     } else {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
-            if let Some(name) = extern_pc_lookup.get(&f.target_bytecode_pc) {
+            if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
                 let is_tail = matches!(f.kind, BranchKind::B);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
@@ -1496,20 +1496,20 @@ fn apply_fixups(
     bc_len: usize,
 ) -> Result<(), C5Error> {
     for f in fixups {
-        if f.target_bytecode_pc > bc_len {
+        if f.target_ent_pc > bc_len {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: branch target {} past end of bytecode",
-                    f.target_bytecode_pc
+                    f.target_ent_pc
                 ),
             )));
         }
-        let target = bc_to_native[f.target_bytecode_pc];
+        let target = bc_to_native[f.target_ent_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: branch target {} did not land on an instruction",
-                    f.target_bytecode_pc
+                    f.target_ent_pc
                 ),
             )));
         }

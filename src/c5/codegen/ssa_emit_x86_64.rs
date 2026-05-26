@@ -2139,7 +2139,7 @@ fn emit_call(
         let call_site = code.len();
         fixups.push(Fixup {
             native_offset: call_site,
-            target_bytecode_pc: target_pc,
+            target_ent_pc: target_pc,
             kind: super::x86_64::BranchKind::Call,
         });
         super::x86_64::emit_call_rel32(code, 0);
@@ -2184,12 +2184,12 @@ fn emit_call(
         }
     }
     // Record a fixup for the call's rel32 field. `emit_call_rel32`
-    // emits opcode 0xE8 then 4 bytes of rel32; `target_bytecode_pc`
+    // emits opcode 0xE8 then 4 bytes of rel32; `target_ent_pc`
     // resolves to the function's native offset in the post-pass.
     let call_site = code.len();
     fixups.push(Fixup {
         native_offset: call_site,
-        target_bytecode_pc: target_pc,
+        target_ent_pc: target_pc,
         kind: super::x86_64::BranchKind::Call,
     });
     super::x86_64::emit_call_rel32(code, 0);

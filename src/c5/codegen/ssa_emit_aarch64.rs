@@ -1611,7 +1611,7 @@ fn emit_call(
         }
         fixups.push(Fixup {
             native_offset: code.len(),
-            target_bytecode_pc: target_pc,
+            target_ent_pc: target_pc,
             kind: BranchKind::Bl,
         });
         emit(code, enc_bl(0));
@@ -1714,11 +1714,11 @@ fn emit_call(
         }
     }
     // Branch placeholder + fixup. The pool path's apply_fixups
-    // resolves `target_bytecode_pc` -> `bytecode_to_native` once
+    // resolves `target_ent_pc` -> `bytecode_to_native` once
     // the map is final.
     fixups.push(Fixup {
         native_offset: code.len(),
-        target_bytecode_pc: target_pc,
+        target_ent_pc: target_pc,
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));

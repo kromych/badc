@@ -1316,7 +1316,7 @@ pub(super) enum BranchKind {
 pub(super) struct Fixup {
     /// Byte offset within `code` of the placeholder's first byte.
     pub(super) native_offset: usize,
-    pub(super) target_bytecode_pc: usize,
+    pub(super) target_ent_pc: usize,
     pub(super) kind: BranchKind,
 }
 
@@ -1475,7 +1475,7 @@ pub(super) fn lower(
 
     // Cross-TU user-function imports surfaced by the parser as
     // placeholder bc_pcs past `text.len()`. Each `Inst::Call`
-    // emits a `Fixup::Call` with `target_bytecode_pc` equal to
+    // emits a `Fixup::Call` with `target_ent_pc` equal to
     // the placeholder; we partition those out before
     // `apply_fixups` and re-emit them as
     // `Build::user_extern_call_sites` entries that the writer
@@ -1493,7 +1493,7 @@ pub(super) fn lower(
     } else {
         let mut out = Vec::with_capacity(fixups.len());
         for f in fixups {
-            if let Some(name) = extern_pc_lookup.get(&f.target_bytecode_pc) {
+            if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
                 let is_tail = matches!(f.kind, BranchKind::Jmp);
                 user_extern_call_sites.push(super::UserExternCallSite {
                     instr_offset: f.native_offset,
@@ -1635,20 +1635,20 @@ fn apply_fixups(
     bc_len: usize,
 ) -> Result<(), C5Error> {
     for f in fixups {
-        if f.target_bytecode_pc > bc_len {
+        if f.target_ent_pc > bc_len {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen (x86_64): branch target {} past end of bytecode",
-                    f.target_bytecode_pc
+                    f.target_ent_pc
                 ),
             )));
         }
-        let target = bc_to_native[f.target_bytecode_pc];
+        let target = bc_to_native[f.target_ent_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen (x86_64): branch target {} did not land on an instruction",
-                    f.target_bytecode_pc
+                    f.target_ent_pc
                 ),
             )));
         }

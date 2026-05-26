@@ -144,7 +144,7 @@ impl Compiler {
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
-            let ent_pc = self.text.len();
+            let ent_pc = self.next_ent_pc;
             self.symbols[tr_idx].val = ent_pc as i64;
             // C99 6.9 has no notion of synthetic helpers, but
             // a trampoline body is emitted into this TU's text,
@@ -240,8 +240,8 @@ impl Compiler {
                 // stays strictly greater than its `ent_pc`, which
                 // is what the linker and DWARF range builder
                 // require.
-                self.text.push(0);
-                self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
+                self.next_ent_pc += 1;
+                self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
                 continue;
             }
 
@@ -274,8 +274,8 @@ impl Compiler {
             // the matching SSA insts live on
             // `synthetic_ssa_funcs[synth_idx]` and drive the codegen.
             let _ = (nargs, binding_idx);
-            self.text.push(0);
-            self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
+            self.next_ent_pc += 1;
+            self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
         }
     }
 }

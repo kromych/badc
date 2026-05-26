@@ -689,11 +689,11 @@ impl Compiler {
         // emit_val no longer pushing to the tape, the body's
         // text.len() growth is zero; without this reservation the
         // linker / DWARF range invariant would fail.
-        self.text.push(0);
+        self.next_ent_pc += 1;
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
-            end_pc: self.text.len(),
+            end_pc: self.next_ent_pc,
             n_params,
             is_variadic,
             n_locals: self.max_loc_offs,

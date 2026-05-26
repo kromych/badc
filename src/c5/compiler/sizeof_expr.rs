@@ -120,7 +120,7 @@ impl Compiler {
             // [`Compiler::resolve_code_relocs`] zips against
             // `code_relocs` post-parse, so dropping the trailing
             // entry keeps the two arrays the same length.
-            let saved_text_len = self.text.len();
+            let saved_text_len = self.next_ent_pc;
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             // If sizeof consumed a leading `(` but the inner
             // content is not a type-name, the paren belongs to a
@@ -142,8 +142,10 @@ impl Compiler {
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
-            // Drop the operand's emitted code.
-            self.text.truncate(saved_text_len);
+            // Drop any PC reservation the operand's parse
+            // recorded; sizeof emits nothing live so the saved
+            // counter must be restored verbatim.
+            self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;

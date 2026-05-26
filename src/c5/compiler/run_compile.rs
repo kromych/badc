@@ -414,7 +414,7 @@ impl Compiler {
                         // emitted, `val` already points at the
                         // real `ent_pc` and must not be
                         // clobbered -- a previous version of this
-                        // code wrote `val = self.text.len()`
+                        // code wrote `val = self.next_ent_pc`
                         // whenever val was 0, which silently
                         // broke any function whose body
                         // legitimately started at PC 0.
@@ -609,7 +609,7 @@ impl Compiler {
                     self.uses_alloca_in_current_fn = false;
                     self.ast_reset();
 
-                    let ent_pc = self.text.len();
+                    let ent_pc = self.next_ent_pc;
                     // Point the symbol at the real `ent_pc`. The
                     // walker reads Symbol::val through live_fun_val
                     // when it lowers a call to this name, so any

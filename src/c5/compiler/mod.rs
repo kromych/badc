@@ -467,13 +467,12 @@ pub struct Compiler {
     symbol_index: lexer::SymbolIndex,
 
     // --- Codegen state ---
-    /// Stand-in for the retired bytecode tape. Tracks the
-    /// parser's next-PC counter so existing `self.text.push(_)`
-    /// / `pop()` / `truncate(n)` / `len()` call sites keep
-    /// working without storing the actual op words. The trailing
-    /// op detectors read recent emits from `recent_emits`
-    /// instead.
-    text: TextPc,
+    /// Next available `ent_pc` identifier for a user function or
+    /// Sys trampoline. Bumped once per function at recording time
+    /// so `ent_pc` / `end_pc` form a strictly increasing,
+    /// non-overlapping per-TU sequence the linker can rebase
+    /// across translation units.
+    next_ent_pc: usize,
     data: Vec<u8>,
     /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
@@ -852,30 +851,6 @@ pub struct Compiler {
     next_compound_literal_id: usize,
 }
 
-/// Parser-internal PC counter standing in for the retired
-/// bytecode tape (`Vec<i64>`). Implements the `Vec` shape the
-/// parser uses (`push` / `pop` / `truncate` / `len`) on a
-/// `usize` since no code reads tape content anymore -- trailing-
-/// op detectors read from `Compiler::recent_emits`.
-#[derive(Debug, Clone, Default)]
-pub(super) struct TextPc {
-    pc: usize,
-}
-
-impl TextPc {
-    pub(super) fn push(&mut self, _val: i64) {
-        self.pc += 1;
-    }
-    pub(super) fn truncate(&mut self, n: usize) {
-        if n < self.pc {
-            self.pc = n;
-        }
-    }
-    pub(super) fn len(&self) -> usize {
-        self.pc
-    }
-}
-
 impl Compiler {
     /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
@@ -1018,7 +993,7 @@ impl Compiler {
             deferred_error,
             dylibs,
             target,
-            text: TextPc::default(),
+            next_ent_pc: 0,
             data,
             ty: 0,
             loc_offs: 0,
@@ -1205,7 +1180,7 @@ impl Compiler {
         let extern_imports = if self.no_entry_point {
             use crate::c5::symbol::Linkage;
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
-            let mut next_pc = self.text.len() + 1;
+            let mut next_pc = self.next_ent_pc + 1;
             for sym in self.symbols.iter_mut() {
                 if sym.class != Token::Fun as i64
                     || sym.defined_here

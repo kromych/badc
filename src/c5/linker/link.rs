@@ -379,7 +379,8 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                             }
                             NativeSymSection::Undef
                             | NativeSymSection::Abs
-                            | NativeSymSection::Common => {
+                            | NativeSymSection::Common
+                            | NativeSymSection::Tls => {
                                 return Err(err(&format!(
                                     "link_native_objects: defined entry for `{}` has \
                                      non-progbits section {:?}",
@@ -455,6 +456,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     let bss_off = def.value as i64 + reloc.addend;
                     park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
+                NativeSymSection::Tls => {
+                    return Err(link_err(&format!(
+                        "reloc against `_Thread_local` symbol `{}` -- \
+                         native-linker TLS lowering not yet wired",
+                        sym.name,
+                    )));
+                }
             }
         }
     }
@@ -488,6 +496,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         ))
                     })?
                 }
+                NativeSymSection::Tls => {
+                    return Err(link_err(&format!(
+                        ".rela.data targets `_Thread_local` symbol `{}` -- \
+                         native-linker TLS lowering not yet wired",
+                        sym.name,
+                    )));
+                }
                 other => other,
             };
             let resolved_value = match sym.section {
@@ -497,6 +512,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::Tls => {
+                    return Err(link_err(&format!(
+                        ".rela.data points at `_Thread_local` symbol `{}` -- \
+                         native-linker TLS lowering not yet wired",
+                        sym.name,
+                    )));
+                }
                 NativeSymSection::Abs => {
                     return Err(err(&format!(
                         "link_native_objects: .rela.data points at ABS symbol `{}`",
@@ -1266,6 +1288,8 @@ mod tests {
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
             bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -1317,6 +1341,8 @@ mod tests {
             text: alloc::vec::Vec::new(),
             data: alloc::vec::Vec::new(),
             bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),
@@ -1343,6 +1369,8 @@ mod tests {
             text: alloc::vec::Vec::new(),
             data: alloc::vec![0u8; 4],
             bss_size: 0,
+            tls_data: alloc::vec::Vec::new(),
+            tls_bss_size: 0,
             symbols: alloc::vec![
                 super::super::object::NativeSymbol {
                     name: alloc::string::String::new(),

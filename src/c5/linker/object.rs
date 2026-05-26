@@ -79,6 +79,12 @@ pub enum NativeSymSection {
     /// into a single `.bss`-resident slot with the largest size
     /// and strictest alignment.
     Common,
+    /// `_Thread_local` storage in `.tdata` (initialised) or
+    /// `.tbss` (zero-init). The merged image needs a PT_TLS
+    /// segment and TPOFF / TLSGD relocs at call sites; the
+    /// native linker fails fast on Tls references until that
+    /// lowering lands.
+    Tls,
 }
 
 /// One entry from the unit's `.symtab`. Section symbols (the
@@ -133,6 +139,12 @@ pub struct NativeObject {
     /// allocate bytes for it (the writer doesn't either --
     /// `SHT_NOBITS` records size but no file content).
     pub bss_size: usize,
+    /// Concatenated bytes from every `.tdata*` section
+    /// (initialised TLS storage). Empty for objects without
+    /// `_Thread_local` data.
+    pub tls_data: Vec<u8>,
+    /// Sum of every `.tbss*` section's size (zero-init TLS).
+    pub tls_bss_size: usize,
     pub symbols: Vec<NativeSymbol>,
     pub text_relocs: Vec<NativeReloc>,
     /// `.rela.data` entries (`R_X86_64_64` / `R_AARCH64_ABS64`)
@@ -245,6 +257,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut text_section_indices: Vec<usize> = Vec::new();
     let mut data_section_indices: Vec<usize> = Vec::new();
     let mut bss_section_indices: Vec<usize> = Vec::new();
+    let mut tdata_section_indices: Vec<usize> = Vec::new();
+    let mut tbss_section_indices: Vec<usize> = Vec::new();
     let mut symtab_idx: Option<usize> = None;
     let mut rela_section_indices: Vec<usize> = Vec::new();
     for (i, sh) in shdrs.iter().enumerate() {
@@ -257,6 +271,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             SectionFamily::Text => text_section_indices.push(i),
             SectionFamily::Data => data_section_indices.push(i),
             SectionFamily::Bss => bss_section_indices.push(i),
+            SectionFamily::Tdata => tdata_section_indices.push(i),
+            SectionFamily::Tbss => tbss_section_indices.push(i),
             SectionFamily::Other => {
                 if let Some(target) = name.strip_prefix(".rela")
                     && !matches!(classify_section_family(target), SectionFamily::Other)
@@ -313,6 +329,39 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         bss_base_per_shndx.push((sh_i, bss_size as u64));
         bss_size += sh.size;
     }
+    // TLS initialised storage (`.tdata*`): concatenate file
+    // bytes; track per-section base for symbol rebasing. TLS
+    // zero-init (`.tbss*`): sum sizes only -- no file content
+    // (SHT_NOBITS). The merged image's PT_TLS segment carries
+    // `tls_data` followed by `tls_bss_size` zero bytes.
+    let mut tls_data_bytes: Vec<u8> = Vec::new();
+    let mut tls_base_per_shndx: Vec<(usize, u64)> =
+        Vec::with_capacity(tdata_section_indices.len() + tbss_section_indices.len());
+    for &sh_i in &tdata_section_indices {
+        let sh = &shdrs[sh_i];
+        if sh.sh_type == SHT_NOBITS {
+            return Err(err(&format!(
+                "tdata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+            )));
+        }
+        let base = tls_data_bytes.len() as u64;
+        tls_base_per_shndx.push((sh_i, base));
+        tls_data_bytes.extend_from_slice(section_slice(bytes, sh)?);
+    }
+    let mut tls_bss_size: usize = 0;
+    for &sh_i in &tbss_section_indices {
+        let sh = &shdrs[sh_i];
+        if sh.sh_type != SHT_NOBITS {
+            return Err(err(&format!(
+                "tbss-family section at index {sh_i} is not SHT_NOBITS",
+            )));
+        }
+        // `.tbss` symbol values are measured against the start
+        // of the TLS image (which begins at the first `.tdata`
+        // byte). `.tbss` sits past the `.tdata` extent.
+        tls_base_per_shndx.push((sh_i, (tls_data_bytes.len() + tls_bss_size) as u64));
+        tls_bss_size += sh.size;
+    }
 
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.link as usize;
@@ -356,6 +405,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             &text_base_per_shndx,
             &data_base_per_shndx,
             &bss_base_per_shndx,
+            &tls_base_per_shndx,
         );
         symbols.push(NativeSymbol {
             name: if st_name == 0 {
@@ -444,6 +494,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         text: text_bytes,
         data: data_bytes,
         bss_size,
+        tls_data: tls_data_bytes,
+        tls_bss_size,
         symbols,
         text_relocs,
         data_relocs,
@@ -530,6 +582,7 @@ fn section_of_shndx(
     text_base_per_shndx: &[(usize, u64)],
     data_base_per_shndx: &[(usize, u64)],
     bss_base_per_shndx: &[(usize, u64)],
+    tls_base_per_shndx: &[(usize, u64)],
 ) -> (NativeSymSection, u64) {
     if shndx == SHN_UNDEF {
         return (NativeSymSection::Undef, 0);
@@ -554,21 +607,28 @@ fn section_of_shndx(
     if let Some(&(_, base)) = bss_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
         return (NativeSymSection::Bss, base);
     }
+    if let Some(&(_, base)) = tls_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
+        return (NativeSymSection::Tls, base);
+    }
     (NativeSymSection::Undef, 0)
 }
 
 /// Classification used to fold each section into the merged
-/// text / data / bss blob. `Text` covers `.text` and any
+/// text / data / bss / tls blob. `Text` covers `.text` and any
 /// `.text.<name>` clang/gcc `-ffunction-sections` emits;
 /// `Data` covers `.data` + per-variable `.data.<name>`
 /// (`-fdata-sections`), `.rodata*` (string literals + const
 /// globals), and `.data.rel.ro*` (initialised-then-readonly
-/// tables); `Bss` covers `.bss` + per-variable `.bss.<name>`.
+/// tables); `Bss` covers `.bss` + per-variable `.bss.<name>`;
+/// `Tdata` and `Tbss` cover the matching `_Thread_local`
+/// storage families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SectionFamily {
     Text,
     Data,
     Bss,
+    Tdata,
+    Tbss,
     Other,
 }
 
@@ -583,6 +643,10 @@ fn classify_section_family(name: &str) -> SectionFamily {
         SectionFamily::Data
     } else if name == ".bss" || name.starts_with(".bss.") {
         SectionFamily::Bss
+    } else if name == ".tdata" || name.starts_with(".tdata.") {
+        SectionFamily::Tdata
+    } else if name == ".tbss" || name.starts_with(".tbss.") {
+        SectionFamily::Tbss
     } else {
         SectionFamily::Other
     }
@@ -1326,6 +1390,179 @@ mod tests {
         assert_eq!(s.name, "uninit_int");
         assert_eq!(s.size, 4, "byte size from st_size");
         assert_eq!(s.value, 4, "alignment from st_value");
+    }
+
+    /// `_Thread_local` storage: clang emits initialised TLS
+    /// variables into `.tdata` and zero-init ones into `.tbss`,
+    /// with STT_TLS symbols pointing at those sections. The
+    /// parser concatenates `.tdata*` bytes into `tls_data`,
+    /// sums `.tbss*` sizes into `tls_bss_size`, and surfaces
+    /// symbols as `Tls` with the value rebased by the section's
+    /// base in the merged TLS image (`.tdata` first, `.tbss`
+    /// past it).
+    #[test]
+    fn tdata_and_tbss_sections_surface_as_tls() {
+        let shstr_names: &[&str] = &[
+            "",
+            ".shstrtab",
+            ".strtab",
+            ".symtab",
+            ".text",
+            ".tdata",
+            ".tbss",
+        ];
+        let mut shstrtab: Vec<u8> = Vec::new();
+        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
+        for n in shstr_names {
+            shstr_off.push(shstrtab.len() as u32);
+            shstrtab.extend_from_slice(n.as_bytes());
+            shstrtab.push(0);
+        }
+        let mut strtab: Vec<u8> = vec![0];
+        let init_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"init_counter\0");
+        let zero_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"zero_counter\0");
+        let mut symtab: Vec<u8> = Vec::new();
+        let push_sym =
+            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
+                out.extend_from_slice(&name.to_le_bytes());
+                out.push(info);
+                out.push(0);
+                out.extend_from_slice(&shndx.to_le_bytes());
+                out.extend_from_slice(&value.to_le_bytes());
+                out.extend_from_slice(&size.to_le_bytes());
+            };
+        push_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_TLS = (1 << 4) | 6 = 0x16.
+        push_sym(&mut symtab, init_off, 0x16, 5, 0, 4);
+        push_sym(&mut symtab, zero_off, 0x16, 6, 0, 8);
+        let text: Vec<u8> = Vec::new();
+        let tdata: Vec<u8> = vec![0x42, 0, 0, 0];
+
+        const N_SECTIONS: usize = 7;
+        const HDR_SIZE: usize = 64;
+        const SHDR_SIZE: usize = 64;
+        let sec_bytes: Vec<&[u8]> = vec![&[], &shstrtab, &strtab, &symtab, &text, &tdata, &[]];
+        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
+        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
+        for body in &sec_bytes {
+            sec_offs.push(cursor);
+            cursor += body.len();
+        }
+        let mut bytes = vec![0u8; cursor];
+        bytes[0..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = ELF_CLASS_64;
+        bytes[5] = ELF_DATA_LSB;
+        bytes[6] = 1;
+        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
+        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
+        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
+        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
+        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
+        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
+        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
+        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
+        let write_shdr = |bytes: &mut [u8],
+                          i: usize,
+                          name_off: u32,
+                          sh_type: u32,
+                          off: usize,
+                          size: usize,
+                          link: u32,
+                          info: u32,
+                          entsize: usize| {
+            let base = HDR_SIZE + i * SHDR_SIZE;
+            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
+            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
+            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
+            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
+            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
+            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
+            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
+        };
+        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+        write_shdr(
+            &mut bytes,
+            1,
+            shstr_off[1],
+            SHT_STRTAB,
+            sec_offs[1],
+            shstrtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            2,
+            shstr_off[2],
+            SHT_STRTAB,
+            sec_offs[2],
+            strtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            3,
+            shstr_off[3],
+            SHT_SYMTAB,
+            sec_offs[3],
+            symtab.len(),
+            2,
+            1,
+            ELF64_SYM_SIZE,
+        );
+        write_shdr(
+            &mut bytes,
+            4,
+            shstr_off[4],
+            SHT_PROGBITS,
+            sec_offs[4],
+            text.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            5,
+            shstr_off[5],
+            SHT_PROGBITS,
+            sec_offs[5],
+            tdata.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            6,
+            shstr_off[6],
+            SHT_NOBITS,
+            sec_offs[6],
+            8,
+            0,
+            0,
+            0,
+        );
+        for (i, body) in sec_bytes.iter().enumerate() {
+            let off = sec_offs[i];
+            bytes[off..off + body.len()].copy_from_slice(body);
+        }
+
+        let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
+        assert_eq!(obj.tls_data.len(), 4);
+        assert_eq!(obj.tls_bss_size, 8);
+        assert!(matches!(obj.symbols[1].section, NativeSymSection::Tls));
+        assert_eq!(obj.symbols[1].value, 0, ".tdata symbol lands at TLS start");
+        assert!(matches!(obj.symbols[2].section, NativeSymSection::Tls));
+        assert_eq!(
+            obj.symbols[2].value, 4,
+            ".tbss symbol lands past the .tdata extent"
+        );
     }
 
     /// Clang/gcc `-fdata-sections` shape: per-variable `.data.<var>`

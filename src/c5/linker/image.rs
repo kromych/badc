@@ -829,7 +829,10 @@ fn patch_data_refs(
             NativeSymSection::Text => text_vaddr as i64,
             NativeSymSection::Data => data_vaddr as i64,
             NativeSymSection::Bss => data_vaddr as i64,
-            NativeSymSection::Undef | NativeSymSection::Abs | NativeSymSection::Common => {
+            NativeSymSection::Undef
+            | NativeSymSection::Abs
+            | NativeSymSection::Common
+            | NativeSymSection::Tls => {
                 return Err(err(&format!(
                     "parked reloc at text[{:#x}] has unexpected target section {:?}",
                     r.text_offset, r.target_section,

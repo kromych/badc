@@ -1563,7 +1563,6 @@ impl Compiler {
                             || x == Op::Lwu as i64
                     );
                     if is_load {
-                        self.text.pop();
                         self.clear_recent_emits();
                         self.ty += Ty::Ptr as i64;
                     }

@@ -103,7 +103,6 @@ impl Compiler {
     }
 
     pub(super) fn emit_val(&mut self, val: i64) {
-        self.text.push(val);
         self.push_recent_emit(val);
     }
 
@@ -409,12 +408,10 @@ impl Compiler {
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
         if self.recent_emits_len > 0 && is_scalar_load_op_val(self.recent_emits[2]) {
-            self.text.pop();
-            // After the load drops we don't know the previous
-            // word offhand; the next emit reseeds the buffer
-            // correctly because every caller of
-            // `pop_trailing_scalar_load` follows up with at
-            // least one emit before any peek runs.
+            // The trailing scalar load no longer occupies a tape
+            // word (emit_op stopped pushing); drop the peek-ring
+            // entry so the next emit reseeds without seeing this
+            // load.
             self.clear_recent_emits();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the
@@ -687,6 +684,12 @@ impl Compiler {
         return_struct_size: i64,
         alloca_top_slot: i64,
     ) {
+        // Reserve one PC unit so end_pc > ent_pc holds for every
+        // function regardless of body content. With emit_op and
+        // emit_val no longer pushing to the tape, the body's
+        // text.len() growth is zero; without this reservation the
+        // linker / DWARF range invariant would fail.
+        self.text.push(0);
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,

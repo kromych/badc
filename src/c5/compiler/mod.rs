@@ -866,14 +866,6 @@ impl TextPc {
     pub(super) fn push(&mut self, _val: i64) {
         self.pc += 1;
     }
-    pub(super) fn pop(&mut self) -> Option<i64> {
-        if self.pc == 0 {
-            None
-        } else {
-            self.pc -= 1;
-            Some(0)
-        }
-    }
     pub(super) fn truncate(&mut self, n: usize) {
         if n < self.pc {
             self.pc = n;

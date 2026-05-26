@@ -179,6 +179,26 @@ pub(super) fn write_relocatable(
     build: &Build,
     machine: Machine,
 ) -> Result<Vec<u8>, C5Error> {
+    // The ET_REL writer doesn't emit `.tdata` / `.tbss` yet, so a
+    // `_Thread_local`-bearing source would otherwise round-trip a
+    // `.o` whose TLS storage is missing -- the resulting link
+    // silently miscompiles (per-thread loads hit a zero descriptor
+    // and either fault or read stale memory). Refuse the emit with
+    // a clear pointer to the in-memory compile + link path that
+    // handles TLS. Removing this check should land alongside
+    // wiring `.tdata` / `.tbss` + the macOS TLV descriptor / Win64
+    // `_tls_index` note sections through ET_REL + link_native_objects
+    // + the per-format writers (TODO).
+    if !program.tls_data.is_empty() || program.tls_init_size > 0 {
+        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
+            "ELF ET_REL writer: `_Thread_local` storage isn't carried \
+             through the relocatable object yet -- the resulting `.o` \
+             would link into a binary whose TLS accesses fault or \
+             read stale memory. Drop the `-c` step and pass the \
+             source(s) directly to `badc -o app` to take the \
+             in-memory compile + link path, which handles TLS.",
+        )));
+    }
     let source_path = program.source_path.as_str();
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text

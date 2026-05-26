@@ -818,6 +818,27 @@ fn main() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
         }
+        // The synth path's MergedNative carrier doesn't yet thread
+        // TLS storage / TLV descriptors / Win64 _tls_index fixups
+        // through to the per-format writers (TODO). Without that,
+        // an executable produced from a TLS-bearing .o silently
+        // SIGBUSes the first time the program reads a
+        // `_Thread_local`. Refuse up front with a clear pointer
+        // to the in-memory compile + link path that handles TLS.
+        let tls_input = native_objs
+            .iter()
+            .find(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0);
+        if let Some(_obj) = tls_input {
+            eprint_diagnostic(
+                "badc: error: native `.o` inputs carrying `_Thread_local` storage \
+                 cannot be linked through the native-link path yet -- the \
+                 MergedNative carrier doesn't thread TLS descriptors / index \
+                 fixups through to the per-format writers (TODO). Drop the \
+                 `-c` step and pass the source(s) directly to `badc -o app` \
+                 to take the in-memory compile + link path, which handles TLS.",
+            );
+            std::process::exit(1);
+        }
         let mut merged = match badc::link_native_objects(&native_objs) {
             Ok(m) => m,
             Err(e) => {

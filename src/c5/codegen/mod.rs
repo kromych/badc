@@ -515,7 +515,7 @@ pub(crate) struct ResolvedDylib {
 }
 
 /// The full set of imports a single compilation needs, derived from
-/// the bytecode walk + the `#pragma binding` table. Each
+/// the SSA walk + the `#pragma binding` table. Each
 /// [`ResolvedImport`]'s position in `imports` is also its GOT / IAT
 /// slot index, so the lowering pass and the wire-format writer share
 /// a single enumeration without coordinating through a static table.
@@ -537,16 +537,15 @@ impl ResolvedImports {
             .position(|i| i.binding_idx == binding_idx)
     }
 
-    /// Add a binding the writer needs even if the bytecode walk
-    /// didn't find a call site for it. Currently used by the ELF
+    /// Add a binding the writer needs even if the SSA walk didn't
+    /// find a call site for it. Currently used by the ELF
     /// writers' `_start` stub, which always tail-calls libc `exit`
     /// regardless of whether the user's code did.
     ///
     /// Resolves by name through `program.dylibs` the same way the
-    /// bytecode walk would, so a source that forgot `<stdlib.h>`
-    /// still gets the friendly
-    /// "no `#pragma binding(... ::exit, ...)`" diagnostic instead
-    /// of a writer-side panic.
+    /// SSA walk would, so a source that forgot `<stdlib.h>` still
+    /// gets the friendly "no `#pragma binding(... ::exit, ...)`"
+    /// diagnostic instead of a writer-side panic.
     pub fn force_include_by_name(
         &mut self,
         local_name: &str,
@@ -703,8 +702,8 @@ impl ResolvedImports {
         // forcing a framework's runtime-init code to fire (e.g.,
         // AppKit registering the NSApplication class with the
         // Objective-C runtime so `objc_getClass("NSApplication")`
-        // resolves). The bytecode walk above only collects dylibs
-        // that owned at least one `Op::JsrExt` binding; declared-
+        // resolves). The SSA walk above only collects dylibs that
+        // owned at least one `Inst::CallExt` binding; declared-
         // but-unused dylibs were silently dropped here, with the
         // visible symptom that the program's dynamic-init hook
         // never ran. Append them in source-declared order so the
@@ -758,9 +757,9 @@ pub(crate) struct Build {
     pub text: Vec<u8>,
     /// Initialised data segment: string literals + zero-initialised
     /// globals. Copied into `__DATA,__data` by the writer; offsets
-    /// into this buffer match the bytecode's view of the data segment,
-    /// so a `DataFixup { data_offset: K }` resolves to byte K of this
-    /// `Vec`.
+    /// into this buffer match the SSA emit's view of the data
+    /// segment, so a `DataFixup { data_offset: K }` resolves to
+    /// byte K of this `Vec`.
     pub data: Vec<u8>,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
@@ -779,12 +778,12 @@ pub(crate) struct Build {
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
     pub func_fixups: Vec<FuncFixup>,
-    /// Sparse map from ent_pc (index into `Program::text`) to
-    /// the byte offset within `Build::text` where that op's emitted
-    /// instructions start. `usize::MAX` for indices that aren't a
-    /// bytecode instruction's first word (operand slots, etc.). The
+    /// Sparse map from SSA-tier PC (ent_pc / end_pc /
+    /// block_start_pc / sentinel) to the byte offset within
+    /// `Build::text` where that PC's emitted instructions start.
+    /// `usize::MAX` for indices that aren't a recognised PC. The
     /// last entry is the total code length, so `[i+1] - [i]` gives
-    /// the byte length of the op at PC `i`.
+    /// the byte length covered between PCs `i` and `i+1`.
     pub pc_to_native: Vec<usize>,
     /// `ent_pc` of every function the lowering emitted, in
     /// lowering (= emission) order. The DWARF builder iterates

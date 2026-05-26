@@ -10,9 +10,11 @@
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by
 //!     `emit_sys_trampolines` and other parser-side synthesis.
 //!
-//! Variant names mirror the c5 bytecode op set the IR descends
-//! from; the in-memory shape stays stable across producers so the
-//! allocator and emitters need no parallel paths.
+//! Variant names mirror the c5 [`super::op::Op`] set so a reader
+//! can map each Inst back to the matching parser-side op without
+//! consulting a separate table; the in-memory shape stays stable
+//! across producers so the allocator and emitters need no parallel
+//! paths.
 
 #![allow(dead_code)]
 
@@ -26,8 +28,8 @@ pub(crate) const NO_VALUE: ValueId = u32::MAX;
 pub(crate) type BlockId = u32;
 
 /// A single SSA instruction. Each variant carries enough operand
-/// metadata for the per-arch lowering to emit native code without
-/// re-walking the original bytecode.
+/// metadata for the per-arch lowering to emit native code
+/// directly.
 #[derive(Debug, Clone)]
 pub(crate) enum Inst {
     /// Plain integer immediate (`Op::Imm` with no data / code
@@ -270,19 +272,19 @@ pub(crate) enum Terminator {
     /// `Op::TailExt`: tail-jump to a libc symbol. The trampoline
     /// shape doesn't return through here.
     TailExt(i64),
-    /// Synthetic fall-through when the bytecode walker hits a
-    /// block boundary without an explicit terminator. Used at
-    /// function boundaries where the next op is the successor
-    /// function's `Op::Ent` -- the walker closes the block,
-    /// records this terminator, and moves on.
+    /// Synthetic fall-through to a successor block. Preserved
+    /// on the variant for object-file round-trips of SSA bodies
+    /// that already carry it; new IR producers should use the
+    /// explicit branch terminators instead.
     FallThrough(BlockId),
 }
 
 /// A single basic block of SSA instructions plus its terminator.
 #[derive(Debug, Clone)]
 pub(crate) struct Block {
-    /// Bytecode PC of the block's first op. Useful for debug
-    /// output and for the bytecode-to-native PC map.
+    /// PC identifier of the block's first instruction. Useful
+    /// for debug output and for the `pc_to_native` map the
+    /// per-arch lowering builds.
     pub start_pc: usize,
     /// Instructions in execution order. Each entry's index within
     /// the function's flat `insts` list is its [`ValueId`]; the

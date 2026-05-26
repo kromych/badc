@@ -633,6 +633,24 @@ fn main() {
     // so routing those targets through it would write a Linux
     // image with the wrong container.
     let native_link_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+    // Native ELF `.o` inputs only flow through the link path on
+    // Linux targets right now; on macOS / Windows the LinkUnit
+    // merger doesn't read native objects, so silently dropping
+    // them would leave the linker with no user code and surface
+    // as a confusing `main() not defined`. Refuse up front with
+    // a clear message instead.
+    if mode == Mode::NativeExecutable
+        && !compile_only
+        && !native_link_target
+        && !objects.is_empty()
+    {
+        eprint_diagnostic(format!(
+            "badc: error: native ELF `.o` link inputs are only supported on \
+             Linux targets right now; got target `{target:?}` with object(s) {:?}",
+            objects
+        ));
+        std::process::exit(1);
+    }
     if mode == Mode::NativeExecutable && !compile_only && native_link_target {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =

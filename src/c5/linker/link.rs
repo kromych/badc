@@ -228,6 +228,45 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Pass 2.5 -- coalesce SHN_COMMON tentative definitions
+    // (C99 6.9.2). For each Common symbol name not already
+    // defined by a strong (Text/Data/Bss) entry, accumulate
+    // `max(size)` and `max(alignment)` across every unit that
+    // declares it, then reserve one zero-init slot per name
+    // past the per-unit `.bss` extent and surface the slot as
+    // a Bss-defined merged symbol.
+    //
+    // Common-vs-Strong: strong wins, Common drop. Common-vs-
+    // Common: coalesce.
+    let mut common_max: BTreeMap<String, (u64, u64)> = BTreeMap::new();
+    for obj in objs.iter() {
+        for sym in &obj.symbols {
+            if !matches!(sym.section, NativeSymSection::Common) {
+                continue;
+            }
+            if sym.name.is_empty() || defined.contains_key(&sym.name) {
+                continue;
+            }
+            let entry = common_max.entry(sym.name.clone()).or_insert((0, 1));
+            entry.0 = entry.0.max(sym.size);
+            entry.1 = entry.1.max(sym.value.max(1));
+        }
+    }
+    for (name, (size, align)) in &common_max {
+        let align = (*align).max(1) as usize;
+        bss_size = align_usize(bss_size, align);
+        let slot_offset = bss_size as u64;
+        bss_size += *size as usize;
+        defined.insert(
+            name.clone(),
+            MergedSymbol {
+                section: NativeSymSection::Bss,
+                value: slot_offset,
+                size: *size,
+            },
+        );
+    }
+
     // Pass 3 -- imports. Walk every UNDEF reference; an entry
     // that doesn't match a defined symbol becomes an import.
     // The final-image writer turns each into a PLT trampoline.
@@ -401,16 +440,20 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     )));
                 }
                 NativeSymSection::Common => {
-                    // SHN_COMMON symbol -- C99 6.9.2 tentative
-                    // definition still awaiting coalescing into
-                    // `.bss`. Allocation happens in the SHN_COMMON
-                    // coalescer pass; until that lands, refuse
-                    // to apply relocs that haven't been resolved.
-                    return Err(link_err(&format!(
-                        "reloc against unresolved SHN_COMMON symbol `{}` \
-                         (tentative-definition coalescing not yet wired)",
-                        sym.name,
-                    )));
+                    // C99 6.9.2 tentative definition: Pass 2.5
+                    // coalesced this name into a `.bss` slot.
+                    // Look the resolved Bss offset up in
+                    // `defined` and route through `park_data_ref`
+                    // -- same flow a cross-unit reference to a
+                    // Bss-defined symbol takes.
+                    let def = defined.get(&sym.name).ok_or_else(|| {
+                        err(&format!(
+                            "link_native_objects: SHN_COMMON `{}` not coalesced (internal: Pass 2.5 missed it)",
+                            sym.name,
+                        ))
+                    })?;
+                    let bss_off = def.value as i64 + reloc.addend;
+                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
             }
         }
@@ -433,7 +476,11 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             let sym = &obj.symbols[reloc.sym_idx];
             let slot_offset = data_bases[i] as u64 + reloc.offset;
             let resolved_section = match sym.section {
-                NativeSymSection::Undef => {
+                NativeSymSection::Undef | NativeSymSection::Common => {
+                    // Common targets are coalesced into `.bss` by
+                    // Pass 2.5 and join `defined` with section
+                    // == Bss; the lookup is the same as for an
+                    // Undef cross-unit reference.
                     defined.get(&sym.name).map(|d| d.section).ok_or_else(|| {
                         link_err(&format!(
                             "undefined reference to `{}` (data initializer)",
@@ -444,20 +491,15 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 other => other,
             };
             let resolved_value = match sym.section {
-                NativeSymSection::Undef => defined.get(&sym.name).map(|d| d.value as i64).unwrap(),
+                NativeSymSection::Undef | NativeSymSection::Common => {
+                    defined.get(&sym.name).map(|d| d.value as i64).unwrap()
+                }
                 NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
                 NativeSymSection::Abs => {
                     return Err(err(&format!(
                         "link_native_objects: .rela.data points at ABS symbol `{}`",
-                        sym.name,
-                    )));
-                }
-                NativeSymSection::Common => {
-                    return Err(link_err(&format!(
-                        ".rela.data points at SHN_COMMON symbol `{}` \
-                         (tentative-definition coalescing not yet wired)",
                         sym.name,
                     )));
                 }
@@ -1210,6 +1252,125 @@ mod tests {
             err.to_string().contains("Aarch64"),
             "unexpected error: {err}",
         );
+    }
+
+    /// Two units each declare an uninitialised `int common_var;`
+    /// (parser surfaces as SHN_COMMON with size=4, alignment=4).
+    /// C99 6.9.2: the linker reserves a single `.bss` slot of
+    /// `max(size) == 4` bytes, aligned to `max(align) == 4`.
+    /// Both units' references must resolve to that one slot.
+    #[test]
+    fn common_symbols_coalesce_to_single_bss_slot() {
+        let mk_unit = |size: u64, align: u64| NativeObject {
+            machine: NativeMachine::X86_64,
+            text: alloc::vec::Vec::new(),
+            data: alloc::vec::Vec::new(),
+            bss_size: 0,
+            symbols: alloc::vec![
+                super::super::object::NativeSymbol {
+                    name: alloc::string::String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                },
+                super::super::object::NativeSymbol {
+                    name: "common_var".to_string(),
+                    section: NativeSymSection::Common,
+                    value: align,
+                    size,
+                    binding: 1,
+                    kind: 1,
+                },
+            ],
+            text_relocs: alloc::vec::Vec::new(),
+            data_relocs: alloc::vec::Vec::new(),
+        };
+        // Unit A claims size=4 align=4; unit B claims size=8 align=8.
+        // C99 6.9.2: max(size)=8, max(align)=8.
+        let a = mk_unit(4, 4);
+        let b = mk_unit(8, 8);
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let def = merged
+            .defined
+            .get("common_var")
+            .expect("coalesced common_var should be defined");
+        assert!(matches!(def.section, NativeSymSection::Bss));
+        assert_eq!(def.size, 8, "max size wins");
+        // Total bss = sum-per-unit (0) + coalesced common (8, 8-aligned at offset 0).
+        assert_eq!(merged.bss_size, 8);
+        assert_eq!(
+            def.value, 0,
+            "common slot lands at the start of the post-unit bss extent"
+        );
+    }
+
+    /// SHN_COMMON tentative def + strong (Data) definition of
+    /// the same name: per C99 6.9.2 the strong def wins, the
+    /// Common is silently dropped. The linker must not error on
+    /// the duplicate name nor allocate a second bss slot.
+    #[test]
+    fn common_yields_to_strong_definition() {
+        let unit_common = NativeObject {
+            machine: NativeMachine::X86_64,
+            text: alloc::vec::Vec::new(),
+            data: alloc::vec::Vec::new(),
+            bss_size: 0,
+            symbols: alloc::vec![
+                super::super::object::NativeSymbol {
+                    name: alloc::string::String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                },
+                super::super::object::NativeSymbol {
+                    name: "x".to_string(),
+                    section: NativeSymSection::Common,
+                    value: 4,
+                    size: 4,
+                    binding: 1,
+                    kind: 1,
+                },
+            ],
+            text_relocs: alloc::vec::Vec::new(),
+            data_relocs: alloc::vec::Vec::new(),
+        };
+        let unit_strong = NativeObject {
+            machine: NativeMachine::X86_64,
+            text: alloc::vec::Vec::new(),
+            data: alloc::vec![0u8; 4],
+            bss_size: 0,
+            symbols: alloc::vec![
+                super::super::object::NativeSymbol {
+                    name: alloc::string::String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                },
+                super::super::object::NativeSymbol {
+                    name: "x".to_string(),
+                    section: NativeSymSection::Data,
+                    value: 0,
+                    size: 4,
+                    binding: 1,
+                    kind: 1,
+                },
+            ],
+            text_relocs: alloc::vec::Vec::new(),
+            data_relocs: alloc::vec::Vec::new(),
+        };
+        let merged = link_native_objects(&[unit_common, unit_strong]).expect("link");
+        let def = merged
+            .defined
+            .get("x")
+            .expect("x should resolve to the strong def");
+        assert!(matches!(def.section, NativeSymSection::Data));
+        assert_eq!(merged.bss_size, 0, "Common dropped, no bss slot");
     }
 
     fn compile_native(src: &str, target: Target, opts: NativeOptions) -> NativeObject {

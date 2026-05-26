@@ -269,24 +269,18 @@ pub(super) fn write_relocatable(
     let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
     for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
-        // Prefer the FunctionSsa-recorded name surfaced via
-        // `build.func_names`; fall back to the legacy
-        // `Program::source_functions` parallel-to-text column
-        // (still populated by the parser; needed for archive-
-        // reloaded units whose FunctionSsa::name didn't round-
-        // trip); last fall back to a `fn_<ent_pc>` placeholder.
+        // FunctionSsa::name is the canonical source for the
+        // symbol-table name: the walker copies it from
+        // `FinishedFunction::name`, sys-trampolines tag
+        // themselves `__c5_sys_<binding>`, and archive reload
+        // round-trips user names + re-derives the trampoline
+        // names from `binding_idx`. An empty entry falls back
+        // to a `fn_<ent_pc>` placeholder.
         let name = build
             .func_names
             .get(i)
             .filter(|s| !s.is_empty())
             .cloned()
-            .or_else(|| {
-                program
-                    .source_functions
-                    .get(ent_pc)
-                    .filter(|s| !s.is_empty())
-                    .cloned()
-            })
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
         func_strs.push(name);
         match func_linkage_by_pc.get(&ent_pc) {

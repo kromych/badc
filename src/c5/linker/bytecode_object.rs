@@ -2267,7 +2267,51 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
             }
         }
     }
+    // Post-pass: synthesise names for sys-trampolines now that
+    // `unit.dylibs` is fully populated. The compact wire format
+    // stores only `binding_idx`, not the name; re-derive
+    // `__c5_sys_<binding_local_name>` so the codegen's name
+    // lookup chain finds the trampoline in `Build::func_names`
+    // without reaching for `Program::source_functions`.
+    let flat_bindings: Vec<String> = unit
+        .dylibs
+        .iter()
+        .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
+        .collect();
+    for f in &mut unit.synthetic_ssa_funcs {
+        if !f.name.is_empty() {
+            continue;
+        }
+        // The trampoline's body carries one `Inst::CallExt` /
+        // `Terminator::TailExt` whose `binding_idx` is the flat
+        // index across the unit's dylibs+bindings.
+        let bind_idx = synth_trampoline_binding_idx(f);
+        if let Some(name) = bind_idx.and_then(|i| flat_bindings.get(i as usize)) {
+            f.name = alloc::format!("__c5_sys_{name}");
+        }
+    }
     Ok(())
+}
+
+/// Recover the binding_idx a synthesised sys-trampoline carries.
+/// Mirrors `synth_shape`'s producer-side classifier: the body has
+/// either one `Inst::CallExt` (shape 1) or a single
+/// `Terminator::TailExt` (shape 0). Returns `None` if the SSA
+/// shape doesn't match either trampoline form -- the caller falls
+/// back to leaving `name` empty.
+fn synth_trampoline_binding_idx(f: &crate::c5::ir::FunctionSsa) -> Option<i64> {
+    use crate::c5::ir::{Inst, Terminator};
+    for inst in &f.insts {
+        if let Inst::CallExt { binding_idx, .. } = inst {
+            return Some(*binding_idx);
+        }
+    }
+    for b in &f.blocks {
+        if let Terminator::TailExt(idx) = b.terminator {
+            return Some(idx);
+        }
+    }
+    None
 }
 
 fn read_synthetic_ssa_funcs(body: &[u8]) -> Result<Vec<crate::c5::ir::FunctionSsa>, C5Error> {

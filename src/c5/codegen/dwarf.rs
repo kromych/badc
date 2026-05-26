@@ -643,13 +643,6 @@ fn collect_subprograms(
         let raw_name = func_name_by_pc
             .get(&ent_pc)
             .cloned()
-            .or_else(|| {
-                program
-                    .source_functions
-                    .get(ent_pc)
-                    .filter(|s| !s.is_empty())
-                    .cloned()
-            })
             .unwrap_or_else(|| format!("fn_bc_{ent_pc}"));
         let count = name_seen.entry(raw_name.clone()).or_insert(0);
         let name = if *count == 0 {

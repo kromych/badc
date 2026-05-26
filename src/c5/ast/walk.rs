@@ -107,9 +107,9 @@ pub(crate) fn walk_function(
     // hidden out-pointer). The callee's prologue copies the
     // struct into a fresh local; the parser allocated the
     // local and recorded its offset in `param_local_slots[i]`,
-    // shifted the symbol's `val` to point at it, and emitted
-    // the matching Mcpy on the bytecode side. Walker replays
-    // the Mcpy so the AST-driven SSA matches.
+    // and shifted the symbol's `val` to point at it. The walker
+    // emits the matching `Inst::Mcpy` here so the SSA carries the
+    // entry-copy semantics.
     // Argument-slot base: 2 for ordinary callees, 3 when the
     // function returns a struct value (slot 2 holds the hidden
     // out-pointer the caller pushed in front of the declared
@@ -377,11 +377,9 @@ impl<'a> Walker<'a> {
                             // somewhere walkable. Non-label dead
                             // code per C99 6.8.6 is still walked
                             // into a fresh synthetic block so the
-                            // resolver's order-pair between walker
-                            // Inst and parser Op emissions stays
-                            // aligned -- the parser emits bytecode
-                            // for unreachable statements
-                            // unconditionally.
+                            // SSA covers the unreachable region;
+                            // the resolver later prunes anything
+                            // the codegen can elide.
                             if !b.is_block_open()
                                 && !matches!(
                                     self.ast.stmt(*s),
@@ -521,15 +519,12 @@ impl<'a> Walker<'a> {
                 };
                 b.branch_zero(cond_v, after, body_blk);
                 // C99 6.8.5.3 specifies the *evaluation* order
-                // (cond, body, post) but leaves layout open; the
-                // parser's bytecode tier emits step before body
-                // (Op::Jmp from step jumps forward to body which
-                // jumps back to step). Walk post first so the
-                // post-merge resolver's order-zip between walker
-                // Inst::Call entries and bytecode Op::Jsr operands
-                // remains aligned. Control flow is unaffected --
-                // each block's terminator routes execution in the
-                // C99 order regardless of inst-vec layout.
+                // (cond, body, post) but leaves layout open. Walk
+                // post before body so the SSA Inst ordering
+                // matches the layout the call-fixup resolver
+                // expects. Control flow is unaffected -- each
+                // block's terminator routes execution in the C99
+                // order regardless of inst-vec layout.
                 b.switch_to(post_blk);
                 if let Some(p) = post_clone {
                     let _ = self.walk_expr_rvalue(b, p)?;
@@ -894,8 +889,8 @@ impl<'a> Walker<'a> {
     /// * `LocalInit::Scalar(expr)` -- evaluate, `store_local`.
     /// * `LocalInit::Aggregate { src_data_off, size_bytes }` --
     ///   emit `Inst::Mcpy { dst = local_addr, src = imm_data,
-    ///   size }` matching the bytecode tier's constant brace-
-    ///   list path.
+    ///   size }` for a brace-list whose every element folded to
+    ///   a compile-time constant.
     fn walk_decl(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -1013,8 +1008,8 @@ impl<'a> Walker<'a> {
     }
 
     /// Walk an expression in rvalue position. Returns the
-    /// `ValueId` whose runtime value matches what the bytecode
-    /// tier would have left in the c5 accumulator.
+    /// `ValueId` whose runtime value is the C99 6.5p1 evaluation
+    /// of the expression.
     fn walk_expr_rvalue(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -1137,10 +1132,9 @@ impl<'a> Walker<'a> {
                 // C99 6.7.2.1: bitfield write -- load the storage
                 // unit, clear the destination slice, mask + shift
                 // the new value into place, OR the cleared old
-                // value with the shifted new, store back. The
-                // walker mirrors `emit_bitfield_access` on the
-                // bytecode side. Returns the combined word so an
-                // outer expression chain keeps a stable rvalue.
+                // value with the shifted new, store back.
+                // Returns the combined word so an outer expression
+                // chain keeps a stable rvalue.
                 let bf = *bitfield;
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -1331,20 +1325,17 @@ impl<'a> Walker<'a> {
                 // Indirect-call shape splits by callee form:
                 //   * Non-Ident callee (struct-field-then-call,
                 //     `*fp(...)`, ...): the parser's Pratt loop
-                //     already evaluated the callee into the
-                //     accumulator before reaching `(`, then
-                //     spilled it to a temp via Op::StLocI and
-                //     evaluated args. To match that bytecode
-                //     order, the walker evaluates the callee
-                //     FIRST and stashes the resulting ValueId.
+                //     evaluates the callee before reaching `(` and
+                //     spills it to a temp via `Op::StLocI`. The
+                //     walker evaluates the callee FIRST and
+                //     stashes the resulting ValueId.
                 //   * Ident callee of class Loc / Glo (simple
                 //     function-pointer variable): the parser's
                 //     dedicated `()`-after-identifier path
                 //     evaluates args FIRST, then loads the
-                //     callee's stored function-pointer value,
-                //     then Jsri. To match that bytecode order,
-                //     the walker defers the callee walk to after
-                //     the args loop.
+                //     callee's stored function-pointer value.
+                //     The walker mirrors this by deferring the
+                //     callee walk to after the args loop.
                 // Token::Fun / Token::Sys never reach the
                 // indirect-call site (the per-class branches
                 // below dispatch to b.call / b.call_ext) so they
@@ -1569,9 +1560,6 @@ impl<'a> Walker<'a> {
                 //     shift-pair Shl K; Shr K to sign-extend the
                 //     truncated value (clang / gcc-compatible UB
                 //     handling).
-                // Mirrors the bytecode tier's
-                // `expr.rs::Token::LP` cast site so the walker
-                // produces the same in-register pattern.
                 let target_size = type_size_bytes(*to_ty, self.target);
                 let source_size = type_size_bytes(src_ty, self.target);
                 if target_size == 0 || target_size >= 8 {
@@ -1891,9 +1879,7 @@ impl<'a> Walker<'a> {
     }
 
     /// Identifier rvalue: take the address, load through the
-    /// type-appropriate `LoadKind`. The bytecode tier's `Op::Lea
-    /// N; Op::Li` (etc.) collapses into this one address + load
-    /// pair on the SSA side. Reads `class` / `val` /
+    /// type-appropriate `LoadKind`. Reads `class` / `val` /
     /// `is_thread_local` straight off the snapshotted Ident node
     /// so a post-parse scope-exit that restored the symbol's
     /// pre-declaration tag doesn't invalidate the walker.
@@ -2147,10 +2133,8 @@ fn type_size_bytes(ty: i64, target: Target) -> usize {
 /// Return the AND mask needed to narrow an unsigned-typed
 /// operand of an integer divide / modulo to its declared storage
 /// width. Returns `0` (no mask) for I64-wide types and for any
-/// signed type. Mirrors `convert.rs::maybe_mask_operands_to_unsigned_common`
-/// but takes only the common type tag and lets the walker apply
-/// the mask through `BinopI(And, _, mask)` rather than the c5
-/// scratch-local sequence the bytecode tier uses.
+/// signed type. Takes only the common type tag and lets the
+/// walker apply the mask through `BinopI(And, _, mask)`.
 fn unsigned_narrow_mask(ty: i64) -> i64 {
     let stripped = ty & !UNSIGNED_BIT;
     let unsigned = (ty & UNSIGNED_BIT) != 0;

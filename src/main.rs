@@ -641,8 +641,9 @@ fn main() {
     // On macOS and Windows, only route through the synth path when
     // there is at least one native `.o` / `.a` input the LinkUnit
     // path cannot consume. Pure `.c` sources keep the LinkUnit +
-    // emit_native chain (auto-codesign on macOS, DWARF, exports,
-    // TLS) until the synthesizer covers those.
+    // emit_native chain (DWARF, exports, TLS) until the
+    // synthesizer covers those. Mach-O auto-codesigning now lives
+    // in `post_write_native`, so both paths sign on macOS hosts.
     let take_native_link_path = match target {
         Target::LinuxX64 | Target::LinuxAarch64 => true,
         Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
@@ -865,6 +866,7 @@ fn main() {
         };
         write_output(out, &bytes, quiet);
         set_executable(out);
+        post_write_native(out, target);
         return;
     }
 
@@ -1408,19 +1410,30 @@ fn emit_native_binary(
     if mode == Mode::NativeExecutable {
         set_executable(out);
     }
+    post_write_native(out, target);
+}
+
+/// Post-write hooks shared by the LinkUnit + emit_native AOT path
+/// and the MergedNative synthesizer path: codesign Mach-O on macOS
+/// hosts so dyld accepts the binary, and surface a per-target
+/// reminder when the produced image's target doesn't match the
+/// running host.
+fn post_write_native(out: &std::path::Path, target: Target) {
     match target {
         Target::MacOSAarch64 => {
             #[cfg(target_os = "macos")]
             codesign(out);
             #[cfg(not(target_os = "macos"))]
-            eprintln!(
-                "badc: produced a Mach-O on a non-macOS host; copy to macOS \
-                 and `codesign --sign - <path>` before running."
-            );
+            {
+                let _ = out;
+                eprintln!(
+                    "badc: produced a Mach-O on a non-macOS host; copy to macOS \
+                     and `codesign --sign - <path>` before running."
+                );
+            }
         }
         Target::LinuxAarch64 => {
-            // ELF binaries don't need signing. If the host isn't
-            // Linux/aarch64, the user has to ship the result there.
+            let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
             eprintln!(
                 "badc: produced a Linux/aarch64 ELF on a different host; \
@@ -1428,6 +1441,7 @@ fn emit_native_binary(
             );
         }
         Target::LinuxX64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
             eprintln!(
                 "badc: produced a Linux/x86_64 ELF on a different host; \
@@ -1435,6 +1449,7 @@ fn emit_native_binary(
             );
         }
         Target::WindowsX64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
             eprintln!(
                 "badc: produced a Windows/x86_64 PE on a non-Windows host; \
@@ -1442,6 +1457,7 @@ fn emit_native_binary(
             );
         }
         Target::WindowsAarch64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
             eprintln!(
                 "badc: produced a Windows/AArch64 PE on a different host; \

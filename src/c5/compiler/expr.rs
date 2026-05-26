@@ -608,11 +608,11 @@ impl Compiler {
                         // bytecode-tier lift's SSA emit; the walker
                         // now derives the same mask from `Expr::Call`
                         // arg types directly (see `walk_expr_rvalue`).
-                        self.emit_op(Op::JsrExt);
+                        self.emit_cf_op(Op::JsrExt);
                         self.emit_val(self.symbols[id_idx].val);
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
                         self.symbols[id_idx].was_referenced = true;
-                        self.emit_op(Op::Jsr);
+                        self.emit_cf_op(Op::Jsr);
                         // Operand placeholder for the bytecode tape;
                         // the walker resolves the matching
                         // `Inst::Call::target_pc` through
@@ -637,7 +637,7 @@ impl Compiler {
                             self.glo_imm_refs.push(id_idx);
                         }
                         self.emit_op(Op::Li);
-                        self.emit_op(Op::Jsri);
+                        self.emit_cf_op(Op::Jsri);
                     } else {
                         let name = self.symbols[id_idx].name.clone();
                         let suggestion = match super::super::headers::header_declaring(&name) {
@@ -1628,7 +1628,7 @@ impl Compiler {
                 }
                 self.emit_lea(fp_temp);
                 self.emit_op(Op::Li);
-                self.emit_op(Op::Jsri);
+                self.emit_cf_op(Op::Jsri);
                 if nargs > 0 {
                     self.emit_op(Op::Adj);
                     self.emit_val(nargs);
@@ -1957,7 +1957,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Cond {
                 let cond_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bz);
+                self.emit_cf_op(Op::Bz);
                 self.emit_val(0);
                 self.expr(Token::Assign as i64)?;
                 // Comma operator in the middle of a ternary:
@@ -1998,7 +1998,7 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
                 }
-                self.emit_op(Op::Jmp);
+                self.emit_cf_op(Op::Jmp);
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
                 let else_ast = self.ast_acc;
@@ -2023,7 +2023,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Lor {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bnz);
+                self.emit_cf_op(Op::Bnz);
                 self.emit_val(0);
                 self.expr(Token::Lan as i64)?;
                 let rhs_ast = self.ast_acc;
@@ -2039,7 +2039,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Lan {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bz);
+                self.emit_cf_op(Op::Bz);
                 self.emit_val(0);
                 self.expr(Token::OrOp as i64)?;
                 let rhs_ast = self.ast_acc;

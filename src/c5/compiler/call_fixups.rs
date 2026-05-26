@@ -235,7 +235,7 @@ impl Compiler {
             //   which matches what real-world dispatch-table
             //   consumers already do.
             if fixed_nargs == 0 && !is_variadic {
-                self.emit_op(Op::TailExt);
+                self.emit_terminator_op(Op::TailExt);
                 self.emit_val(binding_idx);
                 self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
                 continue;
@@ -274,13 +274,13 @@ impl Compiler {
                 self.emit_op(Op::Li);
                 self.emit_op(Op::Psh);
             }
-            self.emit_op(Op::JsrExt);
+            self.emit_cf_op(Op::JsrExt);
             self.emit_val(binding_idx);
             if nargs > 0 {
                 self.emit_op(Op::Adj);
                 self.emit_val(nargs as i64);
             }
-            self.emit_op(Op::Lev);
+            self.emit_terminator_op(Op::Lev);
             // Pin the synthesised SSA entry's `end_pc` to one
             // past the last emitted bytecode op so callers that
             // key off `[ent_pc, end_pc)` (DWARF range builder,

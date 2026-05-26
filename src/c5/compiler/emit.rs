@@ -76,21 +76,6 @@ impl Compiler {
         if is_scalar_load_op_val(op as i64) {
             self.pending.last_loaded_local = None;
         }
-        // Control-flow boundaries flush the dead-store tracker.
-        // Function-terminating ops (`Op::Lev`, `Op::TailExt`)
-        // have no successor, so any pending store is
-        // unambiguously dead and gets reported. Non-terminal
-        // boundaries (branches, calls) silently drop the
-        // entries because a store straddling such an op may be
-        // live in a successor that the analysis can't follow
-        // without flow data.
-        match op {
-            Op::Lev | Op::TailExt => self.emit_dead_stores_and_flush(),
-            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr | Op::JsrExt | Op::Jsri => {
-                self.flush_pending_stores();
-            }
-            _ => {}
-        }
         self.text.push(op as i64);
         self.push_recent_emit(op as i64);
         // AST hook -- ops whose shape is determined by `op` alone
@@ -102,6 +87,30 @@ impl Compiler {
         // wire at the stmt parser sites that know the matching
         // AST shape.
         self.ast_track_emit_op(op);
+    }
+
+    /// Emit a non-terminal control-flow op (`Op::Jmp`, `Op::Bz`,
+    /// `Op::Bnz`, `Op::Jsr`, `Op::JsrExt`, `Op::Jsri`).
+    /// Conservatively drops the dead-store tracker's pending
+    /// entries: a store straddling a branch / call may be live in
+    /// a successor the intra-block analysis can't follow.
+    pub(super) fn emit_cf_op(&mut self, op: Op) {
+        debug_assert!(matches!(
+            op,
+            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr | Op::JsrExt | Op::Jsri,
+        ));
+        self.flush_pending_stores();
+        self.emit_op(op);
+    }
+
+    /// Emit a function-terminating op (`Op::Lev`, `Op::TailExt`).
+    /// Emits one diagnostic per dead store before clearing the
+    /// tracker: no successor exists, so every pending entry is
+    /// unambiguously dead.
+    pub(super) fn emit_terminator_op(&mut self, op: Op) {
+        debug_assert!(matches!(op, Op::Lev | Op::TailExt));
+        self.emit_dead_stores_and_flush();
+        self.emit_op(op);
     }
 
     pub(super) fn emit_val(&mut self, val: i64) {
@@ -176,7 +185,7 @@ impl Compiler {
     /// PC is captured for a later patch) doesn't fit this helper
     /// and stays inline at its handful of sites.
     pub(super) fn emit_jmp(&mut self, target_pc: i64) {
-        self.emit_op(Op::Jmp);
+        self.emit_cf_op(Op::Jmp);
         self.emit_val(target_pc);
     }
 

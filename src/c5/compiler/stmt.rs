@@ -131,10 +131,10 @@ impl Compiler {
             self.emit_imm(1);
             None
         };
-        self.emit_op(Op::Bz);
+        self.emit_cf_op(Op::Bz);
         self.emit_val(0);
 
-        self.emit_op(Op::Jmp);
+        self.emit_cf_op(Op::Jmp);
         self.emit_val(0);
 
         self.consume(b';', "semicolon expected after for-cond")?;
@@ -205,7 +205,7 @@ impl Compiler {
         self.emit_op(Op::Si);
 
         // Jump past the body to the dispatcher emitted at the end.
-        self.emit_op(Op::Jmp);
+        self.emit_cf_op(Op::Jmp);
         self.emit_val(0);
 
         self.switch_cases.push(Vec::new());
@@ -217,7 +217,7 @@ impl Compiler {
         let body_s = self.ast_wrap_stmts_since(body_before);
 
         // Fall-through past the body skips the dispatcher entirely.
-        self.emit_op(Op::Jmp);
+        self.emit_cf_op(Op::Jmp);
         self.emit_val(0);
 
         // Dispatcher block. `switch_cases` / `switch_defaults`
@@ -233,7 +233,7 @@ impl Compiler {
             self.emit_lea(switch_val_offset);
             self.emit_op(Op::Li);
             self.emit_binop_with_imm(Op::Eq, val);
-            self.emit_op(Op::Bnz);
+            self.emit_cf_op(Op::Bnz);
             self.emit_val(0);
         }
 
@@ -580,13 +580,13 @@ impl Compiler {
             self.parse_full_expr()?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
-            self.emit_op(Op::Bz);
+            self.emit_cf_op(Op::Bz);
             self.emit_val(0);
             let then_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
-                self.emit_op(Op::Jmp);
+                self.emit_cf_op(Op::Jmp);
                 self.emit_val(0);
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
@@ -606,7 +606,7 @@ impl Compiler {
             self.parse_full_expr()?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
-            self.emit_op(Op::Bz);
+            self.emit_cf_op(Op::Bz);
             self.emit_val(0);
 
             self.enter_loop();
@@ -643,7 +643,7 @@ impl Compiler {
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
 
-            self.emit_op(Op::Bnz);
+            self.emit_cf_op(Op::Bnz);
             self.emit_val(start_pc as i64);
 
             self.consume(b';', "semicolon expected after do-while")?;
@@ -691,7 +691,7 @@ impl Compiler {
             let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
 
-            self.emit_op(Op::Jmp);
+            self.emit_cf_op(Op::Jmp);
             self.emit_val(0);
 
             if !self.labels.iter().any(|n| n == &target_name) {
@@ -706,7 +706,7 @@ impl Compiler {
             if self.loop_break_depth == 0 {
                 return Err(self.compile_err("break outside of loop or switch"));
             }
-            self.emit_op(Op::Jmp);
+            self.emit_cf_op(Op::Jmp);
             self.emit_val(0);
             self.consume(b';', "semicolon expected after break")?;
             self.ast_emit_break();
@@ -715,7 +715,7 @@ impl Compiler {
             if self.loop_continue_depth == 0 {
                 return Err(self.compile_err("continue outside of loop"));
             }
-            self.emit_op(Op::Jmp);
+            self.emit_cf_op(Op::Jmp);
             self.emit_val(0);
             self.consume(b';', "semicolon expected after continue")?;
             self.ast_emit_continue();
@@ -787,7 +787,7 @@ impl Compiler {
                 self.emit_op(Op::Imm);
                 self.emit_val(0);
             }
-            self.emit_op(Op::Lev);
+            self.emit_terminator_op(Op::Lev);
             self.ast_emit_return(return_value);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {

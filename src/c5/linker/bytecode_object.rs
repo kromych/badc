@@ -1,35 +1,31 @@
-//! ELF-wrapped c5 bytecode object file (`.o`) writer and reader.
+//! ELF-wrapped c5 object file (`.o`) writer and reader.
 //!
 //! The wrapper is a real ELF64 file (`ET_REL`, no program
 //! headers, section-table only) carrying the per-TU payload
 //! split across badc-specific section types:
 //!
-//!   * `.badc.text`    -- `Vec<i64>` bytecode, little-endian,
-//!                        8 bytes per word.
 //!   * `.badc.data`    -- raw byte image of `LinkUnit::data`.
 //!   * `.badc.tdata`   -- initialised TLS bytes (the leading
 //!                        `tls_init_size` bytes of `tls_data`).
 //!   * `.badc.tbss`    -- zero-fill TLS bytes (the remainder).
-//!   * `.badc.meta`    -- bincode-free, length-prefixed
-//!                        serialization of every other field
-//!                        (dylibs, structs, exports, source-file
-//!                        table, side-channels, ...).
+//!   * `.badc.meta`    -- length-prefixed serialization of every
+//!                        other field (dylibs, structs, exports,
+//!                        source-file table, walker-produced
+//!                        SSA, ...).
 //!   * `.symtab` + `.strtab` -- standard ELF symbol table over
 //!                        the external-linkage names of the
 //!                        unit. The `st_value` field is the
 //!                        symbol's `LinkSymbol::value`; the
 //!                        `st_shndx` picks which `.badc.*`
 //!                        section the value indexes into.
-//!   * `.rela.badc.text` / `.rela.badc.data` -- standard ELF
-//!                        relocation tables over the unit's
-//!                        `Reloc` list, one per target section.
+//!   * `.rela.badc.data` -- standard ELF relocation table over
+//!                        the unit's data-segment `Reloc` list.
 //!
-//! The "ELF as carrier" choice is for tooling: `readelf -h`,
-//! `nm`, `objdump -t` all recognise the file, listing symbol
-//! names and section headers without any badc-specific
-//! plumbing. The section *contents* (bytecode, meta blob,
-//! relocation kind bytes) are badc-private and require the
-//! linker to interpret.
+//! `readelf -h`, `nm`, and `objdump -t` all recognise the
+//! wrapper -- they list symbol names and section headers
+//! without any badc-specific plumbing. The section contents
+//! (meta blob, relocation kind bytes) require this linker to
+//! interpret.
 
 use alloc::format;
 use alloc::string::{String, ToString};

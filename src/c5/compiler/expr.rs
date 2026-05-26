@@ -1997,14 +1997,12 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
                 }
-                let b_end_val = (self.text.len() + 2) as i64;
-                self.text[b_else] = b_end_val;
+                let _ = b_else;
                 self.emit_op(Op::Jmp);
-                let b_end = self.text.len();
+                let _b_end = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
                 let else_ast = self.ast_acc;
-                self.text[b_end] = self.text.len() as i64;
                 // Dual-emit Expr::Ternary. The branch fixups above
                 // resolve forward into the bytecode; the AST
                 // captures the three sub-expressions for the
@@ -2027,11 +2025,10 @@ impl Compiler {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bnz);
-                let b = self.text.len();
+                let _b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Lan as i64)?;
                 let rhs_ast = self.ast_acc;
-                self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                     self.ast_emit_short_circuit(
@@ -2045,11 +2042,10 @@ impl Compiler {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bz);
-                let b = self.text.len();
+                let _b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::OrOp as i64)?;
                 let rhs_ast = self.ast_acc;
-                self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
                 if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                     self.ast_emit_short_circuit(

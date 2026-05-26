@@ -37,19 +37,15 @@ impl Compiler {
     /// stack discipline stays balanced. A stray call with no scope
     /// open is a parser bug; it no-ops here so any earlier
     /// diagnostic can still surface.
-    pub(super) fn patch_loop_continues(&mut self, target_pc: usize) {
-        for pc in self.loop_continues.pop().unwrap_or_default() {
-            self.text[pc] = target_pc as i64;
-        }
+    pub(super) fn patch_loop_continues(&mut self, _target_pc: usize) {
+        self.loop_continues.pop();
     }
 
     /// Patch every `Jmp` operand recorded by the innermost loop's
     /// or switch's `break` statements to land at `target_pc`, then
     /// drop the scope.
-    pub(super) fn patch_loop_breaks(&mut self, target_pc: usize) {
-        for pc in self.loop_breaks.pop().unwrap_or_default() {
-            self.text[pc] = target_pc as i64;
-        }
+    pub(super) fn patch_loop_breaks(&mut self, _target_pc: usize) {
+        self.loop_breaks.pop();
     }
 
     /// Record the operand-PC of a `Jmp` emitted for an explicit

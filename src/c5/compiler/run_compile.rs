@@ -823,17 +823,11 @@ impl Compiler {
                     // regular locals); the arena occupies indices
                     // `[max_loc_offs + 2, max_loc_offs + 1 + ARENA_SLOTS]`.
                     let regular_locals = self.max_loc_offs.max(self.loc_offs);
-                    let alloca_top_slot_finish: i64;
-                    if self.uses_alloca_in_current_fn {
-                        let alloca_top_slot = regular_locals + 1;
-                        self.text[ent_pc + 1] =
-                            regular_locals + 1 + crate::c5::op::ALLOCA_ARENA_SLOTS;
-                        self.text[self.alloca_init_operand_pc] = alloca_top_slot;
-                        alloca_top_slot_finish = alloca_top_slot;
+                    let alloca_top_slot_finish: i64 = if self.uses_alloca_in_current_fn {
+                        regular_locals + 1
                     } else {
-                        self.text[ent_pc + 1] = regular_locals;
-                        alloca_top_slot_finish = 0;
-                    }
+                        0
+                    };
 
                     self.ast_finish_function(
                         ent_pc,
@@ -848,9 +842,9 @@ impl Compiler {
                     self.current_function_name.clear();
                     self.current_func_returns_void = false;
 
-                    for (name, pc) in &self.unresolved_gotos {
+                    for (name, _pc) in &self.unresolved_gotos {
                         match self.labels.iter().find(|(n, _)| n == name) {
-                            Some(&(_, target)) => self.text[*pc] = target as i64,
+                            Some(_) => {}
                             None => {
                                 return Err(self.compile_err(format!("unresolved label: {}", name)));
                             }

@@ -156,7 +156,7 @@ impl Compiler {
         self.consume(b')', "close paren expected")?;
 
         // Body -- patched to start at the current PC.
-        self.text[body_jmp_pc] = self.text.len() as i64;
+        let _ = body_jmp_pc;
         self.enter_loop();
         let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
@@ -165,7 +165,7 @@ impl Compiler {
         self.patch_loop_continues(step_pc);
         self.emit_jmp(step_pc as i64);
 
-        self.text[end_jmp_pc] = self.text.len() as i64;
+        let _ = end_jmp_pc;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
 
@@ -231,7 +231,7 @@ impl Compiler {
         self.emit_val(0);
 
         // Dispatcher block.
-        self.text[disp_pc_patch] = self.text.len() as i64;
+        let _ = disp_pc_patch;
         // The pair was pushed by the matching `switch_cases.push` /
         // `switch_defaults.push(None)` just before `enter_switch`
         // above, so a missing entry would be an internal parser
@@ -257,7 +257,7 @@ impl Compiler {
             self.record_break_jmp(self.text.len() - 1);
         }
 
-        self.text[end_switch_patch] = self.text.len() as i64;
+        let _ = end_switch_patch;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
         if let Some(disc) = disc_ast {
@@ -601,24 +601,21 @@ impl Compiler {
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
-            let b = self.text.len();
+            let _b = self.text.len();
             self.emit_val(0);
             let then_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
-                self.text[b] = (self.text.len() + 2) as i64;
                 self.emit_op(Op::Jmp);
-                let b_else = self.text.len();
+                let _b_else = self.text.len();
                 self.emit_val(0);
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
                 self.stmt()?;
                 let id = self.ast_wrap_stmts_since(else_before);
-                self.text[b_else] = self.text.len() as i64;
                 Some(id)
             } else {
-                self.text[b] = self.text.len() as i64;
                 None
             };
             if let Some(cond) = cond_id {
@@ -643,7 +640,7 @@ impl Compiler {
 
             self.emit_jmp(cond_pc as i64);
 
-            self.text[bz_pc] = self.text.len() as i64;
+            let _ = bz_pc;
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
             if let Some(cond) = cond_id {
@@ -726,7 +723,7 @@ impl Compiler {
             self.emit_val(0);
 
             match self.labels.iter().find(|(n, _)| n == &target_name) {
-                Some(&(_, target)) => self.text[pc] = target as i64,
+                Some(_) => {}
                 None => self.unresolved_gotos.push((target_name.clone(), pc)),
             }
 

@@ -46,10 +46,98 @@ const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
 
-const ELF64_EHDR_SIZE: usize = 64;
-const ELF64_SHDR_SIZE: usize = 64;
-const ELF64_SYM_SIZE: usize = 24;
-const ELF64_RELA_SIZE: usize = 24;
+const ELF64_EHDR_SIZE: usize = core::mem::size_of::<Elf64Ehdr>();
+const ELF64_SHDR_SIZE: usize = core::mem::size_of::<Elf64Shdr>();
+const ELF64_SYM_SIZE: usize = core::mem::size_of::<Elf64Sym>();
+const ELF64_RELA_SIZE: usize = core::mem::size_of::<Elf64Rela>();
+
+// On-disk ELF64 records as `#[repr(C)]` structs. The struct
+// layout matches the ELF spec verbatim because every field is
+// naturally aligned at the offset the spec calls out and the
+// platforms we target (x86_64, aarch64) are little-endian, so
+// field byte-order matches on-disk order. `static_assert`-style
+// sanity checks at the bottom of this block lock the sizes.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Ehdr {
+    e_ident: [u8; 16],
+    e_type: u16,
+    e_machine: u16,
+    e_version: u32,
+    e_entry: u64,
+    e_phoff: u64,
+    e_shoff: u64,
+    e_flags: u32,
+    e_ehsize: u16,
+    e_phentsize: u16,
+    e_phnum: u16,
+    e_shentsize: u16,
+    e_shnum: u16,
+    e_shstrndx: u16,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Shdr {
+    sh_name: u32,
+    sh_type: u32,
+    sh_flags: u64,
+    sh_addr: u64,
+    sh_offset: u64,
+    sh_size: u64,
+    sh_link: u32,
+    sh_info: u32,
+    sh_addralign: u64,
+    sh_entsize: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Sym {
+    st_name: u32,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+    st_value: u64,
+    st_size: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Rela {
+    r_offset: u64,
+    r_info: u64,
+    r_addend: i64,
+}
+
+const _: () = {
+    assert!(core::mem::size_of::<Elf64Ehdr>() == 64);
+    assert!(core::mem::size_of::<Elf64Shdr>() == 64);
+    assert!(core::mem::size_of::<Elf64Sym>() == 24);
+    assert!(core::mem::size_of::<Elf64Rela>() == 24);
+};
+
+/// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
+/// checks before reading; copies the bytes into an aligned local
+/// to dodge the unaligned-load requirement on architectures that
+/// would otherwise trap. The caller is responsible for matching
+/// `T` to the on-disk shape -- the helper sidesteps Rust's type
+/// system there because every ELF struct has its own well-known
+/// layout.
+fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
+    let n = core::mem::size_of::<T>();
+    if off.checked_add(n).is_none_or(|end| end > bytes.len()) {
+        return Err(err(&alloc::format!(
+            "ELF record at offset 0x{off:x} (size {n}) past end of file (len {})",
+            bytes.len(),
+        )));
+    }
+    // SAFETY: `T` is `Copy + #[repr(C)]` per call site; bounds
+    // checked above; little-endian field order matches the
+    // host's byte order so the in-memory pattern matches the
+    // on-disk pattern.
+    Ok(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(off) as *const T) })
+}
 
 /// Which architecture's relocations the object uses. Drives the
 /// reloc-type interpretation in [`NativeReloc::rtype`].
@@ -177,22 +265,22 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             ELF64_EHDR_SIZE,
         )));
     }
-    if bytes[4] != ELF_CLASS_64 {
+    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    if ehdr.e_ident[4] != ELF_CLASS_64 {
         return Err(err("ELF object is not 64-bit (ELFCLASS64 expected)"));
     }
-    if bytes[5] != ELF_DATA_LSB {
+    if ehdr.e_ident[5] != ELF_DATA_LSB {
         return Err(err(
             "ELF object is not little-endian (ELFDATA2LSB expected)",
         ));
     }
-    let e_type = u16_at(bytes, 16);
-    if e_type != ET_REL {
+    if ehdr.e_type != ET_REL {
         return Err(err(&format!(
-            "ELF object is not relocatable (e_type = {e_type}, expected ET_REL = {ET_REL})",
+            "ELF object is not relocatable (e_type = {}, expected ET_REL = {ET_REL})",
+            ehdr.e_type,
         )));
     }
-    let e_machine = u16_at(bytes, 18);
-    let machine = match e_machine {
+    let machine = match ehdr.e_machine {
         EM_X86_64 => NativeMachine::X86_64,
         EM_AARCH64 => NativeMachine::Aarch64,
         other => {
@@ -201,10 +289,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             )));
         }
     };
-    let e_shoff = u64_at(bytes, 40) as usize;
-    let e_shentsize = u16_at(bytes, 58) as usize;
-    let e_shnum = u16_at(bytes, 60) as usize;
-    let e_shstrndx = u16_at(bytes, 62) as usize;
+    let e_shoff = ehdr.e_shoff as usize;
+    let e_shentsize = ehdr.e_shentsize as usize;
+    let e_shnum = ehdr.e_shnum as usize;
+    let e_shstrndx = ehdr.e_shstrndx as usize;
     if e_shentsize != ELF64_SHDR_SIZE {
         return Err(err(&format!(
             "section header entry size is {e_shentsize}, expected {ELF64_SHDR_SIZE}",
@@ -217,19 +305,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     // Read every section header up front. The reader is
     // section-name driven so order doesn't matter past this
     // point.
-    let mut shdrs: Vec<SectionHeader> = Vec::with_capacity(e_shnum);
+    let mut shdrs: Vec<Elf64Shdr> = Vec::with_capacity(e_shnum);
     for i in 0..e_shnum {
         let off = e_shoff + i * ELF64_SHDR_SIZE;
-        shdrs.push(SectionHeader {
-            name: u32_at(bytes, off),
-            sh_type: u32_at(bytes, off + 4),
-            flags: u64_at(bytes, off + 8),
-            offset: u64_at(bytes, off + 24) as usize,
-            size: u64_at(bytes, off + 32) as usize,
-            link: u32_at(bytes, off + 40),
-            info: u32_at(bytes, off + 44),
-            entsize: u64_at(bytes, off + 56) as usize,
-        });
+        shdrs.push(read_struct(bytes, off)?);
     }
 
     // Locate `.shstrtab` -- the index in the file header.
@@ -262,7 +341,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut symtab_idx: Option<usize> = None;
     let mut rela_section_indices: Vec<usize> = Vec::new();
     for (i, sh) in shdrs.iter().enumerate() {
-        let name = strtab_str(shstrtab_bytes, sh.name as usize)?;
+        let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
             symtab_idx = Some(i);
             continue;
@@ -327,7 +406,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             )));
         }
         bss_base_per_shndx.push((sh_i, bss_size as u64));
-        bss_size += sh.size;
+        bss_size += sh.sh_size as usize;
     }
     // TLS initialised storage (`.tdata*`): concatenate file
     // bytes; track per-section base for symbol rebasing. TLS
@@ -360,11 +439,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         // of the TLS image (which begins at the first `.tdata`
         // byte). `.tbss` sits past the `.tdata` extent.
         tls_base_per_shndx.push((sh_i, (tls_data_bytes.len() + tls_bss_size) as u64));
-        tls_bss_size += sh.size;
+        tls_bss_size += sh.sh_size as usize;
     }
 
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
-    let strtab_sh_i = symtab_sh.link as usize;
+    let strtab_sh_i = symtab_sh.sh_link as usize;
     let strtab_sh = shdrs.get(strtab_sh_i).ok_or_else(|| {
         err(&format!(
             ".symtab's sh_link ({strtab_sh_i}) is not a valid section index"
@@ -382,40 +461,35 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     // surface with their name field empty and the matching
     // `section` kind, and the linker resolves the reloc
     // through `defined.section` + `value`.
-    if symtab_sh.entsize != ELF64_SYM_SIZE {
+    if symtab_sh.sh_entsize != ELF64_SYM_SIZE as u64 {
         return Err(err(&format!(
             ".symtab entry size is {} bytes; expected {ELF64_SYM_SIZE}",
-            symtab_sh.entsize,
+            symtab_sh.sh_entsize,
         )));
     }
     let symtab_bytes = section_slice(bytes, symtab_sh)?;
     let n_syms = symtab_bytes.len() / ELF64_SYM_SIZE;
     let mut symbols: Vec<NativeSymbol> = Vec::with_capacity(n_syms);
     for i in 0..n_syms {
-        let off = i * ELF64_SYM_SIZE;
-        let st_name = u32_at(symtab_bytes, off) as usize;
-        let st_info = symtab_bytes[off + 4];
-        let st_shndx = u16_at(symtab_bytes, off + 6);
-        let st_value = u64_at(symtab_bytes, off + 8);
-        let st_size = u64_at(symtab_bytes, off + 16);
-        let binding = st_info >> 4;
-        let kind = st_info & 0xf;
+        let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
+        let binding = sym.st_info >> 4;
+        let kind = sym.st_info & 0xf;
         let (section, value_offset) = section_of_shndx(
-            st_shndx,
+            sym.st_shndx,
             &text_base_per_shndx,
             &data_base_per_shndx,
             &bss_base_per_shndx,
             &tls_base_per_shndx,
         );
         symbols.push(NativeSymbol {
-            name: if st_name == 0 {
+            name: if sym.st_name == 0 {
                 String::new()
             } else {
-                strtab_str(strtab_bytes, st_name)?.to_string()
+                strtab_str(strtab_bytes, sym.st_name as usize)?.to_string()
             },
             section,
-            value: st_value + value_offset,
-            size: st_size,
+            value: sym.st_value + value_offset,
+            size: sym.st_size,
             binding,
             kind,
         });
@@ -439,17 +513,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                 ".rela.* section at index {rela_sh_i} is not SHT_RELA",
             )));
         }
-        if rela_sh.entsize != ELF64_RELA_SIZE {
+        if rela_sh.sh_entsize != ELF64_RELA_SIZE as u64 {
             return Err(err(&format!(
                 ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
-                rela_sh.entsize,
+                rela_sh.sh_entsize,
             )));
         }
         // `sh_info` of a SHT_RELA section names the target
         // section it patches. Look the target up in the per-
         // family base maps to find its position within the
         // merged section's blob.
-        let target_shndx = rela_sh.info as usize;
+        let target_shndx = rela_sh.sh_info as usize;
         let (target_base, into_text) = if let Some(&(_, base)) = text_base_per_shndx
             .iter()
             .find(|&&(idx, _)| idx == target_shndx)
@@ -469,17 +543,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         let rela_bytes = section_slice(bytes, rela_sh)?;
         let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
         for j in 0..n_relocs {
-            let off = j * ELF64_RELA_SIZE;
-            let r_offset = u64_at(rela_bytes, off);
-            let r_info = u64_at(rela_bytes, off + 8);
-            let r_addend = i64_at(rela_bytes, off + 16);
-            let sym_idx = (r_info >> 32) as usize;
-            let rtype = (r_info & 0xffff_ffff) as u32;
+            let rela: Elf64Rela = read_struct(rela_bytes, j * ELF64_RELA_SIZE)?;
+            let sym_idx = (rela.r_info >> 32) as usize;
+            let rtype = (rela.r_info & 0xffff_ffff) as u32;
             let entry = NativeReloc {
-                offset: target_base + r_offset,
+                offset: target_base + rela.r_offset,
                 sym_idx,
                 rtype,
-                addend: r_addend,
+                addend: rela.r_addend,
             };
             if into_text {
                 text_relocs.push(entry);
@@ -504,54 +575,25 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
 
 // ---- Internal helpers ----
 
-struct SectionHeader {
-    name: u32,
-    sh_type: u32,
-    flags: u64,
-    offset: usize,
-    size: usize,
-    link: u32,
-    info: u32,
-    entsize: usize,
-}
-
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
         "linker::object: {msg}",
     )))
 }
 
-fn u16_at(bytes: &[u8], off: usize) -> u16 {
-    u16::from_le_bytes([bytes[off], bytes[off + 1]])
-}
-
-fn u32_at(bytes: &[u8], off: usize) -> u32 {
-    u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
-}
-
-fn u64_at(bytes: &[u8], off: usize) -> u64 {
-    let mut buf = [0u8; 8];
-    buf.copy_from_slice(&bytes[off..off + 8]);
-    u64::from_le_bytes(buf)
-}
-
-fn i64_at(bytes: &[u8], off: usize) -> i64 {
-    u64_at(bytes, off) as i64
-}
-
-fn section_slice<'a>(bytes: &'a [u8], sh: &SectionHeader) -> Result<&'a [u8], C5Error> {
+fn section_slice<'a>(bytes: &'a [u8], sh: &Elf64Shdr) -> Result<&'a [u8], C5Error> {
     if sh.sh_type == SHT_NOBITS {
         return Ok(&[]);
     }
-    if sh.offset + sh.size > bytes.len() {
+    let off = sh.sh_offset as usize;
+    let size = sh.sh_size as usize;
+    if off + size > bytes.len() {
         return Err(err(&format!(
-            "section runs past end of file (offset 0x{:x} + size 0x{:x} > len {})",
-            sh.offset,
-            sh.size,
+            "section runs past end of file (offset 0x{off:x} + size 0x{size:x} > len {})",
             bytes.len(),
         )));
     }
-    Ok(&bytes[sh.offset..sh.offset + sh.size])
+    Ok(&bytes[off..off + size])
 }
 
 fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
@@ -779,21 +821,271 @@ mod tests {
                 assert_eq!(obj.machine, NativeMachine::Aarch64);
             }
         }
-        // Silence dead-field warnings on the test side; these
-        // fields are part of the encoder/decoder contract even
-        // if the test below only reads a subset.
+        // Pin the rest of the public contract so a writer
+        // change that drops a field surfaces here.
         let _ = obj.bss_size;
         let _ = obj.data.len();
-        let _ = SectionHeader {
-            name: 0,
-            sh_type: 0,
-            flags: 0,
-            offset: 0,
-            size: 0,
-            link: 0,
-            info: 0,
-            entsize: 0,
+    }
+
+    /// Append a `#[repr(C)]` record as little-endian bytes. The
+    /// hand-built fixtures below use the same on-disk structs
+    /// the parser reads, so a struct-layout regression surfaces
+    /// in both directions at once.
+    fn write_struct<T: Copy>(buf: &mut Vec<u8>, value: &T) {
+        // SAFETY: T is `#[repr(C)] Copy`; we know the byte
+        // count exactly and we're appending to a `Vec<u8>` that
+        // owns the storage. Little-endian host == little-endian
+        // on-disk layout for x86_64 / aarch64.
+        let n = core::mem::size_of::<T>();
+        let ptr = value as *const T as *const u8;
+        let slice = unsafe { core::slice::from_raw_parts(ptr, n) };
+        buf.extend_from_slice(slice);
+    }
+
+    /// Plan for one section in [`build_test_elf`]. The builder
+    /// inserts a NULL section and a `.shstrtab` section
+    /// automatically (at indices 0 and 1); caller-provided
+    /// sections start at index 2.
+    struct SecPlan<'a> {
+        name: &'a str,
+        sh_type: u32,
+        body: Vec<u8>,
+        sh_link: u32,
+        sh_info: u32,
+        sh_entsize: u64,
+        /// Override `sh_size` -- needed for SHT_NOBITS where
+        /// the file body is empty but the runtime size isn't.
+        sh_size_override: Option<u64>,
+    }
+
+    impl<'a> SecPlan<'a> {
+        fn progbits(name: &'a str, body: impl Into<Vec<u8>>) -> Self {
+            Self {
+                name,
+                sh_type: SHT_PROGBITS,
+                body: body.into(),
+                sh_link: 0,
+                sh_info: 0,
+                sh_entsize: 0,
+                sh_size_override: None,
+            }
+        }
+        fn nobits(name: &'a str, size: u64) -> Self {
+            Self {
+                name,
+                sh_type: SHT_NOBITS,
+                body: Vec::new(),
+                sh_link: 0,
+                sh_info: 0,
+                sh_entsize: 0,
+                sh_size_override: Some(size),
+            }
+        }
+        fn symtab(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
+            Self {
+                name,
+                sh_type: SHT_SYMTAB,
+                body,
+                sh_link: link,
+                sh_info: info,
+                sh_entsize: ELF64_SYM_SIZE as u64,
+                sh_size_override: None,
+            }
+        }
+        fn strtab(name: &'a str, body: Vec<u8>) -> Self {
+            Self {
+                name,
+                sh_type: SHT_STRTAB,
+                body,
+                sh_link: 0,
+                sh_info: 0,
+                sh_entsize: 0,
+                sh_size_override: None,
+            }
+        }
+        fn rela(name: &'a str, body: Vec<u8>, link: u32, info: u32) -> Self {
+            Self {
+                name,
+                sh_type: SHT_RELA,
+                body,
+                sh_link: link,
+                sh_info: info,
+                sh_entsize: ELF64_RELA_SIZE as u64,
+                sh_size_override: None,
+            }
+        }
+    }
+
+    /// Assemble an ET_REL byte image. The builder owns
+    /// `.shstrtab` (at index 1); caller-named sections start at
+    /// index 2 in the section header table. Returns the byte
+    /// image ready for `parse_native_elf`.
+    fn build_test_elf(machine: u16, plans: &[SecPlan<'_>]) -> Vec<u8> {
+        // Section index layout:
+        //   0: NULL
+        //   1: .shstrtab
+        //   2..: caller's `plans`
+        let n_total = 2 + plans.len();
+        // Build .shstrtab body + per-section name offsets.
+        let mut shstrtab: Vec<u8> = vec![0]; // NULL section gets offset 0.
+        let mut name_offs: Vec<u32> = Vec::with_capacity(n_total);
+        name_offs.push(0); // NULL section
+        let shstrtab_name_off = shstrtab.len() as u32;
+        shstrtab.extend_from_slice(b".shstrtab");
+        shstrtab.push(0);
+        name_offs.push(shstrtab_name_off);
+        for p in plans {
+            name_offs.push(shstrtab.len() as u32);
+            shstrtab.extend_from_slice(p.name.as_bytes());
+            shstrtab.push(0);
+        }
+        // Lay sections out: ELF header, section header table,
+        // then section bodies in declaration order. `.shstrtab`
+        // lands first among body sections; caller bodies follow.
+        let hdr_size = core::mem::size_of::<Elf64Ehdr>();
+        let shdr_size = core::mem::size_of::<Elf64Shdr>();
+        let mut sec_offs: Vec<usize> = Vec::with_capacity(n_total);
+        let mut cursor = hdr_size + n_total * shdr_size;
+        sec_offs.push(0); // NULL
+        sec_offs.push(cursor);
+        cursor += shstrtab.len();
+        for p in plans {
+            sec_offs.push(cursor);
+            cursor += p.body.len();
+        }
+        let total = cursor;
+        let mut bytes = vec![0u8; total];
+        // ELF header.
+        let mut ehdr = Elf64Ehdr {
+            e_ident: [0; 16],
+            e_type: ET_REL,
+            e_machine: machine,
+            e_version: 1,
+            e_entry: 0,
+            e_phoff: 0,
+            e_shoff: hdr_size as u64,
+            e_flags: 0,
+            e_ehsize: hdr_size as u16,
+            e_phentsize: 0,
+            e_phnum: 0,
+            e_shentsize: shdr_size as u16,
+            e_shnum: n_total as u16,
+            e_shstrndx: 1,
         };
+        ehdr.e_ident[0..4].copy_from_slice(b"\x7fELF");
+        ehdr.e_ident[4] = ELF_CLASS_64;
+        ehdr.e_ident[5] = ELF_DATA_LSB;
+        ehdr.e_ident[6] = 1;
+        {
+            let mut buf = Vec::with_capacity(hdr_size);
+            write_struct(&mut buf, &ehdr);
+            bytes[0..hdr_size].copy_from_slice(&buf);
+        }
+        // Per-section header writer.
+        let write_shdr_at = |bytes: &mut [u8], idx: usize, shdr: Elf64Shdr| {
+            let mut buf = Vec::with_capacity(shdr_size);
+            write_struct(&mut buf, &shdr);
+            let base = hdr_size + idx * shdr_size;
+            bytes[base..base + shdr_size].copy_from_slice(&buf);
+        };
+        // [0] NULL section.
+        write_shdr_at(
+            &mut bytes,
+            0,
+            Elf64Shdr {
+                sh_name: 0,
+                sh_type: 0,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: 0,
+                sh_size: 0,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 0,
+                sh_entsize: 0,
+            },
+        );
+        // [1] .shstrtab.
+        write_shdr_at(
+            &mut bytes,
+            1,
+            Elf64Shdr {
+                sh_name: name_offs[1],
+                sh_type: SHT_STRTAB,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: sec_offs[1] as u64,
+                sh_size: shstrtab.len() as u64,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 0,
+                sh_entsize: 0,
+            },
+        );
+        // [2..] caller sections.
+        for (i, p) in plans.iter().enumerate() {
+            let idx = i + 2;
+            write_shdr_at(
+                &mut bytes,
+                idx,
+                Elf64Shdr {
+                    sh_name: name_offs[idx],
+                    sh_type: p.sh_type,
+                    sh_flags: 0,
+                    sh_addr: 0,
+                    sh_offset: sec_offs[idx] as u64,
+                    sh_size: p.sh_size_override.unwrap_or(p.body.len() as u64),
+                    sh_link: p.sh_link,
+                    sh_info: p.sh_info,
+                    sh_addralign: 0,
+                    sh_entsize: p.sh_entsize,
+                },
+            );
+        }
+        // Section bodies: .shstrtab at index 1, then the plans.
+        bytes[sec_offs[1]..sec_offs[1] + shstrtab.len()].copy_from_slice(&shstrtab);
+        for (i, p) in plans.iter().enumerate() {
+            let off = sec_offs[i + 2];
+            bytes[off..off + p.body.len()].copy_from_slice(&p.body);
+        }
+        bytes
+    }
+
+    /// Encode one `.symtab` entry into a buffer used by
+    /// [`build_test_elf`].
+    fn push_test_sym(
+        out: &mut Vec<u8>,
+        st_name: u32,
+        st_info: u8,
+        st_shndx: u16,
+        st_value: u64,
+        st_size: u64,
+    ) {
+        write_struct(
+            out,
+            &Elf64Sym {
+                st_name,
+                st_info,
+                st_other: 0,
+                st_shndx,
+                st_value,
+                st_size,
+            },
+        );
+    }
+
+    /// Encode one `.rela.<section>` entry into a buffer used by
+    /// [`build_test_elf`].
+    fn push_test_rela(out: &mut Vec<u8>, r_offset: u64, sym_idx: u32, rtype: u32, r_addend: i64) {
+        let r_info = ((sym_idx as u64) << 32) | (rtype as u64);
+        write_struct(
+            out,
+            &Elf64Rela {
+                r_offset,
+                r_info,
+                r_addend,
+            },
+        );
     }
 
     /// Hand-crafted ET_REL with `.text` / `.data` / `.rodata`
@@ -807,211 +1099,34 @@ mod tests {
     /// (`data_base + sym.value + addend`).
     #[test]
     fn rodata_section_lands_in_merged_data_blob() {
-        // Section names (NUL-separated) for .shstrtab.
-        let shstr_names: &[&str] = &[
-            "",
-            ".shstrtab",
-            ".strtab",
-            ".symtab",
-            ".text",
-            ".data",
-            ".rodata",
-            ".rela.data",
-        ];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
-        // Two-symbol .strtab: index 0 is the empty string the
-        // null and STT_SECTION symbols share.
+        // Caller-named sections start at index 2 in the
+        // resulting ET_REL (NULL at 0, builder's .shstrtab at 1).
+        //   2: .strtab
+        //   3: .symtab     (sh_link=2 = strtab; sh_info=3 = first non-local sym)
+        //   4: .text
+        //   5: .data
+        //   6: .rodata
+        //   7: .rela.data  (sh_link=3 = symtab; sh_info=5 = .data target)
         let strtab: Vec<u8> = vec![0];
-        // Symtab entries:
-        //   [0] null
-        //   [1] STT_SECTION pointing at .data   (shndx = 5)
-        //   [2] STT_SECTION pointing at .rodata (shndx = 6)
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0); // st_other
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        push_sym(&mut symtab, 0, 0x03, 5, 0, 0); // STT_SECTION on .data
-        push_sym(&mut symtab, 0, 0x03, 6, 0, 0); // STT_SECTION on .rodata
-        // .text empty; .data 8 zero bytes; .rodata "hi\0\0\0\0\0\0" (8 bytes).
-        let text: Vec<u8> = Vec::new();
-        let data: Vec<u8> = vec![0; 8];
-        let mut rodata: Vec<u8> = b"hi".to_vec();
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // STT_SECTION on .data (shndx=5) / .rodata (shndx=6).
+        push_test_sym(&mut symtab, 0, 0x03, 5, 0, 0);
+        push_test_sym(&mut symtab, 0, 0x03, 6, 0, 0);
+        let mut rodata = b"hi".to_vec();
         rodata.resize(8, 0);
-        // .rela.data: one entry, slot at .data+0, target = STT_SECTION on .rodata (sym 2), R_X86_64_64=1, addend=0.
-        let mut rela_data: Vec<u8> = Vec::new();
-        rela_data.extend_from_slice(&0u64.to_le_bytes()); // r_offset = 0
-        let r_info: u64 = (2u64 << 32) | 1u64; // sym=2, type=R_X86_64_64
-        rela_data.extend_from_slice(&r_info.to_le_bytes());
-        rela_data.extend_from_slice(&0i64.to_le_bytes()); // r_addend = 0
-
-        // Section ordering must match the indices baked into
-        // the STT_SECTION entries above.
-        const N_SECTIONS: usize = 8; // null, shstrtab, strtab, symtab, text, data, rodata, rela.data
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let mut sec_bytes: Vec<&[u8]> = vec![
-            &[],
-            &shstrtab,
-            &strtab,
-            &symtab,
-            &text,
-            &data,
-            &rodata,
-            &rela_data,
+        let mut rela_data = Vec::new();
+        // R_X86_64_64 (type=1), sym=2 (.rodata STT_SECTION), addend=0.
+        push_test_rela(&mut rela_data, 0, 2, 1, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 3),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::progbits(".data", vec![0u8; 8]),
+            SecPlan::progbits(".rodata", rodata),
+            SecPlan::rela(".rela.data", rela_data, 3, 5),
         ];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let total_size = cursor;
-
-        let mut bytes = vec![0u8; total_size];
-        // ELF64 ident.
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1; // EV_CURRENT
-        // e_type, e_machine.
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
-        // e_version.
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        // e_shoff = 64; e_ehsize = 64; e_shentsize = 64; e_shnum = 8; e_shstrndx = 1.
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes()); // shstrndx
-
-        // Per-section header writer. `link` / `info` only matter for symtab + rela.data.
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            // flags / addr left zero.
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            // align left zero.
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        // [0] NULL section -- all zero.
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        // [1] .shstrtab
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        // [2] .strtab
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        // [3] .symtab -- sh_link = strtab index (2), sh_info = index of first non-local (>= 3).
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            3,
-            ELF64_SYM_SIZE,
-        );
-        // [4] .text -- progbits, empty.
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            text.len(),
-            0,
-            0,
-            0,
-        );
-        // [5] .data -- progbits, 8 bytes.
-        write_shdr(
-            &mut bytes,
-            5,
-            shstr_off[5],
-            SHT_PROGBITS,
-            sec_offs[5],
-            data.len(),
-            0,
-            0,
-            0,
-        );
-        // [6] .rodata -- progbits, 8 bytes.
-        write_shdr(
-            &mut bytes,
-            6,
-            shstr_off[6],
-            SHT_PROGBITS,
-            sec_offs[6],
-            rodata.len(),
-            0,
-            0,
-            0,
-        );
-        // [7] .rela.data -- sh_link = symtab (3), sh_info = section it patches (5 = .data).
-        write_shdr(
-            &mut bytes,
-            7,
-            shstr_off[7],
-            SHT_RELA,
-            sec_offs[7],
-            rela_data.len(),
-            3,
-            5,
-            ELF64_RELA_SIZE,
-        );
-
-        // Copy section bodies into place.
-        for (i, body) in sec_bytes.iter_mut().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
-
+        let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse hand-built ET_REL");
         // .data = original 8 bytes + 8 rodata bytes.
         assert_eq!(
@@ -1053,23 +1168,8 @@ mod tests {
     /// merged offset `first_text_size + k`.
     #[test]
     fn function_sections_concat_and_rebase_relocs() {
-        let shstr_names: &[&str] = &[
-            "",
-            ".shstrtab",
-            ".strtab",
-            ".symtab",
-            ".text.helper",
-            ".text.main",
-            ".rela.text.main",
-        ];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
-        // Symbol names: "" / "helper" / "main" / "printf".
+        // Sections at indices 2..: .strtab, .symtab, .text.helper,
+        // .text.main, .rela.text.main.
         let mut strtab: Vec<u8> = vec![0];
         let helper_name_off = strtab.len() as u32;
         strtab.extend_from_slice(b"helper\0");
@@ -1077,160 +1177,25 @@ mod tests {
         strtab.extend_from_slice(b"main\0");
         let printf_name_off = strtab.len() as u32;
         strtab.extend_from_slice(b"printf\0");
-        // Symtab:
-        //   [0] null
-        //   [1] STT_FUNC helper at .text.helper (shndx=4), value=0, size=4
-        //   [2] STT_FUNC main   at .text.main   (shndx=5), value=0, size=8
-        //   [3] STB_GLOBAL UNDEF printf
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0);
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        // st_info = (STB_GLOBAL << 4) | STT_FUNC = (1 << 4) | 2 = 0x12.
-        push_sym(&mut symtab, helper_name_off, 0x12, 4, 0, 4);
-        push_sym(&mut symtab, main_name_off, 0x12, 5, 0, 8);
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_FUNC = 0x12.
+        // helper @ .text.helper (shndx=4); main @ .text.main (shndx=5).
+        push_test_sym(&mut symtab, helper_name_off, 0x12, 4, 0, 4);
+        push_test_sym(&mut symtab, main_name_off, 0x12, 5, 0, 8);
         // STB_GLOBAL STT_NOTYPE UNDEF printf.
-        push_sym(&mut symtab, printf_name_off, 0x10, 0, 0, 0);
-        let text_helper: Vec<u8> = vec![0x11, 0x22, 0x33, 0x44];
-        let text_main: Vec<u8> = vec![0xaa; 8];
-        // One reloc in .rela.text.main: offset=2 (inside main),
-        // sym=3 (printf), type=R_X86_64_PLT32=4, addend=-4.
-        let mut rela_main: Vec<u8> = Vec::new();
-        rela_main.extend_from_slice(&2u64.to_le_bytes());
-        let r_info: u64 = (3u64 << 32) | 4u64;
-        rela_main.extend_from_slice(&r_info.to_le_bytes());
-        rela_main.extend_from_slice(&(-4i64).to_le_bytes());
-
-        const N_SECTIONS: usize = 7;
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let sec_bytes: Vec<&[u8]> = vec![
-            &[],
-            &shstrtab,
-            &strtab,
-            &symtab,
-            &text_helper,
-            &text_main,
-            &rela_main,
+        push_test_sym(&mut symtab, printf_name_off, 0x10, 0, 0, 0);
+        let mut rela_main = Vec::new();
+        // R_X86_64_PLT32 (type=4), sym=3 (printf), addend=-4, offset=2 inside main.
+        push_test_rela(&mut rela_main, 2, 3, 4, -4);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text.helper", vec![0x11, 0x22, 0x33, 0x44]),
+            SecPlan::progbits(".text.main", vec![0xaa; 8]),
+            SecPlan::rela(".rela.text.main", rela_main, 3, 5),
         ];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let mut bytes = vec![0u8; cursor];
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1;
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
-
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            1,
-            ELF64_SYM_SIZE,
-        );
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            text_helper.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            5,
-            shstr_off[5],
-            SHT_PROGBITS,
-            sec_offs[5],
-            text_main.len(),
-            0,
-            0,
-            0,
-        );
-        // .rela.text.main: sh_link = symtab index (3); sh_info = target section (5 = .text.main).
-        write_shdr(
-            &mut bytes,
-            6,
-            shstr_off[6],
-            SHT_RELA,
-            sec_offs[6],
-            rela_main.len(),
-            3,
-            5,
-            ELF64_RELA_SIZE,
-        );
-        for (i, body) in sec_bytes.iter().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
-
+        let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse multi-text fixture");
         assert_eq!(
             obj.text.len(),
@@ -1263,126 +1228,19 @@ mod tests {
     /// `.bss` slot (C99 6.9.2 tentative-definition rules).
     #[test]
     fn common_symbol_surfaces_with_size_and_alignment() {
-        const SHN_COMMON_LOCAL: u16 = 0xfff2;
-        let shstr_names: &[&str] = &["", ".shstrtab", ".strtab", ".symtab", ".text"];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
         let mut strtab: Vec<u8> = vec![0];
         let uninit_name_off = strtab.len() as u32;
         strtab.extend_from_slice(b"uninit_int\0");
-        // Symtab:
-        //   [0] null
-        //   [1] STB_GLOBAL STT_OBJECT SHN_COMMON, value=4 (alignment), size=4 (bytes)
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0);
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        push_sym(&mut symtab, uninit_name_off, 0x11, SHN_COMMON_LOCAL, 4, 4);
-
-        const N_SECTIONS: usize = 5;
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let sec_bytes: Vec<&[u8]> = vec![&[], &shstrtab, &strtab, &symtab, &[]];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let mut bytes = vec![0u8; cursor];
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1;
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
-
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            1,
-            ELF64_SYM_SIZE,
-        );
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            0,
-            0,
-            0,
-            0,
-        );
-        for (i, body) in sec_bytes.iter().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
-
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // STB_GLOBAL STT_OBJECT @ SHN_COMMON, value=4 (alignment), size=4 (bytes).
+        push_test_sym(&mut symtab, uninit_name_off, 0x11, SHN_COMMON, 4, 4);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", Vec::new()),
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse SHN_COMMON fixture");
         assert_eq!(obj.symbols.len(), 2);
         let s = &obj.symbols[1];
@@ -1402,157 +1260,27 @@ mod tests {
     /// past it).
     #[test]
     fn tdata_and_tbss_sections_surface_as_tls() {
-        let shstr_names: &[&str] = &[
-            "",
-            ".shstrtab",
-            ".strtab",
-            ".symtab",
-            ".text",
-            ".tdata",
-            ".tbss",
-        ];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
         let mut strtab: Vec<u8> = vec![0];
         let init_off = strtab.len() as u32;
         strtab.extend_from_slice(b"init_counter\0");
         let zero_off = strtab.len() as u32;
         strtab.extend_from_slice(b"zero_counter\0");
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0);
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        // st_info = (STB_GLOBAL << 4) | STT_TLS = (1 << 4) | 6 = 0x16.
-        push_sym(&mut symtab, init_off, 0x16, 5, 0, 4);
-        push_sym(&mut symtab, zero_off, 0x16, 6, 0, 8);
-        let text: Vec<u8> = Vec::new();
-        let tdata: Vec<u8> = vec![0x42, 0, 0, 0];
-
-        const N_SECTIONS: usize = 7;
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let sec_bytes: Vec<&[u8]> = vec![&[], &shstrtab, &strtab, &symtab, &text, &tdata, &[]];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let mut bytes = vec![0u8; cursor];
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1;
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            1,
-            ELF64_SYM_SIZE,
-        );
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            text.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            5,
-            shstr_off[5],
-            SHT_PROGBITS,
-            sec_offs[5],
-            tdata.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            6,
-            shstr_off[6],
-            SHT_NOBITS,
-            sec_offs[6],
-            8,
-            0,
-            0,
-            0,
-        );
-        for (i, body) in sec_bytes.iter().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
-
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_TLS = 0x16.
+        // .tdata is at shndx=5; .tbss at shndx=6 in the laid-out
+        // section header table (NULL=0, .shstrtab=1, .strtab=2,
+        // .symtab=3, .text=4, .tdata=5, .tbss=6).
+        push_test_sym(&mut symtab, init_off, 0x16, 5, 0, 4);
+        push_test_sym(&mut symtab, zero_off, 0x16, 6, 0, 8);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::progbits(".tdata", vec![0x42, 0, 0, 0]),
+            SecPlan::nobits(".tbss", 8),
+        ];
+        let bytes = build_test_elf(EM_X86_64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse TLS fixture");
         assert_eq!(obj.tls_data.len(), 4);
         assert_eq!(obj.tls_bss_size, 8);
@@ -1573,23 +1301,6 @@ mod tests {
     /// symbol's `st_value` accordingly.
     #[test]
     fn data_sections_and_bss_sections_concat() {
-        let shstr_names: &[&str] = &[
-            "",
-            ".shstrtab",
-            ".strtab",
-            ".symtab",
-            ".text",
-            ".data.first",
-            ".data.second",
-            ".bss.zero",
-        ];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
         let mut strtab: Vec<u8> = vec![0];
         let first_off = strtab.len() as u32;
         strtab.extend_from_slice(b"first\0");
@@ -1597,159 +1308,22 @@ mod tests {
         strtab.extend_from_slice(b"second\0");
         let zero_off = strtab.len() as u32;
         strtab.extend_from_slice(b"zero\0");
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0);
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        // st_info = (STB_GLOBAL << 4) | STT_OBJECT = (1 << 4) | 1 = 0x11.
-        push_sym(&mut symtab, first_off, 0x11, 5, 0, 4);
-        push_sym(&mut symtab, second_off, 0x11, 6, 0, 4);
-        push_sym(&mut symtab, zero_off, 0x11, 7, 0, 8);
-        let text: Vec<u8> = Vec::new();
-        let data_first: Vec<u8> = vec![0xaa; 4];
-        let data_second: Vec<u8> = vec![0xbb; 4];
-
-        const N_SECTIONS: usize = 8;
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let sec_bytes: Vec<&[u8]> = vec![
-            &[],
-            &shstrtab,
-            &strtab,
-            &symtab,
-            &text,
-            &data_first,
-            &data_second,
-            &[],
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_OBJECT = 0x11.
+        // shndx 5 = .data.first, 6 = .data.second, 7 = .bss.zero.
+        push_test_sym(&mut symtab, first_off, 0x11, 5, 0, 4);
+        push_test_sym(&mut symtab, second_off, 0x11, 6, 0, 4);
+        push_test_sym(&mut symtab, zero_off, 0x11, 7, 0, 8);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 1),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::progbits(".data.first", vec![0xaa; 4]),
+            SecPlan::progbits(".data.second", vec![0xbb; 4]),
+            SecPlan::nobits(".bss.zero", 8),
         ];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let mut bytes = vec![0u8; cursor];
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1;
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_AARCH64.to_le_bytes());
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            1,
-            ELF64_SYM_SIZE,
-        );
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            text.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            5,
-            shstr_off[5],
-            SHT_PROGBITS,
-            sec_offs[5],
-            data_first.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            6,
-            shstr_off[6],
-            SHT_PROGBITS,
-            sec_offs[6],
-            data_second.len(),
-            0,
-            0,
-            0,
-        );
-        // .bss.zero: SHT_NOBITS, size = 8.
-        write_shdr(
-            &mut bytes,
-            7,
-            shstr_off[7],
-            SHT_NOBITS,
-            sec_offs[7],
-            8,
-            0,
-            0,
-            0,
-        );
-        for (i, body) in sec_bytes.iter().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
-
+        let bytes = build_test_elf(EM_AARCH64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse multi-data fixture");
         assert_eq!(obj.text.len(), 0, "empty .text section");
         assert_eq!(obj.data.len(), 8, ".data.first || .data.second");
@@ -1771,154 +1345,23 @@ mod tests {
     /// The family-name predicate matches the `.rodata.` prefix.
     #[test]
     fn rodata_str_subsection_lands_in_merged_data_blob() {
-        let shstr_names: &[&str] = &[
-            "",
-            ".shstrtab",
-            ".strtab",
-            ".symtab",
-            ".text",
-            ".data",
-            ".rodata.str.1.1",
-        ];
-        let mut shstrtab: Vec<u8> = Vec::new();
-        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
-        for n in shstr_names {
-            shstr_off.push(shstrtab.len() as u32);
-            shstrtab.extend_from_slice(n.as_bytes());
-            shstrtab.push(0);
-        }
         let strtab: Vec<u8> = vec![0];
-        let mut symtab: Vec<u8> = Vec::new();
-        let push_sym =
-            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
-                out.extend_from_slice(&name.to_le_bytes());
-                out.push(info);
-                out.push(0);
-                out.extend_from_slice(&shndx.to_le_bytes());
-                out.extend_from_slice(&value.to_le_bytes());
-                out.extend_from_slice(&size.to_le_bytes());
-            };
-        push_sym(&mut symtab, 0, 0, 0, 0, 0);
-        // STT_SECTION on .rodata.str.1.1 (shndx = 6).
-        push_sym(&mut symtab, 0, 0x03, 6, 0, 0);
-        let text: Vec<u8> = Vec::new();
-        let data: Vec<u8> = vec![0; 4];
-        let rodata: Vec<u8> = b"hello\0".to_vec();
-
-        const N_SECTIONS: usize = 7;
-        const HDR_SIZE: usize = 64;
-        const SHDR_SIZE: usize = 64;
-        let mut sec_bytes: Vec<&[u8]> =
-            vec![&[], &shstrtab, &strtab, &symtab, &text, &data, &rodata];
-        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
-        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
-        for body in &sec_bytes {
-            sec_offs.push(cursor);
-            cursor += body.len();
-        }
-        let mut bytes = vec![0u8; cursor];
-        bytes[0..4].copy_from_slice(b"\x7fELF");
-        bytes[4] = ELF_CLASS_64;
-        bytes[5] = ELF_DATA_LSB;
-        bytes[6] = 1;
-        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
-        bytes[18..20].copy_from_slice(&EM_AARCH64.to_le_bytes());
-        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
-        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
-        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
-        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
-        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
-        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
-
-        let write_shdr = |bytes: &mut [u8],
-                          i: usize,
-                          name_off: u32,
-                          sh_type: u32,
-                          off: usize,
-                          size: usize,
-                          link: u32,
-                          info: u32,
-                          entsize: usize| {
-            let base = HDR_SIZE + i * SHDR_SIZE;
-            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
-            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
-            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
-            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
-            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
-            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
-            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
-        };
-        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
-        write_shdr(
-            &mut bytes,
-            1,
-            shstr_off[1],
-            SHT_STRTAB,
-            sec_offs[1],
-            shstrtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            2,
-            shstr_off[2],
-            SHT_STRTAB,
-            sec_offs[2],
-            strtab.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            3,
-            shstr_off[3],
-            SHT_SYMTAB,
-            sec_offs[3],
-            symtab.len(),
-            2,
-            2,
-            ELF64_SYM_SIZE,
-        );
-        write_shdr(
-            &mut bytes,
-            4,
-            shstr_off[4],
-            SHT_PROGBITS,
-            sec_offs[4],
-            text.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            5,
-            shstr_off[5],
-            SHT_PROGBITS,
-            sec_offs[5],
-            data.len(),
-            0,
-            0,
-            0,
-        );
-        write_shdr(
-            &mut bytes,
-            6,
-            shstr_off[6],
-            SHT_PROGBITS,
-            sec_offs[6],
-            rodata.len(),
-            0,
-            0,
-            0,
-        );
-        for (i, body) in sec_bytes.iter_mut().enumerate() {
-            let off = sec_offs[i];
-            bytes[off..off + body.len()].copy_from_slice(body);
-        }
+        let mut symtab = Vec::new();
+        push_test_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // STT_SECTION on .rodata.str.1.1 (shndx=6 after NULL,
+        // .shstrtab, .strtab, .symtab, .text, .data, then the
+        // rodata subsection at position 7? recount: NULL=0,
+        // .shstrtab=1, .strtab=2, .symtab=3, .text=4, .data=5,
+        // .rodata.str.1.1=6).
+        push_test_sym(&mut symtab, 0, 0x03, 6, 0, 0);
+        let plans = [
+            SecPlan::strtab(".strtab", strtab),
+            SecPlan::symtab(".symtab", symtab, 2, 2),
+            SecPlan::progbits(".text", Vec::new()),
+            SecPlan::progbits(".data", vec![0u8; 4]),
+            SecPlan::progbits(".rodata.str.1.1", b"hello\0".to_vec()),
+        ];
+        let bytes = build_test_elf(EM_AARCH64, &plans);
         let obj = parse_native_elf(&bytes).expect("parse rodata.str.1.1 fixture");
         assert_eq!(obj.machine, NativeMachine::Aarch64);
         assert_eq!(

@@ -104,8 +104,8 @@ impl Compiler {
             }
         } else {
             // General expression: run the regular parser to learn
-            // the type, then discard the emitted bytecode (the
-            // operand is unevaluated per C99 6.5.3.4). The
+            // the type, then discard everything the parse pushed
+            // (the operand is unevaluated per C99 6.5.3.4). The
             // `last_array_decay_*` side-channel surfaces shape
             // info the array-decay paths set so a decayed array
             // recovers its real size instead of the pointer's 8.

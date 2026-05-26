@@ -109,10 +109,10 @@ impl Compiler {
     }
 
     /// Emit the body of every requested Sys trampoline. Called
-    /// after every real function body has been parsed -- so the
-    /// emitted bytecode lands at the tail of `text` and never
-    /// splits a caller mid-emission. Each trampoline is the
-    /// shortest possible "re-push args, JsrExt, return" sequence:
+    /// after every real function body has been parsed so the
+    /// synthesised SSA lands after the user code without
+    /// splitting a caller mid-build. Each trampoline is the
+    /// shortest possible "re-push args, CallExt, return" sequence:
     ///
     /// ```text
     /// Ent 0
@@ -158,9 +158,9 @@ impl Compiler {
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;
             let binding_idx = self.symbols[sys_idx].val;
-            // Forwarded arg count: matches the bytecode-side
-            // emit below. Variadic prefix forwards one extra so
-            // dispatch tables (open / fcntl / ioctl) line up.
+            // Forwarded arg count. Variadic prefix forwards one
+            // extra so dispatch tables (open / fcntl / ioctl)
+            // line up.
             let nargs_ssa = if fixed_nargs == 0 && !is_variadic {
                 0
             } else if is_variadic {
@@ -203,10 +203,10 @@ impl Compiler {
             sb.return_(r);
             let mut func = sb.finish();
             // SsaBuilder doesn't know the ent_pc until the
-            // bytecode emit below runs. Patch `end_pc` after
-            // the bytecode emit so the DWARF emitter's per-
+            // PC reservation below runs. Patch `end_pc` after
+            // the reservation so the DWARF emitter's per-
             // function range covers the trampoline body.
-            func.end_pc = ent_pc; // patched after the bytecode emit
+            func.end_pc = ent_pc; // patched after the reservation
             let _ = NO_VALUE; // keep import non-warning
             self.synthetic_ssa_funcs.push(func);
             let synth_idx = self.synthetic_ssa_funcs.len() - 1;

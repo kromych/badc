@@ -1123,7 +1123,7 @@ pub(crate) struct FuncFixup {
     pub adrp_offset: usize,
     /// Byte offset within `Build::text` of the target function's first
     /// instruction. Resolved by the codegen during `lower()` so the
-    /// writer doesn't need a bytecode-to-native map.
+    /// writer doesn't need to consult `pc_to_native` for this entry.
     pub target_native_offset: usize,
 }
 
@@ -1286,10 +1286,10 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     let mut imports = ResolvedImports::resolve(program)?;
     // Linux ELF's `_start` always tail-calls libc `exit` so glibc
     // gets to flush stdio and run atexit before the kernel reaps us.
-    // The bytecode walk only finds ops the *user's* code calls --
-    // a `int main() { return 42; }` has no `Op::Exit` -- so we
-    // force-include it here. Resolves through the same
-    // `program.dylibs` lookup as user-emitted ops would, so a
+    // The SSA walk only finds bindings the user's code calls --
+    // a `int main() { return 42; }` carries no call into `exit` --
+    // so force-include it here. Resolves through the same
+    // `program.dylibs` lookup as user-emitted bindings would, so a
     // source that omits `<stdlib.h>` still gets the friendly
     // "no `#pragma binding(... ::exit, ...)`" error.
     // Linux ELF executables tail-call libc `exit` from

@@ -188,9 +188,8 @@ impl Compiler {
                 // would have to add a `*` for a real use, and
                 // a hypothetical bare field would just allocate
                 // 1 byte like the prior behavior did. Promoting
-                // this to an error needs a separate
-                // declarator-aware check; the bytecode
-                // generation works either way.
+                // this to an error needs a separate declarator-
+                // aware check; codegen handles either shape.
                 Ty::Char as i64 | UNSIGNED_BIT
             } else if self.lex.tk == Token::Float {
                 self.next()?;

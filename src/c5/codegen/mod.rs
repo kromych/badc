@@ -17,8 +17,8 @@
 //! Native binaries skip the VM's safety net. There's no
 //! `--track-pointers` equivalent, no `mprotect` enforcement, no
 //! code-vs-data separation check on every load and store. The
-//! `--interp` mode runs the same bytecode under the VM if you want
-//! the watchful version.
+//! `--interp` mode runs the same program under the SSA-walking
+//! VM if you want the watchful version.
 //!
 //! ## Supported targets
 //!

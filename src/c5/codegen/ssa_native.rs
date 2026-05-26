@@ -1,9 +1,8 @@
 //! Direct compilation of a [`FunctionSsa`] to a stand-alone native
-//! code blob on the four supported targets. Skips the `Program` /
-//! bytecode tier so a producer that builds SSA directly (today: the
-//! `SsaBuilder` test harness; future: the parser when it gains SSA
-//! emit) can validate end-to-end against the existing allocator +
-//! per-arch emit.
+//! code blob on the four supported targets. Skips the `Program`
+//! wrapper so a producer that builds SSA directly (the
+//! `SsaBuilder` test harness) can validate end-to-end against the
+//! existing allocator + per-arch emit.
 //!
 //! Scope: a single function with no external calls, no data refs,
 //! no TLS, no Mcpy, no function-pointer literals. Anything outside

@@ -1,6 +1,5 @@
-//! SSA-driven VM interpreter: walks `Vec<FunctionSsa>` instead of a
-//! bytecode tape. The historical bytecode interpreter is gone;
-//! `super::Vm::run` dispatches here unconditionally via
+//! SSA-driven VM interpreter: walks `Vec<FunctionSsa>`.
+//! `super::Vm::run` dispatches here via
 //! [`run_program_with_args_tracked`].
 //!
 //! Per-call state is a `Vec<i64>` register file keyed by `ValueId`;

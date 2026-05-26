@@ -368,9 +368,9 @@ impl Compiler {
 
         // Translate the pending relocation list to use the
         // compact LinkUnit symbol indices. Only the data-side
-        // `DataDataAbs64` / `DataCodeAbs64` kinds survive --
-        // text-side relocations were retired alongside the
-        // bytecode-tape resolver.
+        // `DataDataAbs64` / `DataCodeAbs64` kinds survive;
+        // text-side references travel through
+        // `FunctionSsa::extern_*_refs`.
         let mut relocs: Vec<Reloc> = Vec::with_capacity(data_relocs_pending.len());
         for (kind, location, sym_idx) in data_relocs_pending {
             let remapped = sym_remap.get(sym_idx).copied().unwrap_or(-1);
@@ -444,13 +444,12 @@ impl Compiler {
         // from the parser-symbol space to the compact LinkUnit
         // symbol space via `sym_remap`. The linker later
         // resolves the LinkSymbol through the merged symbol map
-        // and patches `Inst::Call::target_pc` without the
-        // bytecode-tape order-zip. Entries whose remap is -1
-        // (the symbol was filtered out of the LinkUnit table)
-        // are dropped; this can only happen if the parser
-        // recorded the extern reference but no relocation
-        // anchored the symbol, which itself would be a
-        // walker / parser drift caught by the resolver.
+        // and patches `Inst::Call::target_pc`. Entries whose
+        // remap is -1 (the symbol was filtered out of the
+        // LinkUnit table) are dropped; this can only happen if
+        // the parser recorded the extern reference but no
+        // relocation anchored the symbol, which itself would be
+        // a walker / parser drift caught by the resolver.
         for func in &mut user_ssa_funcs {
             let remap = |refs: &mut alloc::vec::Vec<(u32, u32)>| {
                 refs.retain_mut(|(_, sym_idx)| {

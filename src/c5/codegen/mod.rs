@@ -786,10 +786,9 @@ pub(crate) struct Build {
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
     pub pc_to_native: Vec<usize>,
-    /// Bytecode entry-PCs of every function the lowering emitted,
-    /// in lowering (= emission) order. The DWARF builder iterates
-    /// this to produce one `Subprog` per function without walking
-    /// the bytecode tape for `Op::Ent`.
+    /// `ent_pc` of every function the lowering emitted, in
+    /// lowering (= emission) order. The DWARF builder iterates
+    /// this to produce one `Subprog` per function.
     pub func_ent_pcs: Vec<usize>,
     /// Source-level function names parallel to `func_ent_pcs`,
     /// populated from `FunctionSsa::name` during the per-arch

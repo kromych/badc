@@ -343,8 +343,7 @@ pub(crate) struct FunctionSsa {
     /// records the sym at parse time; the linker resolves each
     /// pair after merging through the unit's `sym_remap` so
     /// `Inst::Call::target_pc` lands on the defining unit's
-    /// `ent_pc` without consulting the bytecode tape. Empty for
-    /// functions built outside the walker.
+    /// `ent_pc`. Empty for functions built outside the walker.
     pub extern_call_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::ImmCode(pc)`.
     /// Same shape as `extern_call_refs`; the linker resolves the

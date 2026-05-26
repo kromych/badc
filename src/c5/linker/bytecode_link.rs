@@ -19,23 +19,22 @@
 //!    undefined.
 //! 5. Concatenate every unit's `data` and `tls_data` into the
 //!    merged program, recording per-unit base offsets.
-//!    `Program::text` stays empty for multi-TU links; the SSA
-//!    tier consumes `FunctionSsa` directly and the bytecode
-//!    tape has no merged-program consumer.
 //! 6. Walk the per-unit `data_relocs` / `code_relocs` and
 //!    re-base both endpoints by the unit's data-base offset.
-//! 7. Apply cross-TU `Reloc` entries (data-segment kinds only;
-//!    the text-segment kinds retired alongside the bytecode-
-//!    tape resolver). Each entry points at a `data` slot whose
-//!    final value depends on the resolved target symbol's
-//!    merged-program position.
+//! 7. Apply cross-TU `Reloc` entries -- only data-segment kinds
+//!    survive (`RelocKind::Data*Abs64`). Each entry points at a
+//!    `data` slot whose final value depends on the resolved
+//!    target symbol's merged-program position.
 //! 8. Merge the per-unit metadata: dylib + binding table
 //!    (each unit's `Inst::CallExt::binding_idx` /
 //!    `Terminator::TailExt(idx)` are remapped through
 //!    `binding_remap_per_unit[i]`), struct registry, exports,
 //!    the chosen entry symbol, etc.
-//! 9. Construct the final [`Program`] and return it ready for
-//!    `emit_native_with_options`.
+//! 9. Rebase every SSA function's `ent_pc` / `end_pc` and the
+//!    per-unit `Symbol::val` for `Token::Fun` symbols by the
+//!    unit's `text_base[i]` (the cumulative `unit_text_extent`
+//!    sum) so cross-TU function identifiers stay unique.
+//! 10. Construct the final [`Program`] and return it.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -268,19 +267,16 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut merged_tls: Vec<u8> = Vec::new();
     let mut merged_tls_init: usize = 0;
 
-    // Pre-compute every per-unit base offset. Text bases are
-    // the cumulative bytecode-word counts (one i64 word per
-    // bytecode op), data bases are byte offsets into the
-    // merged data segment (with 8-byte padding between units
-    // so each unit's intra-segment offsets stay 8-aligned),
-    // and tls init bases are byte offsets within the
-    // initialised-TLS prefix region. We do this before any
-    // text or relocation work because the text-walk pass and
-    // the reloc-apply pass both consult these to remap unit-
-    // local addresses, and computing them eagerly avoids the
-    // bug-magnet of "base = current merged length" reading
-    // out-of-date values inside a loop that's also growing
-    // the destination.
+    // Pre-compute every per-unit base offset. `text_base[i]` is
+    // the cumulative `unit_text_extent` -- the PC-space the unit
+    // occupies for ent_pc / end_pc / Symbol::val arithmetic.
+    // `data_base[i]` is the byte offset in the merged data
+    // segment (with 8-byte padding between units so each unit's
+    // intra-segment offsets stay 8-aligned). `tls_init_cum` is
+    // the same for the initialised-TLS prefix region. We compute
+    // these eagerly before the reloc-apply pass so each unit's
+    // remap reads a stable base rather than chasing a moving
+    // target.
     let mut text_cum = 0usize;
     let mut data_cum = merged_data.len();
     let mut tls_init_cum = 0usize;
@@ -338,15 +334,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         merged_tls.extend(core::iter::repeat_n(0u8, bss_len));
     }
 
-    // The bytecode tape is no longer concatenated into the
-    // merged program. The SSA tier sizes itself off
-    // `FunctionSsa::end_pc` and resolves cross-unit references
-    // through walker-recorded `extern_*_refs` +
-    // `binding_remap_per_unit`. `Program::text` ends up empty
-    // for multi-TU links; per-unit `LinkUnit::text` is retained
-    // for the .o round-trip (the on-disk artifact still carries
-    // it) but no merged-program consumer reads its contents.
-
     let mut merged_source_files: Vec<String> = Vec::new();
     let mut source_file_offset_per_unit: Vec<u16> = Vec::with_capacity(n);
     let mut merged_variables: Vec<crate::c5::program::VariableInfo> = Vec::new();
@@ -360,11 +347,12 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut source_path: String = String::new();
 
     // Merged dylib + binding table, with a per-unit binding-
-    // index remap so each unit's Op::JsrExt operands can be
-    // rewritten as we copy text.
+    // index remap so each unit's `Inst::CallExt::binding_idx` /
+    // `Terminator::TailExt(idx)` can be retargeted at the
+    // merged binding's new flat position.
     //
-    // Two-pass to avoid a flat-index shift hazard. The
-    // parser-emitted operand encodes binding position as
+    // Two-pass to avoid a flat-index shift hazard. The walker-
+    // emitted binding_idx encodes flat position as
     // `sum(prior dylibs' sizes) + within-dylib position`. If
     // we built `merged_dylibs` and computed each unit's remap
     // in the same loop, a later unit appending to (say) libc
@@ -565,9 +553,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // walker reads `struct_size(ty)` against `merged_structs` for
     // every struct assignment / return / by-value param size, so
     // the AST snapshots that ride this `Program` need their `ty`
-    // tags rebased. The bytecode tier baked sizes at parse time
-    // (`Op::Mcpy <size>` etc.) and never re-consults the table,
-    // which is why this hadn't surfaced before the walker landed.
+    // tags rebased.
     let mut struct_remap_per_unit: Vec<Vec<usize>> = Vec::with_capacity(units.len());
     for unit in &units {
         let mut remap = Vec::with_capacity(unit.structs.len());
@@ -637,12 +623,11 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // node so the walker emits the right absolute
                     // offset.
                     clone.ast.rebase_data_offsets(d_base);
-                    // Token::Fun `val` snapshots are also unit-
-                    // local pre-link PCs. The walker reads them
-                    // for in-unit `Expr::Call` targets when the
+                    // Token::Fun `val` snapshots are unit-local
+                    // pre-link PCs. The walker reads them for
+                    // in-unit `Expr::Call` targets when the
                     // merged `Symbol` table can't resolve the
-                    // ident. Shift by the same `text_base`
-                    // `Op::Jsr` operands get under `apply_reloc`.
+                    // ident; shift by the unit's `text_base`.
                     clone.ast.rebase_function_pcs(t_base);
                     // Sym indices stored on AST Idents / Decls
                     // are unit-local; the linker concatenates
@@ -651,11 +636,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // the merged table.
                     clone.ast.rebase_sym_indices(s_base);
                     // Token::Sys `val` is the parser's per-unit
-                    // flat binding index; the merger's pass-2
-                    // computed `binding_remap_per_unit[i]` to
-                    // shift it into the merged image, the same
-                    // remap `apply_reloc` uses to rewrite
-                    // `Op::JsrExt` / `Op::TailExt` operands.
+                    // flat binding index; pass-2's
+                    // `binding_remap_per_unit[i]` shifts it
+                    // into the merged image.
                     clone
                         .ast
                         .rebase_sys_binding_indices(&binding_remap_per_unit[i]);
@@ -686,29 +669,17 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             all
         },
         symbols: {
-            // Multi-TU: concatenate each unit's `parser_symbols`,
-            // shift each defining `Token::Fun` symbol's `val` by
-            // the unit's `text_base`, then patch every
-            // forward-declared `Token::Fun` symbol (`val == 0`)
-            // to the post-link PC of its definition in another
-            // unit. The lookup is by `Symbol::name`; the same
-            // shape `apply_reloc` uses to resolve `Op::Jsr`
-            // operands across units, restated here so the
-            // walker's `live_fun_val(sym)` lands on the correct
-            // PC instead of staying at 0 (which collides with
-            // the first emitted function).
             // Concatenate each unit's `parser_symbols`. Token::Fun
-            // gets a `text_base` shift on defining entries (val > 0);
-            // forward-declared siblings (val == 0) are patched
-            // below from the defining sibling's resolved PC.
-            // Token::Glo entries are left at their parser-time val
-            // here; the cross-unit fixup below uses the merger's
-            // `defined: HashMap<String, GlobalSymbol>` so a
-            // tentative-def shape (C99 6.9.2 -- `extern T x;` in
-            // every TU with no syntactic definition) still
-            // resolves through the `LinkUnit::symbols` canonical
-            // entry, the same way `apply_reloc` patches
-            // bytecode-tier `Op::Imm <data_off>` operands.
+            // defining entries (val > 0) get the unit's
+            // `text_base` shift so the walker's `live_fun_val(sym)`
+            // lands on a unique post-link PC; forward-declared
+            // siblings (val == 0) are patched below from the
+            // defining sibling's resolved PC. Token::Glo entries
+            // keep their parser-time val here; the cross-unit
+            // fixup below uses the merger's `defined: HashMap<
+            // String, GlobalSymbol>` so a C99 6.9.2 tentative-
+            // def shape (`extern T x;` across every TU with no
+            // syntactic definition) still resolves.
             let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> = alloc::vec::Vec::new();
             let fun_class = crate::c5::token::Token::Fun as i64;
             let glo_class = crate::c5::token::Token::Glo as i64;

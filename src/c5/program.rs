@@ -162,10 +162,6 @@ pub struct Program {
     /// `main` is trusted today. The Mach-O / ELF / VM / JIT
     /// paths ignore this field.
     pub dllmain_pc: Option<usize>,
-    /// Source-function debug map. Indexed by bytecode PC; each
-    /// entry is the name of the C function whose body the op
-    /// belongs to (empty string for top-level data emission).
-    pub source_functions: Vec<String>,
     /// Source-file table. Populated by the lexer's GNU line-
     /// marker handling: each `#include` boundary or
     /// `#line N "file"` directive interns a fresh filename.

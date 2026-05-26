@@ -1212,7 +1212,6 @@ impl Compiler {
             code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,
-            source_functions: self.source_functions,
             source_files: self.source_files,
             // The compiler doesn't see the input path -- the CLI
             // shim sets this on the returned `Program` before

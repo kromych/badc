@@ -607,7 +607,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         code_relocs: merged_code_relocs,
         dylibs: merged_dylibs,
         dllmain_pc,
-        source_functions: merged_source_functions,
         source_files: merged_source_files,
         source_path,
         variables: merged_variables,

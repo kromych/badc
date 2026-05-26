@@ -49,10 +49,11 @@ use super::bytecode_unit::LinkUnit;
 /// version on a backward-incompatible meta change forces a clear
 /// "linker too old / object file too new" error.
 const META_MAGIC: &[u8; 8] = b"BADCMTA\0";
-// Bump to 2 when the user-SSA wire format grew a `name` string
-// per function (right after the variadic byte). Older `.o` files
-// reject cleanly at meta-decode time.
-const META_VERSION: u32 = 2;
+// Bump to 3 with the retirement of the `.badc.text` /
+// `.rela.badc.text` ELF sections and the `TAG_TEXT_SIZE` meta
+// tag: per-unit PC extent now derives from
+// max(SSA func end_pc).
+const META_VERSION: u32 = 3;
 
 /// Sentinel placed by the writer right after the ELF header so
 /// the reader can refuse a file that looks like an ELF object
@@ -84,7 +85,6 @@ const SHT_NOBITS: u32 = 8;
 
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
-const SHF_EXECINSTR: u64 = 0x4;
 const SHF_TLS: u64 = 0x400;
 const SHF_INFO_LINK: u64 = 0x40;
 
@@ -94,6 +94,7 @@ const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
 const SHN_UNDEF: u16 = 0;
+const SHN_ABS: u16 = 0xfff1;
 
 // ------------------------------------------------------------------
 // On-disk shapes. Mirror the same `#[repr(C)]` + `write_struct`
@@ -190,17 +191,15 @@ fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
 /// Section indices we emit. Order is fixed so the symbol table's
 /// `st_shndx` values can be set without a second pass.
 const SHIDX_NULL: u16 = 0;
-const SHIDX_TEXT: u16 = 1;
-const SHIDX_DATA: u16 = 2;
-const SHIDX_TDATA: u16 = 3;
-const SHIDX_TBSS: u16 = 4;
-const SHIDX_META: u16 = 5;
-const SHIDX_RELA_TEXT: u16 = 6;
-const SHIDX_RELA_DATA: u16 = 7;
-const SHIDX_SYMTAB: u16 = 8;
-const SHIDX_STRTAB: u16 = 9;
-const SHIDX_SHSTRTAB: u16 = 10;
-const NUM_SECTIONS: usize = 11;
+const SHIDX_DATA: u16 = 1;
+const SHIDX_TDATA: u16 = 2;
+const SHIDX_TBSS: u16 = 3;
+const SHIDX_META: u16 = 4;
+const SHIDX_RELA_DATA: u16 = 5;
+const SHIDX_SYMTAB: u16 = 6;
+const SHIDX_STRTAB: u16 = 7;
+const SHIDX_SHSTRTAB: u16 = 8;
+const NUM_SECTIONS: usize = 9;
 
 /// Write `unit` as a `.o` file image. Returns the raw bytes; the
 /// caller is responsible for writing them to disk or piping to
@@ -248,18 +247,6 @@ impl Writer {
         // emitted last with absolute file offsets.
         let mut sections: [(u64, u64); NUM_SECTIONS] = [(0, 0); NUM_SECTIONS];
 
-        // .text: retired. The merged-program consumers
-        // (SSA codegen, VM, linker) read `FunctionSsa` and
-        // walker-tier symbol-ref channels; only the per-unit
-        // bc_pc range size survives, and it ships in the
-        // META section's `TAG_TEXT_SIZE` tag. The ELF
-        // section header is kept (zero-sized) so existing
-        // `readelf` / `objdump` invocations see the
-        // accustomed table shape.
-        self.align_to(8);
-        let text_off = self.out.len();
-        sections[SHIDX_TEXT as usize] = (text_off as u64, 0);
-
         // .data: raw bytes.
         self.align_to(8);
         let data_off = self.out.len();
@@ -297,16 +284,9 @@ impl Writer {
         // .symtab is emitted before .strtab so its sh_link can
         // reference SHIDX_STRTAB.
 
-        // Relocations: split into text-targeting and data-targeting.
-        let (rela_text, rela_data) = encode_relocs(unit);
-
-        self.align_to(8);
-        let rela_text_off = self.out.len();
-        self.out.extend_from_slice(&rela_text);
-        sections[SHIDX_RELA_TEXT as usize] = (
-            rela_text_off as u64,
-            (self.out.len() - rela_text_off) as u64,
-        );
+        // Relocations -- only data-targeting kinds survive the
+        // bytecode-tape retirement.
+        let rela_data = encode_relocs(unit);
 
         self.align_to(8);
         let rela_data_off = self.out.len();
@@ -411,19 +391,10 @@ fn section_metadata(shidx: u16, symtab_first_global: u32) -> (u32, u64, u32, u32
     // (sh_type, sh_flags, sh_link, sh_info, sh_entsize, sh_addralign)
     match shidx {
         SHIDX_NULL => (SHT_NULL, 0, 0, 0, 0, 0),
-        SHIDX_TEXT => (SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 0, 0, 0, 8),
         SHIDX_DATA => (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 0, 0, 0, 8),
         SHIDX_TDATA => (SHT_PROGBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 0, 0, 0, 8),
         SHIDX_TBSS => (SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS, 0, 0, 0, 8),
         SHIDX_META => (SHT_PROGBITS, 0, 0, 0, 0, 8),
-        SHIDX_RELA_TEXT => (
-            SHT_RELA,
-            SHF_INFO_LINK,
-            SHIDX_SYMTAB as u32,
-            SHIDX_TEXT as u32,
-            24,
-            8,
-        ),
         SHIDX_RELA_DATA => (
             SHT_RELA,
             SHF_INFO_LINK,
@@ -487,7 +458,12 @@ fn encode_symtab(unit: &LinkUnit, name_offsets: &[u32]) -> Vec<u8> {
         let s = &unit.symbols[i];
         let st_info = (binding_of(s) << 4) | (st_type_of(s) & 0xf);
         let st_shndx: u16 = match s.kind {
-            SymbolKind::Function => SHIDX_TEXT,
+            // Function symbols carry STT_FUNC, no backing
+            // section after the `.badc.text` retirement; use
+            // SHN_ABS so `readelf` shows a recognisable
+            // non-section index. The reader uses `st_type`
+            // (not shndx) to classify functions.
+            SymbolKind::Function => SHN_ABS,
             SymbolKind::Data => SHIDX_DATA,
             SymbolKind::TlsData => SHIDX_TDATA,
             SymbolKind::Undefined => SHN_UNDEF,
@@ -554,12 +530,10 @@ fn build_strtab(unit: &LinkUnit) -> (Vec<u8>, Vec<u32>) {
 fn build_shstrtab() -> (Vec<u8>, [usize; NUM_SECTIONS]) {
     let names = [
         "", // SHIDX_NULL
-        ".badc.text",
         ".badc.data",
         ".badc.tdata",
         ".badc.tbss",
         ".badc.meta",
-        ".rela.badc.text",
         ".rela.badc.data",
         ".symtab",
         ".strtab",
@@ -575,7 +549,7 @@ fn build_shstrtab() -> (Vec<u8>, [usize; NUM_SECTIONS]) {
     (bytes, offsets)
 }
 
-fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
+fn encode_relocs(unit: &LinkUnit) -> Vec<u8> {
     // Elf64_Rela: r_offset u64, r_info u64, r_addend i64.
     // We encode the badc reloc kind in the low 8 bits of r_info
     // and the symbol index in the high 24+32 bits (ELF spec:
@@ -585,21 +559,12 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
     // globals) per the spec, so an `r.sym_index` that names a
     // unit-table position has to be translated to the
     // post-sort .symtab position before going onto disk.
-    // Without the remap, a global reloc lands on whatever
-    // local happens to share the source position, miscoloring
-    // the cross-TU resolution at read time.
     let elf_sym_index = build_elf_sym_index_map(unit);
 
-    let rt = Vec::new();
     let mut rd = Vec::new();
-    // Stable ordering by location keeps the output deterministic
-    // and gives the reader a clean "scan in order" loop.
     let mut sorted: Vec<&Reloc> = unit.relocs.iter().collect();
     sorted.sort_by_key(|r| (r.kind.as_u8(), r.location));
     for r in sorted {
-        // Only data-segment relocations survive the bytecode-
-        // tape retirement; the writer routes every entry into
-        // `.rela.badc.data`. `rt` stays empty.
         let r_offset: u64 = match r.kind {
             RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => r.location,
         };
@@ -615,7 +580,7 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
         };
         write_struct(&mut rd, &rela);
     }
-    (rt, rd)
+    rd
 }
 
 /// For each unit-table symbol index, return the matching ELF
@@ -1811,27 +1776,13 @@ impl<'a> Reader<'a> {
 
         let mut unit = LinkUnit::default();
 
-        let text = sec(SHIDX_TEXT as usize);
         let data = sec(SHIDX_DATA as usize);
         let tdata = sec(SHIDX_TDATA as usize);
         let tbss = sec(SHIDX_TBSS as usize);
         let meta = sec(SHIDX_META as usize);
-        let rela_text = sec(SHIDX_RELA_TEXT as usize);
         let rela_data = sec(SHIDX_RELA_DATA as usize);
         let symtab = sec(SHIDX_SYMTAB as usize);
         let strtab = sec(SHIDX_STRTAB as usize);
-
-        // .text
-        if text.sh_size % 8 != 0 {
-            return Err(err(".badc.text size is not a multiple of 8"));
-        }
-        let text_bytes = slice_of(
-            bytes,
-            text.sh_offset as usize,
-            text.sh_size as usize,
-            ".badc.text",
-        )?;
-        let _ = text_bytes;
 
         // .data
         unit.data = slice_of(
@@ -1882,17 +1833,8 @@ impl<'a> Reader<'a> {
             &mut unit,
         )?;
 
-        // .rela.badc.text + .rela.badc.data
-        decode_relocs(
-            slice_of(
-                bytes,
-                rela_text.sh_offset as usize,
-                rela_text.sh_size as usize,
-                ".rela.badc.text",
-            )?,
-            true,
-            &mut unit,
-        )?;
+        // .rela.badc.data only -- .rela.badc.text retired with
+        // the bytecode-tape sections.
         decode_relocs(
             slice_of(
                 bytes,
@@ -1900,7 +1842,6 @@ impl<'a> Reader<'a> {
                 rela_data.sh_size as usize,
                 ".rela.badc.data",
             )?,
-            false,
             &mut unit,
         )?;
 
@@ -1979,10 +1920,10 @@ fn decode_symtab(symtab: &[u8], strtab: &[u8], unit: &mut LinkUnit) -> Result<()
             STB_GLOBAL => crate::c5::symbol::Linkage::External,
             _ => crate::c5::symbol::Linkage::None,
         };
-        let kind = if st_shndx == SHN_UNDEF {
-            SymbolKind::Undefined
-        } else if st_shndx == SHIDX_TEXT || st_type == STT_FUNC {
+        let kind = if st_type == STT_FUNC {
             SymbolKind::Function
+        } else if st_shndx == SHN_UNDEF {
+            SymbolKind::Undefined
         } else if st_shndx == SHIDX_TDATA {
             SymbolKind::TlsData
         } else {
@@ -2007,7 +1948,7 @@ fn decode_symtab(symtab: &[u8], strtab: &[u8], unit: &mut LinkUnit) -> Result<()
     Ok(())
 }
 
-fn decode_relocs(table: &[u8], is_text: bool, unit: &mut LinkUnit) -> Result<(), C5Error> {
+fn decode_relocs(table: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
     if !table.len().is_multiple_of(24) {
         return Err(err(".rela.* size is not a multiple of 24"));
     }
@@ -2017,19 +1958,8 @@ fn decode_relocs(table: &[u8], is_text: bool, unit: &mut LinkUnit) -> Result<(),
         let r_addend = i64_at(table, off + 16);
         let kind_byte = (r_info & 0xff) as u8;
         let sym_index = (r_info >> 32) as u32;
-        // The writer stored externals after internals -- but the
-        // ELF symtab keeps a single ordered list. Translate the
-        // ELF symbol index (which counts the null sentinel and
-        // both locals + globals contiguously) to the
-        // `LinkUnit::symbols` slot. We rebuild the same writer
-        // ordering: locals first, then externals. To match,
-        // subtract 1 (null sentinel) and re-index against the
-        // sorted view.
         let kind = RelocKind::from_u8(kind_byte)
             .ok_or_else(|| err(&format!("unknown relocation kind {kind_byte}")))?;
-        if is_text {
-            return Err(err("data-kind reloc in .rela.badc.text"));
-        }
         let location = match kind {
             RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => r_offset,
         };

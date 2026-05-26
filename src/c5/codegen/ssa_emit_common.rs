@@ -108,8 +108,10 @@ pub(super) fn record_inst_src(
 }
 
 /// Record the byte offset of the first post-prologue
-/// instruction against the bytecode word that follows
-/// `Op::Ent`. The DWARF CFI pass reads this to encode
+/// instruction. Stored in `pc_to_native` at the synthetic slot
+/// `ent_pc + Op::Ent.word_size()`, which is the position the
+/// pre-SSA prologue layout reserved for the post-prologue PC.
+/// The DWARF CFI pass reads this slot to encode
 /// `DW_CFA_advance_loc <prologue bytes>` so the post-prologue
 /// CFA / saved-reg rule installs at the right PC.
 pub(super) fn record_post_prologue_pc(

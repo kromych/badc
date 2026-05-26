@@ -252,8 +252,8 @@ pub enum Op {
     /// Tail-jump to an external library symbol. Followed by one
     /// operand: the binding-table index. Used as the entire body
     /// of the per-Sys-symbol address-take trampoline -- the
-    /// trampoline lives at the bytecode-PC stamped on the
-    /// synthetic Token::Fun's `val`, and the codegen lowers
+    /// trampoline lives at the ent_pc stamped on the synthetic
+    /// Token::Fun's `val`, and the codegen lowers
     /// `Op::TailExt` to a single `jmp [rip+iat_disp32]`-shape
     /// instruction (or its aarch64 equivalent). The host's
     /// argument registers and shadow-space stack args -- already
@@ -395,9 +395,10 @@ pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
 
 /// Compiler-builtin intrinsic discriminant. Each lowering target
 /// dispatches on this value to emit the per-arch sequence.
-/// Keep the discriminants stable -- bytecode produced under an
-/// older c5 may live in a vendor-deps archive and re-running it
-/// would mis-decode the operand if these reshuffle.
+/// Keep the discriminants stable -- the `.o` SSA-body wire
+/// format serialises `Inst::Intrinsic { kind, .. }` verbatim, so
+/// an archive built with an older c5 would mis-decode the
+/// operand if these reshuffle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i64)]
 pub enum Intrinsic {
@@ -490,10 +491,9 @@ impl Op {
     }
 
     /// Number of operand i64 words that follow this op in the
-    /// bytecode. Single source of truth -- every bytecode walker
-    /// (the linker merge, the disassembler) reads its operand-
-    /// skip count from here. Adding a new operand-bearing op
-    /// only requires an entry in this match.
+    /// historical i64-word encoding. Still consulted as a PC-
+    /// reservation constant by the post-prologue DWARF slot in
+    /// `record_post_prologue_pc` (`ent_pc + Op::Ent.word_size()`).
     pub fn operand_count(self) -> usize {
         use Op::*;
         match self {
@@ -509,8 +509,10 @@ impl Op {
         }
     }
 
-    /// Total i64 words this op occupies in the bytecode (op + its
-    /// operand). `1 + operand_count()`.
+    /// Per-op PC-reservation constant from the historical i64-word
+    /// encoding (`1 + operand_count()`). Consulted by
+    /// `record_post_prologue_pc` for its synthetic post-prologue
+    /// slot.
     pub fn word_size(self) -> usize {
         1 + self.operand_count()
     }

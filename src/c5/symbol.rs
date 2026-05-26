@@ -177,12 +177,12 @@ pub(crate) struct Symbol {
     pub was_referenced: bool,
 
     /// True once a scalar load (`Op::Li` / `Op::Lc` / ...) of
-    /// this symbol's value survives in the bytecode -- i.e., the
-    /// runtime would actually read the stored value. Distinct
-    /// from `was_referenced`: the identifier-rvalue path
-    /// tentatively sets `was_read` when it emits the load, and
-    /// the assignment / address-of helpers retract the bit if
-    /// they remove the load before the program text is finalised.
+    /// this symbol's value survives in the parser's recent-emit
+    /// ring -- i.e., the runtime would actually read the stored
+    /// value. Distinct from `was_referenced`: the identifier-
+    /// rvalue path tentatively sets `was_read` when it tags the
+    /// load, and the assignment / address-of helpers retract the
+    /// bit if they remove the load before the parse closes.
     /// Consulted alongside `was_written` to emit the "value
     /// assigned but never used" diagnostic for dead stores.
     pub was_read: bool,
@@ -208,7 +208,7 @@ pub(crate) struct Symbol {
     /// in the expression parser and by
     /// `allocate_local_with_init` for declarations with `= ...`.
     /// Cleared when an identifier-rvalue load of the symbol
-    /// reaches the bytecode tail. Branches and function calls
+    /// tags the trailing scalar load. Branches and function calls
     /// also clear the list (conservatively; the analysis is
     /// intra-segment to avoid flow-sensitivity false positives).
     /// Drained at function exit to emit the dead-store

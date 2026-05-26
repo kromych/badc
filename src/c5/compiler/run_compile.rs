@@ -630,7 +630,6 @@ impl Compiler {
                     // alloca-top slot index here. Otherwise the 0
                     // stays and codegen treats the op as a no-op.
                     self.emit_op(Op::AllocaInit);
-                    self.alloca_init_operand_pc = self.text.len();
                     self.emit_val(0);
 
                     // Struct-value parameters: the caller pushed

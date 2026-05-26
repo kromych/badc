@@ -486,13 +486,6 @@ pub struct Compiler {
     /// function definition.
     uses_alloca_in_current_fn: bool,
 
-    /// PC of the `Op::AllocaInit` placeholder emitted right after
-    /// each function's `Op::Ent`. The function-end fixup pass
-    /// writes the alloca-top slot index here when the function
-    /// turned out to use alloca; otherwise the placeholder
-    /// stays at 0 and the codegen treats AllocaInit as a no-op.
-    alloca_init_operand_pc: usize,
-
     /// Per-function AST built in parallel with the bytecode emit.
     /// The arena is reset at every function entry. The SSA walker
     /// reads from these snapshots at codegen entry.
@@ -1023,7 +1016,6 @@ impl Compiler {
             loc_offs: 0,
             max_loc_offs: 0,
             uses_alloca_in_current_fn: false,
-            alloca_init_operand_pc: 0,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

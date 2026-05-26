@@ -305,7 +305,6 @@ impl Compiler {
                     }
                     self.next()?;
                     self.emit_op(Op::Intrinsic);
-                    self.emit_val(intrinsic_id);
                     // Flag the function for the alloca-arena
                     // patch-up at function-end. We don't reserve
                     // the alloca-top slot here -- the function
@@ -713,13 +712,12 @@ impl Compiler {
                 // becomes a user-visible pointer, so it gets the CODE_BASE
                 // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
-                self.emit_op(Op::Imm);
-                // Bytecode-tape placeholder; the walker's
-                // `imm_code_extern` / `imm_code` emit
-                // resolves the function-pointer literal on the
-                // SSA side, so the operand here is no longer
-                // consulted by the codegen.
-                self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
+                // Op::Imm placeholder; the walker's `imm_code_extern`
+                // / `imm_code` emit resolves the function-pointer
+                // literal on the SSA side, so the operand isn't
+                // consulted by the codegen. emit_imm keeps the
+                // `last_imm_was_zero` peek flag honest.
+                self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
                 // keeps the type-check loose-but-not-wrong.
@@ -744,14 +742,12 @@ impl Compiler {
                 // (aarch64) or RIP-relative LEA (x86_64)
                 // pointing at the trampoline.
                 let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
-                self.emit_op(Op::Imm);
-                // Bytecode-tape placeholder; the walker reads
-                // the trampoline's live `Symbol::val` through
-                // `imm_code` post-`emit_sys_trampolines` and
-                // emits the matching `Inst::ImmCode`. The
-                // operand here is no longer consulted by the
-                // codegen.
-                self.emit_val(CODE_BASE as i64);
+                // Op::Imm placeholder; the walker reads the
+                // trampoline's live `Symbol::val` through `imm_code`
+                // post-`emit_sys_trampolines` and emits the
+                // matching `Inst::ImmCode`. The operand isn't
+                // consulted by the codegen.
+                self.emit_imm(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
                 // Dual-emit: the trampoline symbol is Token::Fun
                 // class; the walker reads `Symbol::val` live at
@@ -775,7 +771,6 @@ impl Compiler {
                     // fs:0 + offset on x86_64). The operand is the
                     // byte offset within the program's TLS block.
                     self.emit_op(Op::TlsLea);
-                    self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
                     self.glo_imm_refs.push(id_idx);
@@ -1567,7 +1562,6 @@ impl Compiler {
                 }
                 let fp_temp = -self.loc_offs;
                 self.emit_op(Op::StLocI);
-                self.emit_val(fp_temp);
                 // Each arg lands in its own temp slot first
                 // (left-to-right eval), then we push them
                 // right-to-left so the first arg ends up on top of
@@ -1668,9 +1662,7 @@ impl Compiler {
                              (lhs={lhs_s}, rhs={rhs_s})"
                         )));
                     }
-                    let size = self.size_of_type(t);
                     self.emit_op(Op::Mcpy);
-                    self.emit_val(size as i64);
                     self.ty = t;
                     // Dual-emit `Expr::Assign { lhs, rhs, ty }`
                     // with the struct type; the walker keys on
@@ -2149,7 +2141,6 @@ impl Compiler {
                         }
                         let rhs_temp = -self.loc_offs;
                         self.emit_op(Op::StLocI);
-                        self.emit_val(rhs_temp);
                         self.emit_imm(0);
                         self.ast_binop(Op::Or);
                         self.emit_binop_with_imm(Op::Mul, scale);

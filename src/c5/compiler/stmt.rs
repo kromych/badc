@@ -716,9 +716,7 @@ impl Compiler {
                              struct-returning function",
                         ));
                     }
-                    let size = self.size_of_type(ret_ty);
                     self.emit_op(Op::Mcpy);
-                    self.emit_val(size as i64);
                     // Mirror the rhs expression into the walker's
                     // `Stmt::Return(Some(_))` so the AST-driven
                     // SSA sees the source struct and can emit the
@@ -744,8 +742,7 @@ impl Compiler {
                 // examines the trailing emit sees a predictable
                 // value, matching the synthetic function-end Lev
                 // in run_compile.
-                self.emit_op(Op::Imm);
-                self.emit_val(0);
+                self.emit_imm(0);
             }
             self.emit_dead_stores_and_flush();
             self.ast_emit_return(return_value);

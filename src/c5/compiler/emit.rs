@@ -1,17 +1,17 @@
 //! Low-level emit primitives plus the small "rewrite the trailing
 //! op" helpers and the per-symbol shadow / restore pair.
 //!
-//! `emit_op` and `emit_val` are tag-only helpers. They push the
-//! op identifier (or operand value) into the 3-deep `recent_emits`
-//! ring so the trailing-op peek detectors (`last_emit_is_zero`,
-//! `pop_trailing_scalar_load`, `rewrite_trailing_load_as_psh`)
-//! stay accurate. The fn-pointer chain tracker
-//! (`fn_ptr_chain_depth`) is invalidated by every `emit_op`;
-//! identifier-loads and unary `*` re-seed it inside `expr()`.
+//! `emit_op` is the surviving tag-only helper. It updates the
+//! trailing-op state (`last_imm_was_zero`, `trailing_scalar_load`,
+//! `last_emit_was_indirect_call`, `fn_ptr_chain_depth`) so the
+//! peek detectors (`last_emit_is_zero`, `pop_trailing_scalar_load`,
+//! `rewrite_trailing_load_as_psh`) and the function-pointer
+//! lineage tracker stay accurate. Identifier loads and unary `*`
+//! re-seed `fn_ptr_chain_depth` inside `expr()`.
 //!
 //! The trailing-load rewriters implement the assignment / `&expr`
-//! protocols by reading the last entry of `recent_emits` and
-//! converting it from an rvalue load to a stack push or address.
+//! protocols by reading `trailing_scalar_load` and converting the
+//! trailing rvalue load into a stack push or address producer.
 
 use super::super::ast::{Expr, ExprId, SrcPos};
 use super::super::error::C5Error;
@@ -86,22 +86,9 @@ impl Compiler {
         // other op clears it.
         self.pending.last_imm_was_zero = false;
         // AST hook -- ops whose shape is determined by `op` alone
-        // (vstack push / pop, arithmetic and comparison binops,
-        // unary fneg). Ops that carry an operand word (Imm, Lea,
-        // ...) wire their AST through the helper that owns the
-        // operand value (`emit_imm`, `emit_lea`, ...);
-        // control-flow ops (Jmp / Bz / Bnz / Jsr / Lev / ...)
-        // wire at the stmt parser sites that know the matching
-        // AST shape.
+        // (vstack push, arithmetic / comparison binops, unary
+        // fneg, scalar stores, call-site Acc clobbers).
         self.ast_track_emit_op(op);
-    }
-
-    pub(super) fn emit_val(&mut self, _val: i64) {
-        // No-op: there is no tape and no peek consumer of raw
-        // operand words. emit_imm sets `last_imm_was_zero`
-        // directly; other operand carriers (emit_lea,
-        // emit_binop_with_imm, the StLocI / Adj operand sites)
-        // need no per-word tracking.
     }
 
     /// Push the parser-side AST accumulator onto the vstack.
@@ -246,13 +233,12 @@ impl Compiler {
         // `ast_emit_data_imm`, ...) owns the AST shape.
     }
 
-    /// Emit `Op::Lea <slot_off>` -- load the effective address of
-    /// a stack slot (param positive, local negative) into the
-    /// accumulator. Convenience wrapper for the very common
-    /// `emit_op(Lea); emit_val(off);` pair.
-    pub(super) fn emit_lea(&mut self, slot_off: i64) {
+    /// Address-of a stack slot (param positive, local negative)
+    /// lands in the accumulator. Was `Op::Lea <slot_off>`; the
+    /// operand word is no longer carried, only the trailing-op
+    /// state cleared.
+    pub(super) fn emit_lea(&mut self, _slot_off: i64) {
         self.emit_op(Op::Lea);
-        self.emit_val(slot_off);
     }
 
     /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
@@ -274,15 +260,14 @@ impl Compiler {
         self.emit_op(op);
     }
 
-    /// Emit `Op::Imm <data_offset>` -- the immediate is the
-    /// address of a string literal or a global. Equivalent to a
-    /// plain `Op::Imm` from the parser's perspective; the
-    /// surrounding caller records the operand_pc into
+    /// Immediate carrying a string-literal / global address. The
+    /// surrounding caller records the originating symbol idx into
     /// `glo_imm_refs` so the linker can rebase the address
-    /// against the merged data segment.
+    /// against the merged data segment. Goes through emit_imm so
+    /// the `last_imm_was_zero` peek flag tracks correctly when
+    /// the data offset happens to be 0.
     pub(super) fn emit_data_imm(&mut self, data_offset: i64) {
-        self.emit_op(Op::Imm);
-        self.emit_val(data_offset);
+        self.emit_imm(data_offset);
     }
 
     /// Pad `self.data` with zero bytes so the next allocation lands on
@@ -448,8 +433,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr]; a = field_addr
             self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, old_value]
-            self.emit_op(Op::Imm);
-            self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
+            self.emit_imm(!(mask << bit_offset)); // a = ~(mask << off)
             self.ast_binop(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
@@ -490,14 +474,13 @@ impl Compiler {
             if self.loc_offs > self.max_loc_offs {
                 self.max_loc_offs = self.loc_offs;
             }
-            let ov_temp = -self.loc_offs;
+            let _ov_temp = -self.loc_offs;
             // a = field_addr; stack: [...]
             self.ast_psh(); // stack: [..., field_addr]
             self.emit_op(load_op); // a = old_value
             // Spill old_value into the scratch local without
             // disturbing `a` or the c5 stack.
             self.emit_op(Op::StLocI);
-            self.emit_val(ov_temp);
             // Extract current = (old_value >> bit_offset) & mask.
             if bit_offset > 0 {
                 self.emit_binop_with_imm(Op::Shr, bit_offset as i64);
@@ -541,7 +524,6 @@ impl Compiler {
             // reload the cleared old_value into `a`.
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.emit_op(Op::LdLocI);
-            self.emit_val(ov_temp);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
             self.ast_binop(Op::Or); // pops shifted_new; a = cleared | shifted_new
             self.emit_op(store_op); // pops field_addr, stores a
@@ -1247,41 +1229,22 @@ impl Compiler {
         id
     }
 
-    /// AST-side reaction to an emit_op of an operand-free op.
-    /// `Op::Psh` records the current accumulator on the parser-
-    /// side vstack; binops pop the saved lhs from the vstack,
-    /// pair it with the accumulator's rhs ExprId, and replace
-    /// the accumulator with the resulting `Expr::Binary`; the
-    /// unary `Op::Fneg` rewraps the accumulator with
-    /// `Expr::Unary { op: Neg }`.
-    ///
-    /// Ops outside this set are left alone -- their AST shape
-    /// flows through the operand-aware helpers (`emit_imm`,
-    /// `emit_lea`, ...) or through the statement-level parser
-    /// sites that own control-flow shapes.
-    ///
-    /// If an emit_op fires before a wired operand-aware site has
-    /// populated `ast_acc`, the binop drops the AST node and
-    /// leaves the vstack in sync with whatever the next wired
-    /// site produces.
+    /// AST-side reaction to `emit_op`. `Op::Psh` records the
+    /// current accumulator on the parser-side vstack; binops pop
+    /// the saved lhs from the vstack, pair it with the
+    /// accumulator's rhs ExprId, and replace the accumulator with
+    /// the resulting `Expr::Binary`; the unary `Op::Fneg`
+    /// rewraps the accumulator with `Expr::Unary { op: Neg }`;
+    /// scalar stores pair vstack-top (lvalue address) with the
+    /// rhs accumulator into `Expr::Assign`; call ops clobber the
+    /// accumulator. Other ops are pass-through.
     pub(super) fn ast_track_emit_op(&mut self, op: Op) {
         use super::super::ir::BinOp as B;
         match op {
             Op::Psh => {
-                // Always push a slot so the parser-side vstack
-                // depth stays in lockstep with the c5
-                // stack-machine vstack. When `ast_acc` is None
-                // (an op-aware parser site pushed an address
-                // through `Op::Lea` / `emit_data_imm` without
-                // wiring its AST counterpart), the slot holds
-                // `None` and downstream pops know to skip the
-                // node build.
                 self.ast_vstack.push(self.ast_acc.take());
             }
             Op::Fneg => self.ast_apply_unary(super::super::ast::UnOp::Neg),
-            // Integer arithmetic + comparison. Each case maps the
-            // `Op` tag to the matching `ir::BinOp`; the walker
-            // uses the same enum on the SSA side.
             Op::Add => self.ast_apply_binop(B::Add),
             Op::Sub => self.ast_apply_binop(B::Sub),
             Op::Mul => self.ast_apply_binop(B::Mul),
@@ -1305,8 +1268,6 @@ impl Compiler {
             Op::Ugt => self.ast_apply_binop(B::Ugt),
             Op::Ule => self.ast_apply_binop(B::Ule),
             Op::Uge => self.ast_apply_binop(B::Uge),
-            // Floating-point arithmetic + comparison. Same shape;
-            // the BinOp tag drives the walker's add-vs-fadd pick.
             Op::Fadd => self.ast_apply_binop(B::Fadd),
             Op::Fsub => self.ast_apply_binop(B::Fsub),
             Op::Fmul => self.ast_apply_binop(B::Fmul),
@@ -1317,23 +1278,7 @@ impl Compiler {
             Op::Fgt => self.ast_apply_binop(B::Fgt),
             Op::Fle => self.ast_apply_binop(B::Fle),
             Op::Fge => self.ast_apply_binop(B::Fge),
-            // Scalar stores: vstack-top holds the lvalue address
-            // producer (set by `rewrite_trailing_load_as_psh` from
-            // the lhs Ident / Deref / Member / Index node); the
-            // accumulator holds the rhs value. Pair them into
-            // `Expr::Assign` and leave the result in the
-            // accumulator -- C99 6.5.16p3 says an assignment
-            // expression evaluates to the value stored.
             Op::Si | Op::Sc | Op::Sh | Op::Sw | Op::Sf => self.ast_apply_assign(),
-            // Call ops destroy the c5 accumulator (the call
-            // overwrites it with the callee's return value). The
-            // dual-emit doesn't yet build `Expr::Call` AST nodes,
-            // so clear `ast_acc` here to keep stale data from a
-            // previous statement's Assign / Binary from polluting
-            // the next store / push. Same for the indirect call
-            // op and the Sys-binding external call. Adj is the
-            // post-call stack cleanup; it has no acc effect on
-            // either side.
             Op::Jsr | Op::JsrExt | Op::Jsri => {
                 self.ast_acc = None;
             }
@@ -1341,14 +1286,13 @@ impl Compiler {
         }
     }
 
-    /// Helper for the [`Self::ast_track_emit_op`] binop arm: pops
-    /// the lhs from the parser-side vstack, takes the rhs from
-    /// the accumulator, pushes a new `Expr::Binary`, and replaces
-    /// the accumulator with its ExprId. Result `ty` is whatever
+    /// Build an `Expr::Binary` from the parser-side vstack-top
+    /// (lhs) and the accumulator (rhs); leave the resulting
+    /// ExprId in the accumulator. Result `ty` is whatever
     /// `self.ty` currently holds -- the parser pre-computed the
     /// usual-arithmetic-conversion result type immediately before
-    /// the emit. Drops the node if either operand is missing
-    /// (the surrounding emit site isn't AST-wired yet).
+    /// the emit. Drops the node when either operand is missing,
+    /// keeping the vstack in lockstep with the next wired site.
     fn ast_apply_binop(&mut self, op: super::super::ir::BinOp) {
         let rhs_slot = self.ast_acc.take();
         let lhs_slot = self.ast_vstack.pop().flatten();

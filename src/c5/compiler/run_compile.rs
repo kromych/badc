@@ -640,7 +640,6 @@ impl Compiler {
                             continue;
                         }
                         let slots = self.slots_of_type(pty);
-                        let size = self.size_of_type(pty);
                         let param_val = self.symbols[idx].val;
                         self.loc_offs += slots;
                         let local_val = -self.loc_offs;
@@ -655,9 +654,7 @@ impl Compiler {
                         // numbering above)
                         self.emit_lea(param_val);
                         self.emit_op(Op::Li);
-                        // Mcpy size
                         self.emit_op(Op::Mcpy);
-                        self.emit_val(size as i64);
                         // The symbol now points at the local copy.
                         self.symbols[idx].val = local_val;
                     }
@@ -766,8 +763,7 @@ impl Compiler {
                     // instead of whatever the function body
                     // happened to leave in the accumulator.
                     if self.current_func_returns_void {
-                        self.emit_op(Op::Imm);
-                        self.emit_val(0);
+                        self.emit_imm(0);
                     }
                     self.emit_dead_stores_and_flush();
                     let n_params = params.indices.len();

@@ -85,7 +85,6 @@ impl Compiler {
         }
         let temp = -self.loc_offs;
         self.emit_op(Op::StLocI);
-        self.emit_val(temp);
         // Pop LHS off the c5 stack into accumulator: `Imm 0; Or` pops
         // stack-top into acc by virtue of `Op::Or` ORing acc with the
         // popped stack-top (acc was set to 0 a moment ago).

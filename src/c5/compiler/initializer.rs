@@ -971,7 +971,6 @@ impl Compiler {
         self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
         self.emit_op(Op::Mcpy);
-        self.emit_val(total_bytes as i64);
         // Dual-emit: record the Mcpy source descriptor so the
         // surrounding decl-site caller can build
         // `Decl::Local { init: Aggregate { src_data_off,
@@ -1009,7 +1008,6 @@ impl Compiler {
         self.pending_local_init_ast = self.ast_acc;
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
             self.emit_op(Op::Mcpy);
-            self.emit_val(self.size_of_type(ty) as i64);
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             self.ast_assign();
         } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {

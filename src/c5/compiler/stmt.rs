@@ -156,11 +156,11 @@ impl Compiler {
         self.stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
 
-        self.patch_loop_continues(step_pc);
+        self.close_loop_continues();
         self.emit_jmp(step_pc as i64);
 
-        let end_pc = self.text.len();
-        self.patch_loop_breaks(end_pc);
+        let _end_pc = self.text.len();
+        self.close_loop_breaks();
 
         // C99 6.8.5.3: a `for` with no controlling expression has
         // `1` as its condition (an infinite loop terminated by
@@ -243,8 +243,8 @@ impl Compiler {
         let _ = had_default;
         self.emit_jmp(0);
 
-        let end_pc = self.text.len();
-        self.patch_loop_breaks(end_pc);
+        let _end_pc = self.text.len();
+        self.close_loop_breaks();
         if let Some(disc) = disc_ast {
             self.ast_emit_switch(disc, body_s);
         }
@@ -618,12 +618,12 @@ impl Compiler {
             let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
-            self.patch_loop_continues(cond_pc);
+            self.close_loop_continues();
 
             self.emit_jmp(cond_pc as i64);
 
-            let end_pc = self.text.len();
-            self.patch_loop_breaks(end_pc);
+            let _end_pc = self.text.len();
+            self.close_loop_breaks();
             if let Some(cond) = cond_id {
                 self.ast_emit_while(cond, body_s);
             }
@@ -642,8 +642,8 @@ impl Compiler {
                 return Err(self.compile_err("while expected after do"));
             }
 
-            let cond_pc = self.text.len();
-            self.patch_loop_continues(cond_pc);
+            let _cond_pc = self.text.len();
+            self.close_loop_continues();
 
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
@@ -655,8 +655,8 @@ impl Compiler {
 
             self.consume(b';', "semicolon expected after do-while")?;
 
-            let end_pc = self.text.len();
-            self.patch_loop_breaks(end_pc);
+            let _end_pc = self.text.len();
+            self.close_loop_breaks();
             if let Some(cond) = cond_id {
                 self.ast_emit_do_while(body_s, cond);
             }

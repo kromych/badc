@@ -28,12 +28,12 @@ impl Compiler {
 
     /// Close the innermost loop's `continue` scope. Stack-balanced
     /// against [`Self::enter_loop`].
-    pub(super) fn patch_loop_continues(&mut self, _target_pc: usize) {
+    pub(super) fn close_loop_continues(&mut self) {
         self.loop_continue_depth = self.loop_continue_depth.saturating_sub(1);
     }
 
     /// Close the innermost loop's or switch's `break` scope.
-    pub(super) fn patch_loop_breaks(&mut self, _target_pc: usize) {
+    pub(super) fn close_loop_breaks(&mut self) {
         self.loop_break_depth = self.loop_break_depth.saturating_sub(1);
     }
 }

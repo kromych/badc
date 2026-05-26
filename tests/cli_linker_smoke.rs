@@ -929,3 +929,85 @@ fn macos_native_link_two_sources_with_libc() {
         "unexpected stdout: {stdout}"
     );
 }
+
+// Windows arm64 PE .o link path through the synthesizer. Compiles
+// two sources with `-c --target=windows-aarch64`, links into a PE
+// executable, and execs (natively on Windows arm64, via wine on
+// linux-aarch64 when `BADC_RUN_WINE=1`).
+#[cfg(any(
+    all(target_os = "windows", target_arch = "aarch64"),
+    all(target_os = "linux", target_arch = "aarch64"),
+))]
+#[test]
+fn windows_aarch64_native_link_two_sources_with_libc() {
+    if cfg!(target_os = "linux")
+        && !matches!(std::env::var("BADC_RUN_WINE"), Ok(v) if !v.is_empty() && v != "0")
+    {
+        eprintln!("skipping: BADC_RUN_WINE not set");
+        return;
+    }
+    let dir = tempdir("windows-arm64-native-link");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) { return x * 6; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         extern int helper(int);\n\
+         int main(void) {\n\
+             int r = helper(7);\n\
+             printf(\"answer=%d\\n\", r);\n\
+             return r - 42;\n\
+         }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--target=windows-aarch64")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--target=windows-aarch64")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let exe = dir.join("prog.exe");
+    run(
+        Command::new(badc())
+            .arg("--target=windows-aarch64")
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let out = {
+        #[cfg(target_os = "windows")]
+        {
+            Command::new(&exe).output().expect("run prog")
+        }
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("/usr/bin/wine")
+                .arg(&exe)
+                .env("WINEDEBUG", "-all")
+                .output()
+                .expect("run prog under wine")
+        }
+    };
+    assert_eq!(out.status.code(), Some(0), "exit status mismatch");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("answer=42"),
+        "unexpected stdout: {stdout}"
+    );
+}

@@ -504,11 +504,11 @@ impl Compiler {
 
                     // For Sys symbols (header-bound libc functions),
                     // also fold the variadic flag onto the matching
-                    // `#pragma binding`. The native lowering reads it
-                    // when it picks the variadic ABI dance (macOS
-                    // arm64 stack-packing, SysV xor eax,eax) instead
-                    // of asking the symbol table at codegen time --
-                    // which has long since gone out of scope.
+                    // `#pragma binding`. The native lowering reads
+                    // it when it picks the variadic ABI path (macOS
+                    // arm64 stack-packing, SysV `xor eax, eax`)
+                    // instead of consulting the symbol table at
+                    // codegen time -- it is out of scope by then.
                     if was_sys {
                         let name = self.symbols[id_idx].name.clone();
                         let fixed = params.types.len();

@@ -178,16 +178,14 @@ impl Compiler {
             self.emit_op(plain_op);
             return;
         }
-        // The XOR-mask trick only matters when one operand is
-        // signed and the other unsigned at a width narrower than
-        // 8 bytes -- that's when the sign-extension into the
+        // The XOR-mask sequence is only needed when one operand
+        // is signed and the other unsigned at a width narrower
+        // than 8 bytes -- that's when the sign-extension into the
         // 64-bit register can make `(int)-1 == (uint)0xFFFFFFFF`
-        // come out false. When both operands have the same
-        // signedness, both loads produce matching 64-bit
-        // representations and plain `Op::Eq` already does the
-        // right thing. Skipping the trick for the same-
-        // signedness case keeps the per-eq cost at 1 op for the
-        // overwhelmingly common path.
+        // come out false. Matching signedness produces matching
+        // 64-bit representations and plain `Op::Eq` is correct on
+        // its own. Skipping the mask for the same-signedness case
+        // keeps the per-eq cost at 1 op.
         let lhs_unsigned = is_unsigned_ty(lhs_ty);
         let rhs_unsigned = is_unsigned_ty(self.ty);
         if lhs_unsigned == rhs_unsigned {

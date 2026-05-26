@@ -402,21 +402,20 @@ impl Compiler {
                     }
                     let mut nargs = 0;
                     // Snapshot the AST parser-side vstack depth so
-                    // the call's bytecode dance (per-arg `Op::Lea +
-                    // Op::Psh` arg-temp setup, the right-to-left
-                    // `Op::Lea + Op::Li + Op::Psh` re-push, the
-                    // optional struct-return out-pointer push) can
-                    // leak transient pushes without polluting the
-                    // outer expression's lvalue stack. The bytecode
-                    // side's matching pops happen inside the same
-                    // sequence; on the AST side the matching pops
-                    // are routed through `ast_apply_assign` for the
-                    // per-arg `*temp = arg` shape (the only Op::Si
-                    // in this region), which consumes ONE vstack
-                    // slot per Op::Si. The right-to-left re-push
-                    // and the out-pointer push are pure leaks --
-                    // truncate the vstack back to this depth right
-                    // before `ast_emit_call` so the outer scalar
+                    // the call's per-arg emit sequence (per-arg
+                    // `Op::Lea + Op::Psh` temp setup, the right-to-
+                    // left `Op::Lea + Op::Li + Op::Psh` re-push,
+                    // the optional struct-return out-pointer push)
+                    // can leak transient pushes without polluting
+                    // the outer expression's lvalue stack. The
+                    // matching pops on the AST side route through
+                    // `ast_apply_assign` for the per-arg `*temp =
+                    // arg` shape (the only Op::Si in this region),
+                    // which consumes one vstack slot per Op::Si.
+                    // The right-to-left re-push and the out-pointer
+                    // push are pure leaks -- truncate the vstack
+                    // back to this depth right before
+                    // `ast_emit_call` so the outer scalar
                     // assign's `ast_apply_assign` sees the lvalue
                     // it pushed.
                     let saved_ast_vstack_depth = self.ast_vstack.len();
@@ -657,10 +656,10 @@ impl Compiler {
                         self.emit_op(Op::Adj);
                         self.emit_val(total_pushed);
                     }
-                    // Drop the AST parser-side vstack pushes the
-                    // call's bytecode dance leaked (right-to-left
-                    // re-push, optional struct-return out-pointer
-                    // push) before the outer expression's
+                    // Drop the AST parser-side vstack pushes that
+                    // the call's emit sequence leaked (right-to-
+                    // left re-push, optional struct-return out-
+                    // pointer push) before the outer expression's
                     // `ast_apply_assign` runs. See the matching
                     // `saved_ast_vstack_depth` snapshot above.
                     self.ast_vstack.truncate(saved_ast_vstack_depth);
@@ -1124,8 +1123,8 @@ impl Compiler {
                 self.ty = t;
                 // Overwrite the AST acc with a canonical Cast
                 // node so the intermediate Binary nodes the
-                // bytecode conversion dance pushed don't surface
-                // as the cast's value. The dropped nodes have no
+                // bytecode conversion emit pushed don't surface as
+                // the cast's value. The dropped nodes have no
                 // consumers; the SSA walker won't visit them.
                 if let Some(child) = cast_child_ast {
                     self.ast_emit_cast(child, t);
@@ -1452,12 +1451,12 @@ impl Compiler {
             t = self.lex.tk.raw();
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            // Snapshot the lvalue's AST node before the bytecode
-            // dance below: rewrite + reload + Psh + Imm + Add/Sub
-            // + store_op all run through `ast_apply_*` helpers
-            // that pop the vstack regardless of whether the build
-            // succeeded, so by the time `ast_emit_pre_inc` fires
-            // the lvalue would otherwise be gone.
+            // Snapshot the lvalue's AST node before the emit
+            // sequence below: rewrite + reload + Psh + Imm +
+            // Add/Sub + store_op all run through `ast_apply_*`
+            // helpers that pop the vstack regardless of whether the
+            // build succeeded, so by the time `ast_emit_pre_inc`
+            // fires the lvalue would otherwise be gone.
             let pre_inc_lvalue = self.ast_acc;
             let reload = self
                 .rewrite_trailing_load_as_psh()
@@ -1638,9 +1637,9 @@ impl Compiler {
                 // register value carries the full 8-byte return
                 // regardless of the tag.
                 self.ty = Ty::Int as i64;
-                // Dual-emit the indirect call. Drop the AST
-                // vstack pushes the bytecode dance leaked,
-                // mirror of the direct-call truncation.
+                // Drop the AST vstack pushes the call's emit
+                // sequence leaked, mirror of the direct-call
+                // truncation.
                 self.ast_vstack.truncate(ast_vstack_snapshot);
                 let return_ty = self.ty;
                 if let Some(callee_id) = callee_ast {
@@ -2176,7 +2175,7 @@ impl Compiler {
                     let lhs_ty = t;
                     if self.is_ptr_scaling_nontrivial(rhs_ty) {
                         // Snapshot the AST operands before the
-                        // bytecode dance: lhs (int) sits on the
+                        // emit sequence: lhs (int) sits on the
                         // parser-side vstack, rhs (ptr) is in
                         // `ast_acc`. The `Op::StLocI` / `Op::Imm` /
                         // `Op::Or` / `Op::Mul` / `Op::Psh` /
@@ -2184,8 +2183,8 @@ impl Compiler {
                         // through `ast_track_emit_op` and pops
                         // the AST vstack on each `Op::Or` /
                         // `Op::Li`. Drain the outer vstack, push
-                        // a sentinel for the inner ops to
-                        // consume, run the dance, then restore.
+                        // a sentinel for the inner ops to consume,
+                        // run the sequence, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
                         let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
@@ -2352,7 +2351,7 @@ impl Compiler {
                         // `ast_track_emit_op` and corrupt the AST
                         // vstack/accumulator. Snapshot the AST
                         // operands first, save the rest of the AST
-                        // vstack, run the bytecode dance against a
+                        // vstack, run the emit sequence against a
                         // sentinel-padded vstack so the inner
                         // `Op::Divu`'s embedded pop consumes the
                         // sentinel rather than an outer expression's

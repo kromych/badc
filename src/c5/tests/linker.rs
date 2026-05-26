@@ -431,6 +431,7 @@ fn ssa_func_encoder_round_trip_handcrafted() {
         },
     ];
     let orig = FunctionSsa {
+        name: alloc::string::String::new(),
         ent_pc: 0x1000,
         end_pc: 0x1234,
         locals: 64,
@@ -833,6 +834,7 @@ fn cross_tu_call_through_secondary_dylib() {
         Op::Lev as i64,
     ];
     let lib_synthetic = crate::c5::ir::FunctionSsa {
+        name: alloc::string::String::new(),
         ent_pc: 0,
         end_pc: lib_text.len(),
         locals: 0,

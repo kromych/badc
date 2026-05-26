@@ -78,6 +78,7 @@ impl SsaBuilder {
     /// builder's initial focus; the first push lands there.
     pub(crate) fn new(ent_pc: usize, n_params: usize, is_variadic: bool) -> Self {
         let func = FunctionSsa {
+            name: alloc::string::String::new(),
             ent_pc,
             end_pc: ent_pc,
             locals: 0,
@@ -120,6 +121,14 @@ impl SsaBuilder {
     /// post-walk.
     pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
         self.func.end_pc = end_pc;
+    }
+
+    /// Set the source-level function name. Codegen consumers use
+    /// it for symbol-table and DWARF emission; the builder's
+    /// default is an empty string, which the consumers replace
+    /// with a `fn_<ent_pc>` placeholder.
+    pub(crate) fn set_name(&mut self, name: alloc::string::String) {
+        self.func.name = name;
     }
 
     /// Reserve a new basic block and return its id. The new block

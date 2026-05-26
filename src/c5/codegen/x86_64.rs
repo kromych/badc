@@ -1346,6 +1346,7 @@ pub(super) fn lower(
 ) -> Result<Build, C5Error> {
     let mut code: Vec<u8> = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_names: Vec<alloc::string::String> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
@@ -1420,6 +1421,7 @@ pub(super) fn lower(
         let ent_pc = func_ssa.ent_pc;
         bytecode_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
+        func_names.push(func_ssa.name.clone());
         // Pre-resolve every `imm_data_extern` value-id to the
         // symbol name once per function so `emit_function` can
         // tag the matching `DataFixup` with the cross-TU name.
@@ -1599,6 +1601,7 @@ pub(super) fn lower(
         func_fixups,
         bytecode_to_native,
         func_ent_pcs,
+        func_names,
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,

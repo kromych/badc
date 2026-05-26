@@ -2154,6 +2154,7 @@ mod tests {
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
+            func_names: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),

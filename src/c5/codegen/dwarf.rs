@@ -596,9 +596,19 @@ fn collect_subprograms(
     // in emission order. Native start is
     // `bytecode_to_native[bc_pc]`; native end is the start of the
     // next function's emission (or `total_native` for the last).
-    // A function's source name lives at
-    // `program.source_functions[bc_pc]`, indexed by the bytecode
-    // entry-PC; empty for synthesised trampolines.
+    // A function's source name comes from `build.func_names`
+    // (populated by the per-arch emit from `FunctionSsa::name`),
+    // with `Program::source_functions[bc_pc]` as a fallback for
+    // archive-reloaded units. The per-arch emit pushes
+    // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name`
+    // map covers the sort-by-native-offset reorder below.
+    let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
+        .func_ent_pcs
+        .iter()
+        .copied()
+        .zip(build.func_names.iter().cloned())
+        .filter(|(_, n)| !n.is_empty())
+        .collect();
     let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
     ent_pcs.sort_unstable_by_key(|&pc| {
         build
@@ -630,11 +640,16 @@ fn collect_subprograms(
     // mis-attributed regions are no worse than they were).
     let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
-        let raw_name = program
-            .source_functions
-            .get(ent_pc)
-            .filter(|s| !s.is_empty())
+        let raw_name = func_name_by_pc
+            .get(&ent_pc)
             .cloned()
+            .or_else(|| {
+                program
+                    .source_functions
+                    .get(ent_pc)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+            })
             .unwrap_or_else(|| format!("fn_bc_{ent_pc}"));
         let count = name_seen.entry(raw_name.clone()).or_insert(0);
         let name = if *count == 0 {

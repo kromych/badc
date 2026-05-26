@@ -1720,6 +1720,11 @@ pub(crate) fn read_ssa_func(
 
     *cursor = r.cursor;
     Ok(crate::c5::ir::FunctionSsa {
+        // Archive-reload doesn't carry the source-level function
+        // name yet; the consumers fall back to `fn_<ent_pc>`.
+        // The codegen's name lookup chain treats an empty name
+        // here as "no walker output, use the fallback".
+        name: alloc::string::String::new(),
         ent_pc,
         end_pc,
         locals,

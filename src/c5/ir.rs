@@ -302,6 +302,13 @@ pub(crate) struct Block {
 /// per-arch lowering.
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSsa {
+    /// Source-level function name. Empty for SSA functions built
+    /// outside the parser (test fixtures, archive-reloaded units
+    /// whose name field didn't round-trip yet). Codegen consumers
+    /// use it as the canonical name for symbol-table and DWARF
+    /// emission; fall back to a synthesized `fn_<ent_pc>` when
+    /// empty.
+    pub name: alloc::string::String,
     /// Bytecode PC of the function's `Op::Ent`.
     pub ent_pc: usize,
     /// Bytecode PC one past the function's last op (the start of

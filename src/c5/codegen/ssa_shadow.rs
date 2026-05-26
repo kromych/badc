@@ -48,6 +48,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
                 e,
             )))
         })?;
+        func.name = f.name.clone();
         // `n_params` on FinishedFunction is the parser's
         // declared count. The codegen prologue spills the
         // matching host-arg regs into slots [2, 2+n). Use the

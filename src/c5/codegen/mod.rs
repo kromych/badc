@@ -791,6 +791,14 @@ pub(crate) struct Build {
     /// this to produce one `Subprog` per function without walking
     /// the bytecode tape for `Op::Ent`.
     pub func_ent_pcs: Vec<usize>,
+    /// Source-level function names parallel to `func_ent_pcs`,
+    /// populated from `FunctionSsa::name` during the per-arch
+    /// emit loop. Empty entries surface for archive-reloaded
+    /// units (the name doesn't round-trip yet) and for test-only
+    /// fixtures. The symbol-table and DWARF emitters consult
+    /// this column first, then fall back to a `fn_<ent_pc>`
+    /// placeholder.
+    pub func_names: Vec<String>,
     /// Per-arch call sites to external symbols recorded during
     /// the SSA emit pass, before PLT trampoline application.
     /// Final-image writers don't read this; the

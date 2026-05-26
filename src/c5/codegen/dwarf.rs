@@ -484,7 +484,7 @@ struct SubprogVar {
 /// anyway.
 fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     let body_start = build
-        .bytecode_to_native
+        .pc_to_native
         .get(ent_pc + Op::Ent.word_size())
         .copied()
         .unwrap_or(low_pc);
@@ -594,7 +594,7 @@ fn collect_subprograms(
 
     // Iterate the per-function ent_pcs the lowering recorded
     // in emission order. Native start is
-    // `bytecode_to_native[bc_pc]`; native end is the start of the
+    // `pc_to_native[bc_pc]`; native end is the start of the
     // next function's emission (or `total_native` for the last).
     // A function's source name comes from `build.func_names`
     // (populated by the per-arch emit from `FunctionSsa::name`),
@@ -612,7 +612,7 @@ fn collect_subprograms(
     let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
     ent_pcs.sort_unstable_by_key(|&pc| {
         build
-            .bytecode_to_native
+            .pc_to_native
             .get(pc)
             .copied()
             .unwrap_or(usize::MAX)
@@ -654,7 +654,7 @@ fn collect_subprograms(
         let name_off = strs.intern(&name);
 
         let lo = build
-            .bytecode_to_native
+            .pc_to_native
             .get(ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -663,7 +663,7 @@ fn collect_subprograms(
         }
         let hi = if let Some(&next_ent) = ent_pcs.get(i + 1) {
             build
-                .bytecode_to_native
+                .pc_to_native
                 .get(next_ent)
                 .copied()
                 .unwrap_or(total_native)

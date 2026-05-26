@@ -1357,7 +1357,7 @@ pub(super) fn lower(
     // trampolines are appended to `code`. Mirrors the aarch64 path.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk
-    // against `bytecode_to_native`, mirroring aarch64::lower.
+    // against `pc_to_native`, mirroring aarch64::lower.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
     // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
     // when targeting Windows. The PE writer reserves the
@@ -1375,10 +1375,10 @@ pub(super) fn lower(
         })?;
     // Upper bound on bc_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the bytecode PC
-    // space, and the dense `bytecode_to_native` table holds
+    // space, and the dense `pc_to_native` table holds
     // every reachable PC.
     let bc_pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
-    let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; bc_pc_extent + 1];
+    let mut pc_to_native: Vec<usize> = alloc::vec![usize::MAX; bc_pc_extent + 1];
     // Per-callee variadic flag, derived from FunctionSsa::is_variadic.
     // Each call site reads it to pick the host-ABI vs c5-stack arg
     // passing shape for the callee.
@@ -1419,7 +1419,7 @@ pub(super) fn lower(
     let _ssa_emit_pass_start = std::time::Instant::now();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
-        bytecode_to_native[ent_pc] = code.len();
+        pc_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
         func_names.push(func_ssa.name.clone());
         // Pre-resolve every `imm_data_extern` value-id to the
@@ -1446,7 +1446,7 @@ pub(super) fn lower(
             &variadic_targets,
             &mut tls_index_fixups,
             program.tls_data.len(),
-            &mut bytecode_to_native,
+            &mut pc_to_native,
             &mut ssa_line_rows,
         );
         #[cfg(feature = "std")]
@@ -1471,7 +1471,7 @@ pub(super) fn lower(
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_x86_64 (block walk) -- {us}us");
     }
-    bytecode_to_native[bc_pc_extent] = code.len();
+    pc_to_native[bc_pc_extent] = code.len();
 
     // Cross-TU user-function imports surfaced by the parser as
     // placeholder bc_pcs past `text.len()`. Each `Inst::Call`
@@ -1509,7 +1509,7 @@ pub(super) fn lower(
     apply_fixups(
         &mut code,
         &resolved_fixups,
-        &bytecode_to_native,
+        &pc_to_native,
         bc_pc_extent,
     )?;
 
@@ -1565,7 +1565,7 @@ pub(super) fn lower(
                 ),
             )));
         }
-        let target = bytecode_to_native[target_bc_pc];
+        let target = pc_to_native[target_bc_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -1579,7 +1579,7 @@ pub(super) fn lower(
         });
     }
 
-    let entry_offset = bytecode_to_native
+    let entry_offset = pc_to_native
         .get(program.entry_pc)
         .copied()
         .unwrap_or(usize::MAX);
@@ -1599,7 +1599,7 @@ pub(super) fn lower(
         got_fixups,
         data_fixups,
         func_fixups,
-        bytecode_to_native,
+        pc_to_native,
         func_ent_pcs,
         func_names,
         reloc_call_sites,

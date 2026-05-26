@@ -379,7 +379,7 @@ pub(super) fn emit_function(
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
-    bytecode_to_native: &mut [usize],
+    pc_to_native: &mut [usize],
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let snapshot = code.len();
@@ -392,7 +392,7 @@ pub(super) fn emit_function(
     let abi = target.abi();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, bytecode_to_native, code.len());
+    super::ssa_emit_common::record_post_prologue_pc(func, pc_to_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -406,7 +406,7 @@ pub(super) fn emit_function(
         super::ssa_emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,
-            bytecode_to_native,
+            pc_to_native,
             code.len(),
         );
         for v in block.inst_range.clone() {

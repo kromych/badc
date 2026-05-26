@@ -583,7 +583,7 @@ impl Ast {
     /// empty (the multi-TU path), so without this fixup an
     /// in-unit `Expr::Call` to a defined-in-the-same-unit
     /// function lowers to `Inst::Call { target_pc = pre-link PC }`
-    /// and the SSA emit's `bytecode_to_native[target_pc]` lookup
+    /// and the SSA emit's `pc_to_native[target_pc]` lookup
     /// hits an unmapped slot. Cross-unit references (forward
     /// `extern` calls into another unit) carry `val == 0` and are
     /// handled by the symbol-table fixup pass on the linker side.

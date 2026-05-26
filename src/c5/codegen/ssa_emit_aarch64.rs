@@ -152,7 +152,7 @@ enum LocalBranchKind {
 /// `fixups` is the function-pointer / direct-call fixup table the
 /// surrounding writer already maintains. The SSA emit appends one
 /// `Fixup::Bl` per `Inst::Call`; the `apply_fixups` post-pass
-/// resolves them once `bytecode_to_native` is final.
+/// resolves them once `pc_to_native` is final.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_function(
     func: &FunctionSsa,
@@ -170,7 +170,7 @@ pub(super) fn emit_function(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    bytecode_to_native: &mut [usize],
+    pc_to_native: &mut [usize],
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
@@ -192,7 +192,7 @@ pub(super) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, bytecode_to_native, code.len());
+    super::ssa_emit_common::record_post_prologue_pc(func, pc_to_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -206,7 +206,7 @@ pub(super) fn emit_function(
         super::ssa_emit_common::record_block_start_pc(
             block_idx,
             block.start_pc,
-            bytecode_to_native,
+            pc_to_native,
             code.len(),
         );
         for v in block.inst_range.clone() {
@@ -1714,7 +1714,7 @@ fn emit_call(
         }
     }
     // Branch placeholder + fixup. The pool path's apply_fixups
-    // resolves `target_ent_pc` -> `bytecode_to_native` once
+    // resolves `target_ent_pc` -> `pc_to_native` once
     // the map is final.
     fixups.push(Fixup {
         native_offset: code.len(),
@@ -3101,7 +3101,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
-        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
@@ -3119,7 +3119,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
-            &mut bytecode_to_native,
+            &mut pc_to_native,
             &mut ssa_line_rows,
         );
         assert!(
@@ -3161,7 +3161,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
-        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
@@ -3179,7 +3179,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
-            &mut bytecode_to_native,
+            &mut pc_to_native,
             &mut ssa_line_rows,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -3214,7 +3214,7 @@ mod tests {
             alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
-        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
@@ -3232,7 +3232,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
-            &mut bytecode_to_native,
+            &mut pc_to_native,
             &mut ssa_line_rows,
         );
         assert!(

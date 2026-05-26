@@ -206,7 +206,7 @@ pub(crate) enum ReturnExt {
 }
 
 /// Upper bound on bc_pcs the lowering needs to look up. The
-/// per-arch `lower` sizes `bytecode_to_native` by this value so
+/// per-arch `lower` sizes `pc_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
 /// the SSA emit produces lands in range.
 pub(super) fn pc_extent_for_lowering(
@@ -216,7 +216,7 @@ pub(super) fn pc_extent_for_lowering(
     let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
     // Cross-TU function-import placeholders sit past the
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
-    // pass uses the same dense `bytecode_to_native` table to
+    // pass uses the same dense `pc_to_native` table to
     // recognise them as out-of-range, so the table has to
     // cover the placeholder range too. `extern_function_imports`
     // is empty for every build that didn't go through the
@@ -785,7 +785,7 @@ pub(crate) struct Build {
     /// bytecode instruction's first word (operand slots, etc.). The
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
-    pub bytecode_to_native: Vec<usize>,
+    pub pc_to_native: Vec<usize>,
     /// Bytecode entry-PCs of every function the lowering emitted,
     /// in lowering (= emission) order. The DWARF builder iterates
     /// this to produce one `Subprog` per function without walking
@@ -893,7 +893,7 @@ pub(crate) struct Build {
     /// of [`Program::code_relocs`]. Each entry pairs a data-segment
     /// slot with the bytecode PC of a function; the per-format
     /// writer translates the PC to the native code offset via
-    /// `bytecode_to_native` and patches the slot to the runtime
+    /// `pc_to_native` and patches the slot to the runtime
     /// code address.
     pub code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
@@ -915,7 +915,7 @@ pub(crate) struct Build {
     /// boilerplate `mov eax, 1; ret` stub. `Some(pc)` -> writer
     /// suppresses the stub and points
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
-    /// user's body via `bytecode_to_native[pc]`.
+    /// user's body via `pc_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
     /// Mirror of [`NativeOptions::debug_info`]. The per-format
     /// writers gate DWARF section emission on this -- when

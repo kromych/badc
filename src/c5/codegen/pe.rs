@@ -568,7 +568,7 @@ pub(super) fn write(
             edata_rva,
             text_rva + text_prologue_len,
             &build.exports,
-            &build.bytecode_to_native,
+            &build.pc_to_native,
         )?
     } else {
         Vec::new()
@@ -914,17 +914,17 @@ pub(super) fn write(
     // `build.text`:
     //   * `--shared` output with a user-defined `DllMain` -- the
     //     loader's `DLL_PROCESS_ATTACH` callback lands directly on
-    //     the user body at `bytecode_to_native[dllmain_pc]`.
+    //     the user body at `pc_to_native[dllmain_pc]`.
     //   * Passthrough subsystems (NT-native, UEFI) -- the loader
     //     invokes the entry at `build.entry_offset` directly.
     // `text_prologue_len` is zero in both bypass cases; it stays
     // in the formula for symmetry with the other text-relative
     // computations in this writer.
     let entry_rva = if let Some(pc) = build.dllmain_pc.filter(|_| is_dll) {
-        let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
+        let off = build.pc_to_native.get(pc).copied().ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "PE writer: user-defined DllMain at bytecode PC {pc} \
-                     has no entry in bytecode_to_native -- the lowering \
+                     has no entry in pc_to_native -- the lowering \
                      dropped the function?"
             )))
         })?;
@@ -1078,7 +1078,7 @@ pub(super) fn write(
         for r in &build.code_relocs {
             let bc_pc = r.target_bc_pc as usize;
             let native_off = build
-                .bytecode_to_native
+                .pc_to_native
                 .get(bc_pc)
                 .copied()
                 .unwrap_or(usize::MAX);
@@ -1263,12 +1263,12 @@ const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPO
 /// All RVAs in the directory are image-relative; the
 /// `text_prologue_rva` is `text_rva + stub_len`, the byte
 /// where `build.text` starts. Each export's runtime RVA is
-/// `text_prologue_rva + bytecode_to_native[ent_pc]`.
+/// `text_prologue_rva + pc_to_native[ent_pc]`.
 fn build_export_directory(
     edata_rva: u32,
     text_prologue_rva: u32,
     exports: &[crate::c5::program::ExportedFunction],
-    bytecode_to_native: &[usize],
+    pc_to_native: &[usize],
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
     // Layout offsets within the section.
@@ -1307,7 +1307,7 @@ fn build_export_directory(
 
     // AddressOfFunctions -- RVA of each function.
     for exp in exports {
-        let native_off = bytecode_to_native
+        let native_off = pc_to_native
             .get(exp.ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -3714,9 +3714,9 @@ mod tests {
     /// inside `build.text` rather than at the start of
     /// `.text`. With the stub suppressed, `build.text` lands
     /// at offset 0 of `.text`, so the expected entry is
-    /// `BaseOfCode + bytecode_to_native[dllmain_pc]`. A
+    /// `BaseOfCode + pc_to_native[dllmain_pc]`. A
     /// secondary `dummy` function before `DllMain` guarantees
-    /// `bytecode_to_native[dllmain_pc] > 0` so the assertion
+    /// `pc_to_native[dllmain_pc] > 0` so the assertion
     /// is genuinely distinguishing the user-DllMain branch
     /// from the no-user-DllMain branch.
     #[test]
@@ -3738,7 +3738,7 @@ mod tests {
             super::super::NativeOptions::new().with_shared_library(),
         )
         .expect("lower");
-        let dllmain_native_off = build.bytecode_to_native[dllmain_pc] as u32;
+        let dllmain_native_off = build.pc_to_native[dllmain_pc] as u32;
         assert!(
             dllmain_native_off > 0,
             "with `dummy` defined before DllMain, the lowering \
@@ -3757,7 +3757,7 @@ mod tests {
             entry,
             base + dllmain_native_off,
             "AddressOfEntryPoint must target the user's DllMain at \
-             BaseOfCode + bytecode_to_native[dllmain_pc]"
+             BaseOfCode + pc_to_native[dllmain_pc]"
         );
     }
 

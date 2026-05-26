@@ -114,12 +114,12 @@ pub(super) fn record_inst_src(
 /// CFA / saved-reg rule installs at the right PC.
 pub(super) fn record_post_prologue_pc(
     func: &super::super::ir::FunctionSsa,
-    bytecode_to_native: &mut [usize],
+    pc_to_native: &mut [usize],
     code_len: usize,
 ) {
     let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
-    if post_prologue_pc < bytecode_to_native.len() {
-        bytecode_to_native[post_prologue_pc] = code_len;
+    if post_prologue_pc < pc_to_native.len() {
+        pc_to_native[post_prologue_pc] = code_len;
     }
 }
 
@@ -166,21 +166,21 @@ pub(super) fn is_dead_pure(
 pub(super) fn record_block_start_pc(
     block_idx: usize,
     block_start_pc: usize,
-    bytecode_to_native: &mut [usize],
+    pc_to_native: &mut [usize],
     code_len: usize,
 ) {
     // Skip `block_start_pc == 0` to avoid clobbering the
-    // function-entry slot (`bytecode_to_native[ent_pc]`)
+    // function-entry slot (`pc_to_native[ent_pc]`)
     // written before this routine runs. The lift's inner
     // blocks always carry a non-zero bytecode PC (the entry
     // block holds 0 but `block_idx > 0` filters it). The
     // walker leaves `start_pc` at 0 for every block because
     // its IR doesn't have bytecode PCs at all -- without the
     // 0-guard, walker output would overwrite
-    // `bytecode_to_native[0]` once per inner block and the
+    // `pc_to_native[0]` once per inner block and the
     // post-emit entry-offset resolution would land in the
     // middle (or end) of `main` instead of its prologue.
-    if block_idx > 0 && block_start_pc != 0 && block_start_pc < bytecode_to_native.len() {
-        bytecode_to_native[block_start_pc] = code_len;
+    if block_idx > 0 && block_start_pc != 0 && block_start_pc < pc_to_native.len() {
+        pc_to_native[block_start_pc] = code_len;
     }
 }

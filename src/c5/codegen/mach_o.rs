@@ -1896,7 +1896,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     for (i, exp) in build.exports.iter().enumerate() {
         let n_strx = str_indices[n_locals + i];
         let native_off = build
-            .bytecode_to_native
+            .pc_to_native
             .get(exp.ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -2290,7 +2290,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     for r in &build.code_relocs {
         let bc_pc = r.target_bc_pc as usize;
         let native_off = build
-            .bytecode_to_native
+            .pc_to_native
             .get(bc_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -2447,7 +2447,7 @@ mod tests {
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
-            bytecode_to_native: Vec::new(),
+            pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             func_names: Vec::new(),
             reloc_call_sites: Vec::new(),

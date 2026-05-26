@@ -238,7 +238,7 @@ struct Walker<'a> {
 impl<'a> Walker<'a> {
     /// Live `ent_pc` for a `Token::Fun` symbol. Reading the
     /// symbol's current `val` lets every `Expr::Call` resolve to
-    /// the matching `bytecode_to_native` slot the codegen will
+    /// the matching `pc_to_native` slot the codegen will
     /// populate. Sys trampolines have their `val` patched late
     /// by `emit_sys_trampolines`; the same live-read fits both
     /// cases.

@@ -299,7 +299,7 @@ mod jit_impl {
             for r in &build.code_relocs {
                 let bc_pc = r.target_bc_pc as usize;
                 let native_off = build
-                    .bytecode_to_native
+                    .pc_to_native
                     .get(bc_pc)
                     .copied()
                     .unwrap_or(usize::MAX);

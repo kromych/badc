@@ -238,7 +238,7 @@ pub(super) fn write_relocatable(
 
     // Function symbols. The build records each emitted function's
     // entry bc_pc in `func_ent_pcs`; the matching native offset
-    // lives at `bytecode_to_native[ent_pc]`. The function name --
+    // lives at `pc_to_native[ent_pc]`. The function name --
     // when available -- comes from `program.source_functions`
     // via the existing DWARF builder's path. Here we synthesise
     // a `fn_<ent_pc>` placeholder; the real name plumbing lands
@@ -396,21 +396,21 @@ pub(super) fn write_relocatable(
     let func_extent = |i: usize| -> Result<(usize, usize), C5Error> {
         let ent_pc = build.func_ent_pcs[i];
         let lo = build
-            .bytecode_to_native
+            .pc_to_native
             .get(ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if lo == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "elf_reloc: function ent_pc {ent_pc} has no native offset in bytecode_to_native",
+                    "elf_reloc: function ent_pc {ent_pc} has no native offset in pc_to_native",
                 ),
             )));
         }
         let hi = build
             .func_ent_pcs
             .get(i + 1)
-            .and_then(|&next_ent| build.bytecode_to_native.get(next_ent).copied())
+            .and_then(|&next_ent| build.pc_to_native.get(next_ent).copied())
             .unwrap_or(build.text.len());
         Ok((lo, hi))
     };
@@ -777,7 +777,7 @@ pub(super) fn write_relocatable(
     // Function-pointer initializers: same `R_*_64` shape as
     // pointer-to-global, but the addend is the target
     // function's native byte offset within `.text` (looked up
-    // via `bytecode_to_native`) and the reloc points at the
+    // via `pc_to_native`) and the reloc points at the
     // `.text` section symbol. The linker resolves to
     // `text_vaddr + target_offset`.
     for r in &build.code_relocs {
@@ -802,7 +802,7 @@ pub(super) fn write_relocatable(
             continue;
         }
         let native_off = build
-            .bytecode_to_native
+            .pc_to_native
             .get(bc_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -993,7 +993,7 @@ mod tests {
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
-            bytecode_to_native: Vec::new(),
+            pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             func_names: Vec::new(),
             reloc_call_sites: Vec::new(),

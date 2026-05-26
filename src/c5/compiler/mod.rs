@@ -563,9 +563,17 @@ pub struct Compiler {
     /// the array path has no zero prelude today.
     pub(super) pending_local_runtime_elements: Vec<super::ast::RuntimeInitElement>,
 
-    // --- Patch lists ---
-    loop_breaks: Vec<Vec<usize>>,
-    loop_continues: Vec<Vec<usize>>,
+    // --- Lex-time scope depth ---
+    /// Number of currently-open `break`-eligible scopes
+    /// (`while` / `for` / `do-while` bodies, plus `switch`
+    /// bodies). Used to flag `break` outside any such scope.
+    /// The old per-scope Vec of jmp-pc lists retired when the
+    /// bytecode tape backpatches went away; only the depth
+    /// counter survives.
+    loop_break_depth: usize,
+    /// Number of currently-open `continue`-eligible scopes
+    /// (loops only; `switch` doesn't open one).
+    loop_continue_depth: usize,
     /// Linear table of `(label_name, text_pc)`. Per-function (cleared
     /// at every function start), so it stays small -- typically 0-2
     /// entries even in code that uses `goto`. Linear scan beats
@@ -1011,8 +1019,8 @@ impl Compiler {
             pending_local_init_ast: None,
             pending_local_aggregate_ast: None,
             pending_local_runtime_elements: Vec::new(),
-            loop_breaks: Vec::new(),
-            loop_continues: Vec::new(),
+            loop_break_depth: 0,
+            loop_continue_depth: 0,
             labels: Vec::new(),
             unresolved_gotos: Vec::new(),
             switch_cases: Vec::new(),

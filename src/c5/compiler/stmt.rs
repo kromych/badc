@@ -251,10 +251,7 @@ impl Compiler {
         if let Some(dpc) = default_pc {
             self.emit_jmp(dpc as i64);
         } else {
-            // No default: fall through to the end (patched below
-            // alongside explicit `break`s).
             self.emit_jmp(0);
-            self.record_break_jmp(self.text.len() - 1);
         }
 
         let _ = end_switch_patch;
@@ -732,24 +729,20 @@ impl Compiler {
             self.ast_emit_goto(label);
         } else if self.lex.tk == Token::Break {
             self.next()?;
-            if self.loop_breaks.is_empty() {
+            if self.loop_break_depth == 0 {
                 return Err(self.compile_err("break outside of loop or switch"));
             }
             self.emit_op(Op::Jmp);
-            let pc = self.text.len();
             self.emit_val(0);
-            self.record_break_jmp(pc);
             self.consume(b';', "semicolon expected after break")?;
             self.ast_emit_break();
         } else if self.lex.tk == Token::Continue {
             self.next()?;
-            if self.loop_continues.is_empty() {
+            if self.loop_continue_depth == 0 {
                 return Err(self.compile_err("continue outside of loop"));
             }
             self.emit_op(Op::Jmp);
-            let pc = self.text.len();
             self.emit_val(0);
-            self.record_continue_jmp(pc);
             self.consume(b';', "semicolon expected after continue")?;
             self.ast_emit_continue();
         } else if self.lex.tk == Token::Return {

@@ -223,81 +223,88 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     }
     let shstrtab_bytes = section_slice(bytes, shstrtab)?;
 
-    // Walk the headers once to identify the sections by name.
-    // `.rodata` and `.data.rel.ro` (and their per-symbol
-    // `.rodata.str.1.1` / `.data.rel.ro.local` variants) carry
-    // const-initialised data alongside `.data`; clang and gcc
-    // emit string literals and const globals there by default.
-    // The linker treats them as data-style (writable in our
-    // current loader because there's no separate read-only
-    // segment yet), so the parser concatenates their bytes
-    // after `.data` and remaps any symbol value or reloc
-    // offset by the rodata section's base in the merged blob.
-    let mut text_idx: Option<usize> = None;
-    let mut data_idx: Option<usize> = None;
-    let mut bss_idx: Option<usize> = None;
+    // Walk the headers once to classify each by section family
+    // (text / data / bss / rela-target / other). The parser
+    // concatenates every section in a family after the unqualified
+    // base section's bytes, remapping each symbol's value and any
+    // `.rela.<section>` reloc offset by the section's base in the
+    // merged blob. Data-family covers `.data`, per-variable
+    // `.data.<name>` subsections (clang/gcc `-fdata-sections`),
+    // every `.rodata*` (string literals + const globals), and
+    // every `.data.rel.ro*` (initialised-then-readonly tables);
+    // they share the same merged-data layout because there is no
+    // separate read-only segment in the loader.
+    let mut text_section_indices: Vec<usize> = Vec::new();
+    let mut data_section_indices: Vec<usize> = Vec::new();
+    let mut bss_section_indices: Vec<usize> = Vec::new();
     let mut symtab_idx: Option<usize> = None;
-    let mut rela_text_idx: Option<usize> = None;
-    let mut rela_data_idx: Option<usize> = None;
-    let mut rodata_section_indices: Vec<usize> = Vec::new();
-    let mut rela_rodata_section_indices: Vec<usize> = Vec::new();
+    let mut rela_section_indices: Vec<usize> = Vec::new();
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.name as usize)?;
-        match name {
-            ".text" => text_idx = Some(i),
-            ".data" => data_idx = Some(i),
-            ".bss" => bss_idx = Some(i),
-            ".symtab" => symtab_idx = Some(i),
-            ".rela.text" => rela_text_idx = Some(i),
-            ".rela.data" => rela_data_idx = Some(i),
-            _ => {
-                if is_rodata_family_name(name) {
-                    rodata_section_indices.push(i);
-                } else if let Some(target) = rela_rodata_target_name(name)
-                    && is_rodata_family_name(target)
+        if name == ".symtab" {
+            symtab_idx = Some(i);
+            continue;
+        }
+        match classify_section_family(name) {
+            SectionFamily::Text => text_section_indices.push(i),
+            SectionFamily::Data => data_section_indices.push(i),
+            SectionFamily::Bss => bss_section_indices.push(i),
+            SectionFamily::Other => {
+                if let Some(target) = name.strip_prefix(".rela")
+                    && !matches!(classify_section_family(target), SectionFamily::Other)
                 {
-                    rela_rodata_section_indices.push(i);
+                    rela_section_indices.push(i);
                 }
             }
         }
     }
-    let text_sh = text_idx
-        .map(|i| &shdrs[i])
-        .ok_or_else(|| err("ELF object has no `.text` section"))?;
     let symtab_sh_i = symtab_idx.ok_or_else(|| err("ELF object has no `.symtab` section"))?;
     let symtab_sh = &shdrs[symtab_sh_i];
 
-    let text_bytes = section_slice(bytes, text_sh)?.to_vec();
-    let mut data_bytes: Vec<u8> = match data_idx {
-        Some(i) => section_slice(bytes, &shdrs[i])?.to_vec(),
-        None => Vec::new(),
-    };
-    // Append every rodata-family section's bytes after `.data`
-    // and remember each one's base in the merged blob so the
-    // symbol decoder and `.rela.rodata*` decoder can rebase
-    // values / offsets against it.
-    let mut rodata_base_per_shndx: Vec<(usize, u64)> =
-        Vec::with_capacity(rodata_section_indices.len());
-    for &sh_i in &rodata_section_indices {
+    // Concatenate every section in a family in section-index
+    // order. `text_base_per_shndx[i] = base` means a symbol
+    // originally at `shndx = i` with `st_value = v` lands at
+    // `base + v` in the merged `.text` blob; same for data /
+    // bss. Empty merged sections are allowed -- a translation
+    // unit with no functions and no globals is rare but valid.
+    let mut text_bytes: Vec<u8> = Vec::new();
+    let mut text_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(text_section_indices.len());
+    for &sh_i in &text_section_indices {
         let sh = &shdrs[sh_i];
         if sh.sh_type == SHT_NOBITS {
             return Err(err(&format!(
-                "rodata-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+                "text-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
+            )));
+        }
+        let base = text_bytes.len() as u64;
+        text_base_per_shndx.push((sh_i, base));
+        text_bytes.extend_from_slice(section_slice(bytes, sh)?);
+    }
+    let mut data_bytes: Vec<u8> = Vec::new();
+    let mut data_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(data_section_indices.len());
+    for &sh_i in &data_section_indices {
+        let sh = &shdrs[sh_i];
+        if sh.sh_type == SHT_NOBITS {
+            return Err(err(&format!(
+                "data-family section at index {sh_i} has sh_type SHT_NOBITS (must hold file bytes)",
             )));
         }
         let base = data_bytes.len() as u64;
-        rodata_base_per_shndx.push((sh_i, base));
+        data_base_per_shndx.push((sh_i, base));
         data_bytes.extend_from_slice(section_slice(bytes, sh)?);
     }
-    let bss_size = match bss_idx {
-        Some(i) => {
-            if shdrs[i].sh_type != SHT_NOBITS {
-                return Err(err("`.bss` section is not SHT_NOBITS"));
-            }
-            shdrs[i].size
+    let mut bss_size: usize = 0;
+    let mut bss_base_per_shndx: Vec<(usize, u64)> = Vec::with_capacity(bss_section_indices.len());
+    for &sh_i in &bss_section_indices {
+        let sh = &shdrs[sh_i];
+        if sh.sh_type != SHT_NOBITS {
+            return Err(err(&format!(
+                "bss-family section at index {sh_i} is not SHT_NOBITS",
+            )));
         }
-        None => 0,
-    };
+        bss_base_per_shndx.push((sh_i, bss_size as u64));
+        bss_size += sh.size;
+    }
 
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
     let strtab_sh_i = symtab_sh.link as usize;
@@ -338,10 +345,9 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         let kind = st_info & 0xf;
         let (section, value_offset) = section_of_shndx(
             st_shndx,
-            text_idx,
-            data_idx,
-            bss_idx,
-            &rodata_base_per_shndx,
+            &text_base_per_shndx,
+            &data_base_per_shndx,
+            &bss_base_per_shndx,
         );
         symbols.push(NativeSymbol {
             name: if st_name == 0 {
@@ -357,103 +363,51 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         });
     }
 
-    // Decode `.rela.text`, if present. The writer always emits
-    // a `.rela.text` section (possibly empty); a missing
-    // section is an error rather than an empty reloc list.
+    // Decode every `.rela.<section>` SHT_RELA section. The
+    // section's `sh_info` field names the target section it
+    // patches; the parser routes each entry into `text_relocs`
+    // or `data_relocs` based on the target's family, rebasing
+    // the `r_offset` by the target section's position within
+    // the merged section's blob. ELF says `.rela.bss` is
+    // ill-formed (BSS bytes are zero-init and don't carry
+    // relocs), and a TU without `.rela.text` / `.rela.data` is
+    // valid (no relocs to decode).
     let mut text_relocs: Vec<NativeReloc> = Vec::new();
-    if let Some(i) = rela_text_idx {
-        let rela_sh = &shdrs[i];
-        if rela_sh.sh_type != SHT_RELA {
-            return Err(err(".rela.text section is not SHT_RELA"));
-        }
-        if rela_sh.entsize != ELF64_RELA_SIZE {
-            return Err(err(&format!(
-                ".rela.text entry size is {} bytes; expected {ELF64_RELA_SIZE}",
-                rela_sh.entsize,
-            )));
-        }
-        let rela_bytes = section_slice(bytes, rela_sh)?;
-        let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
-        for j in 0..n_relocs {
-            let off = j * ELF64_RELA_SIZE;
-            let r_offset = u64_at(rela_bytes, off);
-            let r_info = u64_at(rela_bytes, off + 8);
-            let r_addend = i64_at(rela_bytes, off + 16);
-            let sym_idx = (r_info >> 32) as usize;
-            let rtype = (r_info & 0xffff_ffff) as u32;
-            text_relocs.push(NativeReloc {
-                offset: r_offset,
-                sym_idx,
-                rtype,
-                addend: r_addend,
-            });
-        }
-    }
-
-    // Decode `.rela.data` the same way as `.rela.text`; the
-    // section is optional and absent when the TU has no
-    // pointer-to-global initializers.
     let mut data_relocs: Vec<NativeReloc> = Vec::new();
-    if let Some(i) = rela_data_idx {
-        let rela_sh = &shdrs[i];
-        if rela_sh.sh_type != SHT_RELA {
-            return Err(err(".rela.data section is not SHT_RELA"));
-        }
-        if rela_sh.entsize != ELF64_RELA_SIZE {
-            return Err(err(&format!(
-                ".rela.data entry size is {} bytes; expected {ELF64_RELA_SIZE}",
-                rela_sh.entsize,
-            )));
-        }
-        let rela_bytes = section_slice(bytes, rela_sh)?;
-        let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
-        for j in 0..n_relocs {
-            let off = j * ELF64_RELA_SIZE;
-            let r_offset = u64_at(rela_bytes, off);
-            let r_info = u64_at(rela_bytes, off + 8);
-            let r_addend = i64_at(rela_bytes, off + 16);
-            let sym_idx = (r_info >> 32) as usize;
-            let rtype = (r_info & 0xffff_ffff) as u32;
-            data_relocs.push(NativeReloc {
-                offset: r_offset,
-                sym_idx,
-                rtype,
-                addend: r_addend,
-            });
-        }
-    }
-    // `.rela.rodata*` and `.rela.data.rel.ro*` carry relocs
-    // whose `offset` field is relative to the *target* section
-    // start. The parser has prepended the target section's
-    // bytes into `data_bytes` at `rodata_base`, so the merged
-    // reloc offset is `rodata_base + r_offset`. The sym_idx /
-    // rtype / addend pass through unchanged.
-    for &rela_sh_i in &rela_rodata_section_indices {
+    for &rela_sh_i in &rela_section_indices {
         let rela_sh = &shdrs[rela_sh_i];
         if rela_sh.sh_type != SHT_RELA {
             return Err(err(&format!(
-                ".rela.rodata-family section at index {rela_sh_i} is not SHT_RELA",
+                ".rela.* section at index {rela_sh_i} is not SHT_RELA",
             )));
         }
         if rela_sh.entsize != ELF64_RELA_SIZE {
             return Err(err(&format!(
-                ".rela.rodata-family entry size is {} bytes; expected {ELF64_RELA_SIZE}",
+                ".rela.* entry size at index {rela_sh_i} is {} bytes; expected {ELF64_RELA_SIZE}",
                 rela_sh.entsize,
             )));
         }
         // `sh_info` of a SHT_RELA section names the target
-        // section it patches. Use it to look up the target's
-        // base in the merged data blob.
+        // section it patches. Look the target up in the per-
+        // family base maps to find its position within the
+        // merged section's blob.
         let target_shndx = rela_sh.info as usize;
-        let rodata_base = rodata_base_per_shndx
+        let (target_base, into_text) = if let Some(&(_, base)) = text_base_per_shndx
             .iter()
-            .find_map(|&(idx, base)| (idx == target_shndx).then_some(base))
-            .ok_or_else(|| {
-                err(&format!(
-                    ".rela.rodata-family section at index {rela_sh_i} targets section \
-                     {target_shndx} which is not in the recognized rodata family",
-                ))
-            })?;
+            .find(|&&(idx, _)| idx == target_shndx)
+        {
+            (base, true)
+        } else if let Some(&(_, base)) = data_base_per_shndx
+            .iter()
+            .find(|&&(idx, _)| idx == target_shndx)
+        {
+            (base, false)
+        } else {
+            return Err(err(&format!(
+                ".rela.* section at index {rela_sh_i} targets section {target_shndx} \
+                 which is neither a text-family nor a data-family section",
+            )));
+        };
         let rela_bytes = section_slice(bytes, rela_sh)?;
         let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
         for j in 0..n_relocs {
@@ -463,12 +417,17 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             let r_addend = i64_at(rela_bytes, off + 16);
             let sym_idx = (r_info >> 32) as usize;
             let rtype = (r_info & 0xffff_ffff) as u32;
-            data_relocs.push(NativeReloc {
-                offset: rodata_base + r_offset,
+            let entry = NativeReloc {
+                offset: target_base + r_offset,
                 sym_idx,
                 rtype,
                 addend: r_addend,
-            });
+            };
+            if into_text {
+                text_relocs.push(entry);
+            } else {
+                data_relocs.push(entry);
+            }
         }
     }
 
@@ -552,17 +511,17 @@ fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
 
 /// Returns the merged-image section kind for a section index
 /// plus the byte offset to add to the symbol's `st_value` so it
-/// lands at the right position inside the merged section. For
-/// `.text` / `.data` / `.bss` the offset is `0`; for rodata-
-/// family sections it is the section's base within the merged
-/// data blob (`.data` bytes come first, every rodata-family
-/// section concatenated after).
+/// lands at the right position inside the merged section. The
+/// base maps cover every section in the family (the unqualified
+/// `.text` / `.data` / `.bss` sit at base 0 by construction);
+/// any section not in the family maps surfaces as UNDEF so the
+/// linker treats it as a missing reference rather than silently
+/// miscategorising it.
 fn section_of_shndx(
     shndx: u16,
-    text_idx: Option<usize>,
-    data_idx: Option<usize>,
-    bss_idx: Option<usize>,
-    rodata_base_per_shndx: &[(usize, u64)],
+    text_base_per_shndx: &[(usize, u64)],
+    data_base_per_shndx: &[(usize, u64)],
+    bss_base_per_shndx: &[(usize, u64)],
 ) -> (NativeSymSection, u64) {
     if shndx == SHN_UNDEF {
         return (NativeSymSection::Undef, 0);
@@ -571,43 +530,47 @@ fn section_of_shndx(
         return (NativeSymSection::Abs, 0);
     }
     let i = shndx as usize;
-    if Some(i) == text_idx {
-        return (NativeSymSection::Text, 0);
+    if let Some(&(_, base)) = text_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
+        return (NativeSymSection::Text, base);
     }
-    if Some(i) == data_idx {
-        return (NativeSymSection::Data, 0);
-    }
-    if Some(i) == bss_idx {
-        return (NativeSymSection::Bss, 0);
-    }
-    if let Some(&(_, base)) = rodata_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
+    if let Some(&(_, base)) = data_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
         return (NativeSymSection::Data, base);
     }
-    // Unknown section -- fall back to UNDEF so the linker
-    // treats it as a missing external rather than silently
-    // miscategorising it.
+    if let Some(&(_, base)) = bss_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
+        return (NativeSymSection::Bss, base);
+    }
     (NativeSymSection::Undef, 0)
 }
 
-/// True for the section names that hold const-initialised data
-/// the parser folds into the merged `.data` blob: `.rodata`
-/// and `.rodata.<anything>` (clang's per-string subsections like
-/// `.rodata.str.1.1`, gcc's `.rodata.cst*` constant pools) plus
-/// `.data.rel.ro` and `.data.rel.ro.<anything>` (initialised-then-
-/// readonly dispatch tables holding pointers that need dynamic
-/// relocation).
-fn is_rodata_family_name(name: &str) -> bool {
-    name == ".rodata"
-        || name.starts_with(".rodata.")
-        || name == ".data.rel.ro"
-        || name.starts_with(".data.rel.ro.")
+/// Classification used to fold each section into the merged
+/// text / data / bss blob. `Text` covers `.text` and any
+/// `.text.<name>` clang/gcc `-ffunction-sections` emits;
+/// `Data` covers `.data` + per-variable `.data.<name>`
+/// (`-fdata-sections`), `.rodata*` (string literals + const
+/// globals), and `.data.rel.ro*` (initialised-then-readonly
+/// tables); `Bss` covers `.bss` + per-variable `.bss.<name>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SectionFamily {
+    Text,
+    Data,
+    Bss,
+    Other,
 }
 
-/// If `name` matches `.rela.<section>`, returns the target
-/// section name; otherwise `None`. Used to identify `.rela.*`
-/// sections whose target is in the rodata family.
-fn rela_rodata_target_name(name: &str) -> Option<&str> {
-    name.strip_prefix(".rela")
+fn classify_section_family(name: &str) -> SectionFamily {
+    if name == ".text" || name.starts_with(".text.") {
+        SectionFamily::Text
+    } else if name == ".data"
+        || name.starts_with(".data.")
+        || name == ".rodata"
+        || name.starts_with(".rodata.")
+    {
+        SectionFamily::Data
+    } else if name == ".bss" || name.starts_with(".bss.") {
+        SectionFamily::Bss
+    } else {
+        SectionFamily::Other
+    }
 }
 
 #[cfg(test)]
@@ -999,6 +962,416 @@ mod tests {
         assert_eq!(r.offset, 0);
         assert_eq!(r.sym_idx, 2);
         assert_eq!(r.addend, 0);
+    }
+
+    /// Clang/gcc `-ffunction-sections` shape: two `.text.<fn>`
+    /// sections, no unqualified `.text`. Each function symbol
+    /// (STT_FUNC) names its own section index; the parser
+    /// concatenates the section bytes in section-index order
+    /// and rebases each symbol's `st_value` by the section's
+    /// base in the merged text blob. A `.rela.text.<fn>` entry
+    /// at `r_offset = k` inside the second function lands at
+    /// merged offset `first_text_size + k`.
+    #[test]
+    fn function_sections_concat_and_rebase_relocs() {
+        let shstr_names: &[&str] = &[
+            "",
+            ".shstrtab",
+            ".strtab",
+            ".symtab",
+            ".text.helper",
+            ".text.main",
+            ".rela.text.main",
+        ];
+        let mut shstrtab: Vec<u8> = Vec::new();
+        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
+        for n in shstr_names {
+            shstr_off.push(shstrtab.len() as u32);
+            shstrtab.extend_from_slice(n.as_bytes());
+            shstrtab.push(0);
+        }
+        // Symbol names: "" / "helper" / "main" / "printf".
+        let mut strtab: Vec<u8> = vec![0];
+        let helper_name_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"helper\0");
+        let main_name_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"main\0");
+        let printf_name_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"printf\0");
+        // Symtab:
+        //   [0] null
+        //   [1] STT_FUNC helper at .text.helper (shndx=4), value=0, size=4
+        //   [2] STT_FUNC main   at .text.main   (shndx=5), value=0, size=8
+        //   [3] STB_GLOBAL UNDEF printf
+        let mut symtab: Vec<u8> = Vec::new();
+        let push_sym =
+            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
+                out.extend_from_slice(&name.to_le_bytes());
+                out.push(info);
+                out.push(0);
+                out.extend_from_slice(&shndx.to_le_bytes());
+                out.extend_from_slice(&value.to_le_bytes());
+                out.extend_from_slice(&size.to_le_bytes());
+            };
+        push_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_FUNC = (1 << 4) | 2 = 0x12.
+        push_sym(&mut symtab, helper_name_off, 0x12, 4, 0, 4);
+        push_sym(&mut symtab, main_name_off, 0x12, 5, 0, 8);
+        // STB_GLOBAL STT_NOTYPE UNDEF printf.
+        push_sym(&mut symtab, printf_name_off, 0x10, 0, 0, 0);
+        let text_helper: Vec<u8> = vec![0x11, 0x22, 0x33, 0x44];
+        let text_main: Vec<u8> = vec![0xaa; 8];
+        // One reloc in .rela.text.main: offset=2 (inside main),
+        // sym=3 (printf), type=R_X86_64_PLT32=4, addend=-4.
+        let mut rela_main: Vec<u8> = Vec::new();
+        rela_main.extend_from_slice(&2u64.to_le_bytes());
+        let r_info: u64 = (3u64 << 32) | 4u64;
+        rela_main.extend_from_slice(&r_info.to_le_bytes());
+        rela_main.extend_from_slice(&(-4i64).to_le_bytes());
+
+        const N_SECTIONS: usize = 7;
+        const HDR_SIZE: usize = 64;
+        const SHDR_SIZE: usize = 64;
+        let sec_bytes: Vec<&[u8]> = vec![
+            &[],
+            &shstrtab,
+            &strtab,
+            &symtab,
+            &text_helper,
+            &text_main,
+            &rela_main,
+        ];
+        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
+        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
+        for body in &sec_bytes {
+            sec_offs.push(cursor);
+            cursor += body.len();
+        }
+        let mut bytes = vec![0u8; cursor];
+        bytes[0..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = ELF_CLASS_64;
+        bytes[5] = ELF_DATA_LSB;
+        bytes[6] = 1;
+        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
+        bytes[18..20].copy_from_slice(&EM_X86_64.to_le_bytes());
+        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
+        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
+        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
+        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
+        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
+        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
+
+        let write_shdr = |bytes: &mut [u8],
+                          i: usize,
+                          name_off: u32,
+                          sh_type: u32,
+                          off: usize,
+                          size: usize,
+                          link: u32,
+                          info: u32,
+                          entsize: usize| {
+            let base = HDR_SIZE + i * SHDR_SIZE;
+            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
+            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
+            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
+            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
+            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
+            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
+            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
+        };
+        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+        write_shdr(
+            &mut bytes,
+            1,
+            shstr_off[1],
+            SHT_STRTAB,
+            sec_offs[1],
+            shstrtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            2,
+            shstr_off[2],
+            SHT_STRTAB,
+            sec_offs[2],
+            strtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            3,
+            shstr_off[3],
+            SHT_SYMTAB,
+            sec_offs[3],
+            symtab.len(),
+            2,
+            1,
+            ELF64_SYM_SIZE,
+        );
+        write_shdr(
+            &mut bytes,
+            4,
+            shstr_off[4],
+            SHT_PROGBITS,
+            sec_offs[4],
+            text_helper.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            5,
+            shstr_off[5],
+            SHT_PROGBITS,
+            sec_offs[5],
+            text_main.len(),
+            0,
+            0,
+            0,
+        );
+        // .rela.text.main: sh_link = symtab index (3); sh_info = target section (5 = .text.main).
+        write_shdr(
+            &mut bytes,
+            6,
+            shstr_off[6],
+            SHT_RELA,
+            sec_offs[6],
+            rela_main.len(),
+            3,
+            5,
+            ELF64_RELA_SIZE,
+        );
+        for (i, body) in sec_bytes.iter().enumerate() {
+            let off = sec_offs[i];
+            bytes[off..off + body.len()].copy_from_slice(body);
+        }
+
+        let obj = parse_native_elf(&bytes).expect("parse multi-text fixture");
+        assert_eq!(
+            obj.text.len(),
+            4 + 8,
+            "merged text should hold .text.helper || .text.main"
+        );
+        // Symbol [1] = helper. Should land at value=0 in merged text.
+        assert!(matches!(obj.symbols[1].section, NativeSymSection::Text));
+        assert_eq!(obj.symbols[1].name, "helper");
+        assert_eq!(obj.symbols[1].value, 0);
+        // Symbol [2] = main. Should land at value=4 (= helper section's size).
+        assert!(matches!(obj.symbols[2].section, NativeSymSection::Text));
+        assert_eq!(obj.symbols[2].name, "main");
+        assert_eq!(obj.symbols[2].value, 4);
+        // The one reloc lands in text_relocs with offset = 4 (main base) + 2 (original) = 6.
+        assert_eq!(obj.text_relocs.len(), 1);
+        let r = obj.text_relocs[0];
+        assert_eq!(r.offset, 6);
+        assert_eq!(r.sym_idx, 3);
+        assert_eq!(r.addend, -4);
+    }
+
+    /// Clang/gcc `-fdata-sections` shape: per-variable `.data.<var>`
+    /// + `.bss.<var>` subsections, no unqualified `.data` / `.bss`.
+    /// Each subsection's STT_OBJECT symbol points at its own
+    /// section index; the parser concatenates the bytes (or
+    /// sums bss sizes) in section-index order and rebases each
+    /// symbol's `st_value` accordingly.
+    #[test]
+    fn data_sections_and_bss_sections_concat() {
+        let shstr_names: &[&str] = &[
+            "",
+            ".shstrtab",
+            ".strtab",
+            ".symtab",
+            ".text",
+            ".data.first",
+            ".data.second",
+            ".bss.zero",
+        ];
+        let mut shstrtab: Vec<u8> = Vec::new();
+        let mut shstr_off: Vec<u32> = Vec::with_capacity(shstr_names.len());
+        for n in shstr_names {
+            shstr_off.push(shstrtab.len() as u32);
+            shstrtab.extend_from_slice(n.as_bytes());
+            shstrtab.push(0);
+        }
+        let mut strtab: Vec<u8> = vec![0];
+        let first_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"first\0");
+        let second_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"second\0");
+        let zero_off = strtab.len() as u32;
+        strtab.extend_from_slice(b"zero\0");
+        let mut symtab: Vec<u8> = Vec::new();
+        let push_sym =
+            |out: &mut Vec<u8>, name: u32, info: u8, shndx: u16, value: u64, size: u64| {
+                out.extend_from_slice(&name.to_le_bytes());
+                out.push(info);
+                out.push(0);
+                out.extend_from_slice(&shndx.to_le_bytes());
+                out.extend_from_slice(&value.to_le_bytes());
+                out.extend_from_slice(&size.to_le_bytes());
+            };
+        push_sym(&mut symtab, 0, 0, 0, 0, 0);
+        // st_info = (STB_GLOBAL << 4) | STT_OBJECT = (1 << 4) | 1 = 0x11.
+        push_sym(&mut symtab, first_off, 0x11, 5, 0, 4);
+        push_sym(&mut symtab, second_off, 0x11, 6, 0, 4);
+        push_sym(&mut symtab, zero_off, 0x11, 7, 0, 8);
+        let text: Vec<u8> = Vec::new();
+        let data_first: Vec<u8> = vec![0xaa; 4];
+        let data_second: Vec<u8> = vec![0xbb; 4];
+
+        const N_SECTIONS: usize = 8;
+        const HDR_SIZE: usize = 64;
+        const SHDR_SIZE: usize = 64;
+        let sec_bytes: Vec<&[u8]> = vec![
+            &[],
+            &shstrtab,
+            &strtab,
+            &symtab,
+            &text,
+            &data_first,
+            &data_second,
+            &[],
+        ];
+        let mut sec_offs: Vec<usize> = Vec::with_capacity(N_SECTIONS);
+        let mut cursor = HDR_SIZE + N_SECTIONS * SHDR_SIZE;
+        for body in &sec_bytes {
+            sec_offs.push(cursor);
+            cursor += body.len();
+        }
+        let mut bytes = vec![0u8; cursor];
+        bytes[0..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = ELF_CLASS_64;
+        bytes[5] = ELF_DATA_LSB;
+        bytes[6] = 1;
+        bytes[16..18].copy_from_slice(&ET_REL.to_le_bytes());
+        bytes[18..20].copy_from_slice(&EM_AARCH64.to_le_bytes());
+        bytes[20..24].copy_from_slice(&1u32.to_le_bytes());
+        bytes[40..48].copy_from_slice(&(HDR_SIZE as u64).to_le_bytes());
+        bytes[52..54].copy_from_slice(&(HDR_SIZE as u16).to_le_bytes());
+        bytes[58..60].copy_from_slice(&(SHDR_SIZE as u16).to_le_bytes());
+        bytes[60..62].copy_from_slice(&(N_SECTIONS as u16).to_le_bytes());
+        bytes[62..64].copy_from_slice(&1u16.to_le_bytes());
+        let write_shdr = |bytes: &mut [u8],
+                          i: usize,
+                          name_off: u32,
+                          sh_type: u32,
+                          off: usize,
+                          size: usize,
+                          link: u32,
+                          info: u32,
+                          entsize: usize| {
+            let base = HDR_SIZE + i * SHDR_SIZE;
+            bytes[base..base + 4].copy_from_slice(&name_off.to_le_bytes());
+            bytes[base + 4..base + 8].copy_from_slice(&sh_type.to_le_bytes());
+            bytes[base + 24..base + 32].copy_from_slice(&(off as u64).to_le_bytes());
+            bytes[base + 32..base + 40].copy_from_slice(&(size as u64).to_le_bytes());
+            bytes[base + 40..base + 44].copy_from_slice(&link.to_le_bytes());
+            bytes[base + 44..base + 48].copy_from_slice(&info.to_le_bytes());
+            bytes[base + 56..base + 64].copy_from_slice(&(entsize as u64).to_le_bytes());
+        };
+        write_shdr(&mut bytes, 0, 0, 0, 0, 0, 0, 0, 0);
+        write_shdr(
+            &mut bytes,
+            1,
+            shstr_off[1],
+            SHT_STRTAB,
+            sec_offs[1],
+            shstrtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            2,
+            shstr_off[2],
+            SHT_STRTAB,
+            sec_offs[2],
+            strtab.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            3,
+            shstr_off[3],
+            SHT_SYMTAB,
+            sec_offs[3],
+            symtab.len(),
+            2,
+            1,
+            ELF64_SYM_SIZE,
+        );
+        write_shdr(
+            &mut bytes,
+            4,
+            shstr_off[4],
+            SHT_PROGBITS,
+            sec_offs[4],
+            text.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            5,
+            shstr_off[5],
+            SHT_PROGBITS,
+            sec_offs[5],
+            data_first.len(),
+            0,
+            0,
+            0,
+        );
+        write_shdr(
+            &mut bytes,
+            6,
+            shstr_off[6],
+            SHT_PROGBITS,
+            sec_offs[6],
+            data_second.len(),
+            0,
+            0,
+            0,
+        );
+        // .bss.zero: SHT_NOBITS, size = 8.
+        write_shdr(
+            &mut bytes,
+            7,
+            shstr_off[7],
+            SHT_NOBITS,
+            sec_offs[7],
+            8,
+            0,
+            0,
+            0,
+        );
+        for (i, body) in sec_bytes.iter().enumerate() {
+            let off = sec_offs[i];
+            bytes[off..off + body.len()].copy_from_slice(body);
+        }
+
+        let obj = parse_native_elf(&bytes).expect("parse multi-data fixture");
+        assert_eq!(obj.text.len(), 0, "empty .text section");
+        assert_eq!(obj.data.len(), 8, ".data.first || .data.second");
+        assert_eq!(obj.bss_size, 8, ".bss.zero size");
+        // Symbol [1] = first, Data, value=0.
+        assert!(matches!(obj.symbols[1].section, NativeSymSection::Data));
+        assert_eq!(obj.symbols[1].value, 0);
+        // Symbol [2] = second, Data, value=4 (after .data.first).
+        assert!(matches!(obj.symbols[2].section, NativeSymSection::Data));
+        assert_eq!(obj.symbols[2].value, 4);
+        // Symbol [3] = zero, Bss, value=0 (first bss section).
+        assert!(matches!(obj.symbols[3].section, NativeSymSection::Bss));
+        assert_eq!(obj.symbols[3].value, 0);
     }
 
     /// Same shape as `rodata_section_lands_in_merged_data_blob`

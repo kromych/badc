@@ -144,6 +144,7 @@ impl Compiler {
             let expr_ty = self.ty;
             // Drop the operand's emitted code.
             self.text.truncate(saved_text_len);
+            self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;

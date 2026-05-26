@@ -92,6 +92,7 @@ impl Compiler {
             _ => {}
         }
         self.text.push(op as i64);
+        self.push_recent_emit(op as i64);
         // Refresh the `source_files` table so the DWARF emitter
         // sees every file the lexer crossed; the function-name
         // column tied to bytecode PCs retired with
@@ -111,7 +112,30 @@ impl Compiler {
 
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
+        self.push_recent_emit(val);
         let _ = self.intern_source_file();
+    }
+
+    /// Append to the 3-deep ring buffer of recently-emitted
+    /// `text` words. The trailing-op detectors
+    /// (`last_emit_is_zero`, `last_emit_was_indirect_call`) read
+    /// from this buffer instead of indexing `self.text` directly,
+    /// which decouples the parser-internal peephole from the
+    /// underlying tape.
+    pub(super) fn push_recent_emit(&mut self, val: i64) {
+        self.recent_emits[0] = self.recent_emits[1];
+        self.recent_emits[1] = self.recent_emits[2];
+        self.recent_emits[2] = val;
+        self.recent_emits_len = (self.recent_emits_len + 1).min(3);
+    }
+
+    /// Clear the recent-emit buffer. Used by sizeof's truncate
+    /// path and any other rollback site that has just popped
+    /// multiple words off `self.text` -- the next emit reseeds
+    /// the buffer from scratch.
+    pub(super) fn clear_recent_emits(&mut self) {
+        self.recent_emits = [0; 3];
+        self.recent_emits_len = 0;
     }
 
     /// Look up the lexer's current `(file)` in `source_files`,
@@ -210,8 +234,10 @@ impl Compiler {
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
     /// idiom warning on `pointer = 0`.
     pub(super) fn last_emit_is_zero(&self) -> bool {
-        let n = self.text.len();
-        n >= 2 && self.text[n - 1] == 0 && self.text[n - 2] == Op::Imm as i64
+        // Pattern: `Op::Imm, 0` as the two most recent words.
+        self.recent_emits_len >= 2
+            && self.recent_emits[2] == 0
+            && self.recent_emits[1] == Op::Imm as i64
     }
 
     /// True if the most recent emitted op is `Op::Jsri` -- an indirect
@@ -224,12 +250,14 @@ impl Compiler {
     /// `Op::Adj N` (cleanup of pushed args) since that's the standard
     /// Jsri tail.
     pub(super) fn last_emit_was_indirect_call(&self) -> bool {
-        let n = self.text.len();
-        if n >= 1 && self.text[n - 1] == Op::Jsri as i64 {
+        // Trailing `Op::Jsri` (no Adj follows), or the
+        // 3-word `Op::Jsri, Op::Adj, N` cleanup tail.
+        if self.recent_emits_len >= 1 && self.recent_emits[2] == Op::Jsri as i64 {
             return true;
         }
-        // Jsri + Adj N: 3 trailing words.
-        n >= 3 && self.text[n - 2] == Op::Adj as i64 && self.text[n - 3] == Op::Jsri as i64
+        self.recent_emits_len >= 3
+            && self.recent_emits[1] == Op::Adj as i64
+            && self.recent_emits[0] == Op::Jsri as i64
     }
 
     /// If the most recently emitted op is a scalar load (`Op::Lc`
@@ -305,6 +333,12 @@ impl Compiler {
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
+            // Pop-mirror in the recent-emit buffer. After the
+            // load drops we don't know the previous word offhand;
+            // the next emit reseeds the buffer correctly because
+            // every caller of `pop_trailing_scalar_load` follows
+            // up with at least one emit before any peek runs.
+            self.clear_recent_emits();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the
             // tentative `was_read` the identifier-rvalue path

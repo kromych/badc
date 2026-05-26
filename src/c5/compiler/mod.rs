@@ -753,6 +753,18 @@ pub struct Compiler {
     /// `target_bc_pc` to the originating symbol's now-resolved
     /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
+
+    /// Ring buffer of the 3 most-recently-emitted `text` words
+    /// (op and operand slots in `emit_op` / `emit_val` order).
+    /// Replaces direct `self.text[n - 1]` peeks in the trailing-
+    /// op detectors so the parser-internal peephole doesn't
+    /// depend on the bytecode tape's storage layout.
+    recent_emits: [i64; 3],
+    /// Count of valid entries in `recent_emits` (saturates at 3).
+    /// Lets the detectors reject false positives on a fresh
+    /// function whose first three emits don't yet match the
+    /// pattern they're looking for.
+    recent_emits_len: u8,
     /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
     /// emitted as a `Token::Glo` address-of -- the data
     /// reference shape that becomes a cross-TU reference when
@@ -989,6 +1001,8 @@ impl Compiler {
             variables: Vec::new(),
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
+            recent_emits: [0; 3],
+            recent_emits_len: 0,
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),

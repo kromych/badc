@@ -597,46 +597,40 @@ impl Compiler {
                     }
                     self.next()?;
                     if self.symbols[id_idx].class == Token::Sys as i64 {
-                        // External library call. The symbol's `val` is
-                        // the binding's flat index across all
-                        // `#pragma binding(...)` directives the
-                        // preprocessor parsed; the codegen / VM use it
-                        // as the GOT slot lookup key (native) or the
-                        // dispatch-table key (VM). `call_fp_arg_masks`
-                        // used to record per-arg FP-ness here for the
-                        // bytecode-tier lift's SSA emit; the walker
-                        // now derives the same mask from `Expr::Call`
-                        // arg types directly (see `walk_expr_rvalue`).
-                        self.emit_cf_op(Op::JsrExt);
-                        self.emit_val(self.symbols[id_idx].val);
+                        // External library call. The walker emits
+                        // Inst::CallExt keyed on the binding's flat
+                        // index (taken from Symbol::val); the
+                        // codegen lowers it to the per-target GOT /
+                        // import-table reference.
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = false;
+                        self.ast_acc = None;
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                        // Direct call to a c5 user function. The
+                        // walker resolves Inst::Call::target_pc
+                        // through live_fun_val and the linker's
+                        // extern_call_refs channel.
                         self.symbols[id_idx].was_referenced = true;
-                        self.emit_cf_op(Op::Jsr);
-                        // Operand placeholder for the bytecode tape;
-                        // the walker resolves the matching
-                        // `Inst::Call::target_pc` through
-                        // `live_fun_val` and the linker's
-                        // `extern_call_refs` channel, so the
-                        // bytecode operand is no longer consulted.
-                        self.emit_val(self.symbols[id_idx].val);
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = false;
+                        self.ast_acc = None;
                     } else if self.symbols[id_idx].class == Token::Loc as i64
                         || self.symbols[id_idx].class == Token::Glo as i64
                     {
+                        // Indirect call through a function pointer:
+                        // a Loc / Glo whose value is the target's
+                        // ent_pc. Mark the symbol as read for the
+                        // dead-store diagnostic; the walker emits
+                        // Inst::CallIndirect from the AST.
                         if self.symbols[id_idx].class == Token::Loc as i64 {
-                            // Indirect call through a local function
-                            // pointer: the upcoming Li loads the
-                            // function address into the accumulator,
-                            // Jsri then consumes it. The load is a
-                            // real read of the local's value.
                             self.symbols[id_idx].was_referenced = true;
                             self.symbols[id_idx].was_read = true;
-                            self.emit_lea(self.symbols[id_idx].val);
                         } else {
-                            self.emit_data_imm(self.symbols[id_idx].val);
                             self.glo_imm_refs.push(id_idx);
                         }
-                        self.emit_op(Op::Li);
-                        self.emit_cf_op(Op::Jsri);
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = true;
+                        self.ast_acc = None;
                     } else {
                         let name = self.symbols[id_idx].name.clone();
                         let suggestion = match super::super::headers::header_declaring(&name) {
@@ -646,15 +640,6 @@ impl Compiler {
                         return Err(
                             self.compile_err(format!("unknown function `{name}`{suggestion}"))
                         );
-                    }
-                    let total_pushed = if callee_returns_struct {
-                        nargs + 1
-                    } else {
-                        nargs
-                    };
-                    if total_pushed > 0 {
-                        self.emit_op(Op::Adj);
-                        self.emit_val(total_pushed);
                     }
                     // Drop the AST parser-side vstack pushes that
                     // the call's emit sequence leaked (right-to-
@@ -1600,38 +1585,26 @@ impl Compiler {
                 // (left-to-right eval), then we push them
                 // right-to-left so the first arg ends up on top of
                 // the c5 stack.
-                let mut temp_offsets: Vec<i64> = Vec::new();
-                let mut nargs: i64 = 0;
                 while self.lex.tk != ')' {
                     self.loc_offs += 1;
                     if self.loc_offs > self.max_loc_offs {
                         self.max_loc_offs = self.loc_offs;
                     }
                     let temp_off = -self.loc_offs;
-                    temp_offsets.push(temp_off);
                     self.emit_lea(temp_off);
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
                     indirect_arg_ids.push(self.ast_acc);
                     self.emit_op(Op::Si);
-                    nargs += 1;
                     if self.lex.tk == ',' {
                         self.next()?;
                     }
                 }
                 self.next()?; // consume `)`
-                for &temp_off in temp_offsets.iter().rev() {
-                    self.emit_lea(temp_off);
-                    self.emit_op(Op::Li);
-                    self.emit_op(Op::Psh);
-                }
-                self.emit_lea(fp_temp);
-                self.emit_op(Op::Li);
-                self.emit_cf_op(Op::Jsri);
-                if nargs > 0 {
-                    self.emit_op(Op::Adj);
-                    self.emit_val(nargs);
-                }
+                self.flush_pending_stores();
+                self.pending.last_emit_was_indirect_call = true;
+                self.ast_acc = None;
+                let _ = fp_temp;
                 // The dialect can't declare the return type of a
                 // function pointer, so default to `int`. The actual
                 // register value carries the full 8-byte return

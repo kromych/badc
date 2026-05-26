@@ -653,8 +653,7 @@ impl Compiler {
             let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
 
-            self.emit_cf_op(Op::Jmp);
-            self.emit_val(0);
+            self.flush_pending_stores();
 
             if !self.labels.iter().any(|n| n == &target_name) {
                 self.unresolved_gotos.push(target_name.clone());
@@ -668,8 +667,7 @@ impl Compiler {
             if self.loop_break_depth == 0 {
                 return Err(self.compile_err("break outside of loop or switch"));
             }
-            self.emit_cf_op(Op::Jmp);
-            self.emit_val(0);
+            self.flush_pending_stores();
             self.consume(b';', "semicolon expected after break")?;
             self.ast_emit_break();
         } else if self.lex.tk == Token::Continue {
@@ -677,8 +675,7 @@ impl Compiler {
             if self.loop_continue_depth == 0 {
                 return Err(self.compile_err("continue outside of loop"));
             }
-            self.emit_cf_op(Op::Jmp);
-            self.emit_val(0);
+            self.flush_pending_stores();
             self.consume(b';', "semicolon expected after continue")?;
             self.ast_emit_continue();
         } else if self.lex.tk == Token::Return {

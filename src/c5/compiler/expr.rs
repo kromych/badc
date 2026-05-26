@@ -1956,8 +1956,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Cond {
                 let cond_ast = self.ast_acc;
                 self.next()?;
-                self.emit_cf_op(Op::Bz);
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Assign as i64)?;
                 // Comma operator in the middle of a ternary:
                 // `cond ? (side_effect, value) : alt`. C99 6.5.15
@@ -1997,8 +1996,7 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
                 }
-                self.emit_cf_op(Op::Jmp);
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Cond as i64)?;
                 let else_ast = self.ast_acc;
                 // Dual-emit Expr::Ternary. The branch fixups above
@@ -2022,8 +2020,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Lor {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_cf_op(Op::Bnz);
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Lan as i64)?;
                 let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;
@@ -2038,8 +2035,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Lan {
                 let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_cf_op(Op::Bz);
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::OrOp as i64)?;
                 let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;

@@ -1136,12 +1136,11 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
-    /// Retired knob. The bytecode-tape optimizer was deleted
-    /// along with `lift_program`; the walker is the canonical
-    /// SSA producer and reads AST snapshots directly. The flag
-    /// is left on the public API for source compatibility but
-    /// the codegen path ignores it. Future walker-side
-    /// optimization passes may rebind it.
+    /// Reserved for a future walker-side optimisation pass.
+    /// Currently a no-op: the SSA walker and per-arch lowering
+    /// run the same code path regardless of this flag. Left on
+    /// the public API so callers can opt in once the pass
+    /// lands without a signature break.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal

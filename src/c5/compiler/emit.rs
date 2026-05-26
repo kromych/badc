@@ -1,14 +1,13 @@
 //! Low-level emit primitives plus the small "rewrite the trailing
 //! op" helpers and the per-symbol shadow / restore pair.
 //!
-//! `emit_op` and `emit_val` no longer push to a bytecode tape;
-//! they push the op identifier (or operand value) into the
-//! 3-deep `recent_emits` ring so the trailing-op peek detectors
-//! (`last_emit_is_zero`, `pop_trailing_scalar_load`,
-//! `rewrite_trailing_load_as_psh`) stay accurate. The fn-pointer
-//! chain tracker (`fn_ptr_chain_depth`) is invalidated by every
-//! `emit_op`; identifier-loads and unary `*` re-seed it inside
-//! `expr()`.
+//! `emit_op` and `emit_val` are tag-only helpers. They push the
+//! op identifier (or operand value) into the 3-deep `recent_emits`
+//! ring so the trailing-op peek detectors (`last_emit_is_zero`,
+//! `pop_trailing_scalar_load`, `rewrite_trailing_load_as_psh`)
+//! stay accurate. The fn-pointer chain tracker
+//! (`fn_ptr_chain_depth`) is invalidated by every `emit_op`;
+//! identifier-loads and unary `*` re-seed it inside `expr()`.
 //!
 //! The trailing-load rewriters implement the assignment / `&expr`
 //! protocols by reading the last entry of `recent_emits` and

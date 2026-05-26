@@ -196,9 +196,9 @@ pub(crate) enum StoreKind {
     F32,
 }
 
-/// Integer / FP binary opcode. Mirrors the c5 bytecode binop set;
-/// the planner's choice between signed / unsigned forms is
-/// preserved (Div vs Divu, Shr vs Shru).
+/// Integer / FP binary opcode. Variant names match the
+/// `super::op::Op` set; the planner's choice between signed /
+/// unsigned forms is preserved (Div vs Divu, Shr vs Shru).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BinOp {
     Or,

@@ -123,7 +123,6 @@ impl Compiler {
         // makes the condition a full `expression`, so a comma chain
         // is legal here too -- the value of the last subexpression
         // becomes the loop predicate.
-        let cond_pc = self.text.len();
         let cond_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ';' {
             self.parse_full_expr()?;
             self.ast_acc
@@ -140,14 +139,13 @@ impl Compiler {
         self.consume(b';', "semicolon expected after for-cond")?;
 
         // Step (optional). Comma operator: `i++, k--`.
-        let step_pc = self.text.len();
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
             self.parse_full_expr()?;
             self.ast_acc
         } else {
             None
         };
-        self.emit_jmp(cond_pc as i64);
+        self.emit_jmp(0);
 
         self.consume(b')', "close paren expected")?;
 
@@ -157,7 +155,7 @@ impl Compiler {
         let body_s = self.ast_wrap_stmts_since(body_before);
 
         self.close_loop_continues();
-        self.emit_jmp(step_pc as i64);
+        self.emit_jmp(0);
 
         self.close_loop_breaks();
 
@@ -601,7 +599,6 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::While {
             self.next()?;
-            let cond_pc = self.text.len();
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
             let cond_id = self.ast_acc;
@@ -615,7 +612,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.close_loop_continues();
 
-            self.emit_jmp(cond_pc as i64);
+            self.emit_jmp(0);
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
@@ -623,7 +620,6 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::Do {
             self.next()?;
-            let start_pc = self.text.len();
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
@@ -644,7 +640,7 @@ impl Compiler {
             self.consume(b')', "close paren expected")?;
 
             self.emit_cf_op(Op::Bnz);
-            self.emit_val(start_pc as i64);
+            self.emit_val(0);
 
             self.consume(b';', "semicolon expected after do-while")?;
 

@@ -634,19 +634,29 @@ fn main() {
     // image with the wrong container.
     let native_link_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
     // Native ELF `.o` inputs only flow through the link path on
-    // Linux targets right now; on macOS / Windows the LinkUnit
-    // merger doesn't read native objects, so silently dropping
-    // them would leave the linker with no user code and surface
-    // as a confusing `main() not defined`. Refuse up front with
-    // a clear message instead.
+    // Linux targets right now. The LinkUnit merger reads
+    // FunctionSsa, not native object code, so it cannot consume
+    // these inputs; the Mach-O / PE writers that would consume
+    // `MergedNative` are pending (TODO). Silently dropping the
+    // objects would leave the link with no user code and
+    // surface as a confusing `main() not defined`. Refuse up
+    // front with a message that names the gap + suggests the
+    // working cross-compile path.
     if mode == Mode::NativeExecutable
         && !compile_only
         && !native_link_target
         && !objects.is_empty()
     {
+        let suggested = match target {
+            Target::MacOSAarch64 | Target::WindowsAarch64 => "--target=linux-aarch64",
+            Target::WindowsX64 => "--target=linux-x64",
+            _ => "--target=linux-aarch64",
+        };
         eprint_diagnostic(format!(
             "badc: error: native ELF `.o` link inputs are only supported on \
-             Linux targets right now; got target `{target:?}` with object(s) {:?}",
+             Linux targets right now; got target `{target:?}` with object(s) {:?}.\n\
+             Re-run both the `-c` compile and the link with `{suggested}` \
+             to cross-compile a Linux ELF executable.",
             objects
         ));
         std::process::exit(1);

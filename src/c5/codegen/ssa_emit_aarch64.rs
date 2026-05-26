@@ -3007,10 +3007,9 @@ fn emit_return(
     // through the int return register, matching the pool path's
     // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
     // `fmov x, d`; int values flow through the standard
-    // materialise + mov. NO_VALUE is the bytecode emitter's
-    // trailing synthetic Lev with no live accumulator -- harmless
-    // because c5 calls never read the result of a void-returning
-    // function.
+    // materialise + mov. NO_VALUE marks an implicit return with
+    // no live accumulator -- harmless because c5 calls never
+    // read the result of a void-returning function.
     if value != super::super::ir::NO_VALUE {
         let place = alloc
             .places

@@ -24,8 +24,8 @@
 //! Each line names the SSA value, its `Inst` shape, and the
 //! `Place` the allocator picked. The lowering uses the same
 //! value ids in its emitted code, so a single `eprintln!` of the
-//! offending `v<id>` is enough to walk back to the bytecode op
-//! that produced it.
+//! offending `v<id>` is enough to walk back to the producing
+//! `Inst`.
 
 #![cfg(feature = "std")]
 #![allow(dead_code)]

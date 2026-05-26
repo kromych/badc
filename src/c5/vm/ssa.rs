@@ -74,8 +74,8 @@ struct Memory {
     next_alloc_id: u64,
     /// When true, every heap-side load / store / bulk-copy goes
     /// through `check_data_access`. Off by default; opt in via
-    /// `run_program_with_args_tracked` (or `Vm::with_pointer_tracking`
-    /// at the bytecode-compat boundary).
+    /// `run_program_with_args_tracked` (or the
+    /// `Vm::with_pointer_tracking` constructor).
     track_pointers: bool,
 }
 
@@ -112,9 +112,8 @@ impl AccessKind {
 impl Memory {
     fn new(data: &[u8]) -> Self {
         // Reserve a fixed 256 KiB stack region + 256 KiB heap.
-        // C99 doesn't pin either limit; matches the bytecode
-        // VM's `STACK_CAPACITY` order of magnitude and is plenty
-        // for every cargo fixture today.
+        // C99 doesn't pin either limit; this sizing fits every
+        // cargo fixture today.
         const STACK_BYTES: usize = 256 * 1024;
         const HEAP_BYTES: usize = 256 * 1024;
         let data_end = data.len();
@@ -481,8 +480,9 @@ pub(super) fn run_program_with_args<H: Host>(
 }
 
 /// Same as [`run_program_with_args`] with an explicit
-/// `track_pointers` flag. The bytecode-compat boundary uses this
-/// to forward `Vm::with_pointer_tracking` into the SSA-VM.
+/// `track_pointers` flag. `super::Vm::with_pointer_tracking`
+/// forwards through here so opted-in tests get the watchful
+/// load / store / Mcpy checks.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_program_with_args_tracked<H: Host>(
     funcs: &[FunctionSsa],
@@ -821,11 +821,11 @@ fn run_inst<H: Host>(
         Inst::CallIndirect { target, args } => {
             let raw = frame.regs[*target as usize];
             // Code pointers may be tagged two ways: SSA-VM bit 62
-            // (set by `Inst::ImmCode`) or the bytecode VM's
-            // `CODE_BASE`-biased pointer (set by `with_host` when
-            // it patches the data segment's `CodeReloc` entries
-            // so existing fixtures can carry function pointers as
-            // initialised globals without an SSA-aware fix-up).
+            // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
+            // form `with_host` writes when it patches the data
+            // segment's `CodeReloc` entries so static initialisers
+            // can carry function pointers without an SSA-aware
+            // fix-up.
             let target_pc = if raw & CODE_ADDR_MASK != 0 {
                 (raw & !CODE_ADDR_MASK) as usize
             } else if (raw as usize) >= super::super::CODE_BASE {
@@ -866,8 +866,7 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::AllocaInit(_) => {
-            // No-op for v0 == AllocaInit(0); the alloca arena
-            // lives in the bytecode VM's stack. SSA-VM doesn't
+            // No-op for v0 == AllocaInit(0); the SSA-VM does not
             // expose alloca yet -- callers requesting a real
             // arena get the "not implemented" path below.
             return Ok(());
@@ -876,12 +875,11 @@ fn run_inst<H: Host>(
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }
 
-/// Dispatch a libc binding by name. Each arm matches an entry
-/// in the bytecode VM's `Op::JsrExt` table (`vm/intrinsics.rs`);
-/// implementations land here as they're ported off the
-/// `Vm<H>` host-bridge into the byte-addressed `Memory` model.
-/// Unimplemented bindings return a runtime error so the caller
-/// sees which shim needs writing next.
+/// Dispatch a libc binding by name. Implementations land here
+/// as they're ported off the `Vm<H>` host-bridge into the
+/// byte-addressed `Memory` model. Unimplemented bindings
+/// return a runtime error so the caller sees which shim needs
+/// writing next.
 fn dispatch_callext<H: Host>(
     name: &str,
     args: &[i64],
@@ -1314,9 +1312,8 @@ fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
 ///   the captured cursor as the variadic value.
 /// * `VaEnd(&ap)` -- no-op on every supported host.
 /// * `VaCopy(&dst, &src)` -- `*dst = *src`.
-/// * AArch64 setjmp / longjmp intrinsics return "not implemented"
-///   because the bytecode VM also rejects them; they only land
-///   in JIT / AOT output.
+/// * AArch64 setjmp / longjmp intrinsics return "not implemented";
+///   they only land in JIT / AOT output.
 fn run_intrinsic(
     mem: &mut Memory,
     frame: &mut Frame<'_>,
@@ -1354,8 +1351,7 @@ fn run_intrinsic(
             // value (the address of the next variadic slot) and
             // advances `*ap` by 8 -- the c5 stack-slot width. The
             // caller emits the matching `Inst::Load` to materialise
-            // the value; mirrors the bytecode VM exactly so the
-            // walker keeps a single shape.
+            // the value.
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;

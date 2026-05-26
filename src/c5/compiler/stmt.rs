@@ -218,24 +218,12 @@ impl Compiler {
         self.emit_cf_op(Op::Jmp);
         self.emit_val(0);
 
-        // Dispatcher block. `switch_cases` / `switch_defaults`
-        // were primed by the matching pushes above.
-        let cases = self.switch_cases.pop().unwrap_or_default();
+        // Drop the case / default scope vectors primed at switch
+        // entry; the walker reads the case set off the AST node
+        // built below, so the parser doesn't need to consult the
+        // collected values.
+        self.switch_cases.pop();
         self.switch_defaults.pop();
-
-        // Dispatcher: one Eq + Bnz emit per case for tape /
-        // recent-emit accounting. The Bnz operand is the case
-        // body's PC -- dead state, so emit 0. The walker reads
-        // the case set off the AST node, not these emits.
-        for val in cases {
-            self.emit_lea(switch_val_offset);
-            self.emit_op(Op::Li);
-            self.emit_binop_with_imm(Op::Eq, val);
-            self.emit_cf_op(Op::Bnz);
-            self.emit_val(0);
-        }
-
-        self.emit_jmp(0);
 
         self.close_loop_breaks();
         if let Some(disc) = disc_ast {

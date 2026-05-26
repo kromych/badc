@@ -47,10 +47,10 @@ use crate::c5::preprocessor::DylibSpec;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::archive::{ArchiveMember, read_archive};
-use super::bytecode_object::read_object;
-use super::bytecode_reloc::{Reloc, RelocKind};
-use super::bytecode_symbol::SymbolKind;
-use super::bytecode_unit::LinkUnit;
+use super::unit_object::read_object;
+use super::unit_reloc::{Reloc, RelocKind};
+use super::unit_symbol::SymbolKind;
+use super::unit::LinkUnit;
 
 /// Tunable knobs for [`link_units`]. Today this just toggles
 /// the diagnostic shape; future per-link options (output kind

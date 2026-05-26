@@ -34,9 +34,9 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::bytecode_reloc::{Reloc, RelocKind};
-use super::bytecode_symbol::{LinkSymbol, SymbolKind};
-use super::bytecode_unit::LinkUnit;
+use super::unit_reloc::{Reloc, RelocKind};
+use super::unit_symbol::{LinkSymbol, SymbolKind};
+use super::unit::LinkUnit;
 
 /// On-disk magic + version inside `.badc.meta`. Independent of
 /// the ELF wrapper -- a future version of the linker that reads

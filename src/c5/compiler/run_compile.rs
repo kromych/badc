@@ -779,7 +779,7 @@ impl Compiler {
                         self.emit_op(Op::Imm);
                         self.emit_val(0);
                     }
-                    self.emit_terminator_op(Op::Lev);
+                    self.emit_dead_stores_and_flush();
                     let n_params = params.indices.len();
                     let is_variadic = params.is_variadic;
                     // Snapshot per-param types + the local-copy

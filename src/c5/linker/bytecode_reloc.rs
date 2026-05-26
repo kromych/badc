@@ -1,21 +1,13 @@
-//! Cross-TU relocation kinds. Each [`Reloc`] tells the linker
-//! "apply target_value to location, with the kind-specific
-//! biasing", where `target_value` is either a defined symbol's
-//! resolved position in the merged program or a literal addend
-//! when the symbol is `Undefined`-here-but-actually-internal.
+//! Cross-TU data-segment relocations. Each [`Reloc`] tells the
+//! linker "patch the 8-byte slot at `location` with the
+//! resolved address of `sym_index`, plus `addend`".
 //!
-//! All relocations are 64-bit; the linker patches whole i64
-//! words for the text relocations and whole 8-byte spans for
-//! the data relocations, so there's no per-arch encoding
-//! variability. Operand-sized fixups are unnecessary because
-//! the c5 bytecode model uses one i64 per operand.
+//! Text-segment references travel through the walker-tier
+//! `FunctionSsa::extern_*_refs` channels and resolve
+//! independently of this enum; only the data-segment fixups
+//! live here.
 
-/// What to patch and how. Cross-TU references whose target
-/// lives in the bytecode text were retired alongside the
-/// bytecode-tape resolver; only the data-segment fixups
-/// survive here. Walker-tier `Inst::*` references are carried
-/// on `FunctionSsa::extern_*_refs` channels and resolved
-/// independently of this enum.
+/// What to patch and how.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RelocKind {
@@ -70,11 +62,8 @@ pub struct Reloc {
     /// `LinkSymbol` to a merged-program address based on its
     /// `kind` + section base.
     pub sym_index: u32,
-    /// Constant added to the symbol's resolved value before the
-    /// kind-specific biasing. Used for offset-into-array
-    /// references like `&arr[3]` where the parser already
-    /// materialised the `+3` arithmetic; the addend lets the
-    /// linker collapse the trailing `Op::Imm 3 + Op::Add` into
-    /// a single relocation site without a temporary.
+    /// Constant added to the symbol's resolved value. Used for
+    /// offset-into-array references like `&arr[3]` where the
+    /// parser already materialised the `+3` arithmetic.
     pub addend: i64,
 }

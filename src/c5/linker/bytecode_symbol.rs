@@ -18,9 +18,9 @@ use crate::c5::symbol::Linkage;
 /// to its `value`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SymbolKind {
-    /// `value` is a bytecode PC inside `LinkUnit::text` (i.e. an
-    /// i64 word index, not a byte offset). Used for every
-    /// `Token::Fun` defined in the unit.
+    /// `value` is the function's `ent_pc` identifier (unique
+    /// inside the unit, rebased by `text_base[i]` at link).
+    /// Used for every `Token::Fun` defined in the unit.
     Function,
     /// `value` is a byte offset into `LinkUnit::data`. Used for
     /// every non-thread-local file-scope variable defined in the
@@ -57,13 +57,12 @@ pub struct LinkSymbol {
     /// Section + role. See [`SymbolKind`] for the per-variant
     /// interpretation of `value`.
     pub kind: SymbolKind,
-    /// Section-relative offset. For `Function`, the bytecode PC
-    /// (i64 word index) of `Op::Ent`; for `Data` / `TlsData`,
-    /// the byte offset into the matching segment; for
-    /// `Undefined`, ignored (kept at 0).
+    /// Section-relative offset. For `Function`, the `ent_pc`
+    /// identifier; for `Data` / `TlsData`, the byte offset into
+    /// the matching segment; for `Undefined`, ignored (kept at 0).
     pub value: u64,
-    /// Informational size: for `Function`, the bytecode-word
-    /// count of the function body (computed by the writer if not
+    /// Informational size: for `Function`, the function's PC
+    /// extent (end_pc - ent_pc, computed by the writer if not
     /// supplied); for `Data` / `TlsData`, the byte size of the
     /// storage. Aids debuggers and `nm`-style tooling; the
     /// linker itself doesn't depend on it for correctness.
@@ -79,12 +78,12 @@ pub struct LinkSymbol {
 
 impl LinkSymbol {
     /// Convenience constructor for a defined function symbol.
-    pub fn function(name: String, bc_pc: u64, size: u64, linkage: Linkage, type_tag: i64) -> Self {
+    pub fn function(name: String, ent_pc: u64, size: u64, linkage: Linkage, type_tag: i64) -> Self {
         Self {
             name,
             linkage,
             kind: SymbolKind::Function,
-            value: bc_pc,
+            value: ent_pc,
             size,
             type_tag,
         }

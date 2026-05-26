@@ -708,7 +708,7 @@ impl Compiler {
                     // address to copy from.
                     self.emit_lea(2);
                     self.emit_op(Op::Li);
-                    self.emit_op(Op::Psh);
+                    self.ast_psh();
                     self.expr(Token::Assign as i64)?;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
                         return Err(self.compile_err(

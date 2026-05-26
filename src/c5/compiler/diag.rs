@@ -342,7 +342,7 @@ impl Compiler {
         self.emit_imm(0);
         self.emit_op(Op::Or);
         self.emit_op(Op::Fcvtif);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         // Reload RHS into `a`.
         self.emit_lea(rhs_temp);
         self.emit_op(Op::Li);

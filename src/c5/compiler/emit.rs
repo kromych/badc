@@ -128,6 +128,20 @@ impl Compiler {
         self.push_recent_emit(val);
     }
 
+    /// Push the parser-side AST accumulator onto the vstack and
+    /// record an `Op::Psh` in the recent-emit ring so the
+    /// trailing-load peek detectors see the same shape an
+    /// `emit_op(Op::Psh)` would have left. No tape append (the
+    /// op carries no value any consumer reads), no
+    /// `ast_track_emit_op` dispatch (this method *is* the AST
+    /// hook for Op::Psh).
+    pub(super) fn ast_psh(&mut self) {
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.push_recent_emit(Op::Psh as i64);
+        self.ast_vstack.push(self.ast_acc.take());
+    }
+
     /// Append to the 3-deep ring buffer of recently-emitted
     /// `text` words. The trailing-op detectors
     /// (`last_emit_is_zero`, `last_emit_was_indirect_call`) read
@@ -196,7 +210,7 @@ impl Compiler {
     /// pointer-arithmetic scaling, bitfield mask-and-shift,
     /// post/pre-increment step values, and the like.
     pub(super) fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.emit_imm(val);
         // emit_imm is the low-level bytecode primitive and does
         // not touch the AST. Seed `ast_acc` with the matching
@@ -403,13 +417,13 @@ impl Compiler {
             // and reload through indirection later.
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
-            self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr
+            self.ast_psh(); // stack: [..., field_addr]; a = field_addr
             self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
-            self.emit_op(Op::Psh); // stack: [..., field_addr, old_value]
+            self.ast_psh(); // stack: [..., field_addr, old_value]
             self.emit_op(Op::Imm);
             self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
             self.emit_op(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
-            self.emit_op(Op::Psh); // stack: [..., field_addr, cleared]
+            self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
             // Stash the rhs AST id before the trailing Op::Si
             // clears `ast_acc` via `ast_apply_assign`. The
@@ -417,11 +431,11 @@ impl Compiler {
             // `Expr::BitfieldAssign` so the walker reproduces the
             // load-clear-shift-or-store sequence.
             self.pending.bf_assign_rhs = self.ast_acc;
-            self.emit_op(Op::Psh); // stack: [..., field_addr, cleared, new_value]
+            self.ast_psh(); // stack: [..., field_addr, cleared, new_value]
             self.emit_imm(mask);
             self.emit_op(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
             if bit_offset > 0 {
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(bit_offset as i64);
                 self.emit_op(Op::Shl); // a = (new_value & mask) << bit_offset
             }
@@ -450,7 +464,7 @@ impl Compiler {
             }
             let ov_temp = -self.loc_offs;
             // a = field_addr; stack: [...]
-            self.emit_op(Op::Psh); // stack: [..., field_addr]
+            self.ast_psh(); // stack: [..., field_addr]
             self.emit_op(load_op); // a = old_value
             // Spill old_value into the scratch local without
             // disturbing `a` or the c5 stack.
@@ -465,7 +479,7 @@ impl Compiler {
             // the binop pops it as the left operand. Right-hand-
             // side parsing follows the same precedence as a bare
             // assignment.
-            self.emit_op(Op::Psh); // stack: [..., field_addr, current]
+            self.ast_psh(); // stack: [..., field_addr, current]
             self.expr(Token::Assign as i64)?;
             // Stash the parsed rhs AST id + the binop here, before
             // the trailing Op::Si clears `ast_acc`. The Member
@@ -497,7 +511,7 @@ impl Compiler {
             }
             // shifted_new in `a`. Push it so the next ops can
             // reload the cleared old_value into `a`.
-            self.emit_op(Op::Psh); // stack: [..., field_addr, shifted_new]
+            self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.emit_op(Op::LdLocI);
             self.emit_val(ov_temp);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
@@ -516,11 +530,11 @@ impl Compiler {
             // with the bit pattern `11` reads as `3` instead of `-1`.
             self.emit_op(load_op); // a = full storage word
             if bit_offset > 0 {
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(bit_offset as i64);
                 self.emit_op(Op::Shr); // a = (top >> bit_offset)
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             self.emit_imm(mask);
             self.emit_op(Op::And); // a = (...) & mask
             if !is_unsigned_ty(field_ty) && bit_width < 64 {

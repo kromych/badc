@@ -649,7 +649,7 @@ impl Compiler {
                         }
                         // dst = &local
                         self.emit_lea(local_val);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         // src = *param_slot (the passed address;
                         // val from the param-base-aware
                         // numbering above)
@@ -697,7 +697,7 @@ impl Compiler {
                         }
                         // dst = &local
                         self.emit_lea(local_val);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         // Load the caller-pushed f64::to_bits from
                         // the param slot. The full 8-byte load is
                         // intentional -- the caller pushed 8 bytes

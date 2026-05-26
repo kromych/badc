@@ -270,7 +270,7 @@ impl Compiler {
                         if let Some(a) = self.ast_acc {
                             ast_intrinsic_args.push(a);
                         }
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         if self.lex.tk != ',' {
                             return Err(
                                 self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)"))
@@ -463,7 +463,7 @@ impl Compiler {
                         // assignment path already supports: address
                         // first, push, then RHS, then Si.
                         self.emit_lea(temp_off);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         self.expr(Token::Assign as i64)?;
 
                         // Type-check before the Si overwrites self.ty.
@@ -554,7 +554,7 @@ impl Compiler {
                     for &temp_off in temp_offsets.iter().rev() {
                         self.emit_lea(temp_off);
                         self.emit_op(Op::Li);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                     }
                     // For struct-returning callees, push the hidden
                     // out-pointer (address of the result temp) so it
@@ -565,7 +565,7 @@ impl Compiler {
                     // can Mcpy from it.
                     if callee_returns_struct {
                         self.emit_lea(result_temp_off);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                     }
                     // Release the staging slots; they'll be reused by
                     // the next call in this function. The result-temp
@@ -1463,7 +1463,7 @@ impl Compiler {
             if is_floating_scalar(self.ty) {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             let step = self.pointee_step(self.ty);
             self.emit_imm(step);
             self.emit_op(if t == Token::Inc as i64 {
@@ -1592,7 +1592,7 @@ impl Compiler {
                     }
                     let temp_off = -self.loc_offs;
                     self.emit_lea(temp_off);
-                    self.emit_op(Op::Psh);
+                    self.ast_psh();
                     self.expr(Token::Assign as i64)?;
                     indirect_arg_ids.push(self.ast_acc);
                     self.emit_op(Op::Si);
@@ -1667,7 +1667,7 @@ impl Compiler {
                     // into the scalar path and rewrite the wrong Li
                     // into a Psh.
                     let struct_lhs_ast = self.ast_acc.take();
-                    self.emit_op(Op::Psh);
+                    self.ast_psh();
                     self.expr(Token::Assign as i64)?;
                     let struct_rhs_ast = self.ast_acc;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
@@ -1782,7 +1782,7 @@ impl Compiler {
                 }
                 self.emit_op(reload);
                 // Push the current value so the binop can pop it.
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 // For pointer arithmetic with `+=` / `-=`, scale
                 // the RHS by the element size before applying the
                 // op. We capture lhs ty here; rhs ty is known after
@@ -2031,7 +2031,7 @@ impl Compiler {
                 // bits 32..63 for a positive value.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
                 self.emit_op(Op::Or);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
@@ -2039,7 +2039,7 @@ impl Compiler {
                 // C99 6.5.11: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
                 self.emit_op(Op::Xor);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
@@ -2047,7 +2047,7 @@ impl Compiler {
                 // C99 6.5.10: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
@@ -2062,7 +2062,7 @@ impl Compiler {
                     (Op::Feq, "==")
                 };
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
@@ -2076,7 +2076,7 @@ impl Compiler {
                 // see `Cmp::ops` for the per-flavour op picks.
                 let (signed_op, unsigned_op, fp_op, name) = cmp.ops();
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::ShlOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
@@ -2089,7 +2089,7 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 self.emit_op(Op::Shl);
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
@@ -2110,7 +2110,7 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::ShrOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
                 // The RHS is the shift count; only the LHS sign matters.
@@ -2125,7 +2125,7 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::AddOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
@@ -2169,7 +2169,7 @@ impl Compiler {
                         self.emit_imm(0);
                         self.emit_op(Op::Or);
                         self.emit_binop_with_imm(Op::Mul, scale);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         self.emit_lea(rhs_temp);
                         self.emit_op(Op::Li);
                         self.emit_op(Op::Add);
@@ -2237,7 +2237,7 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
@@ -2276,7 +2276,7 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::MulOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
@@ -2296,7 +2296,7 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::DivOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
@@ -2360,7 +2360,7 @@ impl Compiler {
                 if is_floating_scalar(t) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
@@ -2416,7 +2416,7 @@ impl Compiler {
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("floating-point ++/-- not yet implemented"));
                 }
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc {
                     Op::Add
@@ -2424,7 +2424,7 @@ impl Compiler {
                     Op::Sub
                 });
                 self.emit_op(store_op_for(self.ty, self.target));
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc {
                     Op::Sub
@@ -2462,7 +2462,7 @@ impl Compiler {
                 let multi_dim_stride = self.pending.index_stride;
                 let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
                 self.pending.index_stride = 0;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
                 // Restore the queue and shift one level down so

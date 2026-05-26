@@ -968,7 +968,7 @@ impl Compiler {
             return;
         }
         self.emit_lea(local_val);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
         self.emit_op(Op::Mcpy);
         self.emit_val(total_bytes as i64);
@@ -985,7 +985,7 @@ impl Compiler {
     /// is at the comma or semicolon following the initializer.
     pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
         self.emit_lea(local_val);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.expr(Token::Assign as i64)?;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double

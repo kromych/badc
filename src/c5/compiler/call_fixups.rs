@@ -272,7 +272,7 @@ impl Compiler {
             for i in (0..nargs).rev() {
                 self.emit_lea((i + 2) as i64);
                 self.emit_op(Op::Li);
-                self.emit_op(Op::Psh);
+                self.ast_psh();
             }
             self.emit_cf_op(Op::JsrExt);
             self.emit_val(binding_idx);

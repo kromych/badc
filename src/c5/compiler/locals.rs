@@ -766,11 +766,11 @@ impl Compiler {
                 // Inline Psh + Imm + Add (the private
                 // emit_binop_with_imm helper) -- bumps the base
                 // address loaded by Lea by `i * elem_size` bytes.
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(i * elem_size);
                 self.emit_op(Op::Add);
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             // Parse the element expression at assignment
             // precedence; the comma between elements is the
             // delimiter, not a comma-expression operator.
@@ -910,11 +910,11 @@ impl Compiler {
             self.emit_lea(local_val);
             let total_offset = extra_offset + field.offset as i64;
             if total_offset > 0 {
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(total_offset);
                 self.emit_op(Op::Add);
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             self.expr(Token::Assign as i64)?;
             let field_ast = self.ast_acc;
             let elem_size = self.size_of_type(field.ty);

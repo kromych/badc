@@ -92,7 +92,7 @@ impl Compiler {
         self.emit_imm(0);
         self.emit_op(Op::Or);
         self.emit_binop_with_imm(Op::And, mask);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.emit_lea(temp);
         self.emit_op(Op::Li);
         self.emit_binop_with_imm(Op::And, mask);

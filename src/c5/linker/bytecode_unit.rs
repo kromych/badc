@@ -34,13 +34,7 @@ use super::bytecode_symbol::LinkSymbol;
 /// existing `emit_native_*` codegen unchanged.
 #[derive(Debug, Clone, Default)]
 pub struct LinkUnit {
-    // ---- Static data + bc_pc range (mirror of Program) ----
-    /// Number of i64 words the parser emitted into this unit's
-    /// bytecode tape. Used by the linker to compute each unit's
-    /// bc_pc base offset; the actual bytecode bytes are no
-    /// longer carried on `LinkUnit` -- every merged-program
-    /// consumer reads SSA via `user_ssa_funcs` /
-    /// `synthetic_ssa_funcs` instead.
+    // ---- Static data segments (mirror of Program) ----
     pub data: Vec<u8>,
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
@@ -93,9 +87,7 @@ pub struct LinkUnit {
     /// Per-function AST snapshots captured at parse-time by
     /// `compile_to_link_unit`. The linker preserves them so the
     /// walker can drive the codegen post-link. Multi-TU links
-    /// re-base each entry's `ent_pc` by the unit's `text_offset`
-    /// (mirroring how `code_imm_positions` and similar PC-indexed
-    /// side tables re-base).
+    /// re-base each entry's `ent_pc` by the unit's `text_base`.
     pub(crate) finished_functions: Vec<crate::c5::ast::FinishedFunction>,
     /// Parser symbol-table snapshot at compile-end. The walker
     /// reads `array_size` + `type_` off these for shapes the AST
@@ -105,8 +97,7 @@ pub struct LinkUnit {
     /// linker grows that bookkeeping.
     pub(crate) parser_symbols: Vec<crate::c5::symbol::Symbol>,
     /// Sys-trampoline `FunctionSsa` entries synthesised by
-    /// `emit_sys_trampolines`. Each one mirrors a bytecode
-    /// trampoline in the unit's text; the linker rebases
+    /// `emit_sys_trampolines`. The linker rebases each one's
     /// `ent_pc` / `end_pc` by `text_base[i]` and remaps the
     /// `CallExt::binding_idx` / `Terminator::TailExt(idx)`
     /// through `binding_remap_per_unit[i]`.

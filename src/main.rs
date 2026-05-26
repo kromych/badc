@@ -632,36 +632,12 @@ fn main() {
     // `write_executable_elf64` produces Linux ELF unconditionally,
     // so routing those targets through it would write a Linux
     // image with the wrong container.
-    let native_link_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
-    // Native ELF `.o` inputs only flow through the link path on
-    // Linux targets right now. The LinkUnit merger reads
-    // FunctionSsa, not native object code, so it cannot consume
-    // these inputs; the Mach-O / PE writers that would consume
-    // `MergedNative` are pending (TODO). Silently dropping the
-    // objects would leave the link with no user code and
-    // surface as a confusing `main() not defined`. Refuse up
-    // front with a message that names the gap + suggests the
-    // working cross-compile path.
-    if mode == Mode::NativeExecutable
-        && !compile_only
-        && !native_link_target
-        && !objects.is_empty()
-    {
-        let suggested = match target {
-            Target::MacOSAarch64 | Target::WindowsAarch64 => "--target=linux-aarch64",
-            Target::WindowsX64 => "--target=linux-x64",
-            _ => "--target=linux-aarch64",
-        };
-        eprint_diagnostic(format!(
-            "badc: error: native ELF `.o` link inputs are only supported on \
-             Linux targets right now; got target `{target:?}` with object(s) {:?}.\n\
-             Re-run both the `-c` compile and the link with `{suggested}` \
-             to cross-compile a Linux ELF executable.",
-            objects
-        ));
-        std::process::exit(1);
-    }
-    if mode == Mode::NativeExecutable && !compile_only && native_link_target {
+    // The native-link path runs on every target: ELF for Linux,
+    // and the MergedNative-to-Build synthesizer for Mach-O / PE.
+    // The synthesizer baseline excludes _Thread_local, shared
+    // libraries, variadic libc imports, and DWARF emit -- sources
+    // with those still need to take the LinkUnit path below.
+    if mode == Mode::NativeExecutable && !compile_only {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
@@ -840,12 +816,23 @@ fn main() {
             badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
             badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
         };
-        if let Err(e) = plt {
-            eprint_diagnostic(format!("badc: {e}"));
-            std::process::exit(1);
-        }
+        let plt = match plt {
+            Ok(p) => p,
+            Err(e) => {
+                eprint_diagnostic(format!("badc: {e}"));
+                std::process::exit(1);
+            }
+        };
         let entry_name = entry_override.as_deref().unwrap_or("main");
-        let bytes = match badc::write_executable_elf64(&merged, entry_name) {
+        let write_result = match target {
+            Target::LinuxX64 | Target::LinuxAarch64 => {
+                badc::write_executable_elf64(&merged, entry_name)
+            }
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
+                badc::write_native_image_from_merged(&merged, &plt, entry_name, target)
+            }
+        };
+        let bytes = match write_result {
             Ok(b) => b,
             Err(e) => {
                 eprint_diagnostic(format!("badc: {e}"));

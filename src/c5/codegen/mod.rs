@@ -1388,6 +1388,18 @@ fn append_build_info(build: &mut Build) {
     build.text.push(0);
 }
 
+/// Write a native image for `target` given an already-lowered `build`
+/// and its source `program`. Internal entry point shared between
+/// [`emit_native_with_options`] (single-TU path) and the linker's
+/// MergedNative-to-Build synthesizer (multi-TU `.o` link path).
+pub(crate) fn write_native_image(
+    program: &Program,
+    build: &Build,
+    target: Target,
+) -> Result<Vec<u8>, C5Error> {
+    write_for(program, build, target)
+}
+
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {

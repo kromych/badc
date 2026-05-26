@@ -63,6 +63,8 @@ mod image;
 pub(crate) mod link;
 #[cfg(feature = "std")]
 mod object;
+#[cfg(feature = "std")]
+mod synth_build;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
 pub use unit_link::{LinkArchive, LinkOptions, link_units};
@@ -87,3 +89,6 @@ pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
     parse_native_elf,
 };
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use synth_build::write_native_image_from_merged;

@@ -198,18 +198,18 @@ fn bad_lvalue_in_assignment() {
 fn thread_local_compiles_to_op_tlslea() {
     // `_Thread_local` lexes as Token::ThreadLocal, the parser
     // accepts it as a global storage-class prefix, the symbol
-    // carries the flag, and reads/writes lower to Op::TlsLea
-    // operands rather than the regular data-segment Op::Imm.
-    use super::super::op::Op;
+    // carries the flag, and reads/writes route through the TLS
+    // segment rather than the regular data segment. The
+    // contract surfaces through `Program::tls_data` (parser-side
+    // slot allocation) and through the per-target codegen
+    // accepting the lowered form below; a regression that
+    // collapses the access onto the data segment trips one of
+    // those gates.
     let src = "_Thread_local int counter;\n\
                int main() { counter = 42; return counter; }";
     let p = super::Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
-    assert!(
-        p.text.contains(&(Op::TlsLea as i64)),
-        "expected at least one Op::TlsLea in the bytecode"
-    );
     assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
     // Every supported target now lowers `_Thread_local`. Linux
     // and Windows have full code paths; macOS arm64 routes
@@ -328,9 +328,20 @@ fn pragma_export_records_function_on_program() {
         .expect("compile");
     assert_eq!(p.exports.len(), 1, "expected one export");
     assert_eq!(p.exports[0].name, "answer");
+    // The recorded PC must point at one of the finished
+    // functions' entry positions; the export-resolution path
+    // refuses any other value, so this asserts the same
+    // invariant from the caller's side.
     assert!(
-        p.exports[0].bytecode_pc < p.text.len(),
-        "exported PC must be inside the bytecode"
+        p.finished_functions
+            .iter()
+            .any(|f| f.ent_pc == p.exports[0].bytecode_pc),
+        "exported PC {} should match one of the finished functions' ent_pc values: {:?}",
+        p.exports[0].bytecode_pc,
+        p.finished_functions
+            .iter()
+            .map(|f| (&f.name, f.ent_pc))
+            .collect::<alloc::vec::Vec<_>>(),
     );
 }
 

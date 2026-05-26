@@ -181,31 +181,24 @@ impl Compiler {
         Ok(())
     }
 
-    /// `switch (expr) { ... }`. Three phases: stash the scrutinee in a
-    /// fresh local slot, parse the body (which records `case`/`default`
-    /// label positions in `switch_cases`/`switch_defaults`), then emit a
-    /// trailing dispatcher that compares the stashed value against each
-    /// case label and jumps. Breaks inside the body are pushed onto
-    /// `loop_breaks` and patched to land just past the dispatcher.
+    /// `switch (expr) { ... }`. The walker reads the discriminant
+    /// and the case set off `Stmt::Switch`; this parser only has
+    /// to capture the scrutinee expression, prime the per-switch
+    /// scope stacks so `case` / `default` labels know they're
+    /// inside one, recurse into the body, then emit the AST node.
+    /// Breaks inside the body decrement the break depth at switch
+    /// exit through [`Self::close_loop_breaks`].
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
-
-        self.loc_offs += 1;
-        let switch_val_offset = -self.loc_offs;
-        self.emit_lea(switch_val_offset);
-        self.emit_op(Op::Psh);
-
         self.parse_full_expr()?;
         let disc_ast = self.ast_acc;
         self.consume(b')', "close paren expected")?;
 
-        self.emit_op(Op::Si);
-
-        // Jump past the body to the dispatcher emitted at the end.
-        self.emit_cf_op(Op::Jmp);
-        self.emit_val(0);
-
+        // Conservative drop of any pending dead-store entries at
+        // the switch entry boundary, matching the flush a
+        // control-flow op would have produced through emit_cf_op.
+        self.flush_pending_stores();
         self.switch_cases.push(Vec::new());
         self.switch_defaults.push(false);
         self.enter_switch();
@@ -214,17 +207,10 @@ impl Compiler {
         self.stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
 
-        // Fall-through past the body skips the dispatcher entirely.
-        self.emit_cf_op(Op::Jmp);
-        self.emit_val(0);
-
-        // Drop the case / default scope vectors primed at switch
-        // entry; the walker reads the case set off the AST node
-        // built below, so the parser doesn't need to consult the
-        // collected values.
+        // Same conservative drop at the body-exit boundary.
+        self.flush_pending_stores();
         self.switch_cases.pop();
         self.switch_defaults.pop();
-
         self.close_loop_breaks();
         if let Some(disc) = disc_ast {
             self.ast_emit_switch(disc, body_s);

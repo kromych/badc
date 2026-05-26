@@ -552,14 +552,12 @@ impl Compiler {
             self.parse_full_expr()?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
-            self.emit_cf_op(Op::Bz);
-            self.emit_val(0);
+            self.flush_pending_stores();
             let then_before = self.ast_stmts_snapshot();
             self.stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
-                self.emit_cf_op(Op::Jmp);
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
                 self.stmt()?;
@@ -577,8 +575,7 @@ impl Compiler {
             self.parse_full_expr()?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
-            self.emit_cf_op(Op::Bz);
-            self.emit_val(0);
+            self.flush_pending_stores();
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
@@ -586,7 +583,7 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.close_loop_continues();
 
-            self.emit_jmp(0);
+            self.flush_pending_stores();
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {
@@ -613,8 +610,7 @@ impl Compiler {
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
 
-            self.emit_cf_op(Op::Bnz);
-            self.emit_val(0);
+            self.flush_pending_stores();
 
             self.consume(b';', "semicolon expected after do-while")?;
 

@@ -424,6 +424,21 @@ pub(in crate::c5::compiler) struct Pending {
     /// type-warning on `T x = fp();` shapes where c5 can't see
     /// the callee's return type.
     pub last_emit_was_indirect_call: bool,
+
+    /// True while the trailing emit is `Op::Imm 0`. Set by
+    /// `emit_imm(0)`, cleared by every other emit. Read by
+    /// `Self::last_emit_is_zero` to suppress the NULL-idiom
+    /// warning on `pointer = 0`.
+    pub last_imm_was_zero: bool,
+
+    /// `Some(load_op)` while the trailing emit is a scalar load
+    /// (`Op::Li`, `Op::Lc`, `Op::Lcs`, `Op::Lh`, `Op::Lhu`,
+    /// `Op::Lw`, `Op::Lwu`, `Op::Lf`). Set by `emit_op` on the
+    /// matching variants, cleared by every other emit. Drives
+    /// `pop_trailing_scalar_load` (lvalue conversion for `&expr`)
+    /// and `rewrite_trailing_load_as_psh` (assignment / inc /
+    /// compound-assign reload).
+    pub trailing_scalar_load: Option<crate::c5::op::Op>,
 }
 
 impl Default for Pending {
@@ -451,6 +466,8 @@ impl Default for Pending {
             bf_assign_rhs: None,
             bf_compound_assign: None,
             last_emit_was_indirect_call: false,
+            last_imm_was_zero: false,
+            trailing_scalar_load: None,
         }
     }
 }
@@ -783,17 +800,6 @@ pub struct Compiler {
     /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
 
-    /// Ring buffer of the 3 most-recently-emitted op ids /
-    /// operand values (in `emit_op` / `emit_val` call order).
-    /// Backs the trailing-op peek detectors
-    /// (`last_emit_is_zero`, `pop_trailing_scalar_load`,
-    /// `rewrite_trailing_load_as_psh`); no tape underlies it.
-    recent_emits: [i64; 3],
-    /// Count of valid entries in `recent_emits` (saturates at 3).
-    /// Lets the detectors reject false positives on a fresh
-    /// function whose first three emits don't yet match the
-    /// pattern they're looking for.
-    recent_emits_len: u8,
     /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
     /// emitted as a `Token::Glo` address-of -- the data
     /// reference shape that becomes a cross-TU reference when
@@ -1034,8 +1040,6 @@ impl Compiler {
             variables: Vec::new(),
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
-            recent_emits: [0; 3],
-            recent_emits_len: 0,
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),

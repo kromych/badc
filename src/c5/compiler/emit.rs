@@ -19,17 +19,8 @@ use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::is_scalar_load_op_val;
 use super::types::is_unsigned_ty;
-use super::types::{is_scalar_load_op_val, reemit_scalar_load};
-
-/// Sentinel pushed into the `recent_emits` ring by the AST-only
-/// emit helpers (`ast_binop`, `ast_unary`, `ast_assign`). Picks a
-/// value distinct from every `Op` discriminant so the trailing-
-/// op peek detectors (`last_emit_is_zero`,
-/// `pop_trailing_scalar_load`) don't false-match on it. Op
-/// discriminants are small positive integers; `-1` sits cleanly
-/// outside that range.
-const BINOP_SENTINEL: i64 = -1;
 
 impl Compiler {
     // ---- Lexer plumbing ----
@@ -71,26 +62,29 @@ impl Compiler {
         // result is in fn-ptr lineage (see
         // `fn_ptr_chain_depth`).
         self.pending.fn_ptr_chain_depth = -1;
-        // Any scalar load whose source is *not* the
-        // identifier-rvalue path (field access through `->` /
-        // `.`, array indexing, deref through `*`, bitfield
-        // extraction) invalidates the tracked
-        // identifier whose load was previously trailing. Once
-        // the trailing Li belongs to a non-identifier address,
-        // a downstream `pop_trailing_scalar_load` /
-        // `rewrite_trailing_load_as_psh` must not retract
-        // `was_read` from the prior identifier. The
-        // identifier-rvalue path in `expr.rs` re-sets the field
-        // explicitly after its own load emit.
+        // Trailing scalar-load tracker. Scalar load ops
+        // (`Op::Li` / `Op::Lc` / ...) set the flag; every other
+        // op clears it.
         if is_scalar_load_op_val(op as i64) {
+            self.pending.trailing_scalar_load = Some(op);
+            // The identifier-rvalue path in expr.rs re-seeds
+            // `last_loaded_local` after its own load emit; any
+            // other scalar-load source (field, deref, index,
+            // bitfield) leaves it cleared so a downstream pop /
+            // rewrite does not retract `was_read` from a symbol
+            // whose load is no longer trailing.
             self.pending.last_loaded_local = None;
+        } else {
+            self.pending.trailing_scalar_load = None;
         }
         // No caller routes Op::Jsri / Op::Adj through emit_op
         // any more (the indirect-call sites set the flag inline
         // via the call-site path); every op that reaches here
         // clears the flag.
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(op as i64);
+        // Trailing `Imm 0` peek is set only by `emit_imm(0)`; any
+        // other op clears it.
+        self.pending.last_imm_was_zero = false;
         // AST hook -- ops whose shape is determined by `op` alone
         // (vstack push / pop, arithmetic and comparison binops,
         // unary fneg). Ops that carry an operand word (Imm, Lea,
@@ -102,31 +96,29 @@ impl Compiler {
         self.ast_track_emit_op(op);
     }
 
-    pub(super) fn emit_val(&mut self, val: i64) {
-        self.push_recent_emit(val);
+    pub(super) fn emit_val(&mut self, _val: i64) {
+        // No-op: there is no tape and no peek consumer of raw
+        // operand words. emit_imm sets `last_imm_was_zero`
+        // directly; other operand carriers (emit_lea,
+        // emit_binop_with_imm, the StLocI / Adj operand sites)
+        // need no per-word tracking.
     }
 
-    /// Push the parser-side AST accumulator onto the vstack and
-    /// record an `Op::Psh` in the recent-emit ring so the
-    /// trailing-load peek detectors see the same shape an
-    /// `emit_op(Op::Psh)` would have left. No tape append (the
-    /// op carries no value any consumer reads), no
-    /// `ast_track_emit_op` dispatch (this method *is* the AST
-    /// hook for Op::Psh).
+    /// Push the parser-side AST accumulator onto the vstack.
+    /// This method is the AST hook for what used to be an
+    /// `emit_op(Op::Psh)` tag.
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(Op::Psh as i64);
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
         self.ast_vstack.push(self.ast_acc.take());
     }
 
     /// Apply a binary operator to the parser-side vstack-top (lhs)
     /// + accumulator (rhs); the result lands in the accumulator.
     /// Replaces `emit_op(Op::<binop>)` for every variant that maps
-    /// to an `ast_apply_binop` arm. Pushes a non-Imm sentinel into
-    /// the recent-emit ring so the `Imm + 0` peek of
-    /// `last_emit_is_zero` doesn't fire on the just-consumed
-    /// operand pair.
+    /// to an `ast_apply_binop` arm.
     pub(super) fn ast_binop(&mut self, op: Op) {
         use super::super::ir::BinOp as B;
         let binop = match op {
@@ -167,7 +159,8 @@ impl Compiler {
         };
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(BINOP_SENTINEL);
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
         self.ast_apply_binop(binop);
     }
 
@@ -175,7 +168,8 @@ impl Compiler {
     pub(super) fn ast_fneg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(BINOP_SENTINEL);
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
     }
 
@@ -184,14 +178,14 @@ impl Compiler {
     /// surrounding call site through `ast_apply_assign_conv` (for
     /// the assignment-conversion case) or skipped entirely (when
     /// the walker re-derives the conversion from the intrinsic /
-    /// cast signature). This helper clears the parser-state flags
-    /// emit_op used to reset and pushes a non-Imm sentinel into
-    /// recent_emits so the trailing peek detectors don't read a
-    /// stale `Op::Imm 0` shape across the conversion.
+    /// cast signature). Clears the parser-state flags so a
+    /// trailing `Imm 0` / scalar-load shape doesn't leak across
+    /// the conversion.
     pub(super) fn ast_fpcast(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(BINOP_SENTINEL);
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
     }
 
     /// Build an `Expr::Assign` from the vstack-top (lvalue
@@ -201,30 +195,17 @@ impl Compiler {
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.push_recent_emit(BINOP_SENTINEL);
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
         self.ast_apply_assign();
     }
 
-    /// Append to the 3-deep ring buffer of recently-emitted
-    /// `text` words. The trailing-op detectors
-    /// (`last_emit_is_zero`, `last_emit_was_indirect_call`) read
-    /// from this buffer instead of indexing `self.text` directly,
-    /// which decouples the parser-internal peephole from the
-    /// underlying tape.
-    pub(super) fn push_recent_emit(&mut self, val: i64) {
-        self.recent_emits[0] = self.recent_emits[1];
-        self.recent_emits[1] = self.recent_emits[2];
-        self.recent_emits[2] = val;
-        self.recent_emits_len = (self.recent_emits_len + 1).min(3);
-    }
-
-    /// Clear the recent-emit buffer. Used by sizeof's truncate
-    /// path and any other rollback site that has just popped
-    /// multiple words off `self.text` -- the next emit reseeds
-    /// the buffer from scratch.
+    /// Clear the trailing-emit peek flags. Called by sizeof's
+    /// parse-rollback site after the inner expression's tags get
+    /// discarded so a downstream peek doesn't see leftover state.
     pub(super) fn clear_recent_emits(&mut self) {
-        self.recent_emits = [0; 3];
-        self.recent_emits_len = 0;
+        self.pending.last_imm_was_zero = false;
+        self.pending.trailing_scalar_load = None;
     }
 
     /// Look up the lexer's current `(file)` in `source_files`,
@@ -254,8 +235,15 @@ impl Compiler {
     /// runtime address-fixup; for data-segment offsets that need
     /// `__data` relocation use [`Self::emit_data_imm`] instead.
     pub(super) fn emit_imm(&mut self, val: i64) {
-        self.emit_op(Op::Imm);
-        self.emit_val(val);
+        self.pending.fn_ptr_chain_depth = -1;
+        self.pending.last_emit_was_indirect_call = false;
+        self.pending.trailing_scalar_load = None;
+        // Only literal-zero immediates set the peek flag; every
+        // other Imm clears it.
+        self.pending.last_imm_was_zero = val == 0;
+        // Op::Imm carries no AST hook in `ast_track_emit_op`;
+        // the per-site helper (`ast_emit_int_lit`,
+        // `ast_emit_data_imm`, ...) owns the AST shape.
     }
 
     /// Emit `Op::Lea <slot_off>` -- load the effective address of
@@ -314,10 +302,7 @@ impl Compiler {
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
     /// idiom warning on `pointer = 0`.
     pub(super) fn last_emit_is_zero(&self) -> bool {
-        // Pattern: `Op::Imm, 0` as the two most recent words.
-        self.recent_emits_len >= 2
-            && self.recent_emits[2] == 0
-            && self.recent_emits[1] == Op::Imm as i64
+        self.pending.last_imm_was_zero
     }
 
     /// True if the most recent emitted op is `Op::Jsri` -- an indirect
@@ -345,29 +330,19 @@ impl Compiler {
     /// `last() / last_mut() / Op::Psh` triple keeps the four
     /// call sites in sync when new load-op variants are added.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
-        // Read the trailing op out of the recent-emit window;
-        // if it isn't a scalar load, bail. Otherwise capture the
-        // matching reload op and rewrite the cached trailing
-        // entry so downstream peeks see the new shape.
-        if self.recent_emits_len == 0 {
-            return None;
-        }
-        let trailing = self.recent_emits[2];
-        if !is_scalar_load_op_val(trailing) {
-            return None;
-        }
-        let reload_op = reemit_scalar_load(trailing);
-        self.recent_emits[2] = Op::Psh as i64;
-        // The tag rewrite turns `<addr>; Li` into `<addr>; Psh`,
-        // meaning the address producer's value ends up on the c5
-        // stack. Mirror that move on the AST side -- push the
-        // current `ast_acc` slot onto the parser vstack and clear
-        // the accumulator. `None` here represents an address
-        // producer whose AST counterpart hasn't been wired yet;
-        // the downstream store op then sees a `None` lvalue and
-        // skips the Assign build.
+        let load_op = self.pending.trailing_scalar_load.take()?;
+        // Mirror what the equivalent Op::Lc/Lh/Lw/Li -> Op::Psh
+        // tag rewrite did: the address producer's value moves to
+        // the c5 stack; push the current `ast_acc` slot onto the
+        // parser vstack and clear the accumulator. `None` here
+        // represents an address producer whose AST counterpart
+        // hasn't been wired yet; the downstream store op then
+        // sees a `None` lvalue and skips the Assign build.
         self.ast_vstack.push(self.ast_acc.take());
-        Some(reload_op)
+        // The new tail behaves like a Psh, not a scalar load,
+        // and is not a literal Imm 0 either.
+        self.pending.last_imm_was_zero = false;
+        Some(load_op)
     }
 
     /// Take the symbol index of the most recently emitted scalar
@@ -407,35 +382,27 @@ impl Compiler {
     /// success. Used by `&expr` to convert an rvalue load chain
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
-        if self.recent_emits_len > 0 && is_scalar_load_op_val(self.recent_emits[2]) {
-            // The trailing scalar load no longer occupies a tape
-            // word (emit_op stopped pushing); drop the peek-ring
-            // entry so the next emit reseeds without seeing this
-            // load.
-            self.clear_recent_emits();
-            // The load is gone -- the symbol's value never gets
-            // read at runtime through this path. Revert the
-            // tentative `was_read` the identifier-rvalue path
-            // set (preserving any genuine read recorded by an
-            // earlier expression) and record `address_escaped`:
-            // the caller (currently the unary `&` operator) is
-            // converting the rvalue load chain into an
-            // lvalue-address chain, and the resulting pointer
-            // can escape into surrounding code that the
-            // unused-symbol analysis can't follow.
-            if let Some(idx) = self.take_last_loaded_local() {
-                self.symbols[idx].address_escaped = true;
-            }
-            // The tag drop removes the trailing scalar load so
-            // the address producer's value stays in the
-            // accumulator; the AST wraps that producer in
-            // `Expr::Unary { op: AddrOf, child }` so the walker
-            // emits the address path rather than a load.
-            self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
-            true
-        } else {
-            false
+        if self.pending.trailing_scalar_load.take().is_none() {
+            return false;
         }
+        // The load is gone -- the symbol's value never gets
+        // read at runtime through this path. Revert the
+        // tentative `was_read` the identifier-rvalue path set
+        // (preserving any genuine read recorded by an earlier
+        // expression) and record `address_escaped`: the caller
+        // (currently the unary `&` operator) is converting the
+        // rvalue load chain into an lvalue-address chain, and
+        // the resulting pointer can escape into surrounding
+        // code that the unused-symbol analysis can't follow.
+        if let Some(idx) = self.take_last_loaded_local() {
+            self.symbols[idx].address_escaped = true;
+        }
+        // The address producer's value now stays in the
+        // accumulator; wrap it in `Expr::Unary { op: AddrOf,
+        // child }` so the walker emits the address path rather
+        // than a load.
+        self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        true
     }
 
     /// Emit code for accessing a bitfield. On entry `a` holds the

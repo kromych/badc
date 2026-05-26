@@ -1545,17 +1545,10 @@ impl Compiler {
                 // pointer level so the spill below sees the actual
                 // function pointer.
                 if !is_pointer_ty(self.ty) {
-                    let trailing = if self.recent_emits_len > 0 {
-                        Some(self.recent_emits[2])
-                    } else {
-                        None
-                    };
+                    let trailing = self.pending.trailing_scalar_load;
                     let is_load = matches!(
                         trailing,
-                        Some(x) if x == Op::Li as i64
-                            || x == Op::Lc as i64
-                            || x == Op::Lw as i64
-                            || x == Op::Lwu as i64
+                        Some(Op::Li) | Some(Op::Lc) | Some(Op::Lw) | Some(Op::Lwu)
                     );
                     if is_load {
                         self.clear_recent_emits();

@@ -620,26 +620,3 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
         || op_val == Op::Lf as i64
 }
 
-/// Re-emit the same scalar load op that produced `op_val`. Caller
-/// has just rewritten the trailing slot to `Op::Psh` and now needs
-/// to load the same width again so the address-then-value pattern
-/// the increment / compound-assignment lowering expects falls out.
-pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
-    if op_val == Op::Lc as i64 {
-        Op::Lc
-    } else if op_val == Op::Lcs as i64 {
-        Op::Lcs
-    } else if op_val == Op::Lh as i64 {
-        Op::Lh
-    } else if op_val == Op::Lhu as i64 {
-        Op::Lhu
-    } else if op_val == Op::Lw as i64 {
-        Op::Lw
-    } else if op_val == Op::Lwu as i64 {
-        Op::Lwu
-    } else if op_val == Op::Lf as i64 {
-        Op::Lf
-    } else {
-        Op::Li
-    }
-}

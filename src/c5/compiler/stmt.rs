@@ -740,13 +740,14 @@ impl Compiler {
                 }
             } else if returns_void {
                 // Bare `return;` in a void function. Zero the
-                // accumulator so the matching `Op::Lev` leaves a
-                // predictable value, matching the synthetic
-                // function-end Lev in run_compile.
+                // accumulator so a downstream peek detector that
+                // examines the trailing emit sees a predictable
+                // value, matching the synthetic function-end Lev
+                // in run_compile.
                 self.emit_op(Op::Imm);
                 self.emit_val(0);
             }
-            self.emit_terminator_op(Op::Lev);
+            self.emit_dead_stores_and_flush();
             self.ast_emit_return(return_value);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {

@@ -45,11 +45,7 @@ use super::unit::LinkUnit;
 /// version on a backward-incompatible meta change forces a clear
 /// "linker too old / object file too new" error.
 const META_MAGIC: &[u8; 8] = b"BADCMTA\0";
-// Bump to 3 with the retirement of the `.badc.text` /
-// `.rela.badc.text` ELF sections and the `TAG_TEXT_SIZE` meta
-// tag: per-unit PC extent now derives from
-// max(SSA func end_pc).
-const META_VERSION: u32 = 3;
+const META_VERSION: u32 = 4;
 
 /// Sentinel placed by the writer right after the ELF header so
 /// the reader can refuse a file that looks like an ELF object
@@ -62,10 +58,10 @@ const ELFABIVERSION_BADC: u8 = 0x01;
 
 /// `e_type` for an ELF object file (relocatable).
 const ET_REL: u16 = 1;
-/// `e_machine = EM_NONE` -- the bytecode is target-independent
-/// so we record no machine type. Tools that key on
-/// `e_machine` will see `0` and treat it as "unknown
-/// architecture", which is exactly right.
+/// `e_machine = EM_NONE`: the object carries target-independent
+/// SSA function bodies plus per-TU data, no machine code. Tools
+/// that key on `e_machine` see `0` and treat the file as
+/// architecture-unknown.
 const EM_NONE: u16 = 0;
 
 const ELF_CLASS_64: u8 = 2;
@@ -280,8 +276,8 @@ impl Writer {
         // .symtab is emitted before .strtab so its sh_link can
         // reference SHIDX_STRTAB.
 
-        // Relocations -- only data-targeting kinds survive the
-        // bytecode-tape retirement.
+        // Relocations: data-segment fixups only. Text-segment
+        // references travel through `FunctionSsa::extern_*_refs`.
         let rela_data = encode_relocs(unit);
 
         self.align_to(8);
@@ -464,15 +460,11 @@ fn encode_symtab(unit: &LinkUnit, name_offsets: &[u32]) -> Vec<u8> {
             SymbolKind::TlsData => SHIDX_TDATA,
             SymbolKind::Undefined => SHN_UNDEF,
         };
-        // For Function symbols, `value` is a bytecode word
-        // index; convert to a byte offset so a debugger /
-        // tooling that mistakes the section for raw bytes sees
-        // a sensible "address". The linker reads the original
-        // bytecode index back out by dividing by 8.
-        let st_value: u64 = match s.kind {
-            SymbolKind::Function => s.value.saturating_mul(8),
-            _ => s.value,
-        };
+        // Function `value` is the ent_pc identifier (small
+        // integer the linker rebases by `text_base[unit]`); Data
+        // / TlsData `value` is a byte offset into the matching
+        // segment. Both stored verbatim.
+        let st_value: u64 = s.value;
         write_struct(
             &mut out,
             &Elf64Sym {
@@ -1819,8 +1811,8 @@ impl<'a> Reader<'a> {
             &mut unit,
         )?;
 
-        // .rela.badc.data only -- .rela.badc.text retired with
-        // the bytecode-tape sections.
+        // Data-segment fixups only; text references travel
+        // through `FunctionSsa::extern_*_refs`.
         decode_relocs(
             slice_of(
                 bytes,
@@ -1909,13 +1901,7 @@ fn decode_symtab(symtab: &[u8], strtab: &[u8], unit: &mut LinkUnit) -> Result<()
         } else {
             SymbolKind::Data
         };
-        // For Function symbols, value is stored as byte offset
-        // in the on-disk file (mirroring the section bytes); the
-        // reader divides by 8 to recover the bytecode word index.
-        let value = match kind {
-            SymbolKind::Function => st_value / 8,
-            _ => st_value,
-        };
+        let value = st_value;
         unit.symbols.push(LinkSymbol {
             name,
             linkage,

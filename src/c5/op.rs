@@ -1,55 +1,50 @@
-/// Virtual Machine Operations (Opcodes)
-/// These represent the low-level instructions executed by the VM.
+/// Per-width scalar-load tag the parser leaves in
+/// `Compiler::pending.trailing_scalar_load` to mark the most
+/// recent emit. The lvalue-rewrite path consumes the tag through
+/// `pop_trailing_scalar_load` -- `&expr`, `++/--`, compound
+/// assignment, etc. -- to undo the trailing load and recover the
+/// lvalue address. The discriminant base sits above any plausible
+/// `i64` immediate value so a stray int operand can never be
+/// mistaken for a load tag.
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Op {
-    /// Load Integer: Loads an i64 from the address in the accumulator.
+    /// `i64` lvalue read. Source widths: `long` / `long long` /
+    /// pointer / `double` (the 8-byte slot holds the f64 bit
+    /// pattern verbatim).
     Li = 0x7f00_0000_0000_0001,
-    /// Load Character: Loads a u8 from the address in the accumulator,
-    /// zero-extending into the 64-bit accumulator. Used for bare
-    /// `char` (which c5 treats as unsigned) and `unsigned char`.
+    /// Unsigned `char` lvalue read. Zero-extends a `u8` into the
+    /// 64-bit accumulator. C99 leaves `char`'s default signedness
+    /// implementation-defined; c5 picks unsigned so a plain
+    /// `char` reads compare equal to their bit pattern.
     Lc,
-    /// Load Character Signed: Loads an i8 from the address in the
-    /// accumulator, sign-extending into the 64-bit accumulator. Used
-    /// for `signed char` lvalue reads -- C signed-char semantics
-    /// require the high bit to propagate so that values outside
-    /// [0, 127] stay negative.
+    /// Signed `char` lvalue read. Sign-extends an `i8` into the
+    /// 64-bit accumulator so values outside `[0, 127]` keep the
+    /// high bits.
     Lcs,
-    /// Load Word: Loads a 32-bit signed value from the address in the
-    /// accumulator, sign-extending into the 64-bit accumulator. Used
-    /// for signed `int` lvalue reads where `int` is a 4-byte
-    /// storage slot.
+    /// Signed `int` lvalue read. Sign-extends an `i32` into the
+    /// 64-bit accumulator. ARM64 `LDRSW`, x86_64 `MOVSXD`.
     Lw,
-    /// Load Word Unsigned: Loads a 32-bit value from the address in
-    /// the accumulator, zero-extending into the 64-bit accumulator.
-    /// Used for `unsigned int` lvalue reads -- the high half must
-    /// stay zero so that `(unsigned int)-1` compares correctly
-    /// against `0xffffffff` and so that `1u - 2u` wraps to
-    /// `0xffffffff` rather than reading back as signed -1.
+    /// Unsigned `int` lvalue read. Zero-extends a `u32` into the
+    /// 64-bit accumulator so `(unsigned int)-1 == 0xFFFFFFFF`
+    /// reads consistently and `1u - 2u` wraps to `0xFFFFFFFF`
+    /// rather than back to `-1`.
     Lwu,
-    /// Load Half: Loads a 16-bit signed value from the address in
-    /// the accumulator, sign-extending into the 64-bit accumulator.
-    /// Used for `short` lvalue reads where `short` is a 2-byte
-    /// storage slot. ARM64 `LDRSH`, x86_64 `MOVSX r64, m16`.
+    /// Signed `short` lvalue read. Sign-extends an `i16` into the
+    /// 64-bit accumulator. ARM64 `LDRSH`, x86_64 `MOVSX r64, m16`.
     Lh,
-    /// Load Half Unsigned: Loads a 16-bit value from the address in
-    /// the accumulator, zero-extending into the 64-bit accumulator.
-    /// Used for `unsigned short` / `u16` reads and for explicit
-    /// `*(u16*)p` packed-buffer reads. ARM64 `LDRH`, x86_64
-    /// `MOVZX r64, m16`.
+    /// Unsigned `short` / `u16` lvalue read. Zero-extends a `u16`
+    /// into the 64-bit accumulator. ARM64 `LDRH`, x86_64
+    /// `MOVZX r64, m16`. Also covers explicit `*(u16 *)p`
+    /// packed-buffer reads.
     Lhu,
-    /// Bitwise OR
-    /// Load Float: reads a 32-bit IEEE-754 single-precision value
-    /// from the address in the accumulator, widens it to f64, and
-    /// leaves `f64::to_bits()` in `a`. Used for scalar `float`
-    /// lvalue reads where the field / variable storage is 4 bytes
-    /// (`sizeof(float) == 4` post-fix). Companion to [`Op::Sf`].
-    /// The c5 arithmetic ops (`Op::Fadd`, ...) still operate in
-    /// f64 land; the widening here is the only narrowing crossing
-    /// at the load boundary. ARM64 sequence is
-    /// `ldr s0, [x19]; fcvt d0, s0; fmov x19, d0`; x86_64 is
-    /// `mov eax, [rbx]; movd xmm0, eax; cvtss2sd xmm0, xmm0;
-    /// movq rbx, xmm0`.
+    /// Single-precision `float` lvalue read. Reads 32 bits,
+    /// widens to f64, and leaves `f64::to_bits()` in the
+    /// accumulator -- the c5 arithmetic ops operate in f64 land,
+    /// so the widening is the only narrowing crossing at the
+    /// load boundary. ARM64: `ldr s0, [x19]; fcvt d0, s0; fmov
+    /// x19, d0`; x86_64: `mov eax, [rbx]; movd xmm0, eax;
+    /// cvtss2sd xmm0, xmm0; movq rbx, xmm0`.
     Lf,
 }
 

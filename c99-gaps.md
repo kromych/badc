@@ -220,11 +220,10 @@ C11+ features showing up in modern code:
   export.
 - `#pragma entrypoint(<name>)` -- override the default `main`
   entry point. Used for `WinMain` (Win32 GUI) or any
-  custom non-`main` entry. (gh #55.)
+  custom non-`main` entry.
 - `#pragma subsystem(console | windows)` -- pick the Windows
   PE optional-header `Subsystem` field. Quietly ignored on
   non-PE targets so the same source builds for every OS.
-  (gh #32.)
 - `#pragma once`.
 - `--interp` (bytecode VM with pointer tracking),
   `--jit` (in-process), `--dump-asm`.

@@ -282,10 +282,10 @@ so the source carries enough context to build with a bare
 #pragma subsystem(windows)         // pick the Windows PE subsystem (windows | console).
 ```
 
-`#pragma entrypoint(<name>)` (gh #55) lets the source declare
-a non-`main` entry without a build-driver flag; the compiler
+`#pragma entrypoint(<name>)` lets the source declare a
+non-`main` entry without a build-driver flag; the compiler
 resolves the name through the same symbol-table lookup it uses
-for `main`. `#pragma subsystem(<kind>)` (gh #32) drives the
+for `main`. `#pragma subsystem(<kind>)` drives the
 PE optional-header `Subsystem` byte -- `console` (default,
 `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`) or `windows`
 (`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`); together with

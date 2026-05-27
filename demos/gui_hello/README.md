@@ -25,11 +25,11 @@ python demos/gui_hello/smoke.py    # builds all five targets via badc
 
 ## What each demo exercises
 
-* **`hello_win32.c`** -- Pins the GUI subsystem via the new
-  `#pragma subsystem(windows)` (gh #32) so the PE optional
-  header carries `IMAGE_SUBSYSTEM_WINDOWS_GUI = 2` instead of
-  the default console value, and `#pragma entrypoint(WinMain)`
-  (gh #55) so the loader resolves `WinMain` rather than `main`.
+* **`hello_win32.c`** -- Pins the GUI subsystem via
+  `#pragma subsystem(windows)` so the PE optional header
+  carries `IMAGE_SUBSYSTEM_WINDOWS_GUI = 2` instead of the
+  default console value, and `#pragma entrypoint(WinMain)` so
+  the loader resolves `WinMain` rather than `main`.
   Drives the standard `WNDCLASSA` / `RegisterClassA` /
   `CreateWindowExA` / `GetMessageA` / `DispatchMessageA` loop;
   paints "Hello from badc!" via `BeginPaint` / `TextOutA` /

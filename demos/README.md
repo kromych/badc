@@ -129,8 +129,8 @@ and noO. See [`kissfft/README.md`](./kissfft/README.md).
 
 End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
 1.0.8 library. Integer + bit-twiddle heavy (BWT, MTF, RLE, Huffman);
-exercises a different code shape from miniz's deflate. Aligns with
-gh #11. See [`bzip2/README.md`](./bzip2/README.md).
+exercises a different code shape from miniz's deflate.
+See [`bzip2/README.md`](./bzip2/README.md).
 
 ## gui_hello/
 

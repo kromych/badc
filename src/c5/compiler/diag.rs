@@ -340,7 +340,7 @@ impl Compiler {
         self.emit_op(Op::StLocI);
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.
         self.emit_imm(0);
-        self.ast_binop(Op::Or);
+        self.ast_binop(crate::c5::ir::BinOp::Or);
         self.ast_fpcast();
         self.ast_psh();
         // Reload RHS into `a`.

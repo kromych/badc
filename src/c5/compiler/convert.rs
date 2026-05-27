@@ -89,7 +89,7 @@ impl Compiler {
         // stack-top into acc by virtue of `Op::Or` ORing acc with the
         // popped stack-top (acc was set to 0 a moment ago).
         self.emit_imm(0);
-        self.ast_binop(Op::Or);
+        self.ast_binop(crate::c5::ir::BinOp::Or);
         self.emit_binop_with_imm(Op::And, mask);
         self.ast_psh();
         self.emit_lea(temp);
@@ -214,7 +214,7 @@ impl Compiler {
         // `acc = acc XOR top, sp += 8` -- after this, acc holds
         // `LHS XOR RHS` (XOR is commutative) and the stack is
         // restored to its pre-comparison state.
-        self.ast_binop(Op::Xor);
+        self.ast_binop(crate::c5::ir::BinOp::Xor);
         // Mask the XOR to the common-type width: the comparison
         // only cares about the low N bytes.
         self.emit_binop_with_imm(Op::And, mask);

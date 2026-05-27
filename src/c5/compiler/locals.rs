@@ -769,7 +769,7 @@ impl Compiler {
                 // address loaded by Lea by `i * elem_size` bytes.
                 self.ast_psh();
                 self.emit_imm(i * elem_size);
-                self.ast_binop(Op::Add);
+                self.ast_binop(crate::c5::ir::BinOp::Add);
             }
             self.ast_psh();
             // Parse the element expression at assignment
@@ -913,7 +913,7 @@ impl Compiler {
             if total_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(total_offset);
-                self.ast_binop(Op::Add);
+                self.ast_binop(crate::c5::ir::BinOp::Add);
             }
             self.ast_psh();
             self.expr(Token::Assign as i64)?;

@@ -104,46 +104,9 @@ impl Compiler {
 
     /// Apply a binary operator to the parser-side vstack-top (lhs)
     /// + accumulator (rhs); the result lands in the accumulator.
-    /// Replaces `emit_op(Op::<binop>)` for every variant that maps
-    /// to an `ast_apply_binop` arm.
-    pub(super) fn ast_binop(&mut self, op: Op) {
-        use super::super::ir::BinOp as B;
-        let binop = match op {
-            Op::Add => B::Add,
-            Op::Sub => B::Sub,
-            Op::Mul => B::Mul,
-            Op::Div => B::Div,
-            Op::Mod => B::Mod,
-            Op::Divu => B::Divu,
-            Op::Modu => B::Modu,
-            Op::Or => B::Or,
-            Op::Xor => B::Xor,
-            Op::And => B::And,
-            Op::Shl => B::Shl,
-            Op::Shr => B::Shr,
-            Op::Shru => B::Shru,
-            Op::Eq => B::Eq,
-            Op::Ne => B::Ne,
-            Op::Lt => B::Lt,
-            Op::Gt => B::Gt,
-            Op::Le => B::Le,
-            Op::Ge => B::Ge,
-            Op::Ult => B::Ult,
-            Op::Ugt => B::Ugt,
-            Op::Ule => B::Ule,
-            Op::Uge => B::Uge,
-            Op::Fadd => B::Fadd,
-            Op::Fsub => B::Fsub,
-            Op::Fmul => B::Fmul,
-            Op::Fdiv => B::Fdiv,
-            Op::Feq => B::Feq,
-            Op::Fne => B::Fne,
-            Op::Flt => B::Flt,
-            Op::Fgt => B::Fgt,
-            Op::Fle => B::Fle,
-            Op::Fge => B::Fge,
-            _ => unreachable!("ast_binop called with non-binop {op:?}"),
-        };
+    /// Callers pass `BinOp` directly; the helper handles the
+    /// state-tracking flags every binop emit needs to clear.
+    pub(super) fn ast_binop(&mut self, binop: super::super::ir::BinOp) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -434,7 +397,7 @@ impl Compiler {
             self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, old_value]
             self.emit_imm(!(mask << bit_offset)); // a = ~(mask << off)
-            self.ast_binop(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
+            self.ast_binop(crate::c5::ir::BinOp::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
             // Stash the rhs AST id before the trailing Op::Si
@@ -445,17 +408,17 @@ impl Compiler {
             self.pending.bf_assign_rhs = self.ast_acc;
             self.ast_psh(); // stack: [..., field_addr, cleared, new_value]
             self.emit_imm(mask);
-            self.ast_binop(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
+            self.ast_binop(crate::c5::ir::BinOp::And); // a = new_value & mask; stack: [..., field_addr, cleared]
             if bit_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(bit_offset as i64);
-                self.ast_binop(Op::Shl); // a = (new_value & mask) << bit_offset
+                self.ast_binop(crate::c5::ir::BinOp::Shl); // a = (new_value & mask) << bit_offset
             }
             // a = shifted; stack: [..., field_addr, cleared].
             // Op::Or pops cleared, ORs into a. After: a = combined;
             // stack: [..., field_addr]. The trailing Si pops
             // field_addr as the destination.
-            self.ast_binop(Op::Or);
+            self.ast_binop(crate::c5::ir::BinOp::Or);
             self.emit_op(store_op); // pops field_addr, stores a (=combined).
             self.ty = Ty::Int as i64;
             Ok(())
@@ -525,7 +488,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.emit_op(Op::LdLocI);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
-            self.ast_binop(Op::Or); // pops shifted_new; a = cleared | shifted_new
+            self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
             self.emit_op(store_op); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
             Ok(())
@@ -542,11 +505,11 @@ impl Compiler {
             if bit_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(bit_offset as i64);
-                self.ast_binop(Op::Shr); // a = (top >> bit_offset)
+                self.ast_binop(crate::c5::ir::BinOp::Shr); // a = (top >> bit_offset)
             }
             self.ast_psh();
             self.emit_imm(mask);
-            self.ast_binop(Op::And); // a = (...) & mask
+            self.ast_binop(crate::c5::ir::BinOp::And); // a = (...) & mask
             if !is_unsigned_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
                 self.emit_binop_with_imm(Op::Shl, shift);

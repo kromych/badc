@@ -208,6 +208,8 @@ pub(super) fn write_relocatable(
     //   5 = .symtab
     //   6 = .strtab
     //   7 = .shstrtab
+    //   8 = .rela.data
+    //   9 = .badc.dylibs
     // Plus the null section at index 0.
     const SHIDX_TEXT: u16 = 1;
     const SHIDX_DATA: u16 = 3;
@@ -216,7 +218,8 @@ pub(super) fn write_relocatable(
     const SHIDX_STRTAB: u16 = 6;
     const SHIDX_SHSTRTAB: u16 = 7;
     const SHIDX_RELA_DATA: u16 = 8;
-    const NUM_SECTIONS: usize = 9;
+    const SHIDX_BADC_DYLIBS: u16 = 9;
+    const NUM_SECTIONS: usize = 10;
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -669,6 +672,7 @@ pub(super) fn write_relocatable(
         ".strtab",
         ".shstrtab",
         ".rela.data",
+        ".badc.dylibs",
     ]);
 
     // Section data layout. Each section's offset starts at the
@@ -859,6 +863,31 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
     let _ = SHIDX_RELA_DATA;
+
+    // .badc.dylibs -- NUL-separated `#pragma dylib` paths from
+    // every binding pragma in scope. The final-image writer
+    // emits one DT_NEEDED / LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR
+    // per entry; without this, a Linux program calling `sqrt` from
+    // `libm.so.6` would fail to load because the writer only
+    // remembers the libc DT_NEEDED hard-coded into its dynstr.
+    // SHT_PROGBITS with no SHF_ALLOC: standard ELF loaders ignore
+    // the section, the badc reader picks it up by name.
+    let mut dylibs_bytes: Vec<u8> = Vec::new();
+    for d in &build.imports.dylibs {
+        dylibs_bytes.extend_from_slice(d.path.as_bytes());
+        dylibs_bytes.push(0);
+    }
+    let dylibs_off = out.len() as u64;
+    out.extend_from_slice(&dylibs_bytes);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[8],
+        sh_type: SHT_PROGBITS,
+        sh_offset: dylibs_off,
+        sh_size: dylibs_bytes.len() as u64,
+        sh_addralign: 1,
+        ..Default::default()
+    });
+    let _ = SHIDX_BADC_DYLIBS;
 
     debug_assert_eq!(sh.len(), NUM_SECTIONS);
 

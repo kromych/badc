@@ -15,7 +15,7 @@
 #![cfg(feature = "std")]
 #![allow(dead_code)]
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -78,6 +78,13 @@ pub struct MergedNative {
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
+    /// Dylib load paths the final-image writer drops into
+    /// DT_NEEDED / LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR.
+    /// Sourced from every input unit's
+    /// [`NativeObject::dylibs`] (the `#pragma dylib` paths the
+    /// .o writer recorded), deduped on full path with insertion
+    /// order preserved across units.
+    pub dylibs: Vec<String>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -550,6 +557,23 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Dedupe dylib paths across input units, preserving the
+    // order each unit declared them. The final-image writer
+    // emits a DT_NEEDED / LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR
+    // per surviving entry, so order controls the dynamic loader's
+    // search precedence. BTreeSet keeps the dedupe O(N log N) on
+    // the full path count; a Vec-scan would be O(N^2) for the
+    // 10+ dylibs a large multi-TU link sees.
+    let mut dylibs: Vec<String> = Vec::new();
+    let mut seen_dylibs: BTreeSet<String> = BTreeSet::new();
+    for obj in objs {
+        for d in &obj.dylibs {
+            if seen_dylibs.insert(d.clone()) {
+                dylibs.push(d.clone());
+            }
+        }
+    }
+
     Ok(MergedNative {
         text,
         data,
@@ -559,6 +583,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         pending_imports,
         data_abs_relocs,
         machine,
+        dylibs,
     })
 }
 
@@ -1310,6 +1335,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec::Vec::new(),
         };
         // Unit A claims size=4 align=4; unit B claims size=8 align=8.
         // C99 6.9.2: max(size)=8, max(align)=8.
@@ -1363,6 +1389,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec::Vec::new(),
         };
         let unit_strong = NativeObject {
             machine: NativeMachine::X86_64,
@@ -1391,6 +1418,7 @@ mod tests {
             ],
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
+            dylibs: alloc::vec::Vec::new(),
         };
         let merged = link_native_objects(&[unit_common, unit_strong]).expect("link");
         let def = merged

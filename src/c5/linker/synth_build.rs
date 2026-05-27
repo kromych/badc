@@ -164,19 +164,23 @@ fn resolve_entry_offset(merged: &MergedNative, entry_name: &str) -> Result<usize
 }
 
 fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
-    let dylib = match target {
-        Target::MacOSAarch64 => ResolvedDylib {
-            name: "libSystem".to_string(),
-            path: "/usr/lib/libSystem.B.dylib".to_string(),
-        },
-        Target::LinuxAarch64 | Target::LinuxX64 => ResolvedDylib {
-            name: "libc".to_string(),
-            path: linux_libc_path(target),
-        },
-        Target::WindowsX64 | Target::WindowsAarch64 => ResolvedDylib {
-            name: "msvcrt".to_string(),
-            path: "msvcrt.dll".to_string(),
-        },
+    // `merged.dylibs` holds each `#pragma dylib` path the input
+    // units recorded (in declaration order, deduped). When a
+    // unit was produced before the `.badc.dylibs` section landed
+    // and the merge surfaces no entries, fall back to the
+    // single per-target default so the legacy single-libc link
+    // path stays runnable.
+    let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
+        alloc::vec![default_dylib(target)]
+    } else {
+        merged
+            .dylibs
+            .iter()
+            .map(|path| ResolvedDylib {
+                name: dylib_name_from_path(path),
+                path: path.clone(),
+            })
+            .collect()
     };
     let imports: Vec<ResolvedImport> = merged
         .imports
@@ -201,10 +205,34 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             param_types: Vec::new(),
         })
         .collect();
-    ResolvedImports {
-        imports,
-        dylibs: alloc::vec![dylib],
+    ResolvedImports { imports, dylibs }
+}
+
+fn default_dylib(target: Target) -> ResolvedDylib {
+    match target {
+        Target::MacOSAarch64 => ResolvedDylib {
+            name: "libSystem".to_string(),
+            path: "/usr/lib/libSystem.B.dylib".to_string(),
+        },
+        Target::LinuxAarch64 | Target::LinuxX64 => ResolvedDylib {
+            name: "libc".to_string(),
+            path: linux_libc_path(target),
+        },
+        Target::WindowsX64 | Target::WindowsAarch64 => ResolvedDylib {
+            name: "msvcrt".to_string(),
+            path: "msvcrt.dll".to_string(),
+        },
     }
+}
+
+fn dylib_name_from_path(path: &str) -> String {
+    // The c5 handle is the load path's stem -- "libc.so.6" maps
+    // to "libc", "/usr/lib/libSystem.B.dylib" to "libSystem",
+    // "msvcrt.dll" to "msvcrt". Used only for diagnostics today.
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    let stem = basename.split('.').next().unwrap_or(basename);
+    let stripped = stem.strip_prefix("lib").unwrap_or(stem);
+    stripped.to_string()
 }
 
 fn linux_libc_path(target: Target) -> String {
@@ -499,6 +527,7 @@ mod tests {
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::Aarch64,
+            dylibs: alloc::vec![],
         }
     }
 

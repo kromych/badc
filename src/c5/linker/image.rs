@@ -540,14 +540,28 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     );
     text.extend_from_slice(&stub_bytes);
 
-    // .dynstr layout: a leading "\0", then "libc.so.6\0", then
-    // every import name NUL-terminated. Record per-import
-    // string offsets so .dynsym entries can refer back to them.
+    // .dynstr layout: a leading "\0", then one NUL-terminated
+    // entry per DT_NEEDED dylib path collected from each unit's
+    // `#pragma dylib` declarations, then every import name
+    // NUL-terminated. A merge with no recorded dylibs falls back
+    // to "libc.so.6" -- that matches the historical single-libc
+    // ELF write path and keeps cross-TU smokes runnable when an
+    // upstream .o was produced before the `.badc.dylibs` section
+    // landed.
     let mut dynstr: Vec<u8> = Vec::new();
     dynstr.push(0);
-    let libc_name_off = dynstr.len() as u32;
-    dynstr.extend_from_slice(b"libc.so.6");
-    dynstr.push(0);
+    let dylib_paths: alloc::vec::Vec<&str> = if merged.dylibs.is_empty() {
+        alloc::vec!["libc.so.6"]
+    } else {
+        merged.dylibs.iter().map(|s| s.as_str()).collect()
+    };
+    let mut dylib_name_off: alloc::vec::Vec<u32> =
+        alloc::vec::Vec::with_capacity(dylib_paths.len());
+    for path in &dylib_paths {
+        dylib_name_off.push(dynstr.len() as u32);
+        dynstr.extend_from_slice(path.as_bytes());
+        dynstr.push(0);
+    }
     let mut import_name_off: Vec<u32> = Vec::with_capacity(n_imports);
     for name in &merged.imports {
         import_name_off.push(dynstr.len() as u32);
@@ -596,10 +610,10 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     let data_size = merged.data.len() as u64;
     let dynamic_off = data_off + data_size;
     let dynamic_size: u64 = {
-        // Tag list: NEEDED, STRTAB, SYMTAB, STRSZ, SYMENT,
-        // PLTGOT, PLTREL, JMPREL, PLTRELSZ, FLAGS, BIND_NOW,
-        // NULL.
-        let n_tags: u64 = 12;
+        // Tag list: one NEEDED per merged dylib, then STRTAB,
+        // SYMTAB, STRSZ, SYMENT, PLTGOT, PLTREL, JMPREL,
+        // PLTRELSZ, FLAGS, BIND_NOW, NULL.
+        let n_tags: u64 = dylib_name_off.len() as u64 + 11;
         n_tags * ELF64_DYN_SIZE
     };
 
@@ -785,7 +799,9 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
 
     // .dynamic
     debug_assert_eq!(out.len() as u64, dynamic_off);
-    write_dyn(&mut out, DT_NEEDED, libc_name_off as u64);
+    for off in &dylib_name_off {
+        write_dyn(&mut out, DT_NEEDED, *off as u64);
+    }
     write_dyn(&mut out, DT_STRTAB, dynstr_vaddr);
     write_dyn(&mut out, DT_SYMTAB, dynsym_vaddr);
     write_dyn(&mut out, DT_STRSZ, dynstr_size);
@@ -1001,6 +1017,7 @@ mod tests {
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::X86_64,
+            dylibs: alloc::vec![],
         }
     }
 

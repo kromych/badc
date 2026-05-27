@@ -241,6 +241,14 @@ pub struct NativeObject {
     /// patching the 8-byte slot at `offset` in the merged
     /// `.data`.
     pub data_relocs: Vec<NativeReloc>,
+    /// Dylib load paths the writer copied out of the unit's
+    /// `#pragma dylib` declarations (`.badc.dylibs` section).
+    /// Each entry is the verbatim path the final-image writer
+    /// drops into DT_NEEDED / LC_LOAD_DYLIB /
+    /// IMAGE_IMPORT_DESCRIPTOR. Empty when the unit reaches for
+    /// no external libraries; the linker preserves insertion
+    /// order across units and dedupes on full path.
+    pub dylibs: Vec<String>,
 }
 
 /// True when `bytes` starts with the ELF magic. Cheap
@@ -340,10 +348,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut tbss_section_indices: Vec<usize> = Vec::new();
     let mut symtab_idx: Option<usize> = None;
     let mut rela_section_indices: Vec<usize> = Vec::new();
+    let mut dylibs_section_idx: Option<usize> = None;
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
             symtab_idx = Some(i);
+            continue;
+        }
+        if name == ".badc.dylibs" {
+            dylibs_section_idx = Some(i);
             continue;
         }
         match classify_section_family(name) {
@@ -560,6 +573,21 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
+    // `.badc.dylibs` -- NUL-separated load paths the writer
+    // recorded from every `#pragma dylib` declaration in scope.
+    // Absent for objects produced by other toolchains; absent
+    // also for c5 objects that reach for no external libraries.
+    let mut dylibs: Vec<String> = Vec::new();
+    if let Some(i) = dylibs_section_idx {
+        let bytes = section_slice(bytes, &shdrs[i])?;
+        for chunk in bytes.split(|&b| b == 0) {
+            if chunk.is_empty() {
+                continue;
+            }
+            dylibs.push(String::from_utf8_lossy(chunk).into_owned());
+        }
+    }
+
     Ok(NativeObject {
         machine,
         text: text_bytes,
@@ -570,6 +598,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         symbols,
         text_relocs,
         data_relocs,
+        dylibs,
     })
 }
 

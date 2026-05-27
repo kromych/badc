@@ -1469,10 +1469,10 @@ impl Compiler {
             self.ast_psh();
             let step = self.pointee_step(self.ty);
             self.emit_imm(step);
-            self.emit_op(if t == Token::Inc as i64 {
-                Op::Add
+            self.ast_binop(if t == Token::Inc as i64 {
+                super::super::ir::BinOp::Add
             } else {
-                Op::Sub
+                super::super::ir::BinOp::Sub
             });
             self.ast_assign();
             // Build the AST `Expr::PreInc` whose `by` is signed
@@ -2380,18 +2380,18 @@ impl Compiler {
                 }
                 self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc {
-                    Op::Add
+                self.ast_binop(if self.lex.tk == Token::Inc {
+                    super::super::ir::BinOp::Add
                 } else {
-                    Op::Sub
+                    super::super::ir::BinOp::Sub
                 });
                 self.ast_assign();
                 self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc {
-                    Op::Sub
+                self.ast_binop(if self.lex.tk == Token::Inc {
+                    super::super::ir::BinOp::Sub
                 } else {
-                    Op::Add
+                    super::super::ir::BinOp::Add
                 });
                 // Build `Expr::PostInc { lvalue, by, ty }` so
                 // the walker emits load -> binop_imm(Add, by) ->

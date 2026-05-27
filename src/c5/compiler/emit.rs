@@ -19,7 +19,6 @@ use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_scalar_load_op_val;
 use super::types::is_unsigned_ty;
 
 impl Compiler {
@@ -55,6 +54,13 @@ impl Compiler {
 
     // ---- Code emission ----
 
+    /// Emit a scalar-load tag. The parser only routes scalar-load
+    /// Op variants (Lc / Lcs / Lh / Lhu / Lw / Lwu / Li / Lf)
+    /// through this helper; every other emit shape lives on a
+    /// purpose-built helper (`ast_binop`, `ast_assign`, `ast_psh`,
+    /// `mark_emit_other`, ...). Records the load kind in
+    /// `trailing_scalar_load` so the lvalue-rewrite path can
+    /// detect a trailing scalar load and pop it.
     pub(super) fn emit_op(&mut self, op: Op) {
         // Any emit invalidates the function-pointer chain
         // tracking. Identifier loads and the unary `*` handler
@@ -62,33 +68,16 @@ impl Compiler {
         // result is in fn-ptr lineage (see
         // `fn_ptr_chain_depth`).
         self.pending.fn_ptr_chain_depth = -1;
-        // Trailing scalar-load tracker. Scalar load ops
-        // (`Op::Li` / `Op::Lc` / ...) set the flag; every other
-        // op clears it.
-        if is_scalar_load_op_val(op as i64) {
-            self.pending.trailing_scalar_load = Some(op);
-            // The identifier-rvalue path in expr.rs re-seeds
-            // `last_loaded_local` after its own load emit; any
-            // other scalar-load source (field, deref, index,
-            // bitfield) leaves it cleared so a downstream pop /
-            // rewrite does not retract `was_read` from a symbol
-            // whose load is no longer trailing.
-            self.pending.last_loaded_local = None;
-        } else {
-            self.pending.trailing_scalar_load = None;
-        }
-        // No caller routes Op::Jsri / Op::Adj through emit_op
-        // any more (the indirect-call sites set the flag inline
-        // via the call-site path); every op that reaches here
-        // clears the flag.
+        self.pending.trailing_scalar_load = Some(op);
+        // The identifier-rvalue path in expr.rs re-seeds
+        // `last_loaded_local` after its own load emit; any
+        // other scalar-load source (field, deref, index,
+        // bitfield) leaves it cleared so a downstream pop /
+        // rewrite does not retract `was_read` from a symbol
+        // whose load is no longer trailing.
+        self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
-        // Trailing `Imm 0` peek is set only by `emit_imm(0)`; any
-        // other op clears it.
         self.pending.last_imm_was_zero = false;
-        // AST hook -- ops whose shape is determined by `op` alone
-        // (vstack push, arithmetic / comparison binops, unary
-        // fneg, scalar stores, call-site Acc clobbers).
-        self.ast_track_emit_op(op);
     }
 
     /// Push the parser-side AST accumulator onto the vstack.
@@ -467,23 +456,24 @@ impl Compiler {
             // `BitfieldAssign { rhs: Binop(read, op, rhs) }` per
             // C99 6.5.16.2.
             let rhs_ast = self.ast_acc;
-            let (op, ir_op) = match binop {
-                x if x == Token::AddOp as i64 => (Op::Add, crate::c5::ir::BinOp::Add),
-                x if x == Token::SubOp as i64 => (Op::Sub, crate::c5::ir::BinOp::Sub),
-                x if x == Token::MulOp as i64 => (Op::Mul, crate::c5::ir::BinOp::Mul),
-                x if x == Token::DivOp as i64 => (Op::Div, crate::c5::ir::BinOp::Div),
-                x if x == Token::ModOp as i64 => (Op::Mod, crate::c5::ir::BinOp::Mod),
-                x if x == Token::AndOp as i64 => (Op::And, crate::c5::ir::BinOp::And),
-                x if x == Token::OrOp as i64 => (Op::Or, crate::c5::ir::BinOp::Or),
-                x if x == Token::XorOp as i64 => (Op::Xor, crate::c5::ir::BinOp::Xor),
-                x if x == Token::ShlOp as i64 => (Op::Shl, crate::c5::ir::BinOp::Shl),
-                x if x == Token::ShrOp as i64 => (Op::Shr, crate::c5::ir::BinOp::Shr),
+            use super::super::ir::BinOp as B;
+            let ir_op = match binop {
+                x if x == Token::AddOp as i64 => B::Add,
+                x if x == Token::SubOp as i64 => B::Sub,
+                x if x == Token::MulOp as i64 => B::Mul,
+                x if x == Token::DivOp as i64 => B::Div,
+                x if x == Token::ModOp as i64 => B::Mod,
+                x if x == Token::AndOp as i64 => B::And,
+                x if x == Token::OrOp as i64 => B::Or,
+                x if x == Token::XorOp as i64 => B::Xor,
+                x if x == Token::ShlOp as i64 => B::Shl,
+                x if x == Token::ShrOp as i64 => B::Shr,
                 _ => return Err(self.compile_err("unsupported compound op on bitfield")),
             };
             if let Some(r) = rhs_ast {
                 self.pending.bf_compound_assign = Some((r, ir_op));
             }
-            self.emit_op(op);
+            self.ast_binop(ir_op);
             // Mask + shift the combined value back into the slot.
             self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
             if bit_offset > 0 {
@@ -1198,54 +1188,6 @@ impl Compiler {
         id
     }
 
-    /// AST-side reaction to `emit_op`. Only the binop family is
-    /// still reached via the variable-Op path (compound-assign
-    /// dispatch in `expr.rs`); every other arm dropped after the
-    /// `ast_psh` / `ast_assign` / `ast_fneg` / call-site helpers
-    /// captured their specialised side effects. The fall-through
-    /// arm keeps the dispatch total for the residual Op tags
-    /// (Lea / Li / StLocI / LdLocI / Mcpy / TlsLea / Intrinsic /
-    /// load_op_for outputs) that still drive `emit_op` for the
-    /// state-tracking flags.
-    pub(super) fn ast_track_emit_op(&mut self, op: Op) {
-        use super::super::ir::BinOp as B;
-        match op {
-            Op::Add => self.ast_apply_binop(B::Add),
-            Op::Sub => self.ast_apply_binop(B::Sub),
-            Op::Mul => self.ast_apply_binop(B::Mul),
-            Op::Div => self.ast_apply_binop(B::Div),
-            Op::Mod => self.ast_apply_binop(B::Mod),
-            Op::Divu => self.ast_apply_binop(B::Divu),
-            Op::Modu => self.ast_apply_binop(B::Modu),
-            Op::Or => self.ast_apply_binop(B::Or),
-            Op::Xor => self.ast_apply_binop(B::Xor),
-            Op::And => self.ast_apply_binop(B::And),
-            Op::Shl => self.ast_apply_binop(B::Shl),
-            Op::Shr => self.ast_apply_binop(B::Shr),
-            Op::Shru => self.ast_apply_binop(B::Shru),
-            Op::Eq => self.ast_apply_binop(B::Eq),
-            Op::Ne => self.ast_apply_binop(B::Ne),
-            Op::Lt => self.ast_apply_binop(B::Lt),
-            Op::Gt => self.ast_apply_binop(B::Gt),
-            Op::Le => self.ast_apply_binop(B::Le),
-            Op::Ge => self.ast_apply_binop(B::Ge),
-            Op::Ult => self.ast_apply_binop(B::Ult),
-            Op::Ugt => self.ast_apply_binop(B::Ugt),
-            Op::Ule => self.ast_apply_binop(B::Ule),
-            Op::Uge => self.ast_apply_binop(B::Uge),
-            Op::Fadd => self.ast_apply_binop(B::Fadd),
-            Op::Fsub => self.ast_apply_binop(B::Fsub),
-            Op::Fmul => self.ast_apply_binop(B::Fmul),
-            Op::Fdiv => self.ast_apply_binop(B::Fdiv),
-            Op::Feq => self.ast_apply_binop(B::Feq),
-            Op::Fne => self.ast_apply_binop(B::Fne),
-            Op::Flt => self.ast_apply_binop(B::Flt),
-            Op::Fgt => self.ast_apply_binop(B::Fgt),
-            Op::Fle => self.ast_apply_binop(B::Fle),
-            Op::Fge => self.ast_apply_binop(B::Fge),
-            _ => {}
-        }
-    }
 
     /// Build an `Expr::Binary` from the parser-side vstack-top
     /// (lhs) and the accumulator (rhs); leave the resulting

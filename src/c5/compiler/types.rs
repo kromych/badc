@@ -569,27 +569,3 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
     }
 }
 
-/// True if `op_val` (the trailing word in `self.text`) is a scalar
-/// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Lwu` /
-/// `Op::Li`. The parser uses this in every "rewrite the trailing
-/// load into a Psh so the address survives" path: assignments,
-/// compound assignments, pre/post-inc/dec, address-of, etc. The
-/// helper centralises the predicate so adding a new scalar load op
-/// is a one-line change here rather than an audit of every lvalue
-/// rewrite site.
-pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
-    op_val == Op::Lc as i64
-        || op_val == Op::Lcs as i64
-        || op_val == Op::Lh as i64
-        || op_val == Op::Lhu as i64
-        || op_val == Op::Lw as i64
-        || op_val == Op::Lwu as i64
-        || op_val == Op::Li as i64
-        // Single-precision narrow load behaves like the other
-        // scalar-load ops at every lvalue / address-of / inc-dec
-        // / compound-assign rewrite site: the parser drops the
-        // trailing load to recover the address, then re-emits
-        // the matching load (`reemit_scalar_load`) after the
-        // address-side rewrites are in place.
-        || op_val == Op::Lf as i64
-}

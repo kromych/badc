@@ -1977,9 +1977,7 @@ impl<'a> Walker<'a> {
 }
 
 /// Map a c5 type tag to the matching `LoadKind`. Mirrors
-/// `compiler::types::load_op_for` but produces the SSA-side enum
-/// directly so the walker doesn't have to round-trip through
-/// `Op::*`.
+/// `compiler::types::load_op_for`.
 fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let stripped = ty & !UNSIGNED_BIT;

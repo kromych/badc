@@ -356,7 +356,7 @@ pub(in crate::c5::compiler) struct Pending {
     ///
     /// Seeded by the identifier-load path from
     /// `Symbol::fn_ptr_indirection` and updated by unary `*` /
-    /// `&`. Cleared by `emit_op` so any unrelated emit
+    /// `&`. Cleared by `mark_emit_other` so any unrelated emit
     /// invalidates the trace; identifier loads and `*` re-set it
     /// when applicable. Used to suppress the spurious `Li` that
     /// the existing unary `*` handler would emit when chasing a
@@ -375,10 +375,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// program text is finalised, the symbol's was_read flag
     /// must be reverted to its prior state -- the load never
     /// ran, but the symbol may still have been read by an
-    /// earlier expression. Cleared by `emit_op` whenever a
-    /// scalar load lands at the tail through a path that is
-    /// not the identifier-rvalue branch (field access, array
-    /// indexing, deref, bitfield extraction) so a downstream
+    /// earlier expression. Cleared by `mark_emit_scalar_load`
+    /// whenever a scalar load lands at the tail through a path
+    /// that is not the identifier-rvalue branch (field access,
+    /// array indexing, deref, bitfield extraction) so a downstream
     /// pop/rewrite does not retract was_read from a symbol
     /// whose load is no longer trailing.
     pub last_loaded_local: Option<usize>,
@@ -739,9 +739,9 @@ pub struct Compiler {
     pending: Pending,
 
     /// Symbols with at least one entry in `Symbol::pending_stores`.
-    /// Tracked separately so the branch / call handlers in
-    /// `emit_op` can flush every pending store without walking
-    /// the full symbol table on each control-flow op. Cleared in
+    /// Tracked separately so the branch and call AST emitters
+    /// can flush every pending store without walking the full
+    /// symbol table on each control-flow point. Cleared in
     /// lockstep with the per-symbol vectors.
     pending_store_symbols: Vec<usize>,
 

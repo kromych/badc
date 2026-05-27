@@ -576,9 +576,9 @@ impl Compiler {
 
     // ---- AST helpers ----
     //
-    // The parser's `ast_*` calls (plus the small number of
-    // remaining `emit_op(Op::*)` tag sites) populate the per-
-    // function AST that the walker descends to produce SSA.
+    // The parser's `ast_*` calls and the `mark_emit_*` tag
+    // sites populate the per-function AST that the walker
+    // descends to produce SSA.
 
     /// Reset the AST + parser-side value stack at the start of a
     /// function body. The arena drops the previous function's
@@ -613,10 +613,10 @@ impl Compiler {
         alloca_top_slot: i64,
     ) {
         // Reserve one PC unit so end_pc > ent_pc holds for every
-        // function regardless of body content. With emit_op and
-        // emit_val no longer pushing to the tape, the body's
-        // text.len() growth is zero; without this reservation the
-        // linker / DWARF range invariant would fail.
+        // function regardless of body content. The parser does
+        // not advance `next_ent_pc` while walking the body;
+        // without this reservation the linker / DWARF range
+        // invariant would fail.
         self.next_ent_pc += 1;
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),

@@ -892,10 +892,11 @@ impl Compiler {
                         self.symbols[id_idx].was_read = true;
                     }
                     // Seed the fn-pointer chain depth from
-                    // the symbol's recorded indirection. emit_op
-                    // just cleared the field; re-set it now so the
-                    // surrounding unary-`*` chain can recognise
-                    // function-pointer decay. `fn_ptr_indirection`
+                    // the symbol's recorded indirection.
+                    // `mark_emit_scalar_load` just cleared the
+                    // field; re-set it now so the surrounding
+                    // unary-`*` chain can recognise function-
+                    // pointer decay. `fn_ptr_indirection`
                     // is "indirection above fn-ptr, plus 1"; depth
                     // after the load is one less (the load itself
                     // consumed one indirection level).
@@ -1207,9 +1208,8 @@ impl Compiler {
             if self.pending.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
                 // result is itself a fn-ptr rvalue, so any
-                // further `*`s also decay.
-                // Note: emit_op was not called, so the chain
-                // depth is preserved (no clear happened).
+                // further `*`s also decay. No scalar load fired,
+                // so the chain depth is preserved.
             } else if leftover_stride > 0 {
                 // Pointer-to-array operand: `*p` is the row
                 // deref, equivalent to `p[0]`. The row's address
@@ -1237,16 +1237,17 @@ impl Compiler {
                 // the address from `a` directly.
                 let result_is_struct_value =
                     is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-                // Dual-emit: capture the operand snapshot before
-                // the load op runs `ast_track_emit_op` (which is
-                // a no-op for load ops today, but capturing here
-                // matches the assignment / cast pattern).
+                // Capture the operand snapshot before
+                // `mark_emit_scalar_load` clears the chain-depth
+                // state; the snapshot is the deref's child for
+                // the Unary node below.
                 let deref_child_ast = self.ast_acc;
                 if !result_is_struct_value {
                     let prior_depth = self.pending.fn_ptr_chain_depth;
                     self.mark_emit_scalar_load();
-                    // emit_op cleared the chain depth. Restore it
-                    // one level deeper if the operand was tracked:
+                    // `mark_emit_scalar_load` cleared the chain
+                    // depth. Restore it one level deeper if the
+                    // operand was tracked:
                     // a real deref consumes one level of indirection
                     // toward the fn-ptr. (-1 stays -1.)
                     if prior_depth > 0 {
@@ -2470,9 +2471,8 @@ impl Compiler {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
                     // Re-snapshot `idx_ast` after the scale `Mul`.
-                    // `emit_binop_with_imm` ran through
-                    // `ast_track_emit_op`, which wrapped the
-                    // earlier `idx_ast` into a fresh
+                    // `emit_binop_with_imm` wrapped the earlier
+                    // `idx_ast` into a fresh
                     // `Binary { Mul, idx, IntLit(scale) }` whose
                     // id is now on `ast_acc`. Using the post-scale
                     // expression here means the walker can emit a

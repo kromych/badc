@@ -394,24 +394,54 @@ fn project_x86_64_pending(
             reloc.rtype
         )));
     }
+    // Per SysV AMD64 psABI ch. 4.4 the `r_offset` of R_X86_64_PC32
+    // and R_X86_64_PLT32 names the byte location of the 32-bit
+    // displacement field, not the instruction start. The writer's
+    // `patch_addr_load` / `patch_iat_lookup` / function-pointer
+    // patchers take the instruction start (`adrp_offset` is the
+    // aarch64 ADRP analogue) so each x86_64 form steps back from
+    // the displacement to the instruction's first byte:
+    //   * `lea reg, [rip + disp32]`  -- 7-byte REX form, disp32 at +3
+    //   * `call rel32`                -- 5-byte form,    disp32 at +1
+    let instr_back_off = match reloc.rtype {
+        R_X86_64_PC32 => 3,
+        R_X86_64_PLT32 => 1,
+        _ => unreachable!(),
+    };
+    let instr_offset = (reloc.text_offset as usize)
+        .checked_sub(instr_back_off)
+        .ok_or_else(|| {
+            synth_err(&alloc::format!(
+                "synthesizer: x86_64 reloc text_offset {} underflows instr-start adjustment by {}",
+                reloc.text_offset,
+                instr_back_off
+            ))
+        })?;
+    // R_X86_64_PC32 / R_X86_64_PLT32 store the addend as
+    // `target_offset - 4` so the linker's `S + A - P` reproduces the
+    // CPU's RIP-relative semantics (rip points at the next
+    // instruction, four bytes past the displacement field). The
+    // writer's data / function patchers operate on the actual
+    // target offset within the merged section, so add 4 back here.
+    let target_byte_offset = (reloc.addend as i64).wrapping_add(4);
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
-                adrp_offset: reloc.text_offset as usize,
-                data_offset: reloc.addend as u64,
+                adrp_offset: instr_offset,
+                data_offset: target_byte_offset as u64,
             });
             Ok(())
         }
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
-                adrp_offset: reloc.text_offset as usize,
-                target_native_offset: reloc.addend as usize,
+                adrp_offset: instr_offset,
+                target_native_offset: target_byte_offset as usize,
             });
             Ok(())
         }
         NativeSymSection::Undef => {
             got_fixups.push(GotFixup {
-                adrp_offset: reloc.text_offset as usize,
+                adrp_offset: instr_offset,
                 import_index: reloc.import_index,
             });
             Ok(())

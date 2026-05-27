@@ -1444,8 +1444,7 @@ impl Compiler {
             // build succeeded, so by the time `ast_emit_pre_inc`
             // fires the lvalue would otherwise be gone.
             let pre_inc_lvalue = self.ast_acc;
-            let reload = self
-                .rewrite_trailing_load_as_psh()
+            self.rewrite_trailing_load_as_psh()
                 .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
             // ++/-- reads the prior value and stores a new one.
             // `take_last_loaded_local` restored was_read to its
@@ -1460,7 +1459,7 @@ impl Compiler {
                 self.record_local_read(idx);
                 self.record_local_store(idx, line);
             }
-            self.emit_op(reload);
+            self.mark_emit_other();
             if is_floating_scalar(self.ty) {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
@@ -1755,8 +1754,7 @@ impl Compiler {
                 // op; the helper hands back the matching reload op
                 // so we can put the current value back into `a`
                 // before pushing it for the binop's pop.
-                let reload = self
-                    .rewrite_trailing_load_as_psh()
+                self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
                 // Compound assignment reads the prior value
                 // (`reload` re-emits the load below) and stores a
@@ -1773,7 +1771,7 @@ impl Compiler {
                     self.symbols[idx].was_written = true;
                     self.record_local_read(idx);
                 }
-                self.emit_op(reload);
+                self.mark_emit_other();
                 // Push the current value so the binop can pop it.
                 self.ast_psh();
                 // For pointer arithmetic with `+=` / `-=`, scale
@@ -2358,8 +2356,7 @@ impl Compiler {
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
                 let post_inc_lvalue = self.ast_acc;
-                let reload = self
-                    .rewrite_trailing_load_as_psh()
+                self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
                 // Post ++/-- reads the prior value and stores a
                 // new one. Same shape as the compound-assign
@@ -2374,7 +2371,7 @@ impl Compiler {
                     self.record_local_read(idx);
                     self.record_local_store(idx, line);
                 }
-                self.emit_op(reload);
+                self.mark_emit_other();
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("floating-point ++/-- not yet implemented"));
                 }

@@ -868,14 +868,8 @@ fn main() {
             }
         };
         let entry_name = entry_override.as_deref().unwrap_or("main");
-        let write_result = match target {
-            Target::LinuxX64 | Target::LinuxAarch64 => {
-                badc::write_executable_elf64(&merged, entry_name)
-            }
-            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
-                badc::write_native_image_from_merged(&merged, &plt, entry_name, target)
-            }
-        };
+        let write_result =
+            badc::write_native_image_from_merged(&merged, &plt, entry_name, target);
         let bytes = match write_result {
             Ok(b) => b,
             Err(e) => {

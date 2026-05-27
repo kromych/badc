@@ -860,6 +860,7 @@ impl Compiler {
                                 type_tag: sym.type_,
                                 fp_slot: sym.val,
                                 is_parameter: param_set.contains(&i),
+                                decl_line: sym.decl_line as u32,
                             });
                         }
                     }

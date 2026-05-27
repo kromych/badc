@@ -296,4 +296,9 @@ pub struct VariableInfo {
     /// parameter list) so the DWARF emitter picks
     /// `DW_TAG_formal_parameter`; locals get `DW_TAG_variable`.
     pub is_parameter: bool,
+    /// Source line of the declaration. Surfaces as `DW_AT_decl_line`
+    /// on the matching DIE so `(gdb) info args` / `info locals` can
+    /// point at the declaration. Zero when the parser didn't record
+    /// a position (archive-reloaded units default here).
+    pub decl_line: u32,
 }

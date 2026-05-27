@@ -434,6 +434,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 type_tag: v.type_tag,
                 fp_slot: v.fp_slot,
                 is_parameter: v.is_parameter,
+                decl_line: v.decl_line,
             });
         }
         for w in &unit.warnings {

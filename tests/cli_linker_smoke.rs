@@ -1242,6 +1242,69 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// DW_AT_decl_line on variable + formal_parameter DIEs lets the
+/// debugger show the declaration's source line in `info args`
+/// / `info locals`. Symbol::decl_line is captured at parse time
+/// and threads through VariableInfo + SubprogVar to both DWARF
+/// emitters.
+#[test]
+fn multi_tu_link_emits_decl_line_on_locals() {
+    let dir = tempdir("multi-tu-decl-line");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) {\n    int y = x + 1;\n    return y;\n}\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_AT_decl_line"),
+        "expected DW_AT_decl_line on at least one variable / formal_parameter DIE:\n{out_text}",
+    );
+}
+
 /// Multi-TU subprogram DIEs need DW_AT_external (DWARF 4
 /// section 3.3.1) so debuggers honour cross-CU name resolution
 /// for user-defined functions. Without it (gdb) call helper()

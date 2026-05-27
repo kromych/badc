@@ -122,6 +122,7 @@ const DW_AT_DATA_MEMBER_LOCATION: u8 = 0x38;
 const DW_AT_BIT_SIZE: u8 = 0x0d;
 const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 const DW_AT_EXTERNAL: u8 = 0x3f;
+const DW_AT_DECL_LINE: u8 = 0x3b;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -301,13 +302,15 @@ fn build_debug_abbrev() -> Vec<u8> {
     out.push(0);
     // Abbrev 4: formal_parameter -- name + fbreg location +
     // DW_AT_type cross-DIE reference to a type DIE earlier in
-    // the same CU.
+    // the same CU. DW_AT_decl_line surfaces the declaration's
+    // source line so debuggers can locate the parameter spelling.
     write_uleb128(&mut out, ABBREV_FORMAL_PARAMETER);
     out.push(DW_TAG_FORMAL_PARAMETER);
     out.push(DW_CHILDREN_NO);
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
     // Abbrev 5: variable -- same shape as formal_parameter but
@@ -319,6 +322,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
     // Abbrev 6: base_type -- name + byte_size + DWARF encoding
@@ -711,6 +715,8 @@ fn build_debug_info(
                 // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
                 // offset of the matching type DIE emitted above.
                 body.extend_from_slice(&type_off.to_le_bytes());
+                // DW_AT_decl_line (ULEB128).
+                write_uleb128(&mut body, v.decl_line as u64);
             }
             // DWARF 4 section 3.4.2: trailing `...` of a variadic
             // prototype becomes a DW_TAG_unspecified_parameters

@@ -99,6 +99,7 @@ const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
 /// at emit time).
 const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
+const DW_AT_DECL_LINE: u32 = 0x3b;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -117,6 +118,7 @@ const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
 const DW_FORM_EXPRLOC: u32 = 0x18;
+const DW_FORM_UDATA: u32 = 0x0f;
 
 // `DW_OP_*` opcodes used in location / frame-base expressions.
 const DW_OP_FBREG: u8 = 0x91;
@@ -472,6 +474,9 @@ struct SubprogVar {
     type_tag: i64,
     /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
     fp_byte_offset: i64,
+    /// Source line of the declaration; surfaces as
+    /// `DW_AT_decl_line` on the DIE. Zero when unknown.
+    decl_line: u32,
 }
 
 /// Native bytes from a function's `low_pc` to the first byte of
@@ -693,6 +698,7 @@ fn collect_subprograms(
                 } else {
                     v.fp_slot * 8
                 },
+                decl_line: v.decl_line,
             })
             .collect();
 
@@ -1192,6 +1198,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
     write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_attr(&mut buf, DW_AT_DECL_LINE, DW_FORM_UDATA);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
@@ -1204,6 +1211,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
     write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_attr(&mut buf, DW_AT_DECL_LINE, DW_FORM_UDATA);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
@@ -1467,6 +1475,8 @@ fn build_debug_info(
             write_sleb128(&mut loc, v.fp_byte_offset);
             write_uleb128(&mut body, loc.len() as u64);
             body.extend_from_slice(&loc);
+            // DW_AT_decl_line (ULEB128).
+            write_uleb128(&mut body, v.decl_line as u64);
         }
         // Children-list terminator for this subprogram.
         body.push(0);

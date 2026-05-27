@@ -166,21 +166,31 @@ jobs:
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
         run: cargo test --locked --verbose
-      - name: capture libc_basic SIGSEGV PC under gdb (ubuntu-latest only, on failure)
+      - name: capture libc_basic SIGSEGV under strace + dmesg (ubuntu-latest only, on failure)
         # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
-        # macOS/aarch64 lanes pass identical bytes. Build + run one
-        # of the failing fixtures under gdb to surface the faulting
-        # PC and the instructions around it. Step runs only when the
-        # cargo test step above failed and only on ubuntu-latest.
+        # macOS/aarch64 lanes pass identical bytes. badc's ELF
+        # omits section headers so gdb 15.1 refuses to load the
+        # binary -- fall back to strace (which traces syscalls
+        # regardless) and dmesg's segfault row (which carries the
+        # faulting RIP + RSP + RW flags). Both run only when the
+        # cargo test step failed and only on ubuntu-latest.
         if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
         run: |
-          sudo apt-get install -y -qq gdb || true
-          which gdb
-          ulimit -c unlimited || true
+          sudo apt-get install -y -qq strace || true
           cargo build --release --locked --bin badc
           ./target/release/badc tests/fixtures/c/libc_basic.c -o /tmp/libc_basic
+          echo === strace ===
           set +e
-          gdb -batch -ex run -ex 'bt' -ex 'info reg rsp rax rdi rsi xmm0' -ex 'x/16i $pc-20' /tmp/libc_basic 2>&1 | head -120
+          strace -f -o /tmp/strace.log /tmp/libc_basic 2>&1 | head -5
+          echo === tail strace ===
+          tail -40 /tmp/strace.log
+          echo === dmesg segfault ===
+          dmesg 2>/dev/null | tail -10 || true
+          # Run with ptrace-style attach via strace -i to print the
+          # instruction pointer alongside each syscall so the last
+          # entry pins the user-side PC just before the fault.
+          echo === strace with insn pointer ===
+          strace -i /tmp/libc_basic 2>&1 | tail -25 || true
           true
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-

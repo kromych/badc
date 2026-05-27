@@ -649,13 +649,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_abbrev.extend_from_slice(&obj.debug_abbrev);
         debug_line.extend_from_slice(&obj.debug_line);
         for r in &obj.debug_info_relocs {
-            let mut shifted = r.clone();
+            let mut shifted = *r;
             shifted.offset = r.offset.wrapping_add(info_base);
             debug_info_relocs.push(shifted);
             unit_for_debug_info_reloc.push(unit_idx);
         }
         for r in &obj.debug_line_relocs {
-            let mut shifted = r.clone();
+            let mut shifted = *r;
             shifted.offset = r.offset.wrapping_add(line_base);
             debug_line_relocs.push(shifted);
             unit_for_debug_line_reloc.push(unit_idx);

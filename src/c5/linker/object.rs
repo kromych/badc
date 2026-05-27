@@ -257,6 +257,20 @@ pub struct NativeObject {
     /// table. The linker merges across units and remaps the
     /// dylib_index to the merged `dylibs` order.
     pub import_dylib_map: Vec<(String, u32)>,
+    /// Standard DWARF 4 sections the `-c` writer emits.
+    /// Address-bearing slots inside are placeholders paired with
+    /// entries in `debug_info_relocs` / `debug_line_relocs`; the
+    /// linker rebases each via the matching ELF reloc.
+    pub debug_info: Vec<u8>,
+    pub debug_abbrev: Vec<u8>,
+    pub debug_line: Vec<u8>,
+    /// `.rela.debug_info` and `.rela.debug_line` entries. Each
+    /// reloc records the byte offset inside its section, the
+    /// target section symbol (`.text` / `.debug_line` /
+    /// `.debug_abbrev`), the addend, and the reloc kind (4-byte
+    /// vs 8-byte slot).
+    pub debug_info_relocs: Vec<NativeReloc>,
+    pub debug_line_relocs: Vec<NativeReloc>,
 }
 
 /// True when `bytes` starts with the ELF magic. Cheap
@@ -357,6 +371,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut symtab_idx: Option<usize> = None;
     let mut rela_section_indices: Vec<usize> = Vec::new();
     let mut dylibs_section_idx: Option<usize> = None;
+    let mut debug_info_idx: Option<usize> = None;
+    let mut debug_abbrev_idx: Option<usize> = None;
+    let mut debug_line_idx: Option<usize> = None;
+    let mut rela_debug_info_idx: Option<usize> = None;
+    let mut rela_debug_line_idx: Option<usize> = None;
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
         if name == ".symtab" {
@@ -365,6 +384,26 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
         if name == ".note.badc" {
             dylibs_section_idx = Some(i);
+            continue;
+        }
+        if name == ".debug_info" {
+            debug_info_idx = Some(i);
+            continue;
+        }
+        if name == ".debug_abbrev" {
+            debug_abbrev_idx = Some(i);
+            continue;
+        }
+        if name == ".debug_line" {
+            debug_line_idx = Some(i);
+            continue;
+        }
+        if name == ".rela.debug_info" {
+            rela_debug_info_idx = Some(i);
+            continue;
+        }
+        if name == ".rela.debug_line" {
+            rela_debug_line_idx = Some(i);
             continue;
         }
         match classify_section_family(name) {
@@ -645,6 +684,38 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
+    // Standard DWARF 4 sections. Copy each section's bytes
+    // verbatim; the linker concatenates per-unit blobs and
+    // rebases addresses through the matching `.rela.debug_*`
+    // relocations. Empty when the producer didn't emit DWARF
+    // (no `-g` equivalent in c5; the writer emits these
+    // unconditionally for relocatable output).
+    let debug_info = if let Some(i) = debug_info_idx {
+        section_slice(bytes, &shdrs[i])?.to_vec()
+    } else {
+        Vec::new()
+    };
+    let debug_abbrev = if let Some(i) = debug_abbrev_idx {
+        section_slice(bytes, &shdrs[i])?.to_vec()
+    } else {
+        Vec::new()
+    };
+    let debug_line = if let Some(i) = debug_line_idx {
+        section_slice(bytes, &shdrs[i])?.to_vec()
+    } else {
+        Vec::new()
+    };
+    let debug_info_relocs = if let Some(i) = rela_debug_info_idx {
+        parse_rela(bytes, &shdrs[i])?
+    } else {
+        Vec::new()
+    };
+    let debug_line_relocs = if let Some(i) = rela_debug_line_idx {
+        parse_rela(bytes, &shdrs[i])?
+    } else {
+        Vec::new()
+    };
+
     Ok(NativeObject {
         machine,
         text: text_bytes,
@@ -657,7 +728,52 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         data_relocs,
         dylibs,
         import_dylib_map,
+        debug_info,
+        debug_abbrev,
+        debug_line,
+        debug_info_relocs,
+        debug_line_relocs,
     })
+}
+
+/// Parse a `.rela.<target>` section body into a list of
+/// [`NativeReloc`] entries. The section header carries the
+/// section the rela entries apply to (`sh_info`); the parser
+/// returns the entries opaque -- the caller routes them by the
+/// section context. Used for `.rela.debug_info` /
+/// `.rela.debug_line` so the linker can rebase address slots
+/// inside the DWARF byte streams without growing a parallel
+/// `text_relocs` / `data_relocs` pair per section.
+fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error> {
+    if sh.sh_size == 0 {
+        return Ok(Vec::new());
+    }
+    let body = section_slice(bytes, sh)?;
+    let entsize = ELF64_RELA_SIZE;
+    if !body.len().is_multiple_of(entsize) {
+        return Err(err(&format!(
+            ".rela section size {} is not a multiple of {}",
+            body.len(),
+            entsize,
+        )));
+    }
+    let count = body.len() / entsize;
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let off = i * entsize;
+        let r_offset = u64::from_le_bytes(body[off..off + 8].try_into().unwrap());
+        let r_info = u64::from_le_bytes(body[off + 8..off + 16].try_into().unwrap());
+        let r_addend = i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap());
+        let sym_idx = (r_info >> 32) as u32;
+        let rtype = (r_info & 0xffff_ffff) as u32;
+        out.push(NativeReloc {
+            offset: r_offset,
+            sym_idx: sym_idx as usize,
+            rtype,
+            addend: r_addend,
+        });
+    }
+    Ok(out)
 }
 
 // ---- Internal helpers ----

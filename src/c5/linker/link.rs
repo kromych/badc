@@ -1366,6 +1366,11 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
         };
         // Unit A claims size=4 align=4; unit B claims size=8 align=8.
         // C99 6.9.2: max(size)=8, max(align)=8.
@@ -1421,6 +1426,11 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
         };
         let unit_strong = NativeObject {
             machine: NativeMachine::X86_64,
@@ -1451,6 +1461,11 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            debug_info: alloc::vec::Vec::new(),
+            debug_abbrev: alloc::vec::Vec::new(),
+            debug_line: alloc::vec::Vec::new(),
+            debug_info_relocs: alloc::vec::Vec::new(),
+            debug_line_relocs: alloc::vec::Vec::new(),
         };
         let merged = link_native_objects(&[unit_common, unit_strong]).expect("link");
         let def = merged

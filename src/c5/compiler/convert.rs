@@ -90,11 +90,11 @@ impl Compiler {
         // popped stack-top (acc was set to 0 a moment ago).
         self.emit_imm(0);
         self.ast_binop(crate::c5::ir::BinOp::Or);
-        self.emit_binop_with_imm(Op::And, mask);
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         self.ast_psh();
         self.emit_lea(temp);
         self.emit_op(Op::Li);
-        self.emit_binop_with_imm(Op::And, mask);
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
     }
 
     /// After an Add / Sub / Mul, normalize the 64-bit accumulator
@@ -129,7 +129,7 @@ impl Compiler {
                 4 => 0xffff_ffff,
                 _ => return,
             };
-            self.emit_binop_with_imm(Op::And, mask);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         } else {
             // Signed: integer promotion already widens char / short
             // to int, so the only narrow signed common type that
@@ -142,8 +142,8 @@ impl Compiler {
                 4 => 32,
                 _ => return,
             };
-            self.emit_binop_with_imm(Op::Shl, shift_bits);
-            self.emit_binop_with_imm(Op::Shr, shift_bits);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift_bits);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift_bits);
         }
     }
 
@@ -167,14 +167,15 @@ impl Compiler {
     /// -> `Op::Eq`/`Op::Ne` sequence is 5 ops; the wide-common
     /// path uses 1, so the cost only lands on mixed-width sites.
     pub(super) fn emit_eq_with_common_width(&mut self, lhs_ty: i64, invert: bool) {
-        let plain_op = if invert { Op::Ne } else { Op::Eq };
+        use super::super::ir::BinOp as B;
+        let plain_op = if invert { B::Ne } else { B::Eq };
         // Pointers are 8 bytes regardless of pointee type and are
         // always compared as full-width values; the common-width
         // mask is only correct for actual integers. `p == 0`
         // would otherwise mask the pointer to 32 bits and accept
         // any pointer with low-half-zero as NULL.
         if is_pointer_ty(lhs_ty) || is_pointer_ty(self.ty) {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         // The XOR-mask sequence is only needed when one operand
@@ -182,19 +183,19 @@ impl Compiler {
         // than 8 bytes -- that's when the sign-extension into the
         // 64-bit register can make `(int)-1 == (uint)0xFFFFFFFF`
         // come out false. Matching signedness produces matching
-        // 64-bit representations and plain `Op::Eq` is correct on
+        // 64-bit representations and plain `B::Eq` is correct on
         // its own. Skipping the mask for the same-signedness case
         // keeps the per-eq cost at 1 op.
         let lhs_unsigned = is_unsigned_ty(lhs_ty);
         let rhs_unsigned = is_unsigned_ty(self.ty);
         if lhs_unsigned == rhs_unsigned {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         let common = usual_arith_common_ty(lhs_ty, self.ty, self.target);
         let common_size = self.size_of_type(common);
         if common_size >= 8 {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         // Narrow common type, mixed signedness: emit
@@ -207,7 +208,7 @@ impl Compiler {
             _ => -1,
         };
         if mask == -1 {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         // Acc holds RHS; stack-top holds LHS. `Op::Xor` does
@@ -217,7 +218,7 @@ impl Compiler {
         self.ast_binop(crate::c5::ir::BinOp::Xor);
         // Mask the XOR to the common-type width: the comparison
         // only cares about the low N bytes.
-        self.emit_binop_with_imm(Op::And, mask);
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         // Compare against 0.
         self.emit_binop_with_imm(plain_op, 0);
     }

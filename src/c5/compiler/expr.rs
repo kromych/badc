@@ -1074,7 +1074,7 @@ impl Compiler {
                             _ => -1,
                         };
                         if mask != -1 {
-                            self.emit_binop_with_imm(Op::And, mask);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
                         }
                     } else if target_size == 1 || target_size == 2 || target_size == 4 {
                         // Signed cast: shift-pair to mask + sign-extend
@@ -1095,8 +1095,8 @@ impl Compiler {
                             || (target_size == source_size && source_is_unsigned);
                         if needs_extend {
                             let bits = 64i64 - (target_size as i64) * 8;
-                            self.emit_binop_with_imm(Op::Shl, bits);
-                            self.emit_binop_with_imm(Op::Shr, bits);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
                         }
                     }
                 }
@@ -1339,12 +1339,12 @@ impl Compiler {
         } else if self.lex.tk == '!' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(Op::Eq, 0);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(Op::Xor, -1);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             // C99 6.5.3.3: `~` applies integer promotions; the result
             // has the promoted operand's type. `unsigned char` /
             // `unsigned short` promote to signed `int`, so no mask.
@@ -1354,7 +1354,7 @@ impl Compiler {
             // 0xFFFFFFFF.... high pattern from `XOR -1`.
             let operand_ty = self.ty;
             if is_unsigned_ty(operand_ty) && self.size_of_type(operand_ty) == 4 {
-                self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                 self.ty = operand_ty;
             } else {
                 self.ty = Ty::Int as i64;
@@ -1413,7 +1413,7 @@ impl Compiler {
                     // and run any subsequent comparison or shift on
                     // the negated value in `int`.
                     let operand_ty = self.ty;
-                    self.emit_binop_with_imm(Op::Mul, -1);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
                     self.ty = integer_promote(operand_ty);
                     // C99 6.5.3.3p3: result has the promoted operand
                     // type and follows that type's overflow rules.
@@ -1423,7 +1423,7 @@ impl Compiler {
                     // half set and a downstream Or / Shr operates
                     // on the wider pattern.
                     if is_unsigned_ty(self.ty) && self.size_of_type(self.ty) == 4 {
-                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                     }
                 }
             }
@@ -1779,7 +1779,7 @@ impl Compiler {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     if elem_size > 1 {
-                        self.emit_binop_with_imm(Op::Mul, elem_size);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
                     }
                 }
                 // Capture rhs after the pointer-arithmetic
@@ -2057,7 +2057,7 @@ impl Compiler {
                     self.ty = Ty::Int as i64;
                 } else {
                     if is_unsigned_ty(t) && lhs_size == 4 {
-                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                     }
                     self.ty = t;
                 }
@@ -2120,7 +2120,7 @@ impl Compiler {
                         self.mark_emit_other();
                         self.emit_imm(0);
                         self.ast_binop(crate::c5::ir::BinOp::Or);
-                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                         self.ast_psh();
                         self.emit_lea(rhs_temp);
                         self.emit_op(Op::Li);
@@ -2171,7 +2171,7 @@ impl Compiler {
                     let rhs_ty = self.ty;
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
                     // Pre-compute the common type so the dual-
                     // emit binop tracker captures the result-
@@ -2203,12 +2203,12 @@ impl Compiler {
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Div, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
                     self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale = self.pointee_size(t);
-                    self.emit_binop_with_imm(Op::Mul, scale);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     self.ty = t;
                 } else {
@@ -2439,7 +2439,7 @@ impl Compiler {
                     return Err(self.compile_err("pointer type expected"));
                 }
                 if multi_dim_stride > 0 {
-                    self.emit_binop_with_imm(Op::Mul, multi_dim_stride);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
                     self.ast_binop(crate::c5::ir::BinOp::Add);
                     // Multi-dim row pointer -- ty stays at the same
                     // pointer level; the innermost `[k]` decays it
@@ -2462,7 +2462,7 @@ impl Compiler {
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
                     // Re-snapshot `idx_ast` after the scale `Mul`.
                     // `emit_binop_with_imm` ran through
@@ -2547,7 +2547,7 @@ impl Compiler {
                     .clone();
 
                 if field.offset > 0 {
-                    self.emit_binop_with_imm(Op::Add, field.offset as i64);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);
                 }
                 self.ty = field.ty;
 

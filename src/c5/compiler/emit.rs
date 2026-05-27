@@ -212,23 +212,21 @@ impl Compiler {
         self.mark_emit_other();
     }
 
-    /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
-    /// "apply `op` to the accumulator with `val` as the right-
+    /// Emit `Psh; Imm <val>; <binop>` -- the three-step idiom for
+    /// "apply `binop` to the accumulator with `val` as the right-
     /// hand operand". Consolidates the parser sites that emit
     /// pointer-arithmetic scaling, bitfield mask-and-shift,
     /// post/pre-increment step values, and the like.
-    pub(super) fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
+    pub(super) fn emit_binop_with_imm(&mut self, binop: super::super::ir::BinOp, val: i64) {
         self.ast_psh();
         self.emit_imm(val);
-        // emit_imm is the low-level tag primitive and does not
-        // touch the AST. Seed `ast_acc` with the matching IntLit
-        // so the next binop sees a paired rhs. The synthetic
-        // literal is always C99 `int`-typed -- pointer scaling /
-        // mask / shift step constants all fit in the 32-bit
-        // signed range C99 6.4.4.1 gives an unsuffixed decimal
-        // literal.
+        // Seed `ast_acc` with the matching IntLit so the next
+        // binop sees a paired rhs. The synthetic literal is always
+        // C99 `int`-typed -- pointer scaling / mask / shift step
+        // constants all fit in the 32-bit signed range C99 6.4.4.1
+        // gives an unsuffixed decimal literal.
         self.ast_emit_int_lit(val, Ty::Int as i64);
-        self.emit_op(op);
+        self.ast_binop(binop);
     }
 
     /// Immediate carrying a string-literal / global address. The
@@ -454,9 +452,9 @@ impl Compiler {
             self.mark_emit_other();
             // Extract current = (old_value >> bit_offset) & mask.
             if bit_offset > 0 {
-                self.emit_binop_with_imm(Op::Shr, bit_offset as i64);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bit_offset as i64);
             }
-            self.emit_binop_with_imm(Op::And, mask);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
             // Evaluate the RHS with `current` on the c5 stack so
             // the binop pops it as the left operand. Right-hand-
             // side parsing follows the same precedence as a bare
@@ -487,15 +485,15 @@ impl Compiler {
             }
             self.emit_op(op);
             // Mask + shift the combined value back into the slot.
-            self.emit_binop_with_imm(Op::And, mask);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
             if bit_offset > 0 {
-                self.emit_binop_with_imm(Op::Shl, bit_offset as i64);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bit_offset as i64);
             }
             // shifted_new in `a`. Push it so the next ops can
             // reload the cleared old_value into `a`.
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
             self.mark_emit_other();
-            self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !(mask << bit_offset));
             self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
             self.ast_assign(); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
@@ -520,8 +518,8 @@ impl Compiler {
             self.ast_binop(crate::c5::ir::BinOp::And); // a = (...) & mask
             if !is_unsigned_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
-                self.emit_binop_with_imm(Op::Shl, shift);
-                self.emit_binop_with_imm(Op::Shr, shift); // Op::Shr is arithmetic
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // Op::Shr is arithmetic
             }
             self.ty = Ty::Int as i64;
             Ok(())

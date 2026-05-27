@@ -35,6 +35,7 @@ use super::program::Program;
 
 mod aarch64;
 mod dwarf;
+mod dwarf_reloc;
 mod elf;
 #[cfg(feature = "std")]
 mod elf_reloc;

@@ -82,6 +82,7 @@ impl Compiler {
                 elem_size
             }
         } else if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
@@ -92,7 +93,13 @@ impl Compiler {
             // total rather than the decayed pointer. Scalars fall
             // through to `size_of_type(var_ty)`. Postfix shapes
             // (`name->field`, `name.field`, `name[i]`) fail the
-            // peek and route through the expression path.
+            // peek and route through the expression path. C99
+            // 6.5.1p2: an identifier used as a primary expression
+            // must be declared; gating on `class != 0` keeps the
+            // fast path for declared symbols and routes an
+            // undeclared name to the general-expression branch,
+            // whose existing primary-Id arm surfaces the
+            // "undefined variable" diagnostic.
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;

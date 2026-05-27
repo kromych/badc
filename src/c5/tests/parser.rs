@@ -156,6 +156,37 @@ fn undefined_variable_used_in_expression() {
 }
 
 #[test]
+fn sizeof_rejects_undeclared_identifier() {
+    // C99 6.5.3.4 admits two operand shapes: a parenthesized
+    // type-name and a unary-expression. The unary-expression path
+    // folds back to 6.5.1p2, which requires every primary
+    // identifier to be declared. Prior to the fix the bare-id
+    // shortcut in `sizeof_expr.rs` read `Symbol::type_` directly
+    // for any `Token::Id` operand, so an undeclared name silently
+    // resolved to `Symbol::default()` (type_ = `Ty::Char` = 0) and
+    // `sizeof(undeclared)` evaluated to 1 instead of erroring.
+    expect_compile_error(
+        "int main() { return sizeof(no_such_type); }",
+        "undefined variable no_such_type",
+    );
+}
+
+#[test]
+fn sizeof_in_array_dim_rejects_undeclared_identifier() {
+    // Same constraint surfacing through a constant-expression
+    // `sizeof` (C99 6.6 + 6.7.6.2): the array-dimension parser
+    // runs `parse_constant_int` -> `sizeof_operand_bytes`. An
+    // undeclared operand must fail there, not silently fold to
+    // the `Ty::Char` placeholder size and produce a positive
+    // dimension or a confusing "array dimension must be positive"
+    // downstream message.
+    expect_compile_error(
+        "int main() { char x[sizeof(no_such_type) == 1 ? 1 : -1]; return 0; }",
+        "undefined variable no_such_type",
+    );
+}
+
+#[test]
 fn break_outside_loop() {
     expect_compile_error(
         "int main() { break; return 0; }",

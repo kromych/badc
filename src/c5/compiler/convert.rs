@@ -21,7 +21,6 @@
 //! `expr()`; centralising them here keeps the per-operator branches
 //! readable.
 
-use super::super::ir::LoadKind;
 use super::Compiler;
 use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
 
@@ -95,7 +94,7 @@ impl Compiler {
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         self.ast_psh();
         self.emit_lea(temp);
-        self.emit_op(LoadKind::I64);
+        self.mark_emit_other();
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
     }
 

@@ -557,7 +557,7 @@ impl Compiler {
                     // declared param ends up on top of the c5 stack.
                     for &temp_off in temp_offsets.iter().rev() {
                         self.emit_lea(temp_off);
-                        self.emit_op(LoadKind::I64);
+                        self.mark_emit_other();
                         self.ast_psh();
                     }
                     // For struct-returning callees, push the hidden
@@ -2133,7 +2133,7 @@ impl Compiler {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                         self.ast_psh();
                         self.emit_lea(rhs_temp);
-                        self.emit_op(LoadKind::I64);
+                        self.mark_emit_other();
                         self.ast_binop(crate::c5::ir::BinOp::Add);
                         self.ast_vstack.clear();
                         self.ast_vstack.extend(saved_vstack);
@@ -2592,12 +2592,7 @@ impl Compiler {
                     // dedicated dual-emit for the bitfield
                     // produces the only AST node this site needs.
                     let bf_vstack_depth = self.ast_vstack.len();
-                    self.emit_bitfield_access(
-                        field.bit_offset,
-                        field.bit_width,
-                        field.bit_unit_size,
-                        field.ty,
-                    )?;
+                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field.ty)?;
                     if self.ast_vstack.len() > bf_vstack_depth {
                         self.ast_vstack.truncate(bf_vstack_depth);
                     }

@@ -362,23 +362,12 @@ impl Compiler {
         &mut self,
         bit_offset: u32,
         bit_width: u32,
-        unit_size: u8,
         field_ty: i64,
     ) -> Result<(), C5Error> {
         let mask: i64 = if bit_width >= 64 {
             -1
         } else {
             (1i64 << bit_width) - 1
-        };
-        // The bitfield's storage unit width (C99 6.7.2.1p11) picks
-        // the load / store opcode pair. Sub-word units must not
-        // load eight bytes -- doing so would mix in adjacent
-        // fields and the subsequent merge would clobber them.
-        let load_op = match unit_size {
-            1 => LoadKind::U8,
-            2 => LoadKind::I16,
-            4 => LoadKind::I32,
-            _ => LoadKind::I64,
         };
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The storage address
@@ -387,7 +376,7 @@ impl Compiler {
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
             self.ast_psh(); // stack: [..., field_addr]; a = field_addr
-            self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
+            self.mark_emit_other(); // a = old_value; stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, old_value]
             self.emit_imm(!(mask << bit_offset)); // a = ~(mask << off)
             self.ast_binop(crate::c5::ir::BinOp::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
@@ -433,7 +422,7 @@ impl Compiler {
             let _ov_temp = -self.loc_offs;
             // a = field_addr; stack: [...]
             self.ast_psh(); // stack: [..., field_addr]
-            self.emit_op(load_op); // a = old_value
+            self.mark_emit_other(); // a = old_value
             // Spill old_value into the scratch local without
             // disturbing `a` or the c5 stack.
             self.mark_emit_other();
@@ -495,7 +484,7 @@ impl Compiler {
             // (width-1) propagates through the high half of the
             // 64-bit accumulator; without this `signed short f:2`
             // with the bit pattern `11` reads as `3` instead of `-1`.
-            self.emit_op(load_op); // a = full storage word
+            self.mark_emit_other(); // a = full storage word
             if bit_offset > 0 {
                 self.ast_psh();
                 self.emit_imm(bit_offset as i64);

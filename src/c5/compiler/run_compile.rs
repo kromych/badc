@@ -21,7 +21,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
@@ -654,7 +653,7 @@ impl Compiler {
                         // val from the param-base-aware
                         // numbering above)
                         self.emit_lea(param_val);
-                        self.emit_op(LoadKind::I64);
+                        self.mark_emit_other();
                         self.mark_emit_other();
                         // The symbol now points at the local copy.
                         self.symbols[idx].val = local_val;
@@ -703,7 +702,7 @@ impl Compiler {
                         // and the f32 information lives across all
                         // 8 of them (as an f64).
                         self.emit_lea(param_val);
-                        self.emit_op(LoadKind::I64);
+                        self.mark_emit_other();
                         // Narrow to f32 + write 4 bytes to the local.
                         // The rounding is round-to-nearest-ties-to-
                         // even, matching `f64 as f32` in Rust and

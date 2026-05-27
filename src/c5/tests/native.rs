@@ -222,8 +222,7 @@ fn recursion_factorial() {
 
 #[test]
 fn exit_with_value() {
-    // exit(N) compiles to the c5 `Op::Exit` op, which our codegen
-    // routes through a libc call to _exit.
+    // exit(N) lowers to a libc `_exit` call.
     assert_eq!(
         build_and_run("int main() { exit(7); return 0; }", "exit7"),
         7
@@ -453,7 +452,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     // Runtime dynamic linking. Opens the global symbol table,
-    // resolves libc atoi via dlsym, calls it through Op::Jsri
+    // resolves libc atoi via dlsym, calls it through indirect call
     // (which loads args into x0..x7 in case the target is native),
     // exits with atoi("123") = 123.
     ("dlopen_atoi.c", 123),
@@ -505,7 +504,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_per_thread.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy on macOS arm64. The aarch64
+    // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
     // codegen unrolls the copy into ldur/stur word pairs.
     ("struct_value_copy.c", 0),
     // Struct-by-value parameter / return. Both ride the existing

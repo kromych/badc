@@ -72,8 +72,8 @@ pub enum Intrinsic {
     /// the new SP as a `void *`. The memory is reclaimed when
     /// the caller's function returns. The VM runs this through
     /// a per-call-frame leak list -- malloc + remember to free
-    /// at the matching `Op::Lev` -- because the VM doesn't
-    /// have a real native stack to bump.
+    /// at the matching `Terminator::Return` -- because the VM
+    /// doesn't have a real native stack to bump.
     Alloca = 1,
     /// `__c5_aarch64_setjmp(env)` -- AArch64 setjmp implemented
     /// as an inline expansion at the call site. Saves x19-x28,

@@ -474,7 +474,7 @@ fn large_int_literal_auto_promotes() {
 
 #[test]
 fn mcpy_temp_aliases_src() {
-    // Locks the SSA emit's `Op::Mcpy` lowering against a
+    // Locks the SSA emit's `Inst::Mcpy` lowering against a
     // regression where the per-iteration scratch register
     // aliased the source pointer. Picking a temp that only
     // avoided the destination corrupted the source base on the
@@ -489,7 +489,8 @@ fn return_int_widens_to_double() {
     // C99 6.8.6.4 paragraph 3: the value of a return
     // expression is converted as if by assignment to the
     // function's return type. An int-typed `return` from a
-    // `double`-returning function must lift via `Op::Fcvtif`;
+    // `double`-returning function must lift through the
+    // int-to-float cast;
     // dropping the integer bit pattern into the FP slot would
     // make a `(double)x == 505.0` check compare the bit
     // patterns instead of the values.

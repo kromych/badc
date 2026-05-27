@@ -239,9 +239,10 @@ pub(crate) enum Token {
     /// `short` modifier -- a real 2-byte width specifier. Drives
     /// `parse_decl_base_type` to pick `Ty::Short` rather than
     /// `Ty::Int`, so `short` declarations get a 2-byte slot,
-    /// `ScalarLoadKind::Lh` / `Op::Sh` for memory access, and proper sign /
-    /// zero extension on load. `unsigned short` ORs in
-    /// `UNSIGNED_BIT` and switches the load to `ScalarLoadKind::Lhu`.
+    /// `LoadKind::I16` / `StoreKind::I16` for memory access, and
+    /// proper sign / zero extension on load. `unsigned short`
+    /// ORs in `UNSIGNED_BIT` and switches the load to
+    /// `LoadKind::U16`.
     Short,
     /// `signed` modifier -- separated from the rest of [`IntMod`]
     /// because c5 needs to know specifically when `signed` was
@@ -259,7 +260,7 @@ pub(crate) enum Token {
     /// unsigned int u32;` all flow through `parse_decl_base_type`
     /// where the `saw_unsigned` flag ORs `UNSIGNED_BIT` into the
     /// chosen base type. Comparisons later check the bit and
-    /// pick `Op::Ult/Ugt/Ule/Uge` over their signed twins.
+    /// pick `BinOp::Ult/Ugt/Ule/Uge` over their signed twins.
     /// Without it, an unsigned 32-bit value compared against a
     /// high-bit-set constant like `0xFFFFFFFE` reads as signed
     /// `-2` and the comparison's sign goes the wrong way.

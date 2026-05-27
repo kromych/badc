@@ -86,9 +86,10 @@ impl Compiler {
         }
         let temp = -self.loc_offs;
         self.mark_emit_other();
-        // Pop LHS off the c5 stack into accumulator: `Imm 0; Or` pops
-        // stack-top into acc by virtue of `Op::Or` ORing acc with the
-        // popped stack-top (acc was set to 0 a moment ago).
+        // Pop LHS off the c5 stack into accumulator: `Imm 0; Or`
+        // pops stack-top into acc by virtue of `BinOp::Or` ORing
+        // acc with the popped stack-top (acc was set to 0 a
+        // moment ago).
         self.emit_imm(0);
         self.ast_binop(crate::c5::ir::BinOp::Or);
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
@@ -152,7 +153,7 @@ impl Compiler {
     /// usual-arithmetic-conversions when the LHS / RHS have
     /// different signedness or widths.
     ///
-    /// Plain `Op::Eq` is bit-equality at 64 bits, which goes wrong
+    /// Plain `BinOp::Eq` is bit-equality at 64 bits, which goes wrong
     /// when (a) the common type is narrower than 8 bytes and
     /// (b) one operand is sign-extended into the high half while
     /// the other isn't. e.g. `(int)-1 == (uint)0xFFFFFFFF` should be
@@ -164,9 +165,10 @@ impl Compiler {
     /// Strategy: if the common type is narrower than 8 bytes, fold
     /// the LHS-on-stack and RHS-in-acc through XOR (which pops the
     /// stack), AND with the common-width mask, then compare against
-    /// 0. Equal iff the masked-XOR is 0. The `Op::Xor` -> `Op::And`
-    /// -> `Op::Eq`/`Op::Ne` sequence is 5 ops; the wide-common
-    /// path uses 1, so the cost only lands on mixed-width sites.
+    /// 0. Equal iff the masked-XOR is 0. The
+    /// `BinOp::Xor` -> `BinOp::And` -> `BinOp::Eq`/`BinOp::Ne`
+    /// sequence is 5 ops; the wide-common path uses 1, so the
+    /// cost only lands on mixed-width sites.
     pub(super) fn emit_eq_with_common_width(&mut self, lhs_ty: i64, invert: bool) {
         use super::super::ir::BinOp as B;
         let plain_op = if invert { B::Ne } else { B::Eq };
@@ -212,7 +214,7 @@ impl Compiler {
             self.ast_binop(plain_op);
             return;
         }
-        // Acc holds RHS; stack-top holds LHS. `Op::Xor` does
+        // Acc holds RHS; stack-top holds LHS. `BinOp::Xor` does
         // `acc = acc XOR top, sp += 8` -- after this, acc holds
         // `LHS XOR RHS` (XOR is commutative) and the stack is
         // restored to its pre-comparison state.

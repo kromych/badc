@@ -1815,8 +1815,8 @@ impl Preprocessor {
     /// declaration time the frontend stamps the matching
     /// `Symbol::intrinsic` field with the [`Intrinsic`]
     /// discriminant from `op.rs`, and the call-site lowering
-    /// emits `Op::Intrinsic <id>` instead of a regular
-    /// Psh/Jsr/JsrExt + Adj sequence. The arg list is
+    /// emits an `Inst::Intrinsic` instead of a regular call +
+    /// stack-cleanup sequence. The arg list is
     /// expected to be a quoted string so future intrinsics
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to

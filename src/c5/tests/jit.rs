@@ -285,7 +285,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy. The compiler emits the op
+    // Whole-struct copy via Inst::Mcpy. The walker emits it
     // for `a = b` where both are struct values; the VM and both
     // codegens unroll the byte-level copy at compile time.
     ("struct_value_copy.c", 0),
@@ -297,8 +297,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_by_value_return.c", 0),
     // Unsigned-integer comparisons: pin that comparing a u32 / u64 /
     // u8 against a value with the high bit set uses unsigned
-    // semantics (the dialect emits Op::Ult/Ugt/Ule/Uge for those
-    // operands and reaches them through every backend).
+    // semantics (the dialect emits BinOp::Ult/Ugt/Ule/Uge for
+    // those operands and reaches them through every backend).
     ("unsigned_compare.c", 0),
     // `static const unsigned char arr[]` with 1-byte stride. The
     // size_of_type / pointee scaling helpers strip the unsigned bit

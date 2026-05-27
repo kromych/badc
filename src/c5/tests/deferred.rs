@@ -75,7 +75,7 @@ fn unsigned_arith_high_half_masked() {
 
 #[test]
 fn unsigned_right_shift_is_logical() {
-    // `unsigned int x >> 1` lowers to `Op::Shru` (ARM64 LSR /
+    // `unsigned int x >> 1` lowers to `BinOp::Shru` (ARM64 LSR /
     // x86_64 SHR) when the LHS has an unsigned type, so the high
     // bit zero-extends rather than sign-extending.
     let exit = jit_fixture_exit("unsigned_right_shift.c");
@@ -86,7 +86,7 @@ fn unsigned_right_shift_is_logical() {
 fn unsigned_divide_and_modulo_use_unsigned_ops() {
     // C99 6.3.1.8: when either operand of `/` or `%` is unsigned,
     // both operands convert to the unsigned common type and the
-    // operation is unsigned. `Op::Divu` / `Op::Modu` (UDIV on
+    // operation is unsigned. `BinOp::Divu` / `BinOp::Modu` (UDIV on
     // ARM64, `DIV` with `xor edx, edx` on x86_64) are routed
     // when the C99 common type is unsigned.
     let exit = jit_fixture_exit("unsigned_div_mod.c");
@@ -118,9 +118,10 @@ fn c99_arith_common_width_full() {
 
 #[test]
 fn u16_load_store_is_two_bytes() {
-    // `*(u16*)p` reads/writes exactly 2 bytes via ScalarLoadKind::Lh / ScalarLoadKind::Lhu
-    // / Op::Sh and the matching aarch64 LDRSH / LDRH / STRH and
-    // x86_64 movsx16 / movzx16 / mov16 helpers.
+    // `*(u16*)p` reads/writes exactly 2 bytes via `LoadKind::I16`
+    // / `LoadKind::U16` / `StoreKind::I16` and the matching
+    // aarch64 LDRSH / LDRH / STRH and x86_64 movsx16 / movzx16 /
+    // mov16 helpers.
     let exit = jit_fixture_exit("u16_load_store.c");
     assert_eq!(exit, 0, "fixture should exit 0");
 }

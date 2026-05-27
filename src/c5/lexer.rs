@@ -1528,15 +1528,15 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 ///
 /// Each binding becomes a callable name with `val` set to its
 /// flat index across all `bindings` in declaration order. The
-/// parser's call site emits `Op::JsrExt val + Op::Adj N`, and the
-/// codegen / VM resolve `val` against the same flattened list at
-/// emit / run time.
+/// parser's call site builds an `Inst::CallExt` with that
+/// binding index, and the codegen / VM resolve it against the
+/// same flattened list at emit / run time.
 ///
-/// A name that's bound twice (two `#pragma binding`s with the same
-/// `local_name`) gets the *first* index; later bindings are silently
-/// dropped at the symbol-table level but cause `Op::JsrExt` calls to
-/// route to the first dylib regardless of which header the user
-/// thought was authoritative. `#pragma once` deduplication makes
+/// A name that's bound twice (two `#pragma binding`s with the
+/// same `local_name`) gets the *first* index; later bindings are
+/// silently dropped at the symbol-table level but cause every
+/// external call to route to the first dylib regardless of which
+/// header the user thought was authoritative. `#pragma once` deduplication makes
 /// repeated identical bindings the common case; mismatched bindings
 /// from different dylibs (e.g. `msvcrt::pow` then `ucrtbase::pow`)
 /// instead surface as a `warning:` on stderr -- under `std` only --

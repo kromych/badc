@@ -783,7 +783,7 @@ pub(super) fn write_relocatable(
     // up as placeholders paired with `DwarfReloc` records that
     // the loop below translates into ELF `.rela.debug_*`
     // entries.
-    let dwarf = dwarf_reloc::emit(program, build, source_path);
+    let dwarf = dwarf_reloc::emit(program, build, source_path, machine);
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {

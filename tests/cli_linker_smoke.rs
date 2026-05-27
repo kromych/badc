@@ -978,6 +978,24 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
             "expected subprogram DW_AT_name {name} in merged .debug_info:\n{out_text}",
         );
     }
+    // Helper takes `int x`, so its subprogram DIE should carry
+    // a DW_TAG_formal_parameter child with a DW_OP_fbreg
+    // location pointing at the first stack-arg slot. Without
+    // DW_AT_frame_base + DW_TAG_formal_parameter / variable
+    // DIEs, the debugger can't walk locals through `frame
+    // variable`.
+    assert!(
+        out_text.contains("DW_TAG_formal_parameter"),
+        "expected DW_TAG_formal_parameter DIE for `int x` in helper's subprogram:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_AT_frame_base") && out_text.contains("DW_OP_reg"),
+        "expected DW_AT_frame_base on subprograms with children:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_OP_fbreg"),
+        "expected formal_parameter DW_AT_location as DW_OP_fbreg:\n{out_text}",
+    );
 }
 
 /// Multi-TU links populate `.debug_frame` from the merged

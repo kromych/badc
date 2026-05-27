@@ -84,6 +84,8 @@ pub(crate) struct DwarfRelocatable {
 
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
 const DW_TAG_SUBPROGRAM: u8 = 0x2e;
+const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
+const DW_TAG_VARIABLE: u8 = 0x34;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -92,12 +94,19 @@ const DW_AT_HIGH_PC: u8 = 0x12;
 const DW_AT_LANGUAGE: u8 = 0x13;
 const DW_AT_COMP_DIR: u8 = 0x1b;
 const DW_AT_PRODUCER: u8 = 0x25;
+const DW_AT_LOCATION: u8 = 0x02;
+const DW_AT_FRAME_BASE: u8 = 0x40;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
 const DW_FORM_STRING: u8 = 0x08;
 const DW_FORM_DATA1: u8 = 0x0b;
 const DW_FORM_SEC_OFFSET: u8 = 0x17;
+const DW_FORM_EXPRLOC: u8 = 0x18;
+
+const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
+const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
+const DW_OP_FBREG: u8 = 0x91; // fbreg N (SLEB128 N)
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -116,7 +125,10 @@ const LINE_RANGE: u8 = 14;
 const OPCODE_BASE: u8 = 13;
 
 const ABBREV_CU: u64 = 1;
-const ABBREV_SUBPROGRAM: u64 = 2;
+const ABBREV_SUBPROGRAM_LEAF: u64 = 2;
+const ABBREV_SUBPROGRAM_WITH_CHILDREN: u64 = 3;
+const ABBREV_FORMAL_PARAMETER: u64 = 4;
+const ABBREV_VARIABLE: u64 = 5;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -180,10 +192,15 @@ fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
 /// Emit the relocatable DWARF triple plus the address-reloc list.
 /// `source_path` becomes the CU's `DW_AT_name`; the line table's
 /// file numbering reuses [`Program::source_files`].
-pub(crate) fn emit(program: &Program, build: &Build, source_path: &str) -> DwarfRelocatable {
+pub(crate) fn emit(
+    program: &Program,
+    build: &Build,
+    source_path: &str,
+    machine: super::Machine,
+) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let (debug_info, info_relocs) = build_debug_info(source_path, build);
+    let (debug_info, info_relocs) = build_debug_info(source_path, program, build, machine);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,
@@ -210,15 +227,47 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET);
     out.push(0);
     out.push(0);
-    // Abbrev 2: subprogram leaf -- name + extent only. No
-    // children. Parameters / locals / type DIEs land in a follow-
-    // up alongside the type catalog and DW_AT_frame_base wiring.
-    write_uleb128(&mut out, ABBREV_SUBPROGRAM);
+    // Abbrev 2: subprogram leaf -- name + extent only. Used when
+    // the function has no variables.
+    write_uleb128(&mut out, ABBREV_SUBPROGRAM_LEAF);
     out.push(DW_TAG_SUBPROGRAM);
     out.push(DW_CHILDREN_NO);
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
+    out.push(0);
+    out.push(0);
+    // Abbrev 3: subprogram with variable / parameter children.
+    // Adds DW_AT_frame_base so the debugger can resolve fbreg
+    // offsets in the children's DW_AT_location attrs.
+    write_uleb128(&mut out, ABBREV_SUBPROGRAM_WITH_CHILDREN);
+    out.push(DW_TAG_SUBPROGRAM);
+    out.push(DW_CHILDREN_YES);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
+    push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
+    push_attr(&mut out, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
+    out.push(0);
+    out.push(0);
+    // Abbrev 4: formal_parameter -- name + fbreg location.
+    // Sub-int / type DIEs ship in a follow-up alongside the type
+    // catalog; without DW_AT_type the debugger treats the value
+    // as a raw integer.
+    write_uleb128(&mut out, ABBREV_FORMAL_PARAMETER);
+    out.push(DW_TAG_FORMAL_PARAMETER);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    out.push(0);
+    out.push(0);
+    // Abbrev 5: variable -- name + fbreg location. Same shape
+    // as formal_parameter but with the DW_TAG_variable tag so
+    // debuggers distinguish args from locals.
+    write_uleb128(&mut out, ABBREV_VARIABLE);
+    out.push(DW_TAG_VARIABLE);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -233,7 +282,12 @@ fn push_attr(out: &mut Vec<u8>, name: u8, form: u8) {
 
 // ---- .debug_info ----
 
-fn build_debug_info(source_path: &str, build: &Build) -> (Vec<u8>, Vec<DwarfReloc>) {
+fn build_debug_info(
+    source_path: &str,
+    program: &Program,
+    build: &Build,
+    machine: super::Machine,
+) -> (Vec<u8>, Vec<DwarfReloc>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
 
@@ -273,11 +327,20 @@ fn build_debug_info(source_path: &str, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
         addend: 0,
     });
 
+    // Per-target frame-pointer DWARF register encoding for
+    // DW_AT_frame_base. aarch64 uses x29 (DW_OP_reg29); x86_64
+    // uses rbp (DW_OP_reg6). The frame-base expr is a single
+    // opcode byte, so DW_FORM_exprloc length = 1.
+    let frame_base_op: u8 = match machine {
+        super::Machine::Aarch64 => DW_OP_REG29,
+        super::Machine::X86_64 => DW_OP_REG6,
+    };
+
     // Subprogram child DIEs. One per defined function in the
-    // unit. Each carries NAME (inline string), LOW_PC (8-byte
-    // text reloc), HIGH_PC (DATA8 size). Sub-int metadata
-    // (parameters, locals, types, frame_base) lands in a
-    // follow-up that ships alongside the type catalog.
+    // unit. With parameters / variables present, the subprogram
+    // takes the with-children abbrev (carries DW_AT_frame_base)
+    // and ends in a null DIE terminator; otherwise the leaf
+    // abbrev runs.
     for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
         let lo = match build.pc_to_native.get(ent_pc).copied() {
             Some(off) if off != usize::MAX => off as u64,
@@ -298,7 +361,21 @@ fn build_debug_info(source_path: &str, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
             .map(|s| s.as_str())
             .filter(|s| !s.is_empty())
             .unwrap_or("<unknown>");
-        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
+        // Group this function's parameters and locals out of the
+        // flat program.variables list. `function_bc_pc` keys by
+        // the function's ent_pc, matching what the amalg path's
+        // DWARF emitter uses.
+        let vars: Vec<&super::super::program::VariableInfo> = program
+            .variables
+            .iter()
+            .filter(|v| v.function_bc_pc == ent_pc as u64)
+            .collect();
+        let has_children = !vars.is_empty();
+        if has_children {
+            write_uleb128(&mut body, ABBREV_SUBPROGRAM_WITH_CHILDREN);
+        } else {
+            write_uleb128(&mut body, ABBREV_SUBPROGRAM_LEAF);
+        }
         push_string(&mut body, name);
         let low_pc_off = body.len() as u64;
         body.extend_from_slice(&[0u8; 8]);
@@ -310,6 +387,32 @@ fn build_debug_info(source_path: &str, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
             addend: lo as i64,
         });
         body.extend_from_slice(&size.to_le_bytes());
+        if has_children {
+            // DW_AT_frame_base: exprloc with a single
+            // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.
+            write_uleb128(&mut body, 1);
+            body.push(frame_base_op);
+            for v in &vars {
+                let fp_byte_offset = fp_byte_offset_for_slot(v.fp_slot);
+                let abbrev = if v.is_parameter {
+                    ABBREV_FORMAL_PARAMETER
+                } else {
+                    ABBREV_VARIABLE
+                };
+                write_uleb128(&mut body, abbrev);
+                push_string(&mut body, &v.name);
+                // DW_AT_location: exprloc carrying DW_OP_fbreg
+                // <SLEB128 offset>. Length prefix is the byte
+                // count of the expression.
+                let mut expr: Vec<u8> = Vec::with_capacity(8);
+                expr.push(DW_OP_FBREG);
+                write_sleb128(&mut expr, fp_byte_offset);
+                write_uleb128(&mut body, expr.len() as u64);
+                body.extend_from_slice(&expr);
+            }
+            // End-of-children marker for this subprogram.
+            body.push(0);
+        }
     }
 
     // DWARF 4 5.7.2: end-of-children marker for the CU's
@@ -580,6 +683,16 @@ fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
         }
         out.push(byte | 0x80);
     }
+}
+
+/// c5's frame-slot index to native byte offset from the frame
+/// pointer. Mirror of the amalg-path DWARF emitter: locals
+/// (slot < 0) stride by 8 bytes; parameters (slot >= 2) stride
+/// by 16 bytes starting at `(slot - 1) * 16` so slot 2 lands at
+/// +16. Slots 0..2 are the saved-fp / saved-ret area and don't
+/// carry user-visible values.
+fn fp_byte_offset_for_slot(slot: i64) -> i64 {
+    if slot >= 2 { (slot - 1) * 16 } else { slot * 8 }
 }
 
 fn write_sleb128(out: &mut Vec<u8>, mut value: i64) {

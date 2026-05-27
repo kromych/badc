@@ -888,11 +888,7 @@ fn debug_line_covers_each_function_entry_pc() {
 #[test]
 fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     let dir = tempdir("multi-tu-dwarf");
-    write_source(
-        &dir,
-        "helper.c",
-        "int helper(int x) { return x + 1; }\n",
-    );
+    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
     write_source(
         &dir,
         "main.c",

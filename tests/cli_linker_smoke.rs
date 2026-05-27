@@ -1242,6 +1242,65 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Multi-TU subprogram DIEs need DW_AT_external (DWARF 4
+/// section 3.3.1) so debuggers honour cross-CU name resolution
+/// for user-defined functions. Without it (gdb) call helper()
+/// from main's frame may fail to find the helper symbol when
+/// the two functions live in different translation units.
+#[test]
+fn multi_tu_link_emits_external_flag_on_subprograms() {
+    let dir = tempdir("multi-tu-external-flag");
+    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_AT_external"),
+        "expected DW_AT_external on at least one subprogram:\n{out_text}",
+    );
+}
+
 /// A variadic function's subprogram DIE needs a trailing
 /// DW_TAG_unspecified_parameters child (DWARF 4 section 3.4.2)
 /// so debuggers render the `...` of the prototype. Without it

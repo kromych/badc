@@ -166,6 +166,22 @@ jobs:
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
         run: cargo test --locked --verbose
+      - name: capture libc_basic SIGSEGV PC under gdb (ubuntu-latest only, on failure)
+        # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
+        # macOS/aarch64 lanes pass identical bytes. Build + run one
+        # of the failing fixtures under gdb to surface the faulting
+        # PC and the instructions around it. Step runs only when the
+        # cargo test step above failed and only on ubuntu-latest.
+        if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get install -y -qq gdb || true
+          which gdb
+          ulimit -c unlimited || true
+          cargo build --release --locked --bin badc
+          ./target/release/badc tests/fixtures/c/libc_basic.c -o /tmp/libc_basic
+          set +e
+          gdb -batch -ex run -ex 'bt' -ex 'info reg rsp rax rdi rsi xmm0' -ex 'x/16i $pc-20' /tmp/libc_basic 2>&1 | head -120
+          true
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.

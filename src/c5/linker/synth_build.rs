@@ -197,7 +197,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             // for diagnostics; the writer reads `real_symbol`.
             local_name: name.clone(),
             real_symbol: name.clone(),
-            dylib_index: 0,
+            // `import_dylib_map` carries the per-import dylib
+            // assignment the .o writer recorded. An import
+            // missing from the map falls back to dylib 0 (the
+            // first dylib in the merge) so legacy `.o` files
+            // produced before NT_BADC_BINDING_MAP landed still
+            // round-trip.
+            dylib_index: merged.import_dylib_map.get(name).copied().unwrap_or(0) as usize,
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -527,6 +533,7 @@ mod tests {
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::Aarch64,
+            import_dylib_map: alloc::collections::BTreeMap::new(),
             dylibs: alloc::vec![],
         }
     }

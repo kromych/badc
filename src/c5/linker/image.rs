@@ -1018,6 +1018,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
+            import_dylib_map: alloc::collections::BTreeMap::new(),
         }
     }
 

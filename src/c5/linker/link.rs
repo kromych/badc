@@ -85,6 +85,13 @@ pub struct MergedNative {
     /// .o writer recorded), deduped on full path with insertion
     /// order preserved across units.
     pub dylibs: Vec<String>,
+    /// Per-import dylib routing: maps an import name (as it
+    /// appears in [`Self::imports`]) to its index in [`Self::dylibs`].
+    /// Populated from each unit's `NT_BADC_BINDING_MAP` note with
+    /// the per-unit `dylib_index` remapped to the merged
+    /// `dylibs` order; entries from later units that name the
+    /// same import are ignored (first writer wins).
+    pub import_dylib_map: BTreeMap<String, u32>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -573,6 +580,27 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             }
         }
     }
+    // Build the merged import->dylib map. Each unit's per-import
+    // dylib_index is local to that unit's `dylibs` list; translate
+    // through `merged_idx_for[unit_idx][per_unit_idx]` so the value
+    // refers to the merged `dylibs` order. First entry per import
+    // name wins -- a sibling unit redeclaring the same name picks
+    // up the same dylib through cross-TU resolution anyway.
+    let mut import_dylib_map: BTreeMap<String, u32> = BTreeMap::new();
+    for obj in objs {
+        let mut local_to_merged: Vec<u32> = Vec::with_capacity(obj.dylibs.len());
+        for d in &obj.dylibs {
+            let merged_idx = dylibs.iter().position(|m| m == d).unwrap_or(0) as u32;
+            local_to_merged.push(merged_idx);
+        }
+        for (name, idx) in &obj.import_dylib_map {
+            if import_dylib_map.contains_key(name) {
+                continue;
+            }
+            let merged_idx = local_to_merged.get(*idx as usize).copied().unwrap_or(0);
+            import_dylib_map.insert(name.clone(), merged_idx);
+        }
+    }
 
     Ok(MergedNative {
         text,
@@ -584,6 +612,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         data_abs_relocs,
         machine,
         dylibs,
+        import_dylib_map,
     })
 }
 
@@ -1336,6 +1365,7 @@ mod tests {
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
         };
         // Unit A claims size=4 align=4; unit B claims size=8 align=8.
         // C99 6.9.2: max(size)=8, max(align)=8.
@@ -1390,6 +1420,7 @@ mod tests {
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
         };
         let unit_strong = NativeObject {
             machine: NativeMachine::X86_64,
@@ -1419,6 +1450,7 @@ mod tests {
             text_relocs: alloc::vec::Vec::new(),
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
+            import_dylib_map: alloc::vec::Vec::new(),
         };
         let merged = link_native_objects(&[unit_common, unit_strong]).expect("link");
         let def = merged

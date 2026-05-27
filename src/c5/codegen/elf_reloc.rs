@@ -53,6 +53,16 @@ const SHT_NOBITS: u32 = 8;
 // shape (ELF gABI, section 5): each entry is (namesz, descsz,
 // type) header + name (4-byte padded) + desc (4-byte padded).
 const NT_BADC_DYLIBS: u32 = 1;
+// Per-import dylib routing. desc is a sequence of records, each:
+//   u32  dylib_index (LE, into the NT_BADC_DYLIBS path list)
+//   NUL-terminated import name (the real_symbol stored in `.symtab`).
+// Required so the final-image writers (Mach-O / PE / dynamic ELF)
+// place each IAT / `LC_LOAD_DYLIB` / `DT_NEEDED` reference under
+// the right library; without it every import lands under the
+// first dylib and a cross-DLL symbol (`GetCurrentProcess` from
+// `kernel32.dll` while `printf` is from `ucrtbase.dll`) is not
+// found at process startup.
+const NT_BADC_BINDING_MAP: u32 = 2;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -939,15 +949,20 @@ pub(super) fn write_relocatable(
     });
     let _ = SHIDX_RELA_DATA;
 
-    // .note.badc -- vendor note section holding `#pragma dylib`
-    // paths. ELF gABI section 5 shape: `(namesz=5, descsz, type=
-    // NT_BADC_DYLIBS, name="badc\0", desc=<NUL-separated paths>)`,
-    // each field 4-byte aligned. Without this the final-image
-    // writer would emit only the hard-coded libc DT_NEEDED and
-    // a Linux program calling `sqrt` from `libm.so.6` would
-    // refuse to load. Standard ELF tooling ignores unknown note
-    // types; the badc reader picks the entry up by name and type.
-    let note_bytes = build_badc_dylibs_note(&build.imports.dylibs);
+    // .note.badc -- vendor note section. Two records under
+    // namesz="badc\0":
+    //   NT_BADC_DYLIBS       -- NUL-separated `#pragma dylib`
+    //                           paths. Drives DT_NEEDED /
+    //                           LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR.
+    //   NT_BADC_BINDING_MAP  -- (u32 dylib_index, NUL-terminated
+    //                           import name)+. Routes each import
+    //                           to its owning dylib so a cross-DLL
+    //                           reference (kernel32 + ucrtbase in
+    //                           the same PE) places its IAT slot
+    //                           under the right loader entry.
+    // Standard ELF tooling ignores unknown note types; the badc
+    // reader picks the entries up by name + type.
+    let note_bytes = build_badc_note(&build.imports);
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
     out.extend_from_slice(&note_bytes);
@@ -1084,26 +1099,50 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
     (bind << 4) | (ty & 0xf)
 }
 
-/// Build the `.note.badc` section body for a list of
-/// `#pragma dylib` paths. Empty list still produces an entry --
-/// matches `nm --dyn` parity (the section exists, the desc is
-/// empty) and lets the parser distinguish "no dylib note" from
-/// "dylib note with no entries". Format: ELF gABI section 5.
-fn build_badc_dylibs_note(dylibs: &[super::ResolvedDylib]) -> Vec<u8> {
-    let mut desc: Vec<u8> = Vec::new();
-    for d in dylibs {
-        desc.extend_from_slice(d.path.as_bytes());
-        desc.push(0);
-    }
-    let name = b"badc\0";
+/// Build the `.note.badc` section body. Emits two records:
+///   NT_BADC_DYLIBS       -- NUL-separated dylib paths.
+///   NT_BADC_BINDING_MAP  -- per-import (u32 dylib_index, NUL
+///                           import name)+.
+/// Both records share the namesz="badc\0" namespace; the parser
+/// distinguishes by `type`. Each note is independently padded to
+/// the 4-byte ELF gABI boundary.
+fn build_badc_note(imports: &super::ResolvedImports) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
+    let name = b"badc\0";
+
+    // Record 1: dylib paths.
+    let mut dylibs_desc: Vec<u8> = Vec::new();
+    for d in &imports.dylibs {
+        dylibs_desc.extend_from_slice(d.path.as_bytes());
+        dylibs_desc.push(0);
+    }
     out.extend_from_slice(&(name.len() as u32).to_le_bytes());
-    out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(dylibs_desc.len() as u32).to_le_bytes());
     out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
     out.extend_from_slice(name);
     pad_to_4(&mut out);
-    out.extend_from_slice(&desc);
+    out.extend_from_slice(&dylibs_desc);
     pad_to_4(&mut out);
+
+    // Record 2: per-import dylib map. Skip when there are no
+    // imports -- the parser tolerates a missing record so the
+    // older shape (dylibs note only) still round-trips.
+    if !imports.imports.is_empty() {
+        let mut bm_desc: Vec<u8> = Vec::new();
+        for imp in &imports.imports {
+            let idx = imp.dylib_index.max(0) as u32;
+            bm_desc.extend_from_slice(&idx.to_le_bytes());
+            bm_desc.extend_from_slice(imp.real_symbol.as_bytes());
+            bm_desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(bm_desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_BINDING_MAP.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&bm_desc);
+        pad_to_4(&mut out);
+    }
     out
 }
 

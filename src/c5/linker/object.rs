@@ -242,13 +242,21 @@ pub struct NativeObject {
     /// `.data`.
     pub data_relocs: Vec<NativeReloc>,
     /// Dylib load paths the writer copied out of the unit's
-    /// `#pragma dylib` declarations (`.badc.dylibs` section).
-    /// Each entry is the verbatim path the final-image writer
-    /// drops into DT_NEEDED / LC_LOAD_DYLIB /
+    /// `#pragma dylib` declarations (`.note.badc` /
+    /// `NT_BADC_DYLIBS`). Each entry is the verbatim path the
+    /// final-image writer drops into DT_NEEDED / LC_LOAD_DYLIB /
     /// IMAGE_IMPORT_DESCRIPTOR. Empty when the unit reaches for
     /// no external libraries; the linker preserves insertion
     /// order across units and dedupes on full path.
     pub dylibs: Vec<String>,
+    /// Per-import dylib routing (`NT_BADC_BINDING_MAP`). Each
+    /// entry maps an import name to the index of its dylib in
+    /// `dylibs`. The final-image writer reads this so a PE
+    /// linking `printf` (ucrtbase) and `GetCurrentProcess`
+    /// (kernel32) routes each IAT entry to the right loader
+    /// table. The linker merges across units and remaps the
+    /// dylib_index to the merged `dylibs` order.
+    pub import_dylib_map: Vec<(String, u32)>,
 }
 
 /// True when `bytes` starts with the ELF magic. Cheap
@@ -573,13 +581,16 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
-    // `.note.badc` -- vendor note section listing `#pragma dylib`
-    // paths. ELF gABI section 5 record shape: header (namesz,
-    // descsz, type), 4-byte-padded name, 4-byte-padded desc. The
-    // c5 entry is `type = NT_BADC_DYLIBS = 1`, name="badc\0",
-    // desc = NUL-separated paths. Other note records in the
-    // section are skipped silently.
+    // `.note.badc` -- vendor note section. Two record types:
+    //   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
+    //   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
+    //                                  encoded as (u32 LE
+    //                                  dylib_index, NUL import
+    //                                  name)+.
+    // Records under namesz != "badc\0" are skipped silently so
+    // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
+    let mut import_dylib_map: Vec<(String, u32)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -599,12 +610,35 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             if desc_end > body.len() {
                 break;
             }
-            if ntype == 1 && name == b"badc\0" {
-                for chunk in body[cur..desc_end].split(|&b| b == 0) {
-                    if chunk.is_empty() {
-                        continue;
+            if name == b"badc\0" {
+                match ntype {
+                    1 => {
+                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
+                            if chunk.is_empty() {
+                                continue;
+                            }
+                            dylibs.push(String::from_utf8_lossy(chunk).into_owned());
+                        }
                     }
-                    dylibs.push(String::from_utf8_lossy(chunk).into_owned());
+                    2 => {
+                        let mut bm_cur = cur;
+                        while bm_cur + 4 <= desc_end {
+                            let idx =
+                                u32::from_le_bytes(body[bm_cur..bm_cur + 4].try_into().unwrap());
+                            bm_cur += 4;
+                            let name_start = bm_cur;
+                            let Some(nul_pos) = body[bm_cur..desc_end].iter().position(|&b| b == 0)
+                            else {
+                                break;
+                            };
+                            let name_end = name_start + nul_pos;
+                            let imp_name =
+                                String::from_utf8_lossy(&body[name_start..name_end]).into_owned();
+                            bm_cur = name_end + 1;
+                            import_dylib_map.push((imp_name, idx));
+                        }
+                    }
+                    _ => {}
                 }
             }
             cur = cur.saturating_add((descsz + 3) & !3);
@@ -622,6 +656,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         text_relocs,
         data_relocs,
         dylibs,
+        import_dylib_map,
     })
 }
 

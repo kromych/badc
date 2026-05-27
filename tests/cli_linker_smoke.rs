@@ -1242,6 +1242,53 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Amalg dwarf.rs counterpart of
+/// `multi_tu_link_emits_array_type_for_struct_field_arrays`.
+/// Single-source compile through the amalg path also needs to
+/// render struct fields declared as `int xs[N]` as `int [N]`.
+#[test]
+fn amalg_compile_emits_array_type_for_struct_field_arrays() {
+    let dir = tempdir("amalg-struct-array");
+    let src = write_source(
+        &dir,
+        "f.c",
+        "struct Buf { int xs[8]; };\n\
+         int main(void) { struct Buf b; b.xs[0] = 9; return b.xs[0]; }\n",
+    );
+    let out = dir.join("f");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_array_type"),
+        "expected DW_TAG_array_type for struct field `int xs[8]` in amalg compile:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("\"xs\""),
+        "expected member DW_AT_name `xs`:\n{out_text}",
+    );
+}
+
 /// Struct fields declared as fixed-size arrays (e.g.
 /// `struct S { int xs[8]; }`) need to reference a
 /// DW_TAG_array_type DIE rather than decaying to the element

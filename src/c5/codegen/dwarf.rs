@@ -1404,6 +1404,28 @@ fn write_attr(buf: &mut Vec<u8>, attr: u32, form: u32) {
     write_uleb128(buf, form as u64);
 }
 
+/// Bytes a DW_TAG_array_type DIE plus its DW_TAG_subrange_type
+/// child consume. abbrev_array(1) + DW_AT_type ref4(4)
+/// + abbrev_subrange(1) + DW_AT_upper_bound uleb128(N)
+/// + children_terminator(1). Used by the layout pass so struct
+/// member DW_AT_type can forward-ref into the array DIE block.
+fn array_die_size(count: u32) -> u32 {
+    let upper = count.saturating_sub(1) as u64;
+    let upper_bytes = uleb128_byte_len(upper);
+    1 + 4 + 1 + upper_bytes + 1
+}
+
+fn uleb128_byte_len(mut v: u64) -> u32 {
+    let mut n = 0;
+    loop {
+        n += 1;
+        v >>= 7;
+        if v == 0 {
+            return n;
+        }
+    }
+}
+
 // ---- .debug_info ----
 
 #[allow(clippy::too_many_arguments)]
@@ -1435,18 +1457,70 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
+    // Collect every (element_type, count) pair the unit's arrays
+    // need a DIE for. Sources: non-parameter variables with
+    // `array_size > 0` (C99 6.7.5.3p7 decays parameter arrays to
+    // pointers) and struct fields with `array_size > 0`. Element
+    // must be scalar / pointer-to-scalar -- aggregate elements
+    // would need an aggregate DIE that doesn't exist yet at the
+    // array DIE's reserved position.
+    let mut array_pairs: BTreeSet<(CatalogEntry, u32)> = BTreeSet::new();
+    for s in subs {
+        for v in &s.variables {
+            if v.array_size == 0 || v.is_parameter {
+                continue;
+            }
+            let entry = classify(v.type_tag, target);
+            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                array_pairs.insert((entry, v.array_size));
+            }
+        }
+    }
+    // Restrict the struct walk to aggregates the catalog actually
+    // emits a DIE for. The TypeCatalog only pulls in structs that
+    // are transitively reachable from variables / PLT signatures;
+    // collecting array pairs from unreferenced structs would name
+    // element-type DIEs the layout pass never reserved space for.
+    let referenced_struct_ids: BTreeSet<u32> = catalog
+        .entries
+        .iter()
+        .filter_map(|e| match e {
+            CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    for id in &referenced_struct_ids {
+        let Some(s) = structs.get(*id as usize) else {
+            continue;
+        };
+        for f in &s.fields {
+            if f.array_size <= 0 || f.bit_width > 0 {
+                continue;
+            }
+            let entry = classify(f.ty, target);
+            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                array_pairs.insert((entry, f.array_size as u32));
+            }
+        }
+    }
+
     // Layout pass: precompute the CU-relative offset every
-    // catalog entry will land at, *before* writing any of them.
-    // Member type-refs in struct DIEs reach forward to other
-    // structs (linked-list nodes, mutually-recursive
-    // aggregates), so write-time positions aren't enough.
+    // catalog entry and every array DIE will land at, before
+    // writing any of them. Struct fields with array_size > 0
+    // reach forward via DW_FORM_ref4 to array DIEs that come
+    // after the catalog, so write-time positions aren't enough.
     // `die_size` is deterministic, so the pass is exact.
     let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
+    let mut array_offsets: BTreeMap<(CatalogEntry, u32), u32> = BTreeMap::new();
     {
         let mut cursor = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
         for entry in &catalog.entries {
             entry_offsets.insert(*entry, cursor);
             cursor += entry.die_size(structs);
+        }
+        for &(entry, count) in &array_pairs {
+            array_offsets.insert((entry, count), cursor);
+            cursor += array_die_size(count);
         }
     }
 
@@ -1461,39 +1535,33 @@ fn build_debug_info(
             pre_pos, entry_offsets[entry],
             "die_size disagreed with the emitter for {entry:?}",
         );
-        emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
+        emit_type_die(
+            entry,
+            &mut body,
+            catalog,
+            structs,
+            &entry_offsets,
+            &array_offsets,
+            target,
+        );
     }
 
-    // DW_TAG_array_type DIEs for true local arrays. C99 6.7.5.3p7
-    // decays parameter arrays to pointers, so only non-parameter
-    // locals with `array_size > 0` contribute. Side-table keyed by
-    // (element_offset, count) so multiple variables sharing a
-    // shape collapse to a single DIE.
-    let mut array_offsets: BTreeMap<(u32, u32), u32> = BTreeMap::new();
-    {
-        let mut pending: BTreeMap<(u32, u32), ()> = BTreeMap::new();
-        for s in subs {
-            for v in &s.variables {
-                if v.array_size == 0 || v.is_parameter {
-                    continue;
-                }
-                let entry = classify(v.type_tag, target);
-                if let Some(&elem_off) = entry_offsets.get(&entry) {
-                    pending.insert((elem_off, v.array_size), ());
-                }
-            }
-        }
-        for (elem_off, count) in pending.keys() {
-            let arr_off = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-            array_offsets.insert((*elem_off, *count), arr_off);
-            write_uleb128(&mut body, 15);
-            body.extend_from_slice(&elem_off.to_le_bytes());
-            // Subrange child: upper_bound = count - 1.
-            write_uleb128(&mut body, 16);
-            write_uleb128(&mut body, (*count as u64).saturating_sub(1));
-            // Children-list terminator for the array_type DIE.
-            body.push(0);
-        }
+    // Array DIEs at their precomputed offsets. BTreeMap iteration
+    // is ordered by key, matching the layout pass.
+    for (&(entry, count), &arr_off) in &array_offsets {
+        debug_assert_eq!(
+            arr_off,
+            (body.len() as u32) + DebugInfoUnitHeader::SIZE,
+            "array layout disagreed with the emitter for ({entry:?}, {count})",
+        );
+        let elem_off = entry_offsets[&entry];
+        write_uleb128(&mut body, 15);
+        body.extend_from_slice(&elem_off.to_le_bytes());
+        // Subrange child: upper_bound = count - 1.
+        write_uleb128(&mut body, 16);
+        write_uleb128(&mut body, (count as u64).saturating_sub(1));
+        // Children-list terminator for the array_type DIE.
+        body.push(0);
     }
 
     // Subprogram children, each with its own variable /
@@ -1532,12 +1600,12 @@ fn build_debug_info(
                 .get(&entry)
                 .expect("catalog includes every entry produced by classify()");
             // True local arrays reference the array_type DIE if one
-            // was emitted for this (element, count) pair above;
+            // was reserved for this (element, count) pair above;
             // every other variable references the element / scalar
             // / pointer DIE directly.
             let type_off = if v.array_size > 0 && !v.is_parameter {
                 array_offsets
-                    .get(&(elem_off, v.array_size))
+                    .get(&(entry, v.array_size))
                     .copied()
                     .unwrap_or(elem_off)
             } else {
@@ -1661,12 +1729,14 @@ fn build_debug_info(
 /// match `entry.die_size(structs)` exactly -- the layout pass
 /// relied on it -- which is why the abbrev / form widths here
 /// mirror the abbrev table verbatim.
+#[allow(clippy::too_many_arguments)]
 fn emit_type_die(
     entry: &CatalogEntry,
     body: &mut Vec<u8>,
     catalog: &TypeCatalog,
     structs: &[StructDef],
     entry_offsets: &BTreeMap<CatalogEntry, u32>,
+    array_offsets: &BTreeMap<(CatalogEntry, u32), u32>,
     target: Target,
 ) {
     match entry {
@@ -1744,9 +1814,21 @@ fn emit_type_die(
                 // because c5 baked the array stride into the
                 // member offsets at parse time.
                 let member_entry = classify(f.ty, target);
-                let member_type_off = *entry_offsets
+                let elem_off = *entry_offsets
                     .get(&member_entry)
                     .expect("collect() walked every struct field's type into the catalog");
+                // True field array: ref the array_type DIE if one
+                // was reserved for this (element, count) pair.
+                // Bitfields keep the element ref because they
+                // aren't arrays in any case.
+                let member_type_off = if f.array_size > 0 && f.bit_width == 0 {
+                    array_offsets
+                        .get(&(member_entry, f.array_size as u32))
+                        .copied()
+                        .unwrap_or(elem_off)
+                } else {
+                    elem_off
+                };
 
                 if f.bit_width == 0 {
                     // Regular member: abbrev 9.

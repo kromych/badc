@@ -22,10 +22,13 @@
 //! `DW_AT_type` cross-DIE references (`DW_FORM_ref4`) to the type
 //! catalog earlier in the same CU. The `long` base type follows
 //! the C99 data model per target: 4 bytes on Windows (LLP64),
-//! 8 bytes on Linux / macOS (LP64). `.debug_frame` is regenerated
-//! by the merged-image writer from `synth_build`'s symbol set
-//! instead of being carried per-`.o`. Struct / union types land
-//! in a follow-up.
+//! 8 bytes on Linux / macOS (LP64). Struct / union types are
+//! emitted as `DW_TAG_structure_type` / `DW_TAG_union_type` DIEs
+//! with `DW_TAG_member` children; member `DW_AT_type` refs the
+//! scalar catalog above. Nested aggregate fields and bitfield
+//! `DW_AT_bit_offset` encoding stay deferred. `.debug_frame`
+//! regenerates from `synth_build`'s symbol set on the merged
+//! image rather than being carried per-`.o`.
 
 #![allow(dead_code)]
 
@@ -95,6 +98,9 @@ const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
 const DW_TAG_VARIABLE: u8 = 0x34;
 const DW_TAG_BASE_TYPE: u8 = 0x24;
 const DW_TAG_POINTER_TYPE: u8 = 0x0f;
+const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
+const DW_TAG_UNION_TYPE: u8 = 0x17;
+const DW_TAG_MEMBER: u8 = 0x0d;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -108,6 +114,7 @@ const DW_AT_FRAME_BASE: u8 = 0x40;
 const DW_AT_BYTE_SIZE: u8 = 0x0b;
 const DW_AT_ENCODING: u8 = 0x3e;
 const DW_AT_TYPE: u8 = 0x49;
+const DW_AT_DATA_MEMBER_LOCATION: u8 = 0x38;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -116,6 +123,7 @@ const DW_FORM_DATA1: u8 = 0x0b;
 const DW_FORM_SEC_OFFSET: u8 = 0x17;
 const DW_FORM_EXPRLOC: u8 = 0x18;
 const DW_FORM_REF4: u8 = 0x13;
+const DW_FORM_UDATA: u8 = 0x0f;
 
 // DW_ATE_* encoding values for DW_TAG_base_type.
 const DW_ATE_SIGNED: u8 = 0x05;
@@ -151,6 +159,9 @@ const ABBREV_FORMAL_PARAMETER: u64 = 4;
 const ABBREV_VARIABLE: u64 = 5;
 const ABBREV_BASE_TYPE: u64 = 6;
 const ABBREV_POINTER_TYPE: u64 = 7;
+const ABBREV_STRUCTURE_TYPE: u64 = 8;
+const ABBREV_UNION_TYPE: u64 = 9;
+const ABBREV_MEMBER: u64 = 10;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -316,6 +327,34 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
     out.push(0);
     out.push(0);
+    // Abbrev 8: structure_type -- name + byte_size; carries
+    // DW_TAG_member children terminated by a null DIE.
+    write_uleb128(&mut out, ABBREV_STRUCTURE_TYPE);
+    out.push(DW_TAG_STRUCTURE_TYPE);
+    out.push(DW_CHILDREN_YES);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
+    // Abbrev 9: union_type -- same payload as structure_type but
+    // members all live at offset 0.
+    write_uleb128(&mut out, ABBREV_UNION_TYPE);
+    out.push(DW_TAG_UNION_TYPE);
+    out.push(DW_CHILDREN_YES);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
+    // Abbrev 10: structure / union member -- name + type ref4
+    // + byte offset from the start of the aggregate.
+    write_uleb128(&mut out, ABBREV_MEMBER);
+    out.push(DW_TAG_MEMBER);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
     // End of abbrev table.
     out.push(0);
     out
@@ -387,36 +426,61 @@ fn build_debug_info(
     // referenced by this unit's variables. Emit base_type DIEs
     // followed by pointer_type wrappers; pointer levels chain
     // via DW_AT_type ref4 to the next-shallower wrapper (or to
-    // the leaf base_type at depth 1). Map keys back to the
+    // the leaf type at depth 1). Map keys back to the
     // DW_FORM_ref4 offset (CU-relative byte offset = body offset
     // + DEBUG_INFO_UNIT_HEADER_SIZE).
-    let mut type_offsets: BTreeMap<(i64, u8), u32> = BTreeMap::new();
+    let mut type_offsets: BTreeMap<TypeKey, u32> = BTreeMap::new();
     {
-        // Gather distinct leaf bases and the maximum pointer
-        // depth each one needs. The walker uses `Ty::Ptr` to
-        // encode pointer levels via additive arithmetic, so the
-        // depth comes from successive `Ty::Ptr` subtraction
-        // until the result lands in the leaf band.
-        let mut max_depth_per_leaf: BTreeMap<i64, u8> = BTreeMap::new();
+        // Gather distinct leaf bases and aggregates referenced
+        // by this unit's variables and struct fields, along
+        // with the maximum pointer depth each one needs.
+        // Aggregate fields that reference other aggregates pull
+        // those in too via the field-walk below.
+        let mut max_depth_per_scalar: BTreeMap<i64, u8> = BTreeMap::new();
+        let mut max_depth_per_aggregate: BTreeMap<usize, u8> = BTreeMap::new();
         for v in &program.variables {
-            let Some((leaf, depth)) = decompose_pointer_chain(v.type_tag) else {
-                continue;
-            };
-            let entry = max_depth_per_leaf.entry(leaf).or_insert(0);
-            if depth > *entry {
-                *entry = depth;
+            match decompose_pointer_chain(v.type_tag) {
+                Some(TypeKey::Scalar { leaf, depth }) => {
+                    let e = max_depth_per_scalar.entry(leaf).or_insert(0);
+                    if depth > *e {
+                        *e = depth;
+                    }
+                }
+                Some(TypeKey::Aggregate { id, depth }) => {
+                    let e = max_depth_per_aggregate.entry(id).or_insert(0);
+                    if depth > *e {
+                        *e = depth;
+                    }
+                }
+                None => continue,
             }
         }
-        // Emit base_type DIEs first so the pointer wrappers can
-        // reference them at smaller offsets (a forward-ref4
-        // works too -- DWARF allows it -- but keeping the order
-        // monotone keeps debuggers honest on older readers).
-        for (&leaf, &max_depth) in &max_depth_per_leaf {
+        // Pull in field types: aggregates whose fields reference
+        // scalar / pointer-to-scalar leafs need those DIEs in
+        // the catalog. Nested aggregate fields stay deferred
+        // (TODO -- needs topological sort) and surface without
+        // DW_AT_type.
+        for &id in max_depth_per_aggregate.keys() {
+            if let Some(sd) = program.structs.get(id) {
+                for f in &sd.fields {
+                    if let Some(TypeKey::Scalar { leaf, depth }) = decompose_pointer_chain(f.ty) {
+                        let e = max_depth_per_scalar.entry(leaf).or_insert(0);
+                        if depth > *e {
+                            *e = depth;
+                        }
+                    }
+                }
+            }
+        }
+        // Emit base_type DIEs first so the pointer wrappers and
+        // aggregate members can reference them at smaller
+        // offsets.
+        for (&leaf, &max_depth) in &max_depth_per_scalar {
             let Some(base) = base_type_for_leaf(leaf, machine, target) else {
                 continue;
             };
             let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-            type_offsets.insert((leaf, 0), off);
+            type_offsets.insert(TypeKey::Scalar { leaf, depth: 0 }, off);
             write_uleb128(&mut body, ABBREV_BASE_TYPE);
             push_string(&mut body, base.name);
             body.push(base.byte_size);
@@ -428,7 +492,56 @@ fn build_debug_info(
             let mut prev_off = off;
             for depth in 1..=max_depth {
                 let ptr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-                type_offsets.insert((leaf, depth), ptr_off);
+                type_offsets.insert(TypeKey::Scalar { leaf, depth }, ptr_off);
+                write_uleb128(&mut body, ABBREV_POINTER_TYPE);
+                body.push(8);
+                body.extend_from_slice(&prev_off.to_le_bytes());
+                prev_off = ptr_off;
+            }
+        }
+        // Aggregate (struct / union) DIEs. Each carries
+        // DW_TAG_member children referring back into the scalar
+        // catalog above; nested-aggregate members get skipped
+        // for now and surface without DW_AT_type.
+        for (&id, &max_depth) in &max_depth_per_aggregate {
+            let Some(sd) = program.structs.get(id) else {
+                continue;
+            };
+            let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+            type_offsets.insert(TypeKey::Aggregate { id, depth: 0 }, off);
+            let abbrev = if sd.is_union {
+                ABBREV_UNION_TYPE
+            } else {
+                ABBREV_STRUCTURE_TYPE
+            };
+            write_uleb128(&mut body, abbrev);
+            push_string(&mut body, &sd.name);
+            write_uleb128(&mut body, sd.size as u64);
+            for f in &sd.fields {
+                if f.bit_width > 0 {
+                    // Bitfield members need DW_AT_bit_offset +
+                    // DW_AT_bit_size; skip for now.
+                    continue;
+                }
+                let Some(TypeKey::Scalar { leaf, depth }) = decompose_pointer_chain(f.ty) else {
+                    continue;
+                };
+                let Some(&field_type_off) = type_offsets.get(&TypeKey::Scalar { leaf, depth })
+                else {
+                    continue;
+                };
+                write_uleb128(&mut body, ABBREV_MEMBER);
+                push_string(&mut body, &f.name);
+                body.extend_from_slice(&field_type_off.to_le_bytes());
+                write_uleb128(&mut body, f.offset as u64);
+            }
+            // End-of-children marker for the structure DIE.
+            body.push(0);
+            // Pointer wrappers for `Foo *`, `Foo **`, etc.
+            let mut prev_off = off;
+            for depth in 1..=max_depth {
+                let ptr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+                type_offsets.insert(TypeKey::Aggregate { id, depth }, ptr_off);
                 write_uleb128(&mut body, ABBREV_POINTER_TYPE);
                 body.push(8);
                 body.extend_from_slice(&prev_off.to_le_bytes());
@@ -494,10 +607,10 @@ fn build_debug_info(
             write_uleb128(&mut body, 1);
             body.push(frame_base_op);
             for v in &vars {
-                let Some((leaf, depth)) = decompose_pointer_chain(v.type_tag) else {
+                let Some(key) = decompose_pointer_chain(v.type_tag) else {
                     continue;
                 };
-                let Some(&type_off) = type_offsets.get(&(leaf, depth)) else {
+                let Some(&type_off) = type_offsets.get(&key) else {
                     continue;
                 };
                 let fp_byte_offset = fp_byte_offset_for_slot(v.fp_slot);
@@ -812,25 +925,47 @@ struct BaseTypeDesc {
     encoding: u8,
 }
 
-/// Split a c5 type tag into its leaf scalar tag (with the
-/// unsigned bit preserved) and pointer depth. Mirror of the
+/// A type-catalog key: either a scalar leaf with pointer depth,
+/// or a struct/union with id + pointer depth. The unsigned bit
+/// stays bundled into the scalar leaf so signed / unsigned
+/// variants get distinct entries.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum TypeKey {
+    Scalar { leaf: i64, depth: u8 },
+    Aggregate { id: usize, depth: u8 },
+}
+
+/// Split a c5 type tag into its catalog key. Mirror of the
 /// amalg-path `classify` band layout: each non-integer scalar
 /// type occupies a 100-wide band; pointer depth is encoded as
 /// `bare_band_offset / Ty::Ptr`. The integer family shares the
 /// `[0, 100)` band with even values for char and odd values for
-/// int. Struct types live past `STRUCT_BASE`; skip them.
-fn decompose_pointer_chain(type_tag: i64) -> Option<(i64, u8)> {
+/// int. Struct / union types live in the `[STRUCT_BASE,
+/// STRUCT_BASE + N*STRUCT_STRIDE)` range with one band per
+/// struct id.
+fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
     const UNSIGNED_BIT: i64 = 1 << 30;
     const TY_PTR: i64 = Ty::Ptr as i64;
     const BAND_SIZE: i64 = 100;
-    // STRUCT_BASE sits well above the scalar bands; the
-    // relocatable producer doesn't materialise struct types
-    // yet.
-    const STRUCT_BASE: i64 = 1_000_000;
+    const STRUCT_BASE: i64 = 1000;
+    const STRUCT_STRIDE: i64 = 1000;
     let unsigned = (type_tag & UNSIGNED_BIT) != 0;
     let bare = type_tag & !UNSIGNED_BIT;
-    if !(0..STRUCT_BASE).contains(&bare) {
+    if bare < 0 {
         return None;
+    }
+    // Struct / union band: identify the struct id by dividing
+    // the band offset by the stride. Pointer depth is the
+    // intra-band remainder over Ty::Ptr.
+    if bare >= STRUCT_BASE {
+        let band_off = bare - STRUCT_BASE;
+        let id = (band_off / STRUCT_STRIDE) as usize;
+        let depth_off = band_off % STRUCT_STRIDE;
+        if depth_off % TY_PTR != 0 {
+            return None;
+        }
+        let depth = (depth_off / TY_PTR) as u8;
+        return Some(TypeKey::Aggregate { id, depth });
     }
     let (leaf, depth) = if bare < BAND_SIZE {
         let leaf = if bare % TY_PTR == 0 {
@@ -859,7 +994,7 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<(i64, u8)> {
         return None;
     };
     let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf };
-    Some((leaf, depth))
+    Some(TypeKey::Scalar { leaf, depth })
 }
 
 /// Map a c5 leaf scalar type tag to its DWARF base_type

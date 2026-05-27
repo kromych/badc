@@ -1015,6 +1015,93 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     );
 }
 
+/// Aggregate types (`struct Point { int x; int y; }`) surface
+/// as `DW_TAG_structure_type` DIEs with `DW_TAG_member` children
+/// in the merged debug_info, with each member's `DW_AT_type`
+/// pointing at the scalar catalog earlier in the same CU. The
+/// regression watches for the dependency-emit-order bug that
+/// surfaced when the catalog was first wired -- struct fields
+/// must reach their type DIE through a backward `DW_FORM_ref4`.
+#[test]
+fn multi_tu_link_emits_struct_dies() {
+    let dir = tempdir("multi-tu-struct-dies");
+    write_source(
+        &dir,
+        "helper.c",
+        "struct Point { int x; int y; };\n\
+         int helper(struct Point p) { return p.x + p.y; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "struct Point { int x; int y; };\n\
+         extern int helper(struct Point);\n\
+         int main(void) { struct Point p; p.x = 2; p.y = 3; return helper(p); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_structure_type"),
+        "expected DW_TAG_structure_type DIE for `struct Point`:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("\"Point\""),
+        "expected DW_AT_name `Point` on the structure_type:\n{out_text}",
+    );
+    let member_count = out_text.matches("DW_TAG_member").count();
+    assert!(
+        member_count >= 2,
+        "expected at least two DW_TAG_member DIEs (x + y), got {member_count}:\n{out_text}",
+    );
+    for field in ["\"x\"", "\"y\""] {
+        assert!(
+            out_text.contains(field),
+            "expected DW_AT_name {field} on a member:\n{out_text}",
+        );
+    }
+    assert!(
+        out_text.contains("DW_AT_data_member_location"),
+        "expected DW_AT_data_member_location on struct members:\n{out_text}",
+    );
+}
+
 /// Multi-TU links populate `.debug_frame` from the merged
 /// Text-section symbol set: `synth_build.rs` walks every defined
 /// symbol and surfaces its `(ent_pc, name)` to `dwarf::emit`,

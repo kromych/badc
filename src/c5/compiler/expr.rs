@@ -40,8 +40,7 @@ use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
-    is_struct_ty, is_unsigned_ty, load_op_for, struct_id_of, struct_ptr_depth,
-    usual_arith_common_ty,
+    is_struct_ty, is_unsigned_ty, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -868,7 +867,7 @@ impl Compiler {
                 } else {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
-                    self.emit_op(load_op_for(self.ty, self.target));
+                    self.mark_emit_scalar_load();
                     // The AST node is a single `Expr::Ident` keyed
                     // on the symbol-table index. The address-of /
                     // assignment paths re-interpret the same node
@@ -1245,7 +1244,7 @@ impl Compiler {
                 let deref_child_ast = self.ast_acc;
                 if !result_is_struct_value {
                     let prior_depth = self.pending.fn_ptr_chain_depth;
-                    self.emit_op(load_op_for(self.ty, self.target));
+                    self.mark_emit_scalar_load();
                     // emit_op cleared the chain depth. Restore it
                     // one level deeper if the operand was tracked:
                     // a real deref consumes one level of indirection
@@ -1549,7 +1548,7 @@ impl Compiler {
                 // level so the spill below sees the actual function
                 // pointer.
                 if !is_pointer_ty(self.ty) {
-                    let trailing = self.pending.trailing_scalar_load;
+                    let trailing = self.current_scalar_load_kind();
                     let is_load = matches!(
                         trailing,
                         Some(LoadKind::I64)
@@ -2497,7 +2496,7 @@ impl Compiler {
                     let elem_is_struct_value =
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                     if !elem_is_struct_value {
-                        self.emit_op(load_op_for(self.ty, self.target));
+                        self.mark_emit_scalar_load();
                     }
                     // Build a canonical `Expr::Index { array,
                     // idx, ty }` so the walker emits a single
@@ -2689,7 +2688,7 @@ impl Compiler {
                         let elem_size = self.size_of_type(field.ty) as i64;
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
-                        self.emit_op(load_op_for(self.ty, self.target));
+                        self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr
                         // chain depth from the field's lineage tag so
                         // a following unary `*` recognises the C99

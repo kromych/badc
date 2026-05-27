@@ -432,15 +432,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// `Self::last_emit_is_zero` to suppress the NULL-idiom
     /// warning on `pointer = 0`.
     pub last_imm_was_zero: bool,
-
-    /// `Some(load_op)` while the trailing emit is a scalar load
-    /// (`LoadKind::I64`, `LoadKind::U8`, `LoadKind::I8`, `LoadKind::I16`, `LoadKind::U16`,
-    /// `LoadKind::I32`, `LoadKind::U32`, `LoadKind::F32`). Set by `emit_op` on the
-    /// matching variants, cleared by every other emit. Drives
-    /// `pop_trailing_scalar_load` (lvalue conversion for `&expr`)
-    /// and `rewrite_trailing_load_as_psh` (assignment / inc /
-    /// compound-assign reload).
-    pub trailing_scalar_load: Option<crate::c5::ir::LoadKind>,
 }
 
 impl Default for Pending {
@@ -469,7 +460,6 @@ impl Default for Pending {
             bf_compound_assign: None,
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
-            trailing_scalar_load: None,
         }
     }
 }

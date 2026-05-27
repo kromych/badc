@@ -14,13 +14,13 @@
 //! protocols by reading `trailing_scalar_load` and converting the
 //! trailing rvalue load into a stack push or address producer.
 
-use super::super::ast::{Expr, ExprId, SrcPos};
+use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_unsigned_ty;
+use super::types::{is_struct_ty, is_unsigned_ty, load_op_for, struct_ptr_depth};
 
 impl Compiler {
     // ---- Lexer plumbing ----
@@ -55,27 +55,18 @@ impl Compiler {
 
     // ---- Code emission ----
 
-    /// Emit a scalar-load tag. The parser only routes scalar-load
-    /// Op variants (Lc / Lcs / Lh / Lhu / Lw / Lwu / Li / Lf)
-    /// through this helper; every other emit shape lives on a
-    /// purpose-built helper (`ast_binop`, `ast_assign`, `ast_psh`,
-    /// `mark_emit_other`, ...). Records the load kind in
-    /// `trailing_scalar_load` so the lvalue-rewrite path can
-    /// detect a trailing scalar load and pop it.
-    pub(super) fn emit_op(&mut self, op: LoadKind) {
-        // Any emit invalidates the function-pointer chain
-        // tracking. Identifier loads and the unary `*` handler
-        // re-seed it after their own emits when the symbol /
-        // result is in fn-ptr lineage (see
-        // `fn_ptr_chain_depth`).
+    /// Mark a scalar-load emit. The parser calls this at every
+    /// load site the lvalue-rewrite path needs to detect later
+    /// (`pop_trailing_scalar_load`, `rewrite_trailing_load_as_psh`,
+    /// the `**fp` over-deref check). The detection consults
+    /// `ast_acc` directly via `current_scalar_load_kind`, so this
+    /// helper only updates the surrounding peek flags -- mainly
+    /// clearing `last_loaded_local` so a non-Ident load site
+    /// (field, deref, index) doesn't accidentally retract
+    /// `was_read` from an unrelated symbol the previous Ident-
+    /// rvalue path tagged.
+    pub(super) fn mark_emit_scalar_load(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
-        self.pending.trailing_scalar_load = Some(op);
-        // The identifier-rvalue path in expr.rs re-seeds
-        // `last_loaded_local` after its own load emit; any
-        // other scalar-load source (field, deref, index,
-        // bitfield) leaves it cleared so a downstream pop /
-        // rewrite does not retract `was_read` from a symbol
-        // whose load is no longer trailing.
         self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -88,7 +79,6 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
         self.ast_vstack.push(self.ast_acc.take());
     }
 
@@ -100,7 +90,6 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
         self.ast_apply_binop(binop);
     }
 
@@ -110,7 +99,6 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
     }
 
@@ -134,7 +122,6 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
     }
 
     /// Build an `Expr::Assign` from the vstack-top (lvalue
@@ -146,7 +133,6 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
         self.ast_apply_assign();
     }
 
@@ -155,7 +141,6 @@ impl Compiler {
     /// discarded so a downstream peek doesn't see leftover state.
     pub(super) fn clear_recent_emits(&mut self) {
         self.pending.last_imm_was_zero = false;
-        self.pending.trailing_scalar_load = None;
     }
 
     /// Look up the lexer's current `(file)` in `source_files`,
@@ -189,7 +174,6 @@ impl Compiler {
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
-        self.pending.trailing_scalar_load = None;
         // Only literal-zero immediates set the peek flag; every
         // other immediate clears it.
         self.pending.last_imm_was_zero = val == 0;
@@ -250,6 +234,60 @@ impl Compiler {
         self.pending.last_imm_was_zero
     }
 
+    /// Inspect `ast_acc` for the load kind the current expression
+    /// just produced. Returns `Some(kind)` when the topmost
+    /// `Expr` produces a scalar value via a single load
+    /// (`Expr::Ident` with class `Loc` / `Glo` and a non-array,
+    /// non-struct-value type; `Expr::Unary { Deref }`; `Expr::Index`;
+    /// `Expr::Member` whose field is non-array, non-bitfield); the
+    /// kind is `load_op_for(ty, target)`. Mirrors what
+    /// `trailing_scalar_load` would carry through `emit_op` at the
+    /// matching parser sites; lets the lvalue-rewrite path skip the
+    /// state-machine tag and consult the AST directly.
+    pub(super) fn current_scalar_load_kind(&self) -> Option<LoadKind> {
+        let id = self.ast_acc?;
+        let expr = self.ast.exprs.get(id as usize)?;
+        let ty = match expr {
+            Expr::Ident {
+                ty,
+                class,
+                array_size,
+                ..
+            } => {
+                if *array_size != 0 {
+                    return None;
+                }
+                let class = *class;
+                if class != Token::Loc as i64 && class != Token::Glo as i64 {
+                    return None;
+                }
+                *ty
+            }
+            Expr::Unary {
+                op: UnOp::Deref,
+                ty,
+                ..
+            } => *ty,
+            Expr::Index { ty, .. } => *ty,
+            Expr::Member {
+                ty,
+                array_size,
+                bitfield,
+                ..
+            } => {
+                if *array_size != 0 || bitfield.is_some() {
+                    return None;
+                }
+                *ty
+            }
+            _ => return None,
+        };
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            return None;
+        }
+        Some(load_op_for(ty, self.target))
+    }
+
     /// True if the most recent emit was an indirect call through a
     /// variable / struct field whose return type the dialect can't
     /// track. Used by `type_warning` to silently accept an
@@ -272,13 +310,10 @@ impl Compiler {
     /// The pattern shows up in pre/post-increment, plain
     /// assignment, and compound assignment.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<LoadKind> {
-        let load_op = self.pending.trailing_scalar_load.take()?;
+        let load_op = self.current_scalar_load_kind()?;
         // The address producer's value moves to the c5 stack;
         // push the current `ast_acc` slot onto the parser vstack
-        // and clear the accumulator. `None` ast_acc represents an
-        // address producer whose AST counterpart hasn't been
-        // wired yet; the downstream store then sees a `None`
-        // lvalue and skips the Assign build.
+        // and clear the accumulator.
         self.ast_vstack.push(self.ast_acc.take());
         // The new tail behaves like a Psh, not a scalar load,
         // and is not a literal Imm 0 either.
@@ -323,7 +358,7 @@ impl Compiler {
     /// success. Used by `&expr` to convert an rvalue load chain
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
-        if self.pending.trailing_scalar_load.take().is_none() {
+        if self.current_scalar_load_kind().is_none() {
             return false;
         }
         // The load is gone -- the symbol's value never gets

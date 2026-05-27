@@ -403,4 +403,3 @@ impl Intrinsic {
         }
     }
 }
-

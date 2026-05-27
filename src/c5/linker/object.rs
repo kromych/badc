@@ -791,20 +791,28 @@ mod tests {
             "expected `main` STT_FUNC symbol; got {:?}",
             obj.symbols
         );
+        // The .o writer surfaces each libc import under the
+        // host target's `real_symbol` from `#pragma binding`,
+        // so the expected name is host-dependent: Mach-O has a
+        // leading underscore, ELF / PE do not.
+        let printf_real = match target {
+            Target::MacOSAarch64 => "_printf",
+            _ => "printf",
+        };
         let has_printf_undef = obj
             .symbols
             .iter()
-            .any(|s| s.name == "printf" && matches!(s.section, NativeSymSection::Undef));
+            .any(|s| s.name == printf_real && matches!(s.section, NativeSymSection::Undef));
         assert!(
             has_printf_undef,
-            "expected UNDEF `printf` import; got {:?}",
+            "expected UNDEF `{printf_real}` import; got {:?}",
             obj.symbols,
         );
         // At least one CALL26 reloc against the printf import.
         let has_call26 = obj.text_relocs.iter().any(|r| {
             obj.symbols
                 .get(r.sym_idx)
-                .map(|s| s.name == "printf")
+                .map(|s| s.name == printf_real)
                 .unwrap_or(false)
         });
         assert!(

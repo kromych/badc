@@ -387,14 +387,19 @@ pub(super) fn write_relocatable(
         all_names.push(s.as_str());
     }
     let func_strs_end = all_names.len();
-    // Use the portable `local_name` for the .o-level symbol --
-    // the relocatable is the badc-internal format on every
-    // target. Per-OS decoration (the leading underscore on
-    // Mach-O, no decoration on ELF, etc.) belongs to the
-    // final-image writer that converts the .o into the target
-    // container.
+    // Each libc / dylib import surfaces under its
+    // target-specific `real_symbol`. The `#pragma binding`
+    // declaration is the only source of truth that maps the
+    // c5-internal `local_name` (e.g. `errno_location`) to the
+    // platform's actual symbol (`___error` on Mach-O,
+    // `__errno_location` on Linux, `_errno` on PE/COFF).
+    // Storing the real_symbol here lets the synthesizer feed
+    // the final-image writer's dylib import table without
+    // having to recover the per-OS rename -- the .o is per-
+    // target already (it carries arch-specific instruction
+    // bytes), so per-target symbol names are no extra coupling.
     for imp in &build.imports.imports {
-        all_names.push(imp.local_name.as_str());
+        all_names.push(imp.real_symbol.as_str());
     }
     let user_extern_names_start = all_names.len();
     for name in &user_extern_names {

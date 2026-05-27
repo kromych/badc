@@ -184,8 +184,15 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
         .enumerate()
         .map(|(i, name)| ResolvedImport {
             binding_idx: i as i64,
+            // The .o writer stores each libc import under its
+            // per-target `real_symbol` (the name the dynamic
+            // linker actually resolves against). At synth time
+            // the name is already in the target's final shape,
+            // so both fields here point at the same string. The
+            // `local_name` field is preserved as a back-reference
+            // for diagnostics; the writer reads `real_symbol`.
             local_name: name.clone(),
-            real_symbol: target_real_symbol(target, name),
+            real_symbol: name.clone(),
             dylib_index: 0,
             is_variadic: false,
             fixed_args: 0,
@@ -205,13 +212,6 @@ fn linux_libc_path(target: Target) -> String {
         Target::LinuxAarch64 => "/lib/ld-linux-aarch64.so.1".to_string(),
         Target::LinuxX64 => "/lib64/ld-linux-x86-64.so.2".to_string(),
         _ => String::new(),
-    }
-}
-
-fn target_real_symbol(target: Target, local: &str) -> String {
-    match target {
-        Target::MacOSAarch64 => alloc::format!("_{local}"),
-        _ => local.to_string(),
     }
 }
 
@@ -530,7 +530,10 @@ mod tests {
     #[test]
     fn synth_imports_picks_libsystem_for_macos() {
         let mut merged = tiny_aarch64_main();
-        merged.imports = alloc::vec!["malloc".to_string()];
+        // The .o writer stores each libc import under the
+        // target's `real_symbol` from `#pragma binding`; the
+        // synthesizer passes the name through verbatim.
+        merged.imports = alloc::vec!["_malloc".to_string()];
         let imports = synth_imports(&merged, Target::MacOSAarch64);
         assert_eq!(imports.dylibs.len(), 1);
         assert!(
@@ -539,7 +542,6 @@ mod tests {
             imports.dylibs[0].path
         );
         assert_eq!(imports.imports.len(), 1);
-        assert_eq!(imports.imports[0].local_name, "malloc");
         assert_eq!(imports.imports[0].real_symbol, "_malloc");
     }
 

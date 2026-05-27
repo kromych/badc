@@ -109,17 +109,16 @@ pub(super) fn record_inst_src(
 
 /// Record the byte offset of the first post-prologue
 /// instruction. Stored in `pc_to_native` at the synthetic slot
-/// `ent_pc + Op::Ent.word_size()`, which is the position the
-/// pre-SSA prologue layout reserved for the post-prologue PC.
-/// The DWARF CFI pass reads this slot to encode
-/// `DW_CFA_advance_loc <prologue bytes>` so the post-prologue
-/// CFA / saved-reg rule installs at the right PC.
+/// `ent_pc + POST_PROLOGUE_PC_OFFSET`. The DWARF CFI pass reads
+/// this slot to encode `DW_CFA_advance_loc <prologue bytes>` so
+/// the post-prologue CFA / saved-reg rule installs at the right
+/// PC.
 pub(super) fn record_post_prologue_pc(
     func: &super::super::ir::FunctionSsa,
     pc_to_native: &mut [usize],
     code_len: usize,
 ) {
-    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
+    let post_prologue_pc = func.ent_pc + super::POST_PROLOGUE_PC_OFFSET;
     if post_prologue_pc < pc_to_native.len() {
         pc_to_native[post_prologue_pc] = code_len;
     }

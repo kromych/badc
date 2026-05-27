@@ -206,6 +206,16 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
+/// Distance from a function's `ent_pc` to the synthetic
+/// post-prologue PC slot in `pc_to_native`. Matches the i64-word
+/// stride the legacy bytecode encoder reserved for `Op::Ent` (one
+/// opcode word + one operand word), kept as a numeric constant so
+/// the codegen no longer reaches into the `op` module just to
+/// recover it. The DWARF CFI pass reads
+/// `pc_to_native[ent_pc + POST_PROLOGUE_PC_OFFSET]` to encode
+/// `DW_CFA_advance_loc <prologue bytes>`.
+pub(super) const POST_PROLOGUE_PC_OFFSET: usize = 2;
+
 /// Upper bound on ent_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `pc_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write

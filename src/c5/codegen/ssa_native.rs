@@ -44,7 +44,7 @@ pub(crate) fn compile_function_to_bytes(
     let alloc = super::ssa_alloc::allocate(func, target);
     let imports = ResolvedImports::default();
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
-    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
+    let post_prologue_pc = func.ent_pc + super::POST_PROLOGUE_PC_OFFSET;
     let mut pc_to_native: Vec<usize> = alloc::vec![0usize; post_prologue_pc + 1];
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
 

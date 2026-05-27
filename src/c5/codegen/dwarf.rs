@@ -48,7 +48,6 @@ use alloc::vec::Vec;
 
 use super::{Build, Target};
 use crate::c5::compiler::{StructDef, types};
-use crate::c5::op::Op;
 use crate::c5::program::Program;
 use crate::c5::token::Ty;
 
@@ -486,7 +485,7 @@ struct SubprogVar {
 fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     let body_start = build
         .pc_to_native
-        .get(ent_pc + Op::Ent.word_size())
+        .get(ent_pc + super::POST_PROLOGUE_PC_OFFSET)
         .copied()
         .unwrap_or(low_pc);
     if body_start == usize::MAX || body_start <= low_pc {

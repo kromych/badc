@@ -1967,15 +1967,29 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     ) = if emit_dwarf {
         // Mach-O routes argc/argv through `LC_MAIN`,
         // not an emitted stub, so there's no entry-stub range to
-        // describe.
-        let s = dwarf::emit(
-            program,
-            build,
-            super::Target::MacOSAarch64,
-            code_vmaddr_base,
-            &program.source_path,
-            None,
-        );
+        // describe. Multi-TU links hand over pre-baked DWARF
+        // through `Build::merged_dwarf` -- use those bytes
+        // directly. `debug_str` / `debug_frame` aren't preserved
+        // by the linker yet (TODO); the writer emits empty
+        // sections so the load-command layout stays stable.
+        let s = if let Some(md) = &build.merged_dwarf {
+            dwarf::DwarfSections {
+                debug_info: md.debug_info.clone(),
+                debug_abbrev: md.debug_abbrev.clone(),
+                debug_line: md.debug_line.clone(),
+                debug_str: Vec::new(),
+                debug_frame: Vec::new(),
+            }
+        } else {
+            dwarf::emit(
+                program,
+                build,
+                super::Target::MacOSAarch64,
+                code_vmaddr_base,
+                &program.source_path,
+                None,
+            )
+        };
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
         let abbrev = info + s.debug_info.len() as u64;

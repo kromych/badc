@@ -7,8 +7,6 @@ pub enum Op {
     Lea = 0x7f00_0000_0000_0001,
     /// Load Immediate: Loads a constant value into the accumulator.
     Imm,
-    /// Jump to Subroutine: Pushes return address and jumps.
-    Jsr,
     /// Jump to Subroutine indirect.
     Jsri,
     /// Load Integer: Loads an i64 from the address in the accumulator.
@@ -23,10 +21,6 @@ pub enum Op {
     /// require the high bit to propagate so that values outside
     /// [0, 127] stay negative.
     Lcs,
-    /// Store Integer: Stores the accumulator into the address on top of stack.
-    Si,
-    /// Store Character: Stores the lower byte of accumulator into address on stack.
-    Sc,
     /// Load Word: Loads a 32-bit signed value from the address in the
     /// accumulator, sign-extending into the 64-bit accumulator. Used
     /// for signed `int` lvalue reads where `int` is a 4-byte
@@ -39,11 +33,6 @@ pub enum Op {
     /// against `0xffffffff` and so that `1u - 2u` wraps to
     /// `0xffffffff` rather than reading back as signed -1.
     Lwu,
-    /// Store Word: Stores the low 32 bits of the accumulator into the
-    /// address on top of stack. Companion to [`Op::Lw`] / [`Op::Lwu`]
-    /// for 4-byte int writes (signed and unsigned share the same
-    /// store semantics; only the load differs).
-    Sw,
     /// Load Half: Loads a 16-bit signed value from the address in
     /// the accumulator, sign-extending into the 64-bit accumulator.
     /// Used for `short` lvalue reads where `short` is a 2-byte
@@ -55,13 +44,6 @@ pub enum Op {
     /// `*(u16*)p` packed-buffer reads. ARM64 `LDRH`, x86_64
     /// `MOVZX r64, m16`.
     Lhu,
-    /// Store Half: Stores the low 16 bits of the accumulator into
-    /// the address on top of stack. Companion to [`Op::Lh`] /
-    /// [`Op::Lhu`] for 2-byte short writes (signed and unsigned
-    /// share the same store; only the load differs).
-    Sh,
-    /// Push: Pushes the accumulator onto the stack.
-    Psh,
     /// External library call. Followed by one operand: the index
     /// (into the program's flattened `#pragma binding(...)` table)
     /// of the binding to call. Args are already on the VM stack
@@ -166,8 +148,6 @@ pub enum Op {
     Fmul,
     /// `a = (top / acc)` as f64. Pops top.
     Fdiv,
-    /// `a = -acc` as f64.
-    Fneg,
     /// `a = (top == acc) ? 1 : 0` as i64.
     Feq,
     /// `a = (top != acc) ? 1 : 0` as i64.
@@ -192,16 +172,6 @@ pub enum Op {
     /// `mov eax, [rbx]; movd xmm0, eax; cvtss2sd xmm0, xmm0;
     /// movq rbx, xmm0`.
     Lf,
-    /// Store Float: takes the accumulator (`f64::to_bits()`),
-    /// narrows the bit pattern to single-precision, and stores
-    /// the resulting 4 bytes at the address on top of stack.
-    /// Companion to [`Op::Lf`] for 4-byte float writes. The
-    /// narrow-then-widen-back rounding is a single-precision
-    /// `fcvt s, d` on ARM64 (`cvtsd2ss` on x86_64); subsequent
-    /// loads through `Op::Lf` reproduce the same f64 bit pattern
-    /// as long as the stored value fit single-precision exactly.
-    Sf,
-
     /// Memory copy. Operand: size in bytes (compile-time constant).
     /// Stack top: destination address. Accumulator: source address
     /// (the parser leaves it there because the RHS struct-value

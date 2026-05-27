@@ -1192,22 +1192,18 @@ impl Compiler {
         id
     }
 
-    /// AST-side reaction to `emit_op`. `Op::Psh` records the
-    /// current accumulator on the parser-side vstack; binops pop
-    /// the saved lhs from the vstack, pair it with the
-    /// accumulator's rhs ExprId, and replace the accumulator with
-    /// the resulting `Expr::Binary`; the unary `Op::Fneg`
-    /// rewraps the accumulator with `Expr::Unary { op: Neg }`;
-    /// scalar stores pair vstack-top (lvalue address) with the
-    /// rhs accumulator into `Expr::Assign`; call ops clobber the
-    /// accumulator. Other ops are pass-through.
+    /// AST-side reaction to `emit_op`. Only the binop family is
+    /// still reached via the variable-Op path (compound-assign
+    /// dispatch in `expr.rs`); every other arm dropped after the
+    /// `ast_psh` / `ast_assign` / `ast_fneg` / call-site helpers
+    /// captured their specialised side effects. The fall-through
+    /// arm keeps the dispatch total for the residual Op tags
+    /// (Lea / Li / StLocI / LdLocI / Mcpy / TlsLea / Intrinsic /
+    /// load_op_for outputs) that still drive `emit_op` for the
+    /// state-tracking flags.
     pub(super) fn ast_track_emit_op(&mut self, op: Op) {
         use super::super::ir::BinOp as B;
         match op {
-            Op::Psh => {
-                self.ast_vstack.push(self.ast_acc.take());
-            }
-            Op::Fneg => self.ast_apply_unary(super::super::ast::UnOp::Neg),
             Op::Add => self.ast_apply_binop(B::Add),
             Op::Sub => self.ast_apply_binop(B::Sub),
             Op::Mul => self.ast_apply_binop(B::Mul),
@@ -1241,10 +1237,6 @@ impl Compiler {
             Op::Fgt => self.ast_apply_binop(B::Fgt),
             Op::Fle => self.ast_apply_binop(B::Fle),
             Op::Fge => self.ast_apply_binop(B::Fge),
-            Op::Si | Op::Sc | Op::Sh | Op::Sw | Op::Sf => self.ast_apply_assign(),
-            Op::Jsr | Op::JsrExt | Op::Jsri => {
-                self.ast_acc = None;
-            }
             _ => {}
         }
     }

@@ -500,6 +500,20 @@ pub(crate) struct ResolvedImport {
     pub param_types: Vec<i64>,
 }
 
+/// Pre-baked DWARF byte streams from the multi-TU link.
+/// `synth_build` populates this from `MergedNative`; the
+/// final-image writer drops it into the output's `.debug_*`
+/// sections instead of regenerating via `dwarf::emit`.
+/// Address slots inside still need rebasing -- the producer
+/// emitted them as placeholders paired with reloc records.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MergedDwarf {
+    pub debug_info: Vec<u8>,
+    pub debug_abbrev: Vec<u8>,
+    pub debug_line: Vec<u8>,
+}
+
 /// One resolved dylib the program needs at load time. Distinct from
 /// [`super::preprocessor::DylibSpec`] in that this only contains the
 /// dylibs whose bindings the program *uses* -- declaring `<windows.h>`
@@ -923,6 +937,18 @@ pub(crate) struct Build {
     /// so existing tests that build a `Build` by hand keep
     /// debug info enabled.
     pub debug_info: bool,
+    /// Pre-baked merged DWARF byte streams. Set by the
+    /// multi-TU link synthesizer (`synth_build.rs`) so the
+    /// final-image writer consumes the linker-merged bytes
+    /// instead of regenerating via `dwarf::emit`. `None`
+    /// (the in-memory compile path) falls back to the on-the-fly
+    /// emitter. Each tuple element is the matching standard
+    /// section payload; relocs against runtime addresses
+    /// (`DwarfReloc` entries from the producer) are still
+    /// pending and need to be applied by the writer once it
+    /// knows the final vmaddr layout.
+    #[allow(dead_code)]
+    pub merged_dwarf: Option<MergedDwarf>,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the

@@ -2483,6 +2483,7 @@ mod tests {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             debug_info: true,
+            merged_dwarf: None,
             plt_trampoline_offsets: Vec::new(),
         }
     }

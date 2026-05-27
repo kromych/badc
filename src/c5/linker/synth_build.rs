@@ -126,7 +126,25 @@ fn synth_program_and_build(
         exports: exports.clone(),
         output_kind: OutputKind::Executable,
         dllmain_pc: None,
-        debug_info: false,
+        // Multi-TU links carry pre-baked DWARF byte streams from
+        // every input unit (`linker/link::link_native_objects`
+        // concatenates them and rebases per-section offsets).
+        // Empty merged blobs mean no input unit carried DWARF;
+        // pass `None` so the writers skip the section emit
+        // entirely instead of dumping zero-length placeholders.
+        debug_info: !merged.debug_info.is_empty(),
+        merged_dwarf: if merged.debug_info.is_empty()
+            && merged.debug_abbrev.is_empty()
+            && merged.debug_line.is_empty()
+        {
+            None
+        } else {
+            Some(crate::c5::codegen::MergedDwarf {
+                debug_info: merged.debug_info.clone(),
+                debug_abbrev: merged.debug_abbrev.clone(),
+                debug_line: merged.debug_line.clone(),
+            })
+        },
         plt_trampoline_offsets,
     };
 

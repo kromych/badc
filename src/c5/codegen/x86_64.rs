@@ -1664,6 +1664,7 @@ pub(super) fn lower(
         macho_tlv_descriptors: Vec::new(),
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
+        merged_dwarf: None,
         plt_trampoline_offsets,
     })
 }

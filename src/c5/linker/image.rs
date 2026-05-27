@@ -383,8 +383,8 @@ fn x86_64_start_stub(
     exit_text_offset: Option<usize>,
 ) -> Vec<u8> {
     // xor    ebp, ebp                                ; clear frame ptr
-    // pop    rdi                                     ; argc
-    // mov    rsi, rsp                                ; argv
+    // mov    rdi, [rsp]                              ; argc
+    // lea    rsi, [rsp + 8]                          ; argv
     // call   <entry>                                 ; rel32
     // mov    rdi, rax                                ; exit code
     // -- if `__c5_exit` is in the merged image --
@@ -393,10 +393,20 @@ fn x86_64_start_stub(
     // -- otherwise (no libc; static path) --
     //   mov  eax, 0xe7                               ; sys_exit_group = 231
     //   syscall
-    let mut buf: Vec<u8> = Vec::with_capacity(24);
+    //
+    // AMD64 SysV ABI 3.4.1 requires `(%rsp + 8) % 16 == 0` at the
+    // callee entry point, i.e. rsp must be 16-aligned at the
+    // moment of `call`. The kernel hands `_start` an rsp that is
+    // already 16-aligned, so reading argc / argv via memory loads
+    // (rather than the rsp-shifting `pop rdi`) leaves the
+    // alignment intact for the `call entry` below. Without this
+    // contract any SSE-aligned spill inside main's libc calls
+    // (movaps / movdqa / ...) faults on real Intel hardware
+    // (QEMU emulation tolerates the misalignment).
+    let mut buf: Vec<u8> = Vec::with_capacity(28);
     buf.extend_from_slice(&[0x31, 0xed]); // xor ebp, ebp
-    buf.push(0x5f); // pop rdi
-    buf.extend_from_slice(&[0x48, 0x89, 0xe6]); // mov rsi, rsp
+    buf.extend_from_slice(&[0x48, 0x8b, 0x3c, 0x24]); // mov rdi, [rsp]
+    buf.extend_from_slice(&[0x48, 0x8d, 0x74, 0x24, 0x08]); // lea rsi, [rsp + 8]
     let call_entry_start = stub_text_offset + buf.len();
     let call_entry_end = call_entry_start + 5;
     let rel_entry = (entry_text_offset as i64) - (call_entry_end as i64);

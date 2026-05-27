@@ -355,7 +355,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             symtab_idx = Some(i);
             continue;
         }
-        if name == ".badc.dylibs" {
+        if name == ".note.badc" {
             dylibs_section_idx = Some(i);
             continue;
         }
@@ -573,18 +573,41 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
-    // `.badc.dylibs` -- NUL-separated load paths the writer
-    // recorded from every `#pragma dylib` declaration in scope.
-    // Absent for objects produced by other toolchains; absent
-    // also for c5 objects that reach for no external libraries.
+    // `.note.badc` -- vendor note section listing `#pragma dylib`
+    // paths. ELF gABI section 5 record shape: header (namesz,
+    // descsz, type), 4-byte-padded name, 4-byte-padded desc. The
+    // c5 entry is `type = NT_BADC_DYLIBS = 1`, name="badc\0",
+    // desc = NUL-separated paths. Other note records in the
+    // section are skipped silently.
     let mut dylibs: Vec<String> = Vec::new();
     if let Some(i) = dylibs_section_idx {
-        let bytes = section_slice(bytes, &shdrs[i])?;
-        for chunk in bytes.split(|&b| b == 0) {
-            if chunk.is_empty() {
-                continue;
+        let body = section_slice(bytes, &shdrs[i])?;
+        let mut cur = 0usize;
+        while cur + 12 <= body.len() {
+            let namesz = u32::from_le_bytes(body[cur..cur + 4].try_into().unwrap()) as usize;
+            let descsz = u32::from_le_bytes(body[cur + 4..cur + 8].try_into().unwrap()) as usize;
+            let ntype = u32::from_le_bytes(body[cur + 8..cur + 12].try_into().unwrap());
+            cur += 12;
+            let name_end = cur.saturating_add(namesz);
+            if name_end > body.len() {
+                break;
             }
-            dylibs.push(String::from_utf8_lossy(chunk).into_owned());
+            let name = &body[cur..name_end];
+            let name_padded = (namesz + 3) & !3;
+            cur = cur.saturating_add(name_padded);
+            let desc_end = cur.saturating_add(descsz);
+            if desc_end > body.len() {
+                break;
+            }
+            if ntype == 1 && name == b"badc\0" {
+                for chunk in body[cur..desc_end].split(|&b| b == 0) {
+                    if chunk.is_empty() {
+                        continue;
+                    }
+                    dylibs.push(String::from_utf8_lossy(chunk).into_owned());
+                }
+            }
+            cur = cur.saturating_add((descsz + 3) & !3);
         }
     }
 

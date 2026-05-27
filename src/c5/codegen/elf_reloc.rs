@@ -7,8 +7,10 @@
 //! resolves at link time.
 //!
 //! Sections emitted: `.text`, `.data`, `.bss`, `.rela.text`,
-//! `.symtab`, `.strtab`, `.shstrtab`, `.rela.data` plus the
-//! null section.
+//! `.symtab`, `.strtab`, `.shstrtab`, `.rela.data`, `.note.badc`
+//! (vendor note carrying `#pragma dylib` paths), `.debug_info`,
+//! `.rela.debug_info`, `.debug_abbrev`, `.debug_line`,
+//! `.rela.debug_line` plus the null section.
 //! `.symtab` carries: file symbol, the three section symbols,
 //! one `STT_FUNC STB_LOCAL` per `static`-linkage function and
 //! one `STT_FUNC STB_GLOBAL` per externally-linked function,
@@ -31,6 +33,7 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::Build;
 use super::Machine;
+use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
 
 // ELF64 constants (Elf.h subset).
 const ELF_CLASS_64: u8 = 2;
@@ -43,7 +46,13 @@ const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
+const SHT_NOTE: u32 = 7;
 const SHT_NOBITS: u32 = 8;
+
+// Vendor note types under namesz="badc\0". Standard ELF note
+// shape (ELF gABI, section 5): each entry is (namesz, descsz,
+// type) header + name (4-byte padded) + desc (4-byte padded).
+const NT_BADC_DYLIBS: u32 = 1;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -53,9 +62,11 @@ const SHF_INFO_LINK: u64 = 0x40;
 const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
+const R_X86_64_32: u32 = 10;
 
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
 const R_AARCH64_ABS64: u32 = 257;
+const R_AARCH64_ABS32: u32 = 258;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -209,7 +220,12 @@ pub(super) fn write_relocatable(
     //   6 = .strtab
     //   7 = .shstrtab
     //   8 = .rela.data
-    //   9 = .badc.dylibs
+    //   9 = .note.badc
+    //  10 = .debug_info
+    //  11 = .rela.debug_info
+    //  12 = .debug_abbrev
+    //  13 = .debug_line
+    //  14 = .rela.debug_line
     // Plus the null section at index 0.
     const SHIDX_TEXT: u16 = 1;
     const SHIDX_DATA: u16 = 3;
@@ -218,8 +234,13 @@ pub(super) fn write_relocatable(
     const SHIDX_STRTAB: u16 = 6;
     const SHIDX_SHSTRTAB: u16 = 7;
     const SHIDX_RELA_DATA: u16 = 8;
-    const SHIDX_BADC_DYLIBS: u16 = 9;
-    const NUM_SECTIONS: usize = 10;
+    const SHIDX_NOTE_BADC: u16 = 9;
+    const SHIDX_DEBUG_INFO: u16 = 10;
+    const SHIDX_RELA_DEBUG_INFO: u16 = 11;
+    const SHIDX_DEBUG_ABBREV: u16 = 12;
+    const SHIDX_DEBUG_LINE: u16 = 13;
+    const SHIDX_RELA_DEBUG_LINE: u16 = 14;
+    const NUM_SECTIONS: usize = 15;
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -245,9 +266,22 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
-    // Section symbols (.text, .data, .bss). Each has empty name
-    // and SHN of the matching section.
-    for shndx in [SHIDX_TEXT, SHIDX_DATA, SHIDX_BSS] {
+    // Section symbols (.text, .data, .bss, .debug_line,
+    // .debug_abbrev). Each has empty name and SHN of the matching
+    // section. The DWARF section symbols let `.rela.debug_info` /
+    // `.rela.debug_line` relocations target them: a placeholder
+    // slot in `.debug_info` that refers to the unit's
+    // `.debug_line` start surfaces as
+    // `R_*_32 against .debug_line section sym, addend = 0`, which
+    // the linker rebases to the unit's final `.debug_line` offset
+    // after concatenation.
+    for shndx in [
+        SHIDX_TEXT,
+        SHIDX_DATA,
+        SHIDX_BSS,
+        SHIDX_DEBUG_LINE,
+        SHIDX_DEBUG_ABBREV,
+    ] {
         symbols.push(Elf64Sym {
             st_info: pack_sym_info(STB_LOCAL, STT_SECTION),
             st_shndx: shndx,
@@ -533,12 +567,14 @@ pub(super) fn write_relocatable(
     }
 
     // Section symbol indices follow the order we pushed them in
-    // above: null(0), file(1), then text(2), data(3), bss(4).
-    // Data + function-pointer fixups land against the matching
-    // section symbol; the `r_addend` carries the offset within
-    // the section.
+    // above: null(0), file(1), then text(2), data(3), bss(4),
+    // .debug_line(5), .debug_abbrev(6). Data + function-pointer
+    // fixups land against the matching section symbol; the
+    // `r_addend` carries the offset within the section.
     let text_sym_idx: u64 = 2;
     let data_sym_idx: u64 = 3;
+    let debug_line_sym_idx: u64 = 5;
+    let debug_abbrev_sym_idx: u64 = 6;
 
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
@@ -672,8 +708,47 @@ pub(super) fn write_relocatable(
         ".strtab",
         ".shstrtab",
         ".rela.data",
-        ".badc.dylibs",
+        ".note.badc",
+        ".debug_info",
+        ".rela.debug_info",
+        ".debug_abbrev",
+        ".debug_line",
+        ".rela.debug_line",
     ]);
+
+    // Generate the DWARF triple for this TU. Address slots end
+    // up as placeholders paired with `DwarfReloc` records that
+    // the loop below translates into ELF `.rela.debug_*`
+    // entries.
+    let dwarf = dwarf_reloc::emit(program, build, source_path);
+    let mut rela_debug_info_bytes: Vec<u8> =
+        Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
+    for r in &dwarf.info_relocs {
+        write_struct(
+            &mut rela_debug_info_bytes,
+            &dwarf_reloc_to_elf_rela(
+                r,
+                machine_for_rela,
+                debug_line_sym_idx,
+                debug_abbrev_sym_idx,
+                text_sym_idx,
+            ),
+        );
+    }
+    let mut rela_debug_line_bytes: Vec<u8> =
+        Vec::with_capacity(dwarf.line_relocs.len() * ELF64_RELA_SIZE);
+    for r in &dwarf.line_relocs {
+        write_struct(
+            &mut rela_debug_line_bytes,
+            &dwarf_reloc_to_elf_rela(
+                r,
+                machine_for_rela,
+                debug_line_sym_idx,
+                debug_abbrev_sym_idx,
+                text_sym_idx,
+            ),
+        );
+    }
 
     // Section data layout. Each section's offset starts at the
     // running tail of the output, rounded to its alignment.
@@ -864,30 +939,107 @@ pub(super) fn write_relocatable(
     });
     let _ = SHIDX_RELA_DATA;
 
-    // .badc.dylibs -- NUL-separated `#pragma dylib` paths from
-    // every binding pragma in scope. The final-image writer
-    // emits one DT_NEEDED / LC_LOAD_DYLIB / IMAGE_IMPORT_DESCRIPTOR
-    // per entry; without this, a Linux program calling `sqrt` from
-    // `libm.so.6` would fail to load because the writer only
-    // remembers the libc DT_NEEDED hard-coded into its dynstr.
-    // SHT_PROGBITS with no SHF_ALLOC: standard ELF loaders ignore
-    // the section, the badc reader picks it up by name.
-    let mut dylibs_bytes: Vec<u8> = Vec::new();
-    for d in &build.imports.dylibs {
-        dylibs_bytes.extend_from_slice(d.path.as_bytes());
-        dylibs_bytes.push(0);
-    }
-    let dylibs_off = out.len() as u64;
-    out.extend_from_slice(&dylibs_bytes);
+    // .note.badc -- vendor note section holding `#pragma dylib`
+    // paths. ELF gABI section 5 shape: `(namesz=5, descsz, type=
+    // NT_BADC_DYLIBS, name="badc\0", desc=<NUL-separated paths>)`,
+    // each field 4-byte aligned. Without this the final-image
+    // writer would emit only the hard-coded libc DT_NEEDED and
+    // a Linux program calling `sqrt` from `libm.so.6` would
+    // refuse to load. Standard ELF tooling ignores unknown note
+    // types; the badc reader picks the entry up by name and type.
+    let note_bytes = build_badc_dylibs_note(&build.imports.dylibs);
+    let note_off = round_up(out.len() as u64, 4);
+    out.resize(note_off as usize, 0);
+    out.extend_from_slice(&note_bytes);
     sh.push(Elf64Shdr {
         sh_name: shstrtab_offs[8],
+        sh_type: SHT_NOTE,
+        sh_offset: note_off,
+        sh_size: note_bytes.len() as u64,
+        sh_addralign: 4,
+        ..Default::default()
+    });
+    let _ = SHIDX_NOTE_BADC;
+
+    // .debug_info -- one CU DIE per `.o`. SHT_PROGBITS without
+    // SHF_ALLOC: not loaded at runtime, just consumed by the
+    // debugger via its `.shdr` walk.
+    let debug_info_off = out.len() as u64;
+    out.extend_from_slice(&dwarf.debug_info);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[9],
         sh_type: SHT_PROGBITS,
-        sh_offset: dylibs_off,
-        sh_size: dylibs_bytes.len() as u64,
+        sh_offset: debug_info_off,
+        sh_size: dwarf.debug_info.len() as u64,
         sh_addralign: 1,
         ..Default::default()
     });
-    let _ = SHIDX_BADC_DYLIBS;
+
+    // .rela.debug_info -- placeholder slots described above.
+    let rela_debug_info_off = round_up(out.len() as u64, 8);
+    out.resize(rela_debug_info_off as usize, 0);
+    out.extend_from_slice(&rela_debug_info_bytes);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[10],
+        sh_type: SHT_RELA,
+        sh_flags: SHF_INFO_LINK,
+        sh_offset: rela_debug_info_off,
+        sh_size: rela_debug_info_bytes.len() as u64,
+        sh_link: SHIDX_SYMTAB as u32,
+        sh_info: SHIDX_DEBUG_INFO as u32,
+        sh_addralign: 8,
+        sh_entsize: ELF64_RELA_SIZE as u64,
+        ..Default::default()
+    });
+
+    // .debug_abbrev -- abbreviation table. No relocs; the slot
+    // it's referenced from in `.debug_info` already carries the
+    // reloc that rebases to its merged-section offset.
+    let debug_abbrev_off = out.len() as u64;
+    out.extend_from_slice(&dwarf.debug_abbrev);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[11],
+        sh_type: SHT_PROGBITS,
+        sh_offset: debug_abbrev_off,
+        sh_size: dwarf.debug_abbrev.len() as u64,
+        sh_addralign: 1,
+        ..Default::default()
+    });
+
+    // .debug_line -- per-statement line program. Reloc against
+    // `.text` rebases each `DW_LNE_set_address` opcode.
+    let debug_line_off = out.len() as u64;
+    out.extend_from_slice(&dwarf.debug_line);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[12],
+        sh_type: SHT_PROGBITS,
+        sh_offset: debug_line_off,
+        sh_size: dwarf.debug_line.len() as u64,
+        sh_addralign: 1,
+        ..Default::default()
+    });
+
+    // .rela.debug_line -- the placeholder slots above.
+    let rela_debug_line_off = round_up(out.len() as u64, 8);
+    out.resize(rela_debug_line_off as usize, 0);
+    out.extend_from_slice(&rela_debug_line_bytes);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[13],
+        sh_type: SHT_RELA,
+        sh_flags: SHF_INFO_LINK,
+        sh_offset: rela_debug_line_off,
+        sh_size: rela_debug_line_bytes.len() as u64,
+        sh_link: SHIDX_SYMTAB as u32,
+        sh_info: SHIDX_DEBUG_LINE as u32,
+        sh_addralign: 8,
+        sh_entsize: ELF64_RELA_SIZE as u64,
+        ..Default::default()
+    });
+    let _ = SHIDX_DEBUG_INFO;
+    let _ = SHIDX_RELA_DEBUG_INFO;
+    let _ = SHIDX_DEBUG_ABBREV;
+    let _ = SHIDX_DEBUG_LINE;
+    let _ = SHIDX_RELA_DEBUG_LINE;
 
     debug_assert_eq!(sh.len(), NUM_SECTIONS);
 
@@ -930,6 +1082,66 @@ pub(super) fn write_relocatable(
 
 fn pack_sym_info(bind: u8, ty: u8) -> u8 {
     (bind << 4) | (ty & 0xf)
+}
+
+/// Build the `.note.badc` section body for a list of
+/// `#pragma dylib` paths. Empty list still produces an entry --
+/// matches `nm --dyn` parity (the section exists, the desc is
+/// empty) and lets the parser distinguish "no dylib note" from
+/// "dylib note with no entries". Format: ELF gABI section 5.
+fn build_badc_dylibs_note(dylibs: &[super::ResolvedDylib]) -> Vec<u8> {
+    let mut desc: Vec<u8> = Vec::new();
+    for d in dylibs {
+        desc.extend_from_slice(d.path.as_bytes());
+        desc.push(0);
+    }
+    let name = b"badc\0";
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+    out.extend_from_slice(&NT_BADC_DYLIBS.to_le_bytes());
+    out.extend_from_slice(name);
+    pad_to_4(&mut out);
+    out.extend_from_slice(&desc);
+    pad_to_4(&mut out);
+    out
+}
+
+fn pad_to_4(out: &mut Vec<u8>) {
+    while !out.len().is_multiple_of(4) {
+        out.push(0);
+    }
+}
+
+/// Translate a `DwarfReloc` (target = section kind + width) into
+/// an `Elf64Rela`. The reloc type comes from `(width, machine)`:
+/// 32-bit slots use `R_X86_64_32` / `R_AARCH64_ABS32`, 64-bit
+/// slots use `R_X86_64_64` / `R_AARCH64_ABS64`. The target
+/// section's symtab index is looked up from the three indices the
+/// caller pre-resolved when laying out the symbol table.
+fn dwarf_reloc_to_elf_rela(
+    r: &DwarfReloc,
+    machine: Machine,
+    debug_line_sym_idx: u64,
+    debug_abbrev_sym_idx: u64,
+    text_sym_idx: u64,
+) -> Elf64Rela {
+    let sym_idx = match r.target {
+        DwarfRelocTarget::Text => text_sym_idx,
+        DwarfRelocTarget::DebugLine => debug_line_sym_idx,
+        DwarfRelocTarget::DebugAbbrev => debug_abbrev_sym_idx,
+    };
+    let rtype = match (r.width, machine) {
+        (DwarfRelocWidth::W8, Machine::X86_64) => R_X86_64_64,
+        (DwarfRelocWidth::W4, Machine::X86_64) => R_X86_64_32,
+        (DwarfRelocWidth::W8, Machine::Aarch64) => R_AARCH64_ABS64,
+        (DwarfRelocWidth::W4, Machine::Aarch64) => R_AARCH64_ABS32,
+    };
+    Elf64Rela {
+        r_offset: r.offset,
+        r_info: (sym_idx << 32) | (rtype as u64),
+        r_addend: r.addend,
+    }
 }
 
 /// Emit the relocs the per-arch lowering left behind for an

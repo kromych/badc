@@ -962,6 +962,79 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     );
 }
 
+/// Multi-TU links populate `.debug_frame` from the merged
+/// Text-section symbol set: `synth_build.rs` walks every defined
+/// symbol and surfaces its `(ent_pc, name)` to `dwarf::emit`,
+/// which builds one FDE per function on top of the linker-merged
+/// `.debug_info` / `.debug_line` streams. Without this, the
+/// merged image carried an empty `.debug_frame` and unwinders
+/// fell back to frame-pointer chasing.
+#[test]
+fn multi_tu_link_populates_debug_frame() {
+    let dir = tempdir("multi-tu-frame");
+    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    // `dwarfdump --debug-frame` (BSD) and `llvm-dwarfdump
+    // --debug-frame` both decode CIE + FDE entries from ELF and
+    // Mach-O alike; pick whichever is on PATH. An FDE per
+    // user-defined function lands as `00000000 ffffffff CIE`
+    // followed by lines naming `helper` / `main` in the FDE
+    // header. Skip when neither tool is available so the suite
+    // still runs on bare Linux images.
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-frame").arg(&out);
+    let frame_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-frame")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    // Both dumpers print the section as the second line of output
+    // when populated and emit no FDE bodies when empty. `FDE`
+    // tokens count both `FDE cie=` (BSD) and `FDE cie=0x...` (LLVM).
+    let fde_count = frame_text.matches("FDE").count();
+    assert!(
+        fde_count >= 2,
+        "expected at least two FDEs (helper + main) in merged .debug_frame, \
+         got {fde_count}:\n{frame_text}",
+    );
+}
+
 #[test]
 fn compile_only_writes_relocatable_elf() {
     let dir = tempdir("co-native");

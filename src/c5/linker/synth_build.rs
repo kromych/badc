@@ -100,6 +100,33 @@ fn synth_program_and_build(
         extern_function_imports: Vec::new(),
     };
 
+    // Surface every Text-section defined symbol as a "function"
+    // for the DWARF CFI / DIE pass. The synth path doesn't track
+    // STT_FUNC vs STT_OBJECT separately on MergedSymbol, so any
+    // Text-resident symbol with a non-empty name reaches dwarf::emit
+    // as a Subprog candidate. Empty-name entries (section symbols)
+    // would build a DIE with `DW_AT_name = ""` and break the
+    // sort-by-native-offset reorder, so they're filtered out here.
+    // `pc_to_native[ent_pc] = ent_pc` for each entry so
+    // `collect_subprograms` can map the c5-PC back to the native
+    // byte offset (identity on the merged path -- merged.text already
+    // holds the final native bytes).
+    let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_names: Vec<String> = Vec::new();
+    let mut pc_to_native = pc_to_native;
+    for (name, sym) in &merged.defined {
+        if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
+            continue;
+        }
+        let pc = sym.value as usize;
+        func_ent_pcs.push(pc);
+        func_names.push(name.clone());
+        if pc_to_native.len() <= pc {
+            pc_to_native.resize(pc + 1, usize::MAX);
+        }
+        pc_to_native[pc] = pc;
+    }
+
     let build = Build {
         text: merged.text.clone(),
         data: merged.data.clone(),
@@ -108,8 +135,8 @@ fn synth_program_and_build(
         data_fixups,
         func_fixups,
         pc_to_native,
-        func_ent_pcs: Vec::new(),
-        func_names: Vec::new(),
+        func_ent_pcs,
+        func_names,
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),

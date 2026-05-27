@@ -1965,13 +1965,14 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        // Mach-O routes argc/argv through `LC_MAIN`,
-        // not an emitted stub, so there's no entry-stub range to
-        // describe. Multi-TU links hand over pre-baked DWARF
-        // through `Build::merged_dwarf` -- use those bytes
-        // directly. `debug_str` / `debug_frame` aren't preserved
-        // by the linker yet (TODO); the writer emits empty
-        // sections so the load-command layout stays stable.
+        // Mach-O routes argc/argv through `LC_MAIN`, so no
+        // entry-stub range to describe. Multi-TU links hand over
+        // pre-baked DWARF through `Build::merged_dwarf` --
+        // `.debug_info` / `.debug_abbrev` / `.debug_line` /
+        // `.debug_str` use those bytes directly; `.debug_frame`
+        // regenerates from the synth-Build's per-function metadata
+        // (`synth_build` populates that from every Text-section
+        // defined symbol so backtraces unwind through merged code).
         let s = if let Some(md) = &build.merged_dwarf {
             // Text-targeting placeholders the linker couldn't
             // apply (low_pc / high_pc + line-program addresses
@@ -1986,12 +1987,20 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             for r in &md.debug_line_text_relocs {
                 super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
             }
+            let fresh = dwarf::emit(
+                program,
+                build,
+                super::Target::MacOSAarch64,
+                code_vmaddr_base,
+                &program.source_path,
+                None,
+            );
             dwarf::DwarfSections {
                 debug_info,
                 debug_abbrev: md.debug_abbrev.clone(),
                 debug_line,
                 debug_str: md.debug_str.clone(),
-                debug_frame: Vec::new(),
+                debug_frame: fresh.debug_frame,
             }
         } else {
             dwarf::emit(

@@ -1177,9 +1177,11 @@ pub(super) fn write(
     };
     let dwarf_sections = if let Some(md) = &build.merged_dwarf {
         // Multi-TU link: drop pre-baked linker-merged DWARF
-        // bytes into the output sections. `.debug_frame` isn't
-        // preserved by the linker yet (TODO); the empty payload
-        // keeps the segment layout self-consistent.
+        // bytes into `.debug_info` / `.debug_abbrev` / `.debug_line`
+        // / `.debug_str`. `.debug_frame` regenerates from the
+        // synth-Build's per-function metadata (which `synth_build`
+        // populates from every Text-section defined symbol) so
+        // backtraces unwind cleanly through merged-image code.
         //
         // Text-targeting placeholders the linker couldn't apply
         // (DW_AT_low_pc / DW_AT_high_pc / line-program addresses
@@ -1193,12 +1195,20 @@ pub(super) fn write(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, dwarf_text_vmaddr)?;
         }
+        let fresh = dwarf::emit(
+            program,
+            build,
+            elf_target,
+            dwarf_text_vmaddr,
+            &program.source_path,
+            start_stub_range,
+        );
         dwarf::DwarfSections {
             debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
             debug_line,
             debug_str: md.debug_str.clone(),
-            debug_frame: Vec::new(),
+            debug_frame: fresh.debug_frame,
         }
     } else if emit_dwarf {
         dwarf::emit(

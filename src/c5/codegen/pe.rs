@@ -433,9 +433,12 @@ pub(super) fn write(
     // image loader rejects an image with ERROR_BAD_EXE_FORMAT
     // (193) when two SizeOfRawData == 0 sections share a
     // VirtualAddress, so empty blobs are dropped here and never
-    // reach the section table -- the multi-TU link path's
-    // `.debug_str` / `.debug_frame` are still empty until the
-    // linker merges those streams (TODO).
+    // reach the section table. Multi-TU link path:
+    // `.debug_info` / `.debug_abbrev` / `.debug_line` /
+    // `.debug_str` come from the linker-merged streams;
+    // `.debug_frame` regenerates fresh from the synth-Build's
+    // per-function metadata that `synth_build` populates from
+    // every Text-section defined symbol.
     let dwarf_sections_raw = if let Some(md) = &build.merged_dwarf {
         // The linker leaves text-targeting placeholders cleared
         // because the writer commits the merged-text runtime
@@ -452,12 +455,20 @@ pub(super) fn write(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
         }
+        let fresh = dwarf::emit(
+            program,
+            build,
+            target,
+            text_vmaddr,
+            &program.source_path,
+            None,
+        );
         dwarf::DwarfSections {
             debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
             debug_line,
             debug_str: md.debug_str.clone(),
-            debug_frame: Vec::new(),
+            debug_frame: fresh.debug_frame,
         }
     } else if dwarf_section_present {
         dwarf::emit(

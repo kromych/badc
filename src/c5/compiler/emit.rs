@@ -1,8 +1,9 @@
 //! Low-level emit primitives plus the small "rewrite the trailing
-//! op" helpers and the per-symbol shadow / restore pair.
+//! emit" helpers and the per-symbol shadow / restore pair.
 //!
-//! `emit_op` is the surviving tag-only helper. It updates the
-//! trailing-op state (`last_imm_was_zero`, `trailing_scalar_load`,
+//! `emit_op` is a tag-only helper now that the parser emits AST
+//! nodes directly. It updates the trailing-emit state
+//! (`last_imm_was_zero`, `trailing_scalar_load`,
 //! `last_emit_was_indirect_call`, `fn_ptr_chain_depth`) so the
 //! peek detectors (`last_emit_is_zero`, `pop_trailing_scalar_load`,
 //! `rewrite_trailing_load_as_psh`) and the function-pointer
@@ -80,9 +81,9 @@ impl Compiler {
         self.pending.last_imm_was_zero = false;
     }
 
-    /// Push the parser-side AST accumulator onto the vstack.
-    /// This method is the AST hook for what used to be an
-    /// `emit_op(Op::Psh)` tag.
+    /// Push the parser-side AST accumulator onto the vstack so
+    /// the next binop / store sees it as the lhs and the new
+    /// accumulator becomes the rhs.
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
@@ -103,7 +104,8 @@ impl Compiler {
         self.ast_apply_binop(binop);
     }
 
-    /// Apply unary `Op::Fneg` to the accumulator.
+    /// Apply unary floating-point negation to the accumulator
+    /// (C99 6.5.3.3p3, result type IEEE-754 negated input).
     pub(super) fn ast_fneg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
@@ -112,22 +114,22 @@ impl Compiler {
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
     }
 
-    /// Tag-only state mgmt for an FP cast (`Op::Fcvtif` /
-    /// `Op::Fcvtfi`). The AST counterpart is wired by the
+    /// Tag-only state mgmt for an integer / float cast (C99
+    /// 6.3.1.4 / 6.3.1.5). The AST counterpart is wired by the
     /// surrounding call site through `ast_apply_assign_conv` (for
     /// the assignment-conversion case) or skipped entirely (when
     /// the walker re-derives the conversion from the intrinsic /
     /// cast signature). Clears the parser-state flags so a
-    /// trailing `Imm 0` / scalar-load shape doesn't leak across
-    /// the conversion.
+    /// trailing literal-zero / scalar-load shape doesn't leak
+    /// across the conversion.
     pub(super) fn ast_fpcast(&mut self) {
         self.mark_emit_other();
     }
 
-    /// Clear every trailing-emit flag a non-binop / non-load tag
-    /// would clear. Replaces `emit_op(Op::Mcpy | StLocI | LdLocI
-    /// | Lea | TlsLea | Intrinsic)` for sites that only need the
-    /// flag bookkeeping and don't drive an AST hook.
+    /// Clear every trailing-emit flag for a non-binop / non-load
+    /// AST emit (struct copy, address-of-local, TLS load, intrinsic
+    /// call, etc.). Sites that only need the flag bookkeeping and
+    /// don't drive an AST hook funnel through here.
     pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
@@ -137,8 +139,9 @@ impl Compiler {
 
     /// Build an `Expr::Assign` from the vstack-top (lvalue
     /// address producer) + accumulator (rvalue), leaving the
-    /// assigned value in the accumulator per C99 6.5.16p3.
-    /// Replaces `emit_op(Op::Si | Sc | Sh | Sw | Sf)`.
+    /// assigned value in the accumulator per C99 6.5.16p3. The
+    /// walker picks the storage width from the lvalue's type
+    /// (char, short, int, float, or pointer-sized).
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
@@ -176,27 +179,26 @@ impl Compiler {
         idx.min(u16::MAX as usize) as u16
     }
 
-    /// Emit a plain `Op::Imm <val>` -- a 2-word `[op, operand]`
-    /// pair that pushes a 64-bit constant into the accumulator.
-    /// The constant is treated as a literal value with no
-    /// runtime address-fixup; for data-segment offsets that need
-    /// `__data` relocation use [`Self::emit_data_imm`] instead.
+    /// Tag a plain 64-bit integer-literal load into the
+    /// accumulator. The constant is treated as a literal value
+    /// with no runtime address-fixup; for data-segment offsets
+    /// that need `__data` relocation use [`Self::emit_data_imm`]
+    /// instead. Per-site helpers (`ast_emit_int_lit`,
+    /// `ast_emit_data_imm`, ...) own the matching AST shape; this
+    /// helper only updates the trailing-emit peek flags.
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.trailing_scalar_load = None;
         // Only literal-zero immediates set the peek flag; every
-        // other Imm clears it.
+        // other immediate clears it.
         self.pending.last_imm_was_zero = val == 0;
-        // Op::Imm carries no AST hook in `ast_track_emit_op`;
-        // the per-site helper (`ast_emit_int_lit`,
-        // `ast_emit_data_imm`, ...) owns the AST shape.
     }
 
-    /// Address-of a stack slot (param positive, local negative)
-    /// lands in the accumulator. Was `Op::Lea <slot_off>`; the
-    /// operand word is no longer carried, only the trailing-op
-    /// state cleared.
+    /// Tag an address-of-stack-slot emit (param positive, local
+    /// negative; result lands in the accumulator). The walker
+    /// emits the matching AST node; this helper only clears the
+    /// trailing-emit flags.
     pub(super) fn emit_lea(&mut self, _slot_off: i64) {
         self.mark_emit_other();
     }
@@ -248,39 +250,35 @@ impl Compiler {
         self.pending.last_imm_was_zero
     }
 
-    /// True if the most recent emitted op is `Op::Jsri` -- an indirect
-    /// call through a variable / struct field whose return type the
-    /// dialect can't track. Used by `type_warning` to silently accept
-    /// an `int`-tagged rvalue assigned to a pointer lvalue (or vice
-    /// versa): the actual register value carries a full 8-byte return
-    /// regardless, so the assignment is a runtime no-op even though
-    /// the type tag mismatches. The walker tolerates a trailing
-    /// `Op::Adj N` (cleanup of pushed args) since that's the standard
-    /// Jsri tail.
+    /// True if the most recent emit was an indirect call through a
+    /// variable / struct field whose return type the dialect can't
+    /// track. Used by `type_warning` to silently accept an
+    /// `int`-tagged rvalue assigned to a pointer lvalue (or vice
+    /// versa): the actual register value carries a full 8-byte
+    /// return regardless, so the assignment is a runtime no-op
+    /// even though the type tag mismatches.
     pub(super) fn last_emit_was_indirect_call(&self) -> bool {
         self.pending.last_emit_was_indirect_call
     }
 
-    /// If the most recently emitted op is a scalar load (`ScalarLoadKind::Lc`
-    /// / `ScalarLoadKind::Lw` / `ScalarLoadKind::Li`), rewrite it in place to `Op::Psh` and
-    /// return the matching reload op so the caller can `emit_op` it
-    /// to put the original loaded value back into the accumulator.
-    /// Returns `None` if the trailing op isn't a scalar load, in
-    /// which case the caller reports its own "bad lvalue" error.
+    /// If the most recently tagged emit is a scalar load
+    /// (`ScalarLoadKind::Lc` / `Lw` / `Li` / ...), drop the load
+    /// tag, push the address producer's `ast_acc` onto the parser
+    /// vstack, and return the load kind so the caller can re-tag
+    /// the subsequent re-emitted load. Returns `None` when the
+    /// trailing tag isn't a scalar load; the caller then reports
+    /// its own "bad lvalue" error.
     ///
     /// The pattern shows up in pre/post-increment, plain
-    /// assignment, and compound assignment. Centralising the
-    /// `last() / last_mut() / Op::Psh` triple keeps the four
-    /// call sites in sync when new load-op variants are added.
+    /// assignment, and compound assignment.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<ScalarLoadKind> {
         let load_op = self.pending.trailing_scalar_load.take()?;
-        // Mirror what the equivalent ScalarLoadKind::Lc/Lh/Lw/Li -> Op::Psh
-        // tag rewrite did: the address producer's value moves to
-        // the c5 stack; push the current `ast_acc` slot onto the
-        // parser vstack and clear the accumulator. `None` here
-        // represents an address producer whose AST counterpart
-        // hasn't been wired yet; the downstream store op then
-        // sees a `None` lvalue and skips the Assign build.
+        // The address producer's value moves to the c5 stack;
+        // push the current `ast_acc` slot onto the parser vstack
+        // and clear the accumulator. `None` ast_acc represents an
+        // address producer whose AST counterpart hasn't been
+        // wired yet; the downstream store then sees a `None`
+        // lvalue and skips the Assign build.
         self.ast_vstack.push(self.ast_acc.take());
         // The new tail behaves like a Psh, not a scalar load,
         // and is not a literal Imm 0 either.
@@ -395,7 +393,7 @@ impl Compiler {
             self.ast_binop(crate::c5::ir::BinOp::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.ast_psh(); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
-            // Stash the rhs AST id before the trailing Op::Si
+            // Stash the rhs AST id before the trailing store
             // clears `ast_acc` via `ast_apply_assign`. The
             // surrounding Member handler reads this and builds
             // `Expr::BitfieldAssign` so the walker reproduces the
@@ -410,8 +408,8 @@ impl Compiler {
                 self.ast_binop(crate::c5::ir::BinOp::Shl); // a = (new_value & mask) << bit_offset
             }
             // a = shifted; stack: [..., field_addr, cleared].
-            // Op::Or pops cleared, ORs into a. After: a = combined;
-            // stack: [..., field_addr]. The trailing Si pops
+            // Or pops cleared, ORs into a. After: a = combined;
+            // stack: [..., field_addr]. The trailing store pops
             // field_addr as the destination.
             self.ast_binop(crate::c5::ir::BinOp::Or);
             self.ast_assign(); // pops field_addr, stores a (=combined).
@@ -423,9 +421,9 @@ impl Compiler {
             // The math needs old_value twice -- once to extract the
             // current bitfield value as the binop's left operand,
             // once to clear the slot for the final merge. A
-            // dedicated scratch local hands `Op::StLocI` /
-            // `Op::LdLocI` the spill / reload pair that the plain
-            // `Lea N; Si` shape cannot express (Lea clobbers `a`).
+            // dedicated scratch local carries the spill / reload
+            // pair since the address-of-local instruction sequence
+            // would otherwise clobber the accumulator.
             let binop = self.lex.ival;
             self.next()?; // consume the assign-op
             self.loc_offs += 1;
@@ -451,7 +449,7 @@ impl Compiler {
             self.ast_psh(); // stack: [..., field_addr, current]
             self.expr(Token::Assign as i64)?;
             // Stash the parsed rhs AST id + the binop here, before
-            // the trailing Op::Si clears `ast_acc`. The Member
+            // the trailing store clears `ast_acc`. The Member
             // handler reads this to build the dual-emit equivalent
             // `BitfieldAssign { rhs: Binop(read, op, rhs) }` per
             // C99 6.5.16.2.
@@ -509,7 +507,7 @@ impl Compiler {
             if !is_unsigned_ty(field_ty) && bit_width < 64 {
                 let shift = 64i64 - (bit_width as i64);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift);
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // Op::Shr is arithmetic
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift); // arithmetic Shr
             }
             self.ty = Ty::Int as i64;
             Ok(())

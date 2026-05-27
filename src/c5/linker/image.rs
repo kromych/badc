@@ -1078,6 +1078,38 @@ mod tests {
     }
 
     #[test]
+    fn x86_64_start_stub_preserves_kernel_rsp_alignment() {
+        // AMD64 SysV ABI 3.4.1: the call instruction must land main
+        // with `(rsp + 8) % 16 == 0`. The kernel hands `_start` an
+        // rsp that is already 16-aligned, so reading argc / argv via
+        // memory (not `pop rdi`, which shifts rsp by 8) keeps rsp
+        // 16-aligned for the upcoming `call`. The byte sequence
+        // below is the contract the linker stub must continue to
+        // honour; the syscall-tail variant is exercised by passing
+        // `None` for `exit_text_offset`.
+        let stub = x86_64_start_stub(0, 0x100, Some(0x200));
+        // xor ebp, ebp
+        assert_eq!(&stub[0..2], &[0x31, 0xed]);
+        // mov rdi, [rsp]
+        assert_eq!(&stub[2..6], &[0x48, 0x8b, 0x3c, 0x24]);
+        // lea rsi, [rsp + 8]
+        assert_eq!(&stub[6..11], &[0x48, 0x8d, 0x74, 0x24, 0x08]);
+        // Stub must not push, pop, or sub rsp between the kernel
+        // entry and `call entry`; any of those would unbalance the
+        // call-site alignment contract.
+        assert!(
+            !stub[..11].contains(&0x5f), // pop rdi
+            "stub adjusts rsp before `call entry`; breaks SysV 3.4.1"
+        );
+        assert!(
+            !stub[..11].windows(3).any(|w| w == [0x48, 0x81, 0xec]),
+            "stub `sub rsp` before `call entry`; breaks SysV 3.4.1"
+        );
+        // call entry rel32 follows immediately.
+        assert_eq!(stub[11], 0xe8);
+    }
+
+    #[test]
     fn refuses_to_emit_when_entry_missing() {
         let mut merged = text_then_data_image();
         merged.defined.clear();

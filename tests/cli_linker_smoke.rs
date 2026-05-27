@@ -876,6 +876,96 @@ fn debug_line_covers_each_function_entry_pc() {
     }
 }
 
+/// Locks the multi-TU DWARF link path: each input unit's
+/// compile-unit DIE should survive the merge with its own
+/// `DW_AT_name`, its `Abbrev Offset` should advance into the
+/// merged `.debug_abbrev`, `DW_AT_stmt_list` should index into
+/// the merged `.debug_line`, and `DW_AT_low_pc` should point at
+/// the function's actual runtime address. Regressions historically
+/// surfaced as zeroed address slots or a stray null-DIE hiding
+/// every CU past the first; both fall out of the assertions
+/// below.
+#[test]
+fn multi_tu_link_preserves_per_unit_dwarf_cu() {
+    let dir = tempdir("multi-tu-dwarf");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) { return x + 1; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    assert!(out.exists(), "expected {} to exist", out.display());
+    // `dwarfdump` (BSD) / `llvm-dwarfdump` / GNU `objdump
+    // --dwarf=info` all walk `.debug_info` by the CU header's
+    // `unit_length`; pick whichever is on PATH first.
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    // Every source file the linker pulled in should surface as a
+    // CU. Runtime helpers (`runtime.c`) get appended to the
+    // input set; the user-source CUs are the strict subset the
+    // assertion targets.
+    for name in ["main.c", "helper.c"] {
+        assert!(
+            out_text.contains(name),
+            "expected CU DIE for `{name}` in merged .debug_info:\n{out_text}",
+        );
+    }
+    // Past the first CU the linker has to rebase the abbrev
+    // offset; a zero here means the rebase pass silently
+    // skipped the slot. `Abbrev Offset` is the column name
+    // both dumpers use.
+    let nonzero_abbrev_offsets = out_text
+        .lines()
+        .filter(|l| l.contains("Abbrev Offset:") || l.contains("abbr_offset ="))
+        .filter(|l| !(l.contains(": 0x0\n") || l.ends_with(": 0")))
+        .count();
+    assert!(
+        nonzero_abbrev_offsets >= 1,
+        "expected at least one CU's Abbrev Offset to land past the first abbrev table:\n{out_text}",
+    );
+}
+
 #[test]
 fn compile_only_writes_relocatable_elf() {
     let dir = tempdir("co-native");

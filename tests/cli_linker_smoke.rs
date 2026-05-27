@@ -1242,6 +1242,69 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// DW_AT_decl_file on variable + formal_parameter DIEs lets the
+/// debugger show the declaration's source file. Symbol::decl_file
+/// is captured at parse time from the lexer's intern_source_file
+/// index; the emit pass adds 1 to convert from c5's 0-indexed
+/// table to DWARF's 1-indexed file_names slot.
+#[test]
+fn multi_tu_link_emits_decl_file_on_locals() {
+    let dir = tempdir("multi-tu-decl-file");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(int x) {\n    int y = x + 1;\n    return y;\n}\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_AT_decl_file"),
+        "expected DW_AT_decl_file on at least one variable / formal_parameter DIE:\n{out_text}",
+    );
+}
+
 /// Every subprogram DIE carries DW_AT_calling_convention =
 /// DW_CC_normal (1) per DWARF 4 section 3.3.1.1. SysV / Win64 /
 /// AAPCS64 all fall under the C standard convention as far as

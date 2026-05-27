@@ -872,6 +872,7 @@ impl Compiler {
                                 is_parameter,
                                 decl_line: sym.decl_line as u32,
                                 array_size,
+                                decl_file: sym.decl_file,
                             });
                         }
                     }

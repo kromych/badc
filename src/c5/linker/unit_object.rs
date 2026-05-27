@@ -643,6 +643,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
             buf.push(if v.is_parameter { 1 } else { 0 });
             write_u32(&mut buf, v.decl_line);
             write_u32(&mut buf, v.array_size);
+            write_u32(&mut buf, v.decl_file);
         }
     }
     {
@@ -838,7 +839,7 @@ fn variables_vec_len(vs: &[crate::c5::program::VariableInfo]) -> u32 {
     for v in vs {
         total += 8;
         total += 4 + v.name.len() as u32;
-        total += 8 + 8 + 1 + 4 + 4;
+        total += 8 + 8 + 1 + 4 + 4 + 4;
     }
     total
 }
@@ -2023,7 +2024,7 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     let function_bc_pc = u64_at(body, local);
                     local += 8;
                     let name = read_string(body, &mut local)?;
-                    if local + 8 + 8 + 1 + 4 + 4 > body.len() {
+                    if local + 8 + 8 + 1 + 4 + 4 + 4 > body.len() {
                         return Err(err("variables row truncated"));
                     }
                     let type_tag = i64_at(body, local);
@@ -2031,7 +2032,8 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     let is_parameter = body[local + 16] != 0;
                     let decl_line = u32_at(body, local + 17);
                     let array_size = u32_at(body, local + 21);
-                    local += 25;
+                    let decl_file = u32_at(body, local + 25);
+                    local += 29;
                     out.push(crate::c5::program::VariableInfo {
                         function_bc_pc,
                         name,
@@ -2040,6 +2042,7 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                         is_parameter,
                         decl_line,
                         array_size,
+                        decl_file,
                     });
                 }
                 unit.variables = out;

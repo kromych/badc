@@ -221,6 +221,13 @@ pub(crate) struct Symbol {
     /// closing brace.
     pub decl_line: usize,
 
+    /// `Compiler::source_files` index of the file the declaration
+    /// was parsed from. Captured at declaration time alongside
+    /// `decl_line`. Surfaces as `DW_AT_decl_file` in the DWARF
+    /// variable / formal_parameter DIE after mapping to the
+    /// DWARF file_names index. Zero means the primary source.
+    pub decl_file: u32,
+
     /// True if the declaration was parsed while the lexer was
     /// reading the primary source (matched against
     /// `Compiler::source_label`); false when the declaration came

@@ -436,6 +436,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 is_parameter: v.is_parameter,
                 decl_line: v.decl_line,
                 array_size: v.array_size,
+                decl_file: v.decl_file,
             });
         }
         for w in &unit.warnings {

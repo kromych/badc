@@ -183,6 +183,8 @@ impl Compiler {
             self.symbols[param_idx].array_size = 0;
             self.symbols[param_idx].was_referenced = false;
             self.symbols[param_idx].decl_line = self.lex.line;
+            let decl_file = self.intern_source_file() as u32;
+            self.symbols[param_idx].decl_file = decl_file;
             self.symbols[param_idx].decl_in_main_source = self.in_main_source();
             // Unconditional write: a regular scalar/pointer
             // parameter must not inherit a stale fn-ptr lineage

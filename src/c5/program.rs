@@ -307,4 +307,8 @@ pub struct VariableInfo {
     /// scalars and for parameters (the latter decay to pointers per
     /// C99 6.7.5.3p7 and keep the pointer-type DIE).
     pub array_size: u32,
+    /// `Compiler::source_files` index of the declaration's source
+    /// file. Surfaces as `DW_AT_decl_file` after mapping to the
+    /// DWARF file_names index. Zero is the primary source.
+    pub decl_file: u32,
 }

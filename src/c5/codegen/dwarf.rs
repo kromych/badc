@@ -102,6 +102,7 @@ const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
 const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
 const DW_AT_DECL_LINE: u32 = 0x3b;
+const DW_AT_DECL_FILE: u32 = 0x3a;
 const DW_AT_PROTOTYPED: u32 = 0x27;
 const DW_AT_UPPER_BOUND: u32 = 0x2f;
 const DW_AT_CALLING_CONVENTION: u32 = 0x36;
@@ -487,6 +488,10 @@ struct SubprogVar {
     /// emission. Zero for scalars and for parameters (the latter
     /// decay to pointers per C99 6.7.5.3p7).
     array_size: u32,
+    /// c5 source_files index of the declaration's file. The emit
+    /// pass maps this to a DWARF file_names index for the DIE's
+    /// DW_AT_decl_file.
+    decl_file: u32,
 }
 
 /// Native bytes from a function's `low_pc` to the first byte of
@@ -710,6 +715,7 @@ fn collect_subprograms(
                 },
                 decl_line: v.decl_line,
                 array_size: v.array_size,
+                decl_file: v.decl_file,
             })
             .collect();
 
@@ -1211,6 +1217,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
     write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_attr(&mut buf, DW_AT_DECL_FILE, DW_FORM_UDATA);
     write_attr(&mut buf, DW_AT_DECL_LINE, DW_FORM_UDATA);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
@@ -1224,6 +1231,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
     write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_attr(&mut buf, DW_AT_DECL_FILE, DW_FORM_UDATA);
     write_attr(&mut buf, DW_AT_DECL_LINE, DW_FORM_UDATA);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
@@ -1625,6 +1633,11 @@ fn build_debug_info(
             write_sleb128(&mut loc, v.fp_byte_offset);
             write_uleb128(&mut body, loc.len() as u64);
             body.extend_from_slice(&loc);
+            // DW_AT_decl_file (ULEB128) -- c5's `source_files` is
+            // 0-indexed with the primary TU at 0; the DWARF
+            // file_names table is 1-indexed with the primary file
+            // at slot 1, so emit `decl_file + 1`.
+            write_uleb128(&mut body, v.decl_file as u64 + 1);
             // DW_AT_decl_line (ULEB128).
             write_uleb128(&mut body, v.decl_line as u64);
         }

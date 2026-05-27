@@ -134,6 +134,8 @@ impl Compiler {
                 self.symbols[loc_idx].type_ = ty;
                 self.symbols[loc_idx].was_referenced = false;
                 self.symbols[loc_idx].decl_line = self.lex.line;
+                let decl_file = self.intern_source_file() as u32;
+                self.symbols[loc_idx].decl_file = decl_file;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;

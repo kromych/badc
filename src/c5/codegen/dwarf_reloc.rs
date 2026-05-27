@@ -125,6 +125,7 @@ const DW_AT_BIT_SIZE: u8 = 0x0d;
 const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 const DW_AT_EXTERNAL: u8 = 0x3f;
 const DW_AT_DECL_LINE: u8 = 0x3b;
+const DW_AT_DECL_FILE: u8 = 0x3a;
 const DW_AT_PROTOTYPED: u8 = 0x27;
 const DW_AT_CALLING_CONVENTION: u8 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
@@ -327,6 +328,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DECL_FILE, DW_FORM_UDATA);
     push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
@@ -339,6 +341,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DECL_FILE, DW_FORM_UDATA);
     push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
@@ -829,6 +832,11 @@ fn build_debug_info(
                 // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
                 // offset of the matching type DIE emitted above.
                 body.extend_from_slice(&type_off.to_le_bytes());
+                // DW_AT_decl_file (ULEB128) -- c5's `source_files`
+                // is 0-indexed (0 = primary TU, headers at 1+);
+                // DWARF file_names is 1-indexed with the primary
+                // file at slot 1, so emit `decl_file + 1`.
+                write_uleb128(&mut body, v.decl_file as u64 + 1);
                 // DW_AT_decl_line (ULEB128).
                 write_uleb128(&mut body, v.decl_line as u64);
             }

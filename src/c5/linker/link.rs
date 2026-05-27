@@ -112,6 +112,13 @@ pub struct MergedNative {
     pub debug_line_relocs: Vec<super::object::NativeReloc>,
     pub unit_for_debug_info_reloc: Vec<usize>,
     pub unit_for_debug_line_reloc: Vec<usize>,
+    /// Text-targeting DWARF relocs that survived the link pass.
+    /// Each entry's `byte_offset` is the placeholder location
+    /// inside the matching merged section; the writer adds the
+    /// committed text vmaddr to `merged_text_offset` and writes
+    /// the result in little-endian over `width` bytes.
+    pub debug_info_text_relocs: Vec<DebugTextReloc>,
+    pub debug_line_text_relocs: Vec<DebugTextReloc>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -414,7 +421,9 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                             NativeSymSection::Undef
                             | NativeSymSection::Abs
                             | NativeSymSection::Common
-                            | NativeSymSection::Tls => {
+                            | NativeSymSection::Tls
+                            | NativeSymSection::DebugAbbrev
+                            | NativeSymSection::DebugLine => {
                                 return Err(err(&format!(
                                     "link_native_objects: defined entry for `{}` has \
                                      non-progbits section {:?}",
@@ -497,6 +506,15 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         sym.name,
                     )));
                 }
+                NativeSymSection::DebugAbbrev | NativeSymSection::DebugLine => {
+                    // `.rela.text` shouldn't target a DWARF section
+                    // symbol; the producer routes those through
+                    // `.rela.debug_info` / `.rela.debug_line` instead.
+                    return Err(err(&format!(
+                        "link_native_objects: `.rela.text` reloc targets {:?} symbol",
+                        sym.section,
+                    )));
+                }
             }
         }
     }
@@ -557,6 +575,12 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     return Err(err(&format!(
                         "link_native_objects: .rela.data points at ABS symbol `{}`",
                         sym.name,
+                    )));
+                }
+                NativeSymSection::DebugAbbrev | NativeSymSection::DebugLine => {
+                    return Err(err(&format!(
+                        "link_native_objects: .rela.data points at {:?} symbol `{}`",
+                        sym.section, sym.name,
                     )));
                 }
             };
@@ -662,6 +686,61 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Pass 6 -- DWARF reloc resolution. The per-unit DWARF
+    // streams reference offsets into other DWARF sections (CU
+    // header debug_abbrev_offset, DW_AT_stmt_list -> debug_line,
+    // line-program addresses -> .text). Once each unit's base
+    // offset within the merged stream is known the section-
+    // relative writes can land directly; absolute text-targeting
+    // writes still need the final-image text vmaddr the writer
+    // will commit, so they get parked on the merged blob with the
+    // intra-stream byte offset of the placeholder and the merged-
+    // text offset of the target.
+    let mut debug_info_text_relocs: Vec<DebugTextReloc> = Vec::new();
+    let mut debug_line_text_relocs: Vec<DebugTextReloc> = Vec::new();
+    for (i, reloc) in debug_info_relocs.iter().enumerate() {
+        let unit_idx = unit_for_debug_info_reloc[i];
+        let obj = &objs[unit_idx];
+        let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
+            err(&format!(
+                "link_native_objects: debug_info reloc references symbol index {} out of range",
+                reloc.sym_idx,
+            ))
+        })?;
+        resolve_debug_reloc(
+            machine,
+            &mut debug_info,
+            &mut debug_info_text_relocs,
+            unit_idx,
+            reloc,
+            sym,
+            &text_bases,
+            &debug_abbrev_bases,
+            &debug_line_bases,
+        )?;
+    }
+    for (i, reloc) in debug_line_relocs.iter().enumerate() {
+        let unit_idx = unit_for_debug_line_reloc[i];
+        let obj = &objs[unit_idx];
+        let sym = obj.symbols.get(reloc.sym_idx).ok_or_else(|| {
+            err(&format!(
+                "link_native_objects: debug_line reloc references symbol index {} out of range",
+                reloc.sym_idx,
+            ))
+        })?;
+        resolve_debug_reloc(
+            machine,
+            &mut debug_line,
+            &mut debug_line_text_relocs,
+            unit_idx,
+            reloc,
+            sym,
+            &text_bases,
+            &debug_abbrev_bases,
+            &debug_line_bases,
+        )?;
+    }
+
     Ok(MergedNative {
         text,
         data,
@@ -683,8 +762,99 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_line_relocs,
         unit_for_debug_info_reloc,
         unit_for_debug_line_reloc,
+        debug_info_text_relocs,
+        debug_line_text_relocs,
     })
 }
+
+/// One text-targeting DWARF reloc that survives the link pass.
+/// The placeholder at `byte_offset` inside its parent DWARF
+/// section needs `text_vaddr + merged_text_offset` written into
+/// the matching `width` bytes (8 for `R_X86_64_64`/`R_AARCH64_ABS64`,
+/// 4 for `R_X86_64_32`/`R_AARCH64_ABS32`). `text_vaddr` is whatever
+/// runtime address the final-image writer commits for the start of
+/// the merged `.text`.
+#[derive(Debug, Clone, Copy)]
+pub struct DebugTextReloc {
+    pub byte_offset: u64,
+    pub merged_text_offset: u64,
+    pub width: u8,
+}
+
+fn resolve_debug_reloc(
+    machine: NativeMachine,
+    section_bytes: &mut [u8],
+    text_relocs_out: &mut Vec<DebugTextReloc>,
+    unit_idx: usize,
+    reloc: &super::object::NativeReloc,
+    sym: &super::object::NativeSymbol,
+    text_bases: &[usize],
+    debug_abbrev_bases: &[usize],
+    debug_line_bases: &[usize],
+) -> Result<(), C5Error> {
+    let patch_off = reloc.offset as usize;
+    let unit_target_base = match sym.section {
+        NativeSymSection::Text => text_bases[unit_idx] as u64,
+        NativeSymSection::DebugAbbrev => debug_abbrev_bases[unit_idx] as u64,
+        NativeSymSection::DebugLine => debug_line_bases[unit_idx] as u64,
+        other => {
+            return Err(err(&format!(
+                "link_native_objects: DWARF reloc targets {other:?}; only Text / DebugAbbrev / \
+                 DebugLine are supported",
+            )));
+        }
+    };
+    let resolved = unit_target_base
+        .wrapping_add(sym.value)
+        .wrapping_add(reloc.addend as u64);
+    let (width, is_text_targeting) = match (machine, reloc.rtype, sym.section) {
+        (NativeMachine::X86_64, R_X86_64_64, NativeSymSection::Text)
+        | (NativeMachine::Aarch64, R_AARCH64_ABS64, NativeSymSection::Text) => (8u8, true),
+        (NativeMachine::X86_64, R_X86_64_32, _)
+        | (NativeMachine::Aarch64, R_AARCH64_ABS32, _) => (4u8, false),
+        (NativeMachine::X86_64, R_X86_64_64, _)
+        | (NativeMachine::Aarch64, R_AARCH64_ABS64, _) => (8u8, false),
+        _ => {
+            return Err(err(&format!(
+                "link_native_objects: unsupported DWARF reloc type {} for {:?}",
+                reloc.rtype, machine,
+            )));
+        }
+    };
+    let end = patch_off.checked_add(width as usize).ok_or_else(|| {
+        err(&format!(
+            "link_native_objects: DWARF reloc offset 0x{patch_off:x} + width {width} overflows",
+        ))
+    })?;
+    if end > section_bytes.len() {
+        return Err(err(&format!(
+            "link_native_objects: DWARF reloc patch at 0x{patch_off:x}+{width} past section end \
+             ({} bytes)",
+            section_bytes.len(),
+        )));
+    }
+    if is_text_targeting {
+        // Stash the section-relative placeholder so the writer can
+        // patch once `.text`'s runtime address is committed.
+        text_relocs_out.push(DebugTextReloc {
+            byte_offset: patch_off as u64,
+            merged_text_offset: resolved,
+            width,
+        });
+        // Leave the placeholder cleared so a writer that ignores
+        // `debug_*_text_relocs` produces deterministic bytes.
+        section_bytes[patch_off..end].fill(0);
+    } else {
+        let bytes = &resolved.to_le_bytes()[..width as usize];
+        section_bytes[patch_off..end].copy_from_slice(bytes);
+    }
+    Ok(())
+}
+
+const R_X86_64_64: u32 = 1;
+const R_X86_64_32: u32 = 10;
+const R_AARCH64_ABS64: u32 = 257;
+const R_AARCH64_ABS32: u32 = 258;
 
 /// Per-import PLT trampoline metadata returned by
 /// [`emit_x86_64_plt`]. Each entry pairs the trampoline's byte

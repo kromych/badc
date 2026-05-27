@@ -352,6 +352,39 @@ fn round_up(n: u64, align: u64) -> u64 {
 /// `use_libc_exit` selects the longer (libc-routed) tail when the
 /// program has a libc `exit` binding in scope; the syscall tail
 /// is shorter on aarch64 and one byte longer on x86_64.
+/// Write the runtime address of a text-targeting DWARF
+/// placeholder over its preserved location in a merged DWARF
+/// section. `r.byte_offset` names the placeholder; the writer
+/// adds `text_vmaddr` to `r.merged_text_offset` and writes the
+/// matching `r.width` bytes (4 or 8) little-endian.
+fn apply_merged_dwarf_text_reloc(
+    section_bytes: &mut [u8],
+    r: &super::DwarfTextReloc,
+    text_vmaddr: u64,
+) -> Result<(), C5Error> {
+    let off = r.byte_offset as usize;
+    let end = off.checked_add(r.width as usize).ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+            "elf::write: DWARF text reloc offset 0x{off:x} + width {} overflows",
+            r.width,
+        )))
+    })?;
+    if end > section_bytes.len() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &alloc::format!(
+                "elf::write: DWARF text reloc past section end (offset 0x{off:x}, width {}, \
+                 section length {})",
+                r.width,
+                section_bytes.len(),
+            ),
+        )));
+    }
+    let resolved = text_vmaddr.wrapping_add(r.merged_text_offset);
+    let bytes = &resolved.to_le_bytes()[..r.width as usize];
+    section_bytes[off..end].copy_from_slice(bytes);
+    Ok(())
+}
+
 fn start_stub_len(machine: Machine, use_libc_exit: bool) -> u64 {
     match (machine, use_libc_exit) {
         // aarch64 libc tail: adrp + ldr + blr = 3 instructions.
@@ -1181,10 +1214,23 @@ pub(super) fn write(
         // `.debug_frame` aren't preserved by the linker yet
         // (TODO); empty payloads keep the segment layout
         // self-consistent.
+        //
+        // Text-targeting placeholders the linker couldn't apply
+        // (DW_AT_low_pc / DW_AT_high_pc / line-program addresses
+        // need `text_vaddr + merged_text_offset`) get rewritten
+        // here now that the writer knows the committed text vmaddr.
+        let mut debug_info = md.debug_info.clone();
+        let mut debug_line = md.debug_line.clone();
+        for r in &md.debug_info_text_relocs {
+            apply_merged_dwarf_text_reloc(&mut debug_info, r, dwarf_text_vmaddr)?;
+        }
+        for r in &md.debug_line_text_relocs {
+            apply_merged_dwarf_text_reloc(&mut debug_line, r, dwarf_text_vmaddr)?;
+        }
         dwarf::DwarfSections {
-            debug_info: md.debug_info.clone(),
+            debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
-            debug_line: md.debug_line.clone(),
+            debug_line,
             debug_str: Vec::new(),
             debug_frame: Vec::new(),
         }

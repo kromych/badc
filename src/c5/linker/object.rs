@@ -173,6 +173,16 @@ pub enum NativeSymSection {
     /// native linker fails fast on Tls references until that
     /// lowering lands.
     Tls,
+    /// `STT_SECTION` symbol pointing at the unit's `.debug_abbrev`
+    /// section. Used by `.rela.debug_info` entries for the CU
+    /// header's `debug_abbrev_offset`; the linker rebases the
+    /// reloc's addend by the unit's merged `.debug_abbrev` base.
+    DebugAbbrev,
+    /// `STT_SECTION` symbol pointing at the unit's `.debug_line`
+    /// section. Used by `.rela.debug_info` for `DW_AT_stmt_list`
+    /// and by `.rela.debug_line` for any cross-line-table
+    /// references.
+    DebugLine,
 }
 
 /// One entry from the unit's `.symtab`. Section symbols (the
@@ -540,6 +550,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             &data_base_per_shndx,
             &bss_base_per_shndx,
             &tls_base_per_shndx,
+            debug_abbrev_idx,
+            debug_line_idx,
         );
         symbols.push(NativeSymbol {
             name: if sym.st_name == 0 {
@@ -828,6 +840,8 @@ fn section_of_shndx(
     data_base_per_shndx: &[(usize, u64)],
     bss_base_per_shndx: &[(usize, u64)],
     tls_base_per_shndx: &[(usize, u64)],
+    debug_abbrev_idx: Option<usize>,
+    debug_line_idx: Option<usize>,
 ) -> (NativeSymSection, u64) {
     if shndx == SHN_UNDEF {
         return (NativeSymSection::Undef, 0);
@@ -854,6 +868,12 @@ fn section_of_shndx(
     }
     if let Some(&(_, base)) = tls_base_per_shndx.iter().find(|&&(idx, _)| idx == i) {
         return (NativeSymSection::Tls, base);
+    }
+    if Some(i) == debug_abbrev_idx {
+        return (NativeSymSection::DebugAbbrev, 0);
+    }
+    if Some(i) == debug_line_idx {
+        return (NativeSymSection::DebugLine, 0);
     }
     (NativeSymSection::Undef, 0)
 }

@@ -143,6 +143,24 @@ fn synth_program_and_build(
                 debug_info: merged.debug_info.clone(),
                 debug_abbrev: merged.debug_abbrev.clone(),
                 debug_line: merged.debug_line.clone(),
+                debug_info_text_relocs: merged
+                    .debug_info_text_relocs
+                    .iter()
+                    .map(|r| crate::c5::codegen::DwarfTextReloc {
+                        byte_offset: r.byte_offset,
+                        merged_text_offset: r.merged_text_offset,
+                        width: r.width,
+                    })
+                    .collect(),
+                debug_line_text_relocs: merged
+                    .debug_line_text_relocs
+                    .iter()
+                    .map(|r| crate::c5::codegen::DwarfTextReloc {
+                        byte_offset: r.byte_offset,
+                        merged_text_offset: r.merged_text_offset,
+                        width: r.width,
+                    })
+                    .collect(),
             })
         },
         plt_trampoline_offsets,
@@ -593,6 +611,8 @@ mod tests {
             debug_line_relocs: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
+            debug_info_text_relocs: alloc::vec![],
+            debug_line_text_relocs: alloc::vec![],
         }
     }
 

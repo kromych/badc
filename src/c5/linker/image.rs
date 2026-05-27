@@ -858,7 +858,9 @@ fn patch_data_refs(
             NativeSymSection::Undef
             | NativeSymSection::Abs
             | NativeSymSection::Common
-            | NativeSymSection::Tls => {
+            | NativeSymSection::Tls
+            | NativeSymSection::DebugAbbrev
+            | NativeSymSection::DebugLine => {
                 return Err(err(&format!(
                     "parked reloc at text[{:#x}] has unexpected target section {:?}",
                     r.text_offset, r.target_section,
@@ -1039,6 +1041,8 @@ mod tests {
             debug_line_relocs: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
+            debug_info_text_relocs: alloc::vec![],
+            debug_line_text_relocs: alloc::vec![],
         }
     }
 

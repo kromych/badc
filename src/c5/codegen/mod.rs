@@ -512,6 +512,27 @@ pub(crate) struct MergedDwarf {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    /// Text-targeting DWARF relocs the linker couldn't apply
+    /// without the writer's committed `.text` runtime address.
+    /// Each entry stores the placeholder offset inside its
+    /// parent merged section, the merged-text offset of the
+    /// target, and the write width (4 or 8). The writer adds
+    /// `text_vaddr` to `merged_text_offset` and writes
+    /// little-endian bytes over the placeholder.
+    pub debug_info_text_relocs: Vec<DwarfTextReloc>,
+    pub debug_line_text_relocs: Vec<DwarfTextReloc>,
+}
+
+/// One text-targeting DWARF reloc surfaced through
+/// [`MergedDwarf`]. Mirrors [`crate::c5::linker::link::DebugTextReloc`]
+/// so the writer doesn't need to reach across the linker module
+/// boundary.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DwarfTextReloc {
+    pub byte_offset: u64,
+    pub merged_text_offset: u64,
+    pub width: u8,
 }
 
 /// One resolved dylib the program needs at load time. Distinct from

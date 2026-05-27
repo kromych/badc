@@ -573,8 +573,9 @@ impl Compiler {
     /// post-parse local high-water mark, function name) into the
     /// per-TU snapshot vector. Called from the end-of-function-
     /// body hook in `run_compile`, right after the trailing
-    /// `Op::Lev`. The `ast_acc` / `ast_vstack` parser-side state
-    /// is left alone -- the next function's `ast_reset` zeroes it.
+    /// return tag fires. The `ast_acc` / `ast_vstack` parser-side
+    /// state is left alone -- the next function's `ast_reset`
+    /// zeroes it.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn ast_finish_function(
         &mut self,

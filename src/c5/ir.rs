@@ -32,26 +32,27 @@ pub(crate) type BlockId = u32;
 /// directly.
 #[derive(Debug, Clone)]
 pub(crate) enum Inst {
-    /// Plain integer immediate (`Op::Imm` with no data / code
-    /// segment provenance). Lowering uses `load_imm64`.
+    /// Plain integer immediate with no data / code segment
+    /// provenance. Lowering uses `load_imm64`.
     Imm(i64),
-    /// `Op::Imm` whose operand is a data-segment byte offset.
-    /// The per-arch lowering emits an `adrp + add` placeholder
-    /// pair and records a `DataFixup` so the writer can patch
-    /// the page-relative immediate against `__data + offset`.
+    /// Integer immediate whose operand is a data-segment byte
+    /// offset. The per-arch lowering emits an `adrp + add`
+    /// placeholder pair and records a `DataFixup` so the writer
+    /// can patch the page-relative immediate against
+    /// `__data + offset`.
     ImmData(i64),
-    /// `Op::Imm` whose operand is a function-pointer literal
-    /// (`CODE_BASE + target_ent_pc`). The per-arch lowering
-    /// emits an `adrp + add` placeholder pair and records a
-    /// pending func-fixup so the writer can patch against the
-    /// callee's body offset.
+    /// Integer immediate whose operand is a function-pointer
+    /// literal (`CODE_BASE + target_ent_pc`). The per-arch
+    /// lowering emits an `adrp + add` placeholder pair and
+    /// records a pending func-fixup so the writer can patch
+    /// against the callee's body offset.
     ImmCode(usize),
-    /// Address of a local or parameter slot relative to the frame
-    /// pointer (`Op::Lea N`). N is the c5-slot index; locals are
+    /// Address of a local or parameter slot relative to the
+    /// frame pointer. N is the c5-slot index; locals are
     /// negative, params >= 2.
     LocalAddr(i64),
     /// Address of a thread-local variable in the per-target TLS
-    /// block (`Op::TlsLea`).
+    /// block.
     TlsAddr(i64),
     /// Load from memory. Width / signedness driven by the source
     /// load op.
@@ -116,7 +117,7 @@ pub(crate) enum Inst {
         lhs: ValueId,
         rhs_imm: i64,
     },
-    /// Unary floating-point negation (`Op::Fneg`).
+    /// Unary floating-point negation.
     Fneg(ValueId),
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
@@ -132,73 +133,74 @@ pub(crate) enum Inst {
     /// (typically the loaded value of a function pointer). Args
     /// flow through the same planner.
     CallIndirect { target: ValueId, args: Vec<ValueId> },
-    /// External library call (`Op::JsrExt`).
+    /// External library call.
     CallExt {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
     },
-    /// Tail-jump to an external symbol (`Op::TailExt`). Used only
-    /// as the body of an address-take trampoline; never has a
-    /// defined value (control transfers out).
+    /// Tail-jump to an external symbol. Used only as the body
+    /// of an address-take trampoline; never has a defined value
+    /// (control transfers out).
     TailExt(i64),
-    /// Whole-struct memory copy (`Op::Mcpy`).
+    /// Whole-struct memory copy.
     Mcpy {
         dst: ValueId,
         src: ValueId,
         size: i64,
     },
-    /// Compiler-builtin intrinsic (`Op::Intrinsic`). The discriminant
-    /// is the `Intrinsic` enum value. Single-arg intrinsics carry
-    /// one element in `args`; two-arg intrinsics (longjmp, va_start,
-    /// va_copy) carry two elements with `args[0]` the pushed first
-    /// arg and `args[1]` the accumulator-resident second arg. Most
-    /// intrinsics return a value (alloca's new pointer, setjmp's
-    /// 0-on-initial-call); longjmp does not return at all.
+    /// Compiler-builtin intrinsic. The discriminant is the
+    /// `Intrinsic` enum value. Single-arg intrinsics carry one
+    /// element in `args`; two-arg intrinsics (longjmp, va_start,
+    /// va_copy) carry two elements with `args[0]` the pushed
+    /// first arg and `args[1]` the accumulator-resident second
+    /// arg. Most intrinsics return a value (alloca's new pointer,
+    /// setjmp's 0-on-initial-call); longjmp does not return at
+    /// all.
     Intrinsic { kind: i64, args: Vec<ValueId> },
-    /// Per-frame alloca arena bookkeeping setup (`Op::AllocaInit`).
-    /// Slot index is the alloca-top FP-slot offset. Produces no
-    /// SSA value; emitted purely for the side effect.
+    /// Per-frame alloca arena bookkeeping setup. Slot index is
+    /// the alloca-top FP-slot offset. Produces no SSA value;
+    /// emitted purely for the side effect.
     AllocaInit(i64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoadKind {
-    /// `ScalarLoadKind::Li` -- 8-byte signed integer.
+    /// 8-byte signed integer.
     I64,
-    /// `ScalarLoadKind::Lc` -- 1-byte unsigned char, zero-extended.
+    /// 1-byte unsigned char, zero-extended.
     U8,
-    /// `ScalarLoadKind::Lcs` -- 1-byte signed char, sign-extended.
+    /// 1-byte signed char, sign-extended.
     I8,
-    /// `ScalarLoadKind::Lw` -- 4-byte signed int, sign-extended.
+    /// 4-byte signed int, sign-extended.
     I32,
-    /// `ScalarLoadKind::Lwu` -- 4-byte unsigned int, zero-extended.
+    /// 4-byte unsigned int, zero-extended.
     U32,
-    /// `ScalarLoadKind::Lh` -- 2-byte signed short, sign-extended.
+    /// 2-byte signed short, sign-extended.
     I16,
-    /// `ScalarLoadKind::Lhu` -- 2-byte unsigned short, zero-extended.
+    /// 2-byte unsigned short, zero-extended.
     U16,
-    /// `ScalarLoadKind::Lf` -- 4-byte float widened to f64.
+    /// 4-byte float widened to f64.
     F32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StoreKind {
-    /// `Op::Si` -- 8-byte integer.
+    /// 8-byte integer.
     I64,
-    /// `Op::Sc` -- 1-byte char.
+    /// 1-byte char.
     I8,
-    /// `Op::Sw` -- 4-byte int.
+    /// 4-byte int.
     I32,
-    /// `Op::Sh` -- 2-byte short.
+    /// 2-byte short.
     I16,
-    /// `Op::Sf` -- 4-byte float (narrowed from f64).
+    /// 4-byte float (narrowed from f64).
     F32,
 }
 
-/// Integer / FP binary opcode. Variant names match the
-/// `super::op::ScalarLoadKind` set; the planner's choice between signed /
-/// unsigned forms is preserved (Div vs Divu, Shr vs Shru).
+/// Integer / FP binary opcode. The planner's choice between
+/// signed / unsigned forms is preserved (Div vs Divu, Shr vs
+/// Shru).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BinOp {
     Or,
@@ -238,9 +240,9 @@ pub(crate) enum BinOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FpCastKind {
-    /// `Op::Fcvtfi` -- truncating f64 to i64.
+    /// Truncating f64 to i64.
     FpToInt,
-    /// `Op::Fcvtif` -- i64 to f64.
+    /// i64 to f64.
     IntToFp,
 }
 
@@ -265,12 +267,11 @@ pub(crate) enum Terminator {
         target: BlockId,
         fall_through: BlockId,
     },
-    /// Return the accumulator value (`Op::Lev`). The per-arch
-    /// lowering moves `value` into the host's int / FP return
-    /// register.
+    /// Return the accumulator value. The per-arch lowering moves
+    /// `value` into the host's int / FP return register.
     Return(ValueId),
-    /// `Op::TailExt`: tail-jump to a libc symbol. The trampoline
-    /// shape doesn't return through here.
+    /// Tail-jump to a libc symbol. The trampoline shape doesn't
+    /// return through here.
     TailExt(i64),
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
@@ -296,7 +297,7 @@ pub(crate) struct Block {
     /// terminator's branch). For a `Return` block this is the
     /// returned value. `NO_VALUE` if the accumulator wasn't
     /// written in this block (rare; e.g. a block consisting of
-    /// just a `Op::Jmp` to a synthetic target).
+    /// just an unconditional branch to a synthetic target).
     pub exit_acc: ValueId,
 }
 
@@ -311,12 +312,13 @@ pub(crate) struct FunctionSsa {
     /// emission; fall back to a synthesized `fn_<ent_pc>` when
     /// empty.
     pub name: alloc::string::String,
-    /// Bytecode PC of the function's `Op::Ent`.
+    /// Function-entry PC in the parser's PC space; the per-arch
+    /// `pc_to_native` table maps it to the native byte offset.
     pub ent_pc: usize,
-    /// Bytecode PC one past the function's last op (the start of
+    /// PC one past the function's last op (the start of
     /// whatever follows).
     pub end_pc: usize,
-    /// Local-slot count from `Op::Ent`'s operand. Set by the
+    /// Local-slot count for the function frame. Set by the
     /// producer; consumed by the per-arch frame layout.
     pub locals: i64,
     /// Declared parameter count.

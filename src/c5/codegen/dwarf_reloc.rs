@@ -105,6 +105,8 @@ const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
 const DW_TAG_UNION_TYPE: u8 = 0x17;
 const DW_TAG_MEMBER: u8 = 0x0d;
 const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
+const DW_TAG_ARRAY_TYPE: u8 = 0x01;
+const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -124,6 +126,7 @@ const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 const DW_AT_EXTERNAL: u8 = 0x3f;
 const DW_AT_DECL_LINE: u8 = 0x3b;
 const DW_AT_PROTOTYPED: u8 = 0x27;
+const DW_AT_UPPER_BOUND: u8 = 0x2f;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -175,6 +178,8 @@ const ABBREV_UNION_TYPE: u64 = 9;
 const ABBREV_MEMBER: u64 = 10;
 const ABBREV_BITFIELD_MEMBER: u64 = 11;
 const ABBREV_UNSPECIFIED_PARAMETERS: u64 = 12;
+const ABBREV_ARRAY_TYPE: u64 = 13;
+const ABBREV_SUBRANGE_TYPE: u64 = 14;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -398,6 +403,24 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut out, ABBREV_UNSPECIFIED_PARAMETERS);
     out.push(DW_TAG_UNSPECIFIED_PARAMETERS);
     out.push(DW_CHILDREN_NO);
+    out.push(0);
+    out.push(0);
+    // Abbrev 13: array_type -- a true local array (e.g.
+    // `int xs[N]`). DW_AT_type refs the element type DIE; the
+    // DW_TAG_subrange_type child carries the bound.
+    write_uleb128(&mut out, ABBREV_ARRAY_TYPE);
+    out.push(DW_TAG_ARRAY_TYPE);
+    out.push(DW_CHILDREN_YES);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    out.push(0);
+    out.push(0);
+    // Abbrev 14: subrange_type -- DWARF 4 5.13: a subrange entry
+    // describes one dimension of an array. DW_AT_upper_bound is
+    // the last in-bounds index (count - 1).
+    write_uleb128(&mut out, ABBREV_SUBRANGE_TYPE);
+    out.push(DW_TAG_SUBRANGE_TYPE);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_UPPER_BOUND, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -628,6 +651,39 @@ fn build_debug_info(
         }
     }
 
+    // DW_TAG_array_type DIEs for true local arrays. C99 6.7.5.3p7
+    // decays parameter arrays to pointers, so only non-parameter
+    // locals with `array_size > 0` contribute. Each unique
+    // (element_type, count) pair emits one array_type DIE with a
+    // subrange_type child carrying DW_AT_upper_bound = count - 1.
+    let mut array_offsets: BTreeMap<(TypeKey, u32), u32> = BTreeMap::new();
+    {
+        let mut pending: BTreeMap<(TypeKey, u32), ()> = BTreeMap::new();
+        for v in &program.variables {
+            if v.array_size == 0 || v.is_parameter {
+                continue;
+            }
+            let Some(key) = decompose_pointer_chain(v.type_tag) else {
+                continue;
+            };
+            if type_offsets.contains_key(&key) {
+                pending.insert((key, v.array_size), ());
+            }
+        }
+        for (key, count) in pending.keys() {
+            let elem_off = *type_offsets.get(key).expect("element type present");
+            let arr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+            array_offsets.insert((*key, *count), arr_off);
+            write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
+            body.extend_from_slice(&elem_off.to_le_bytes());
+            // Subrange child: upper_bound = count - 1.
+            write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
+            write_uleb128(&mut body, (*count as u64).saturating_sub(1));
+            // Children-list terminator for the array_type DIE.
+            body.push(0);
+        }
+    }
+
     // Subprogram child DIEs. One per defined function in the
     // unit. With parameters / variables present, the subprogram
     // takes the with-children abbrev (carries DW_AT_frame_base)
@@ -698,7 +754,19 @@ fn build_debug_info(
                 let Some(key) = decompose_pointer_chain(v.type_tag) else {
                     continue;
                 };
-                let Some(&type_off) = type_offsets.get(&key) else {
+                // True local arrays reference the array_type DIE;
+                // every other variable (parameters, scalars,
+                // pointers, struct values) references the element /
+                // scalar / pointer DIE directly.
+                let type_off = if v.array_size > 0 && !v.is_parameter {
+                    array_offsets
+                        .get(&(key, v.array_size))
+                        .copied()
+                        .or_else(|| type_offsets.get(&key).copied())
+                } else {
+                    type_offsets.get(&key).copied()
+                };
+                let Some(type_off) = type_off else {
                     continue;
                 };
                 let fp_byte_offset = fp_byte_offset_for_slot(v.fp_slot);

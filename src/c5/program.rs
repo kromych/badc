@@ -301,4 +301,10 @@ pub struct VariableInfo {
     /// point at the declaration. Zero when the parser didn't record
     /// a position (archive-reloaded units default here).
     pub decl_line: u32,
+    /// Declared element count for true local arrays (`int xs[N]`).
+    /// Drives DW_TAG_array_type / DW_TAG_subrange_type emission so
+    /// `ptype xs` shows `int [N]` instead of just `int`. Zero for
+    /// scalars and for parameters (the latter decay to pointers per
+    /// C99 6.7.5.3p7 and keep the pointer-type DIE).
+    pub array_size: u32,
 }

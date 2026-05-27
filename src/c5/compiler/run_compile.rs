@@ -854,13 +854,24 @@ impl Compiler {
                             && sym.val != 1
                             && !sym.name.is_empty()
                         {
+                            let is_parameter = param_set.contains(&i);
+                            // C99 6.7.5.3p7: a parameter declared as
+                            // `T name[N]` decays to a pointer and
+                            // doesn't carry an array-type DIE; keep
+                            // `array_size` at zero for parameters.
+                            let array_size = if is_parameter {
+                                0
+                            } else {
+                                sym.array_size.max(0) as u32
+                            };
                             self.variables.push(crate::c5::program::VariableInfo {
                                 function_bc_pc: ent_pc as u64,
                                 name: sym.name.clone(),
                                 type_tag: sym.type_,
                                 fp_slot: sym.val,
-                                is_parameter: param_set.contains(&i),
+                                is_parameter,
                                 decl_line: sym.decl_line as u32,
+                                array_size,
                             });
                         }
                     }

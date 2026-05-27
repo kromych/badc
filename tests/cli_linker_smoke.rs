@@ -1242,6 +1242,77 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// True local arrays (`int xs[N]`) get DW_TAG_array_type with a
+/// DW_TAG_subrange_type child carrying DW_AT_upper_bound = N - 1
+/// per DWARF 4 section 5.13. `ptype xs` in gdb then shows
+/// `int [N]` rather than just `int`. Parameters decay to pointers
+/// per C99 6.7.5.3p7 and keep their pointer-type DIE.
+#[test]
+fn multi_tu_link_emits_array_type_for_local_arrays() {
+    let dir = tempdir("multi-tu-array-type");
+    write_source(
+        &dir,
+        "helper.c",
+        "int helper(void) {\n    int xs[5];\n    xs[0] = 7;\n    return xs[0];\n}\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(void);\nint main(void) { return helper(); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_array_type"),
+        "expected DW_TAG_array_type for `int xs[5]`:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_TAG_subrange_type"),
+        "expected DW_TAG_subrange_type child of the array_type DIE:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_AT_upper_bound"),
+        "expected DW_AT_upper_bound on the subrange_type DIE:\n{out_text}",
+    );
+}
+
 /// Every c5-emitted subprogram has DW_AT_prototyped set per
 /// DWARF 4 section 3.3.3.7 -- c5 rejects K&R-style identifier-
 /// list declarators (C99 6.7.6.3p14) so every function is

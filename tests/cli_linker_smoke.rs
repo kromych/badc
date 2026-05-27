@@ -1196,6 +1196,66 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// A variadic function's subprogram DIE needs a trailing
+/// DW_TAG_unspecified_parameters child (DWARF 4 section 3.4.2)
+/// so debuggers render the `...` of the prototype. Without it
+/// gdb / lldb show the function as taking only the fixed params,
+/// which silently breaks vararg-aware frame inspection.
+#[test]
+fn multi_tu_link_emits_unspecified_parameters_for_variadic() {
+    let dir = tempdir("multi-tu-variadic-die");
+    write_source(&dir, "helper.c", "int sum_n(int n, ...) { return n; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int sum_n(int, ...);\n\
+         int main(void) { return sum_n(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_unspecified_parameters"),
+        "expected DW_TAG_unspecified_parameters under the variadic subprogram:\n{out_text}",
+    );
+}
+
 /// Multi-TU links populate `.debug_frame` from the merged
 /// Text-section symbol set: `synth_build.rs` walks every defined
 /// symbol and surfaces its `(ent_pc, name)` to `dwarf::emit`,

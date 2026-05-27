@@ -104,6 +104,7 @@ const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
 const DW_TAG_UNION_TYPE: u8 = 0x17;
 const DW_TAG_MEMBER: u8 = 0x0d;
+const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -168,6 +169,7 @@ const ABBREV_STRUCTURE_TYPE: u64 = 8;
 const ABBREV_UNION_TYPE: u64 = 9;
 const ABBREV_MEMBER: u64 = 10;
 const ABBREV_BITFIELD_MEMBER: u64 = 11;
+const ABBREV_UNSPECIFIED_PARAMETERS: u64 = 12;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -371,6 +373,14 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
     push_attr(&mut out, DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA);
     push_attr(&mut out, DW_AT_BIT_SIZE, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
+    // Abbrev 12: unspecified_parameters -- the `...` of a
+    // variadic prototype (DWARF 4 section 3.4.2). No attributes;
+    // the tag itself signals trailing varargs to the debugger.
+    write_uleb128(&mut out, ABBREV_UNSPECIFIED_PARAMETERS);
+    out.push(DW_TAG_UNSPECIFIED_PARAMETERS);
+    out.push(DW_CHILDREN_NO);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -626,6 +636,13 @@ fn build_debug_info(
             .map(|s| s.as_str())
             .filter(|s| !s.is_empty())
             .unwrap_or("<unknown>");
+        // Variadic flag is looked up by name in `program.symbols`;
+        // a missing entry means non-variadic (safe default --
+        // `printf` and similar always have a matching Token::Fun
+        // symbol in the defining TU).
+        let is_variadic = program.symbols.iter().any(|s| {
+            s.class == super::super::token::Token::Fun as i64 && s.name == name && s.is_variadic
+        });
         // Group this function's parameters and locals out of the
         // flat program.variables list. `function_bc_pc` keys by
         // the function's ent_pc, matching what the amalg path's
@@ -635,7 +652,10 @@ fn build_debug_info(
             .iter()
             .filter(|v| v.function_bc_pc == ent_pc as u64)
             .collect();
-        let has_children = !vars.is_empty();
+        // A variadic function always needs the WITH_CHILDREN
+        // abbrev so the trailing DW_TAG_unspecified_parameters DIE
+        // has somewhere to live.
+        let has_children = !vars.is_empty() || is_variadic;
         if has_children {
             write_uleb128(&mut body, ABBREV_SUBPROGRAM_WITH_CHILDREN);
         } else {
@@ -683,6 +703,12 @@ fn build_debug_info(
                 // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
                 // offset of the matching type DIE emitted above.
                 body.extend_from_slice(&type_off.to_le_bytes());
+            }
+            // DWARF 4 section 3.4.2: trailing `...` of a variadic
+            // prototype becomes a DW_TAG_unspecified_parameters
+            // child after the formal-parameter siblings.
+            if is_variadic {
+                write_uleb128(&mut body, ABBREV_UNSPECIFIED_PARAMETERS);
             }
             // End-of-children marker for this subprogram.
             body.push(0);

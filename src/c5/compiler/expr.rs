@@ -1039,9 +1039,12 @@ impl Compiler {
                 // bit-pattern-compatible and need no conversion.
                 let target_is_fp = is_floating_scalar(t);
                 let source_is_fp = is_floating_scalar(self.ty);
-                if target_is_fp && !source_is_fp {
-                    self.ast_fpcast();
-                } else if !target_is_fp && source_is_fp {
+                if target_is_fp ^ source_is_fp {
+                    // Mixed FP / int cast: route through ast_fpcast
+                    // regardless of direction. The shared call is
+                    // the AST shape for `int -> fp` *and* `fp ->
+                    // int`; the actual register conversion lives in
+                    // the per-arch emit.
                     self.ast_fpcast();
                 } else if !target_is_fp
                     && !source_is_fp

@@ -66,7 +66,11 @@ fn synth_program_and_build(
     check_target_machine(target, merged.machine)?;
     let entry_offset = resolve_entry_offset(merged, entry_name)?;
     let imports = synth_imports(merged, target);
-    let (got_fixups, data_fixups, func_fixups) = synth_fixups(merged, plt)?;
+    let SynthFixups {
+        got: got_fixups,
+        data: data_fixups,
+        func: func_fixups,
+    } = synth_fixups(merged, plt)?;
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt);
     let exports = synth_exports(merged);
@@ -225,10 +229,15 @@ fn target_real_symbol(target: Target, local: &str) -> String {
 /// `merged.text`. Each is `adrp x16, 0; ldr x16, [x16]; br x16`
 /// pointing at GOT slot `import_index`; one GotFixup per trampoline
 /// lets the writer patch the adrp+ldr to reach `__got + slot * 8`.
-fn synth_fixups(
-    merged: &MergedNative,
-    plt: &[PltTrampoline],
-) -> Result<(Vec<GotFixup>, Vec<DataFixup>, Vec<FuncFixup>), C5Error> {
+/// Per-arch fixup streams the writer consumes for a single
+/// function-pointer / data reference site.
+struct SynthFixups {
+    got: Vec<GotFixup>,
+    data: Vec<DataFixup>,
+    func: Vec<FuncFixup>,
+}
+
+fn synth_fixups(merged: &MergedNative, plt: &[PltTrampoline]) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
@@ -256,7 +265,11 @@ fn synth_fixups(
         }
     }
 
-    Ok((got_fixups, data_fixups, func_fixups))
+    Ok(SynthFixups {
+        got: got_fixups,
+        data: data_fixups,
+        func: func_fixups,
+    })
 }
 
 // Reloc kind constants. Match the values link.rs uses (it keeps its

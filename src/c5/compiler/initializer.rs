@@ -35,7 +35,6 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
@@ -970,7 +969,7 @@ impl Compiler {
         self.emit_lea(local_val);
         self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
-        self.emit_op(Op::Mcpy);
+        self.mark_emit_other();
         // Dual-emit: record the Mcpy source descriptor so the
         // surrounding decl-site caller can build
         // `Decl::Local { init: Aggregate { src_data_off,
@@ -1007,7 +1006,7 @@ impl Compiler {
         // canonical `store_local` directly.
         self.pending_local_init_ast = self.ast_acc;
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
-            self.emit_op(Op::Mcpy);
+            self.mark_emit_other();
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             self.ast_assign();
         } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {

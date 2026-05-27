@@ -132,6 +132,14 @@ impl Compiler {
     /// trailing `Imm 0` / scalar-load shape doesn't leak across
     /// the conversion.
     pub(super) fn ast_fpcast(&mut self) {
+        self.mark_emit_other();
+    }
+
+    /// Clear every trailing-emit flag a non-binop / non-load tag
+    /// would clear. Replaces `emit_op(Op::Mcpy | StLocI | LdLocI
+    /// | Lea | TlsLea | Intrinsic)` for sites that only need the
+    /// flag bookkeeping and don't drive an AST hook.
+    pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -201,7 +209,7 @@ impl Compiler {
     /// operand word is no longer carried, only the trailing-op
     /// state cleared.
     pub(super) fn emit_lea(&mut self, _slot_off: i64) {
-        self.emit_op(Op::Lea);
+        self.mark_emit_other();
     }
 
     /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
@@ -443,7 +451,7 @@ impl Compiler {
             self.emit_op(load_op); // a = old_value
             // Spill old_value into the scratch local without
             // disturbing `a` or the c5 stack.
-            self.emit_op(Op::StLocI);
+            self.mark_emit_other();
             // Extract current = (old_value >> bit_offset) & mask.
             if bit_offset > 0 {
                 self.emit_binop_with_imm(Op::Shr, bit_offset as i64);
@@ -486,7 +494,7 @@ impl Compiler {
             // shifted_new in `a`. Push it so the next ops can
             // reload the cleared old_value into `a`.
             self.ast_psh(); // stack: [..., field_addr, shifted_new]
-            self.emit_op(Op::LdLocI);
+            self.mark_emit_other();
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
             self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
             self.ast_assign(); // pops field_addr, stores a

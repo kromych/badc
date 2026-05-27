@@ -716,7 +716,7 @@ impl Compiler {
                              struct-returning function",
                         ));
                     }
-                    self.emit_op(Op::Mcpy);
+                    self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
                     // `Stmt::Return(Some(_))` so the AST-driven
                     // SSA sees the source struct and can emit the

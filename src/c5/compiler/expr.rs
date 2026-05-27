@@ -304,7 +304,7 @@ impl Compiler {
                         )));
                     }
                     self.next()?;
-                    self.emit_op(Op::Intrinsic);
+                    self.mark_emit_other();
                     // Flag the function for the alloca-arena
                     // patch-up at function-end. We don't reserve
                     // the alloca-top slot here -- the function
@@ -770,7 +770,7 @@ impl Compiler {
                     // sequence (TPIDR_EL0 + offset on aarch64,
                     // fs:0 + offset on x86_64). The operand is the
                     // byte offset within the program's TLS block.
-                    self.emit_op(Op::TlsLea);
+                    self.mark_emit_other();
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
                     self.glo_imm_refs.push(id_idx);
@@ -1564,7 +1564,7 @@ impl Compiler {
                     self.max_loc_offs = self.loc_offs;
                 }
                 let fp_temp = -self.loc_offs;
-                self.emit_op(Op::StLocI);
+                self.mark_emit_other();
                 // Each arg lands in its own temp slot first
                 // (left-to-right eval), then we push them
                 // right-to-left so the first arg ends up on top of
@@ -1665,7 +1665,7 @@ impl Compiler {
                              (lhs={lhs_s}, rhs={rhs_s})"
                         )));
                     }
-                    self.emit_op(Op::Mcpy);
+                    self.mark_emit_other();
                     self.ty = t;
                     // Dual-emit `Expr::Assign { lhs, rhs, ty }`
                     // with the struct type; the walker keys on
@@ -2143,7 +2143,7 @@ impl Compiler {
                             self.max_loc_offs = self.loc_offs;
                         }
                         let rhs_temp = -self.loc_offs;
-                        self.emit_op(Op::StLocI);
+                        self.mark_emit_other();
                         self.emit_imm(0);
                         self.ast_binop(crate::c5::ir::BinOp::Or);
                         self.emit_binop_with_imm(Op::Mul, scale);

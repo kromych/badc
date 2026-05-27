@@ -654,7 +654,7 @@ impl Compiler {
                         // numbering above)
                         self.emit_lea(param_val);
                         self.emit_op(Op::Li);
-                        self.emit_op(Op::Mcpy);
+                        self.mark_emit_other();
                         // The symbol now points at the local copy.
                         self.symbols[idx].val = local_val;
                     }

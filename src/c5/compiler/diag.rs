@@ -337,7 +337,7 @@ impl Compiler {
         }
         let rhs_temp = -self.loc_offs;
         let rhs_ty = self.ty;
-        self.emit_op(Op::StLocI);
+        self.mark_emit_other();
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.
         self.emit_imm(0);
         self.ast_binop(crate::c5::ir::BinOp::Or);

@@ -3,10 +3,8 @@
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Op {
-    /// Load Effective Address: Calculates address of a local variable.
-    Lea = 0x7f00_0000_0000_0001,
     /// Load Immediate: Loads a constant value into the accumulator.
-    Imm,
+    Imm = 0x7f00_0000_0000_0001,
     /// Jump to Subroutine indirect.
     Jsri,
     /// Load Integer: Loads an i64 from the address in the accumulator.
@@ -115,21 +113,6 @@ pub enum Op {
     /// Modulo `%` (unsigned). See [`Op::Divu`].
     Modu,
 
-    // --- Load-local fusion ---
-    /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`. Emitted by
-    /// the bitfield-read path in `compiler/emit.rs` to reload a
-    /// freshly-stored slot without disturbing the c5 stack.
-    LdLocI,
-    /// `*(i64*)(bp + N*8) = a` -- store accumulator into a local
-    /// frame slot at the given offset, without disturbing the c5
-    /// stack or the accumulator. The compiler emits this when it
-    /// needs to spill a freshly-computed value (e.g. an indirect
-    /// call's function-pointer source) to a temp before the
-    /// surrounding code clobbers `a`. The regular `Lea N; Si`
-    /// pattern can't express this safely because `Lea` clobbers
-    /// `a` first.
-    StLocI,
-
     // --- Floating-point arithmetic and comparison ---
     //
     // Both `float` and `double` flow through the same f64 ops; the
@@ -172,49 +155,6 @@ pub enum Op {
     /// `mov eax, [rbx]; movd xmm0, eax; cvtss2sd xmm0, xmm0;
     /// movq rbx, xmm0`.
     Lf,
-    /// Memory copy. Operand: size in bytes (compile-time constant).
-    /// Stack top: destination address. Accumulator: source address
-    /// (the parser leaves it there because the RHS struct-value
-    /// expression terminates with the address in `a`). Copies the
-    /// given byte count from src to dst, then sets `a` to dst so
-    /// the op behaves as `memcpy(dst, src, n)` does (returns dst).
-    /// Used to lower whole-struct assignment without forcing the
-    /// program to `#include <string.h>` and bind libc memcpy.
-    Mcpy,
-
-    /// Thread-Local Storage address load. Operand: byte offset
-    /// within the TLS block of the variable being addressed. The
-    /// codegen materialises the TLS-base + offset address into
-    /// `a` using the platform's local-exec sequence:
-    ///   * Linux/aarch64: `mrs x19, tpidr_el0; add x19, x19, imm`
-    ///     (variant-1 layout: TLS sits AFTER the TCB head, so the
-    ///     emitted offset is `TCB_HEAD + var_offset`).
-    ///   * Linux/x86_64: `mov r13, qword ptr fs:[0]; sub r13, imm`
-    ///     (variant-2 layout: TLS sits BEFORE the FS base, so the
-    ///     emitted offset is `tls_total_size - var_offset`).
-    ///   * macOS arm64 / Win64: not yet supported -- compile-time
-    ///     reject in the writer's TLS-fixup application path.
-    ///
-    /// The VM allocates a per-Program TLS region and treats the
-    /// op as a plain `Op::Imm tls_base + offset` (no real per-
-    /// thread isolation; the VM is single-threaded).
-    TlsLea,
-
-    /// Compiler-builtin intrinsic. Operand: the [`Intrinsic`]
-    /// discriminant cast to `i64`. The accumulator carries the
-    /// single integer argument on entry; the lowered sequence
-    /// leaves the result in the accumulator. Used for
-    /// architecture-specific shapes (`alloca`, future atomics
-    /// / cpuid / vector-builtin surface) that can't sit behind a
-    /// regular dynamic-binding `Op::JsrExt` call -- e.g.
-    /// `alloca` has to bump the *caller's* stack pointer and
-    /// return a pointer into the same frame, which a normal
-    /// function call can't do. The frontend tags an intrinsic
-    /// callee by setting `Symbol::intrinsic` (driven by
-    /// `#pragma intrinsic("name")`); call-site lowering then
-    /// emits this op instead of the regular push/jsr/adj
-    /// sequence.
-    Intrinsic,
 }
 
 /// Per-function alloca arena size, in 8-byte slots. Sized to

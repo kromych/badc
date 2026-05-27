@@ -51,6 +51,29 @@ struct LocalCacheEntry {
     value: ValueId,
 }
 
+/// Discriminant for the pure-value CSE cache. Imm / ImmData /
+/// ImmCode produce no side effects and read no memory, so the
+/// cache only needs `switch_to` invalidation. The intra-block
+/// dominance an SSA function requires holds for repeats inside
+/// the same block. `LocalAddr` is deliberately excluded -- the
+/// per-arch emit pattern-matches `LocalAddr` immediately
+/// followed by `Load` / `Store` and fuses the pair into a
+/// single-instruction addressing mode; CSE'ing the LocalAddr
+/// breaks that adjacency and falls into the "op outside the
+/// implemented subset" branch.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PureKey {
+    Imm(i64),
+    ImmData(i64),
+    ImmCode(usize),
+}
+
+#[derive(Clone, Copy)]
+struct PureCacheEntry {
+    key: PureKey,
+    value: ValueId,
+}
+
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
 /// returns its [`ValueId`]; terminators close the current block.
 pub(crate) struct SsaBuilder {
@@ -66,6 +89,10 @@ pub(crate) struct SsaBuilder {
     /// address-of-local / block transitions; individual entries
     /// invalidate when their slot is `store_local`-overwritten.
     local_cache: Vec<LocalCacheEntry>,
+    /// Per-block CSE cache for pure values (`Inst::Imm`,
+    /// `Inst::ImmData`, `Inst::ImmCode`). Linear scan; resets on
+    /// `switch_to`.
+    pure_cache: Vec<PureCacheEntry>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
     /// as `usize`. Set on [`Self::new_block`] and re-anchored by
     /// [`Self::switch_to`] -- the latter is what guarantees the
@@ -118,6 +145,7 @@ impl SsaBuilder {
             func,
             current: None,
             local_cache: Vec::new(),
+            pure_cache: Vec::new(),
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
@@ -181,11 +209,23 @@ impl SsaBuilder {
         // entries from the prior block don't dominate the new
         // block's first uses (would need phi to merge them).
         self.local_cache.clear();
+        self.pure_cache.clear();
     }
 
     /// The implicit entry block (block 0). Always exists.
     pub(crate) fn entry_block(&self) -> BlockId {
         0
+    }
+
+    /// Scan the in-block pure-value cache for a previously-built
+    /// entry with the same key; return its ValueId on a hit.
+    fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
+        for entry in &self.pure_cache {
+            if entry.key == key {
+                return Some(entry.value);
+            }
+        }
+        None
     }
 
     fn push(&mut self, inst: Inst) -> ValueId {
@@ -207,14 +247,35 @@ impl SsaBuilder {
         self.cur_src = (line, file_idx);
     }
 
-    /// `Inst::Imm`.
+    /// `Inst::Imm`. In-block CSE: a prior `imm(v)` returns the
+    /// same ValueId. Pure value, no aliasing concerns; the
+    /// `switch_to` block-boundary clear is the only invalidation.
     pub(crate) fn imm(&mut self, v: i64) -> ValueId {
-        self.push(Inst::Imm(v))
+        if let Some(cached) = self.lookup_pure(PureKey::Imm(v)) {
+            return cached;
+        }
+        let id = self.push(Inst::Imm(v));
+        self.pure_cache.push(PureCacheEntry {
+            key: PureKey::Imm(v),
+            value: id,
+        });
+        id
     }
 
-    /// `Inst::ImmData` (data-segment offset).
+    /// `Inst::ImmData` (data-segment offset). Same CSE shape as
+    /// `imm`. Externally-resolved data offsets use
+    /// `imm_data_extern`, which records a per-site reloc entry
+    /// and must NOT be CSE'd.
     pub(crate) fn imm_data(&mut self, off: i64) -> ValueId {
-        self.push(Inst::ImmData(off))
+        if let Some(cached) = self.lookup_pure(PureKey::ImmData(off)) {
+            return cached;
+        }
+        let id = self.push(Inst::ImmData(off));
+        self.pure_cache.push(PureCacheEntry {
+            key: PureKey::ImmData(off),
+            value: id,
+        });
+        id
     }
 
     /// `Inst::ImmData(0)` whose target lives in another TU.
@@ -226,9 +287,19 @@ impl SsaBuilder {
         v
     }
 
-    /// `Inst::ImmCode` (function-pointer literal).
+    /// `Inst::ImmCode` (function-pointer literal). Same CSE shape
+    /// as `imm`; the extern variant `imm_code_extern` skips the
+    /// cache for per-site reloc accounting.
     pub(crate) fn imm_code(&mut self, target_pc: usize) -> ValueId {
-        self.push(Inst::ImmCode(target_pc))
+        if let Some(cached) = self.lookup_pure(PureKey::ImmCode(target_pc)) {
+            return cached;
+        }
+        let id = self.push(Inst::ImmCode(target_pc));
+        self.pure_cache.push(PureCacheEntry {
+            key: PureKey::ImmCode(target_pc),
+            value: id,
+        });
+        id
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.
@@ -252,7 +323,9 @@ impl SsaBuilder {
 
     /// `Inst::LocalAddr`. The address of a local escapes; any
     /// subsequent generic store could write through it, so drop
-    /// every CSE entry that's currently keyed on a local slot.
+    /// every load-local CSE entry. The address materialization
+    /// itself is pure but is deliberately NOT CSE'd -- see the
+    /// `PureKey` comment for why.
     pub(crate) fn local_addr(&mut self, off: i64) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::LocalAddr(off))
@@ -870,5 +943,53 @@ mod tests {
             "load across a call must re-emit (conservative alias model)",
         );
         b.return_(v_post);
+    }
+
+    /// Repeat `imm(v)` of the same value returns the same
+    /// ValueId. Pure value, no side effects.
+    #[test]
+    fn imm_cse_collapses_repeats() {
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_a = b.imm(7);
+        let v_b = b.imm(7);
+        let v_c = b.imm(7);
+        assert_eq!(v_a, v_b);
+        assert_eq!(v_a, v_c);
+        b.return_(v_a);
+        let func = b.finish();
+        let imm_count = func
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Imm(7)))
+            .count();
+        assert_eq!(imm_count, 1, "three `imm(7)` calls collapse to one Inst");
+    }
+
+    /// Different Imm values stay distinct.
+    #[test]
+    fn imm_cse_keeps_distinct_values_apart() {
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_a = b.imm(7);
+        let v_b = b.imm(8);
+        assert_ne!(v_a, v_b);
+        b.return_(v_a);
+    }
+
+    /// Block transitions clear the pure cache: an `imm(v)` in the
+    /// entry block doesn't reach into the body. SSA dominance
+    /// would need a phi to bridge the value across blocks.
+    #[test]
+    fn imm_cse_clears_across_blocks() {
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_entry = b.imm(7);
+        let body = b.new_block();
+        b.jmp(body);
+        b.switch_to(body);
+        let v_body = b.imm(7);
+        assert_ne!(
+            v_entry, v_body,
+            "imm across block boundary must emit fresh",
+        );
+        b.return_(v_body);
     }
 }

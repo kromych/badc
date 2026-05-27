@@ -66,6 +66,8 @@ enum PureKey {
     Imm(i64),
     ImmData(i64),
     ImmCode(usize),
+    Binop { op: BinOp, lhs: ValueId, rhs: ValueId },
+    BinopI { op: BinOp, lhs: ValueId, rhs_imm: i64 },
 }
 
 #[derive(Clone, Copy)]
@@ -394,9 +396,19 @@ impl SsaBuilder {
         self.push(Inst::StoreLocal { off, value, kind })
     }
 
-    /// `Inst::Binop`.
+    /// `Inst::Binop`. In-block CSE: a prior `binop(op, lhs, rhs)`
+    /// with the same operands returns the same ValueId. Inputs are
+    /// already SSA values whose definitions dominate this site, so
+    /// the cached result is bit-identical (including IEEE-754 NaN
+    /// payloads: same inputs to same FP op produce the same NaN).
     pub(crate) fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
-        self.push(Inst::Binop { op, lhs, rhs })
+        let key = PureKey::Binop { op, lhs, rhs };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Binop { op, lhs, rhs });
+        self.pure_cache.push(PureCacheEntry { key, value: id });
+        id
     }
 
     /// If `v` names an `Inst::Imm` in the current function, return
@@ -437,7 +449,13 @@ impl SsaBuilder {
         if zero_collapses {
             return self.imm(0);
         }
-        self.push(Inst::BinopI { op, lhs, rhs_imm })
+        let key = PureKey::BinopI { op, lhs, rhs_imm };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::BinopI { op, lhs, rhs_imm });
+        self.pure_cache.push(PureCacheEntry { key, value: id });
+        id
     }
 
     /// `Inst::Fneg`.
@@ -973,6 +991,36 @@ mod tests {
         let v_b = b.imm(8);
         assert_ne!(v_a, v_b);
         b.return_(v_a);
+    }
+
+    /// Repeat `binop_imm(op, lhs, k)` returns the cached ValueId.
+    #[test]
+    fn binop_imm_cse_collapses_repeats() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v_x = b.load_local(2, LoadKind::I32);
+        let v_a = b.binop_imm(BinOp::Mul, v_x, 4);
+        let v_b = b.binop_imm(BinOp::Mul, v_x, 4);
+        assert_eq!(v_a, v_b);
+        b.return_(v_a);
+    }
+
+    /// Repeat `binop(op, lhs, rhs)` returns the cached ValueId.
+    #[test]
+    fn binop_cse_collapses_repeats() {
+        let mut b = SsaBuilder::new(0, 2, false);
+        let v_x = b.load_local(2, LoadKind::I32);
+        let v_y = b.load_local(3, LoadKind::I32);
+        let v_a = b.binop(BinOp::Add, v_x, v_y);
+        let v_b = b.binop(BinOp::Add, v_x, v_y);
+        assert_eq!(v_a, v_b);
+        b.return_(v_a);
+        let func = b.finish();
+        let add_count = func
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Binop { op: BinOp::Add, .. }))
+            .count();
+        assert_eq!(add_count, 1, "two identical Binop adds collapse to one");
     }
 
     /// Block transitions clear the pure cache: an `imm(v)` in the

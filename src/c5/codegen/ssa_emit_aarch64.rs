@@ -1472,10 +1472,14 @@ fn emit_call_ext(
     // truncation pass before it becomes the c5 accumulator. The
     // libgcc helper `__trunctfdf2` takes binary128 in v0 and
     // returns FP64 in d0; the codegen pre-includes it on
-    // LinuxAarch64. Mirrors the pool path's
-    // `Op::JsrExt` -> bl __trunctfdf2 sequence. macOS / Windows
-    // AArch64 alias `long double` to `double`, so v0 is already
-    // FP64 on those targets.
+    // LinuxAarch64. macOS / Windows AArch64 alias `long double`
+    // to `double`, so v0 is already FP64 on those targets and
+    // the truncation step is skipped.
+    //
+    // The follow-up must be `BL`, not `B`: the patcher only
+    // rewrites imm26, so the placeholder opcode determines
+    // whether LR gets set. With `B`, the trampoline's `ret`
+    // reads the unchanged LR and jumps back to the same site.
     if imp.returns_long_double && target == Target::LinuxAarch64 {
         let trunc_idx = imports
             .imports
@@ -1491,7 +1495,7 @@ fn emit_call_ext(
             import_index: trunc_idx,
             is_tail: false,
         });
-        emit(code, enc_b(0));
+        emit(code, enc_bl(0));
     }
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));

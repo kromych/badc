@@ -901,7 +901,6 @@ fn cross_tu_call_through_secondary_dylib() {
     // a single binding that unit 1 calls). Run the link and
     // assert the merged Program's `Op::JsrExt` operand still
     // names the libutil binding after merging.
-    use crate::c5::op::Op;
     use crate::c5::{Binding, DylibSpec, LinkSymbol, Linkage, SymbolKind};
 
     let mk_binding = |local: &str, real: &str| Binding {
@@ -1029,5 +1028,4 @@ fn cross_tu_call_through_secondary_dylib() {
         }
     }
     assert!(found, "expected to find a CallExt in the merged SSA");
-    let _ = Op::JsrExt;
 }

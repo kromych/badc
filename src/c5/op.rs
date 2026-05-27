@@ -3,12 +3,8 @@
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Op {
-    /// Load Immediate: Loads a constant value into the accumulator.
-    Imm = 0x7f00_0000_0000_0001,
-    /// Jump to Subroutine indirect.
-    Jsri,
     /// Load Integer: Loads an i64 from the address in the accumulator.
-    Li,
+    Li = 0x7f00_0000_0000_0001,
     /// Load Character: Loads a u8 from the address in the accumulator,
     /// zero-extending into the 64-bit accumulator. Used for bare
     /// `char` (which c5 treats as unsigned) and `unsigned char`.
@@ -42,19 +38,6 @@ pub enum Op {
     /// `*(u16*)p` packed-buffer reads. ARM64 `LDRH`, x86_64
     /// `MOVZX r64, m16`.
     Lhu,
-    /// External library call. Followed by one operand: the index
-    /// (into the program's flattened `#pragma binding(...)` table)
-    /// of the binding to call. Args are already on the VM stack
-    /// (in 16-byte slots, as for a regular `Jsri`); the trailing
-    /// `Op::Adj N` after the call gives the runtime / lowering the
-    /// arg count to drop.
-    ///
-    /// Replaces the old per-symbol `Op::Open` / `Op::Prtf` / ... set:
-    /// the lexer no longer carries a fixed table of libc names,
-    /// each header's `#pragma binding` fills the table dynamically,
-    /// and a call site lowers the same way regardless of which
-    /// dylib's symbol is on the other end.
-    JsrExt,
     /// Bitwise OR
     Or,
     /// Bitwise XOR

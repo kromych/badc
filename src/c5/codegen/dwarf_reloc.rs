@@ -241,22 +241,36 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     // primary file is index 1; every other entry the lexer
     // recorded follows. The `<source>` placeholder is the lexer's
     // pre-marker default and gets folded into entry 1.
-    let mut hdr: Vec<u8> = Vec::new();
     // Header byte budget (post-length): version(2) + header_length(4)
     // + minimum_instruction_length(1) + maximum_operations_per_instruction(1)
     // + default_is_stmt(1) + line_base(1) + line_range(1) +
     // opcode_base(1) + standard_opcode_lengths(opcode_base-1) +
     // include_directories(null) + file_names(...) + terminator.
-    hdr.push(1); // minimum_instruction_length
-    hdr.push(1); // maximum_operations_per_instruction
-    hdr.push(1); // default_is_stmt
-    hdr.push(LINE_BASE as u8);
-    hdr.push(LINE_RANGE);
-    hdr.push(OPCODE_BASE);
-    for &n in &[0u8, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1] {
-        hdr.push(n);
-    }
-    hdr.push(0); // include_directories terminator
+    let mut hdr: Vec<u8> = alloc::vec![
+        1, // minimum_instruction_length
+        1, // maximum_operations_per_instruction
+        1, // default_is_stmt
+        LINE_BASE as u8,
+        LINE_RANGE,
+        OPCODE_BASE,
+        // standard_opcode_lengths for DW_LNS_{copy, advance_pc,
+        // advance_line, set_file, set_column, negate_stmt,
+        // set_basic_block, const_add_pc, fixed_advance_pc,
+        // set_prologue_end, set_epilogue_begin, set_isa}.
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0, // include_directories terminator
+    ];
     push_file_entry(&mut hdr, default_file_name(program));
     let mut next_dwarf_idx: u64 = 2;
     let mut dwarf_file_for_lex_idx: Vec<u64> = Vec::with_capacity(program.source_files.len());

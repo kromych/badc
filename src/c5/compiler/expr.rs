@@ -1821,13 +1821,25 @@ impl Compiler {
                 use super::super::ir::BinOp as B;
                 let bop = match binop {
                     x if x == Token::AddOp as i64 => {
-                        if lhs_is_fp { B::Fadd } else { B::Add }
+                        if lhs_is_fp {
+                            B::Fadd
+                        } else {
+                            B::Add
+                        }
                     }
                     x if x == Token::SubOp as i64 => {
-                        if lhs_is_fp { B::Fsub } else { B::Sub }
+                        if lhs_is_fp {
+                            B::Fsub
+                        } else {
+                            B::Sub
+                        }
                     }
                     x if x == Token::MulOp as i64 => {
-                        if lhs_is_fp { B::Fmul } else { B::Mul }
+                        if lhs_is_fp {
+                            B::Fmul
+                        } else {
+                            B::Mul
+                        }
                     }
                     x if x == Token::DivOp as i64 => {
                         if lhs_is_fp {
@@ -1839,14 +1851,22 @@ impl Compiler {
                         }
                     }
                     x if x == Token::ModOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) { B::Modu } else { B::Mod }
+                        if is_unsigned_ty(lhs_ty) {
+                            B::Modu
+                        } else {
+                            B::Mod
+                        }
                     }
                     x if x == Token::AndOp as i64 => B::And,
                     x if x == Token::OrOp as i64 => B::Or,
                     x if x == Token::XorOp as i64 => B::Xor,
                     x if x == Token::ShlOp as i64 => B::Shl,
                     x if x == Token::ShrOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) { B::Shru } else { B::Shr }
+                        if is_unsigned_ty(lhs_ty) {
+                            B::Shru
+                        } else {
+                            B::Shr
+                        }
                     }
                     _ => {
                         return Err(self.compile_err("unknown compound-assign opcode"));

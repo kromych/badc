@@ -1130,7 +1130,7 @@ fn build_badc_note(imports: &super::ResolvedImports) -> Vec<u8> {
     if !imports.imports.is_empty() {
         let mut bm_desc: Vec<u8> = Vec::new();
         for imp in &imports.imports {
-            let idx = imp.dylib_index.max(0) as u32;
+            let idx = imp.dylib_index as u32;
             bm_desc.extend_from_slice(&idx.to_le_bytes());
             bm_desc.extend_from_slice(imp.real_symbol.as_bytes());
             bm_desc.push(0);

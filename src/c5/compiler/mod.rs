@@ -1260,10 +1260,15 @@ impl Compiler {
             dylibs: self.dylibs,
             dllmain_pc,
             source_files: self.source_files,
-            // The compiler doesn't see the input path -- the CLI
-            // shim sets this on the returned `Program` before
-            // calling `emit_native_*`.
-            source_path: String::new(),
+            // `source_label` carries the path the CLI passed at
+            // `with_source_label`; mirror it onto the returned
+            // `Program` so DWARF emitters that consume the path
+            // (DW_AT_name on the CU DIE, line-program file 0)
+            // don't surface empty fields when the caller forgets
+            // to set it explicitly. The LinkUnit + emit_native
+            // paths still overwrite the field downstream when
+            // they have a more specific value.
+            source_path: self.source_label.clone(),
             variables: self.variables,
             // Struct registry, exposed so the DWARF emitter can
             // walk member offsets / bitfield layouts and produce

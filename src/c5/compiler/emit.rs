@@ -1,18 +1,19 @@
 //! Low-level emit primitives plus the small "rewrite the trailing
 //! emit" helpers and the per-symbol shadow / restore pair.
 //!
-//! `emit_op` is a tag-only helper now that the parser emits AST
-//! nodes directly. It updates the trailing-emit state
-//! (`last_imm_was_zero`, `trailing_scalar_load`,
-//! `last_emit_was_indirect_call`, `fn_ptr_chain_depth`) so the
-//! peek detectors (`last_emit_is_zero`, `pop_trailing_scalar_load`,
-//! `rewrite_trailing_load_as_psh`) and the function-pointer
-//! lineage tracker stay accurate. Identifier loads and unary `*`
-//! re-seed `fn_ptr_chain_depth` inside `expr()`.
+//! `mark_emit_scalar_load` is the marker the parser calls at every
+//! scalar load site (Ident-rvalue, unary-`*` deref, array index,
+//! struct field). It updates the trailing-emit peek flags
+//! (`last_imm_was_zero`, `last_emit_was_indirect_call`,
+//! `fn_ptr_chain_depth`) and clears `last_loaded_local`. Identifier
+//! loads and unary `*` re-seed `fn_ptr_chain_depth` after their
+//! own emits.
 //!
-//! The trailing-load rewriters implement the assignment / `&expr`
-//! protocols by reading `trailing_scalar_load` and converting the
-//! trailing rvalue load into a stack push or address producer.
+//! The trailing-load rewriters (`pop_trailing_scalar_load`,
+//! `rewrite_trailing_load_as_psh`) implement the `&expr` /
+//! assignment / increment protocols by inspecting `ast_acc`
+//! through `current_scalar_load_kind` and converting the trailing
+//! rvalue load into a stack push or address producer.
 
 use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
 use super::super::error::C5Error;
@@ -240,10 +241,9 @@ impl Compiler {
     /// (`Expr::Ident` with class `Loc` / `Glo` and a non-array,
     /// non-struct-value type; `Expr::Unary { Deref }`; `Expr::Index`;
     /// `Expr::Member` whose field is non-array, non-bitfield); the
-    /// kind is `load_op_for(ty, target)`. Mirrors what
-    /// `trailing_scalar_load` would carry through `emit_op` at the
-    /// matching parser sites; lets the lvalue-rewrite path skip the
-    /// state-machine tag and consult the AST directly.
+    /// kind is `load_op_for(ty, target)`. The lvalue-rewrite path
+    /// consults this instead of a parser-state tag, so the
+    /// trailing-load detection lives entirely on the AST side.
     pub(super) fn current_scalar_load_kind(&self) -> Option<LoadKind> {
         let id = self.ast_acc?;
         let expr = self.ast.exprs.get(id as usize)?;

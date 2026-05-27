@@ -7,22 +7,10 @@ pub enum Op {
     Lea = 0x7f00_0000_0000_0001,
     /// Load Immediate: Loads a constant value into the accumulator.
     Imm,
-    /// Jump: Unconditional jump to a specific text address.
-    Jmp,
     /// Jump to Subroutine: Pushes return address and jumps.
     Jsr,
     /// Jump to Subroutine indirect.
     Jsri,
-    /// Branch if Zero: Jumps if the accumulator is 0.
-    Bz,
-    /// Branch if Not Zero: Jumps if the accumulator is not 0.
-    Bnz,
-    /// Enter Subroutine: Sets up the stack frame for a new function.
-    Ent,
-    /// Adjust Stack: Cleans up arguments from the stack after a call.
-    Adj,
-    /// Leave Subroutine: Restores previous stack frame and returns.
-    Lev,
     /// Load Integer: Loads an i64 from the address in the accumulator.
     Li,
     /// Load Character: Loads a u8 from the address in the accumulator,
@@ -192,14 +180,6 @@ pub enum Op {
     Fle,
     /// `a = (top >= acc) ? 1 : 0` as i64.
     Fge,
-    /// `a = (i64)(f64::from_bits(acc))` -- truncating float-to-int
-    /// cast. Used by `(int)f` and by promotions before integer ops
-    /// that take a float operand.
-    Fcvtfi,
-    /// `a = ((i64)acc as f64).to_bits()` -- int-to-float cast. Used
-    /// by `(float)i` / `(double)i` and by integer-side operands of
-    /// a mixed FP expression.
-    Fcvtif,
     /// Load Float: reads a 32-bit IEEE-754 single-precision value
     /// from the address in the accumulator, widens it to f64, and
     /// leaves `f64::to_bits()` in `a`. Used for scalar `float`
@@ -249,33 +229,6 @@ pub enum Op {
     /// op as a plain `Op::Imm tls_base + offset` (no real per-
     /// thread isolation; the VM is single-threaded).
     TlsLea,
-    /// Tail-jump to an external library symbol. Followed by one
-    /// operand: the binding-table index. Used as the entire body
-    /// of the per-Sys-symbol address-take trampoline -- the
-    /// trampoline lives at the ent_pc stamped on the synthetic
-    /// Token::Fun's `val`, and the codegen lowers
-    /// `Op::TailExt` to a single `jmp [rip+iat_disp32]`-shape
-    /// instruction (or its aarch64 equivalent). The host's
-    /// argument registers and shadow-space stack args -- already
-    /// prepared by the caller's `Op::Jsri` lowering -- are
-    /// forwarded straight through, so the libc fn sees exactly
-    /// what the caller's `Adj N` declared. There's no `Ent`,
-    /// no c5-stack push/pop, and no `Lev` after this op: the
-    /// libc fn's `ret` returns directly to the caller's
-    /// post-Jsri continuation.
-    ///
-    /// Replaces the multi-op trampoline body
-    /// (`Ent / Lea / Li / Psh / JsrExt / Adj / Lev`) for libc
-    /// symbols whose address gets taken; the old shape forwarded
-    /// only as many args as the binding's prototype declared,
-    /// which broke when a dispatch-table entry cast a libc fn to
-    /// a different-arity function-pointer type at the call site.
-    /// The tail-jump shape is independent of the binding's
-    /// declared arity. Placed at the end of the enum so the
-    /// `OPS[]` lookup table's tail entry matches the enum
-    /// discriminant -- adding new ops elsewhere requires keeping
-    /// the two in lockstep.
-    TailExt,
 
     /// Compiler-builtin intrinsic. Operand: the [`Intrinsic`]
     /// discriminant cast to `i64`. The accumulator carries the
@@ -292,24 +245,6 @@ pub enum Op {
     /// emits this op instead of the regular push/jsr/adj
     /// sequence.
     Intrinsic,
-
-    /// Companion to `Op::Intrinsic(Alloca)` -- initialises the
-    /// per-frame alloca arena's top pointer at function entry.
-    /// Operand: the FP-slot index of the alloca-top slot
-    /// (positive, in 8-byte units). Zero means "this function
-    /// doesn't use alloca" and codegen emits nothing.
-    ///
-    /// The compiler emits an `AllocaInit 0` placeholder right
-    /// after every `Op::Ent`. If the function body later emits
-    /// an `Op::Intrinsic(Alloca)`, the compiler backpatches both
-    /// the Ent's local count (to reserve the arena) and this
-    /// AllocaInit's operand (to point at the bookkeeping slot
-    /// just below the regular locals). The arena sits below the
-    /// slot at slots `[idx+1, idx+ARENA_SLOTS]`; alloca calls
-    /// bump the slot's stored value down per call and return
-    /// the new value. The whole arena is freed implicitly when
-    /// the function's epilogue tears down the frame.
-    AllocaInit,
 }
 
 /// Per-function alloca arena size, in 8-byte slots. Sized to

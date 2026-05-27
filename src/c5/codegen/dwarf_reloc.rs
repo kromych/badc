@@ -20,10 +20,12 @@
 //! carry `DW_AT_frame_base` and emit formal_parameter / variable
 //! children with `DW_AT_location` (DW_OP_fbreg + offset) and
 //! `DW_AT_type` cross-DIE references (`DW_FORM_ref4`) to the type
-//! catalog earlier in the same CU. `.debug_frame` is regenerated
+//! catalog earlier in the same CU. The `long` base type follows
+//! the C99 data model per target: 4 bytes on Windows (LLP64),
+//! 8 bytes on Linux / macOS (LP64). `.debug_frame` is regenerated
 //! by the merged-image writer from `synth_build`'s symbol set
-//! instead of being carried per-`.o`. Struct / union types and
-//! the C99 `long`-on-Windows narrowing land in a follow-up.
+//! instead of being carried per-`.o`. Struct / union types land
+//! in a follow-up.
 
 #![allow(dead_code)]
 
@@ -221,8 +223,7 @@ pub(crate) fn emit(
 ) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let (debug_info, info_relocs) =
-        build_debug_info(source_path, program, build, machine, target);
+    let (debug_info, info_relocs) = build_debug_info(source_path, program, build, machine, target);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,

@@ -733,7 +733,7 @@ fn emit_inst(
             // first alloca call subtracts from the value stored
             // there. Initialise the slot with its own address so
             // alloca(n) lands at `address - n`, the top of the
-            // arena reserved by `Op::Ent`.
+            // arena reserved by the prologue's local-slot count.
             if *slot == 0 {
                 return true;
             }
@@ -969,7 +969,7 @@ fn emit_inst(
     }
 }
 
-/// `Op::TlsLea` lowering. Routes through the per-target TLS
+/// `Inst::TlsAddr` lowering. Routes through the per-target TLS
 /// access shape -- Linux variant 1 (TPIDR_EL0 + tcb + offset),
 /// Windows TEB->TLS slot via `_tls_index` and the per-thread
 /// pointer table at `[x18, #0x58]`, or Apple's TLV descriptor
@@ -1059,10 +1059,10 @@ fn emit_tls_addr(
     }
 }
 
-/// `Op::Intrinsic` lowering. Each variant matches the pool path's
-/// shape in [`super::aarch64::lower_op`] but pulls its operands
-/// from the allocator's `Place`s rather than off the c5 stack /
-/// accumulator.
+/// `Inst::Intrinsic` lowering. Each variant matches the pool
+/// path's shape in [`super::aarch64::lower_op`] but pulls its
+/// operands from the allocator's `Place`s rather than off the c5
+/// stack / accumulator.
 fn emit_intrinsic(
     code: &mut Vec<u8>,
     kind: i64,
@@ -1590,15 +1590,17 @@ fn emit_call(
 ) -> bool {
     if callee_is_variadic {
         // The variadic c5 ABI keeps the c5 stack: every arg is
-        // pushed at a 16-byte stride matching `Op::Psh`. The
-        // callee's prologue (`emit_prologue` with entry_spill=0)
-        // skips host-arg-reg spills and reads its args via
-        // `Op::Lea N` -> `fp + 16*(N-1)`. `va_start` continues the
-        // walk past the last named arg.
+        // pushed at a 16-byte stride matching the accumulator
+        // push. The callee's prologue (`emit_prologue` with
+        // entry_spill=0) skips host-arg-reg spills and reads its
+        // args through the address-of-local path at
+        // `fp + 16*(N-1)`. `va_start` continues the walk past the
+        // last named arg.
         //
         // Push args in cdecl order: args[N-1] first (deepest), so
         // args[0] -- the first declared arg -- lands on top of the
-        // stack and the callee's `Op::Lea 2` reads it.
+        // stack and the callee reads it through its first param
+        // slot.
         for (i, &arg_id) in args.iter().rev().enumerate() {
             let arg_place = alloc
                 .places
@@ -1769,9 +1771,10 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
 }
 
 /// Indirect call through a function-pointer value. Mirrors the
-/// pool path's `Op::Jsri`: marshal args per the host ABI, capture
-/// the target into a callee-overwritable scratch register that
-/// arg marshalling won't clobber, `blr`, recover the return value.
+/// pool path's indirect-call lowering: marshal args per the host
+/// ABI, capture the target into a callee-overwritable scratch
+/// register that arg marshalling won't clobber, `blr`, recover
+/// the return value.
 /// FP args and variadic indirect callees aren't part of the thin
 /// slice; either case returns false.
 fn emit_call_indirect(
@@ -1807,7 +1810,7 @@ fn emit_call_indirect(
     // their args off the 16-byte-stride stack (their prologue
     // skips the host-arg-reg spill); non-variadic callees pull
     // their args from x0..x7 + host stack overflow, ignoring the
-    // c5 stack pushes. Mirroring the pool path's `Op::Jsri`
+    // c5 stack pushes. Mirroring the pool path's indirect-call
     // shape -- push every arg first, then load the prefix into
     // host arg regs, then blr -- handles both at the indirect
     // call site without needing the callee's variadic flag.
@@ -1847,7 +1850,8 @@ fn emit_call_indirect(
     // Load the prefix into host arg regs from the c5-stride
     // stack we just laid down. Non-variadic callees expect this
     // shape; variadic callees ignore the host arg regs but read
-    // the same slots through `Op::Lea`. Stack overflow (args
+    // the same slots through the address-of-local path. Stack
+    // overflow (args
     // past 8) stays on the c5 stack at `[sp + i*16]`, which the
     // callee prologue's overflow restripe loop also reads from.
     let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
@@ -1974,8 +1978,9 @@ fn emit_mcpy(
     true
 }
 
-/// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
-/// byte offset relative to fp. Mirror of the pool path's
+/// Translate a c5-stack slot index (the operand of an
+/// address-of-local emit) into a byte offset relative to fp.
+/// Mirror of the pool path's
 use super::ssa_emit_common::c5_slot_to_fp_offset;
 
 fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
@@ -2246,7 +2251,8 @@ fn emit_store_local(
     // Materialise the value first; the address path below picks a
     // scratch register based on whether the displacement fits the
     // unscaled 9-bit field. c5 spills an FP-typed accumulator into
-    // a local temp via `Op::StLocI` (the bit pattern fits 8 bytes
+    // a local temp through the store-local path (the bit pattern
+    // fits 8 bytes
     // regardless of type), so an FpReg value bridges through
     // `fmov d -> x` into a GPR before the store; otherwise it
     // routes through the normal int materialisation.

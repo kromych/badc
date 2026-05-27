@@ -595,12 +595,13 @@ pub(super) fn emit_function(
                 }
             }
             Terminator::TailExt(binding_idx) => {
-                // c5 emits `Op::TailExt` for the sys-trampoline
-                // bodies: the matching `Op::Jsri` already placed
-                // every arg in the host ABI's argument registers
-                // / shadow-space slots, so we just forward control
-                // through the PLT trampoline and let the libc fn's
-                // `ret` carry us back to the original caller.
+                // The parser emits `Terminator::TailExt` for the
+                // sys-trampoline bodies: the matching indirect
+                // call already placed every arg in the host ABI's
+                // argument registers / shadow-space slots, so the
+                // emit just forwards control through the PLT
+                // trampoline and lets the libc fn's `ret` carry
+                // us back to the original caller.
                 let import_index = match imports.index_of_binding(binding_idx) {
                     Some(i) => i,
                     None => {
@@ -666,7 +667,8 @@ enum LocalBranchKind {
 }
 
 /// Spill the host-ABI argument registers into the c5 cdecl slots
-/// the body references via `Op::Lea N` (`N >= 2`). c5 places the
+/// the body references via address-of-local with slot index
+/// `N >= 2`. c5 places the
 /// first declared parameter at `[rbp + 16]`, the second at
 /// `[rbp + 32]`, etc. AMD64 SysV / Win64 push the return address
 /// before `call`, so the prologue needs to interleave the saved
@@ -799,13 +801,13 @@ fn emit_inst(
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit
-            // nothing. Non-zero: the
-            // bookkeeping slot lives at `[rbp - slot*8]`; the
-            // matching `Op::Intrinsic(Alloca)` reads + writes it
-            // to allocate from a per-frame arena. Initialise the
-            // slot with its own address so `alloca(n)` lands at
-            // `address - n`, the top of the arena `Op::Ent` already
-            // reserved.
+            // nothing. Non-zero: the bookkeeping slot lives at
+            // `[rbp - slot*8]`; the matching `Inst::Intrinsic`
+            // (alloca) reads + writes it to allocate from a
+            // per-frame arena. Initialise the slot with its own
+            // address so `alloca(n)` lands at `address - n`, the
+            // top of the arena reserved by the prologue's
+            // local-slot count.
             if *slot == 0 {
                 return true;
             }
@@ -936,7 +938,7 @@ fn emit_inst(
     }
 }
 
-/// `Op::TlsLea` lowering. Routes through the per-target TLS
+/// `Inst::TlsAddr` lowering. Routes through the per-target TLS
 /// access shape. Linux variant-2 layout: `var = fs:[0] - (tls_total
 /// - offset)`. The Windows path emits a TEB `gs:[0x58]` table
 /// lookup indexed by `_tls_index` plus a final `lea`, and pushes
@@ -1133,11 +1135,11 @@ fn emit_store_local(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // c5 spills an FP-typed accumulator into a local temp via
-    // `Op::StLocI` (the bit pattern fits 8 bytes either way), so
-    // an FpReg value bridges through `movq r, xmm` into a GPR
-    // before the store; otherwise it routes through the normal
-    // int materialisation.
+    // c5 spills an FP-typed accumulator into a local temp through
+    // the store-local path (the bit pattern fits 8 bytes either
+    // way), so an FpReg value bridges through `movq r, xmm` into
+    // a GPR before the store; otherwise it routes through the
+    // normal int materialisation.
     let rv = if let Place::FpReg(xr) = value_place {
         super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(xr));
         SCRATCH_R10
@@ -2111,13 +2113,14 @@ fn emit_call(
 ) -> bool {
     if callee_is_variadic {
         // c5's variadic ABI keeps the c5 stack: each arg is pushed
-        // at a 16-byte stride matching `Op::Psh`. The callee's
-        // prologue (`emit_prologue` with `entry_spill = 0`) skips
-        // the host-arg-reg spill and reads its args through
-        // `Op::Lea N` -> `[rbp + 16*(N-1)]`; `va_start` continues
-        // the walk past the last named arg. Push args in reverse
-        // so args[0] -- the first declared arg -- lands on top of
-        // the stack at `[rbp + 16]`.
+        // at a 16-byte stride matching the accumulator push. The
+        // callee's prologue (`emit_prologue` with
+        // `entry_spill = 0`) skips the host-arg-reg spill and
+        // reads its args through the address-of-local path at
+        // `[rbp + 16*(N-1)]`; `va_start` continues the walk past
+        // the last named arg. Push args in reverse so args[0] --
+        // the first declared arg -- lands on top of the stack at
+        // `[rbp + 16]`.
         for (i, &arg_id) in args.iter().rev().enumerate() {
             let arg_place = alloc
                 .places

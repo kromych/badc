@@ -121,12 +121,12 @@ pub(crate) struct Symbol {
     /// a separate `Ty::Void` band, because a real band collides
     /// with the function-pointer encoding C99 6.7.6.3 uses for
     /// `void (*)(...)` slots inside dispatch tables. Consumed by:
-    ///   * the function-body emit path: prepends `Op::Imm 0`
-    ///     before the trailing synthetic `Op::Lev` so a caller
-    ///     that misclassifies the prototype reads `0` rather
-    ///     than stale accumulator state (C99 6.8.6.4p3).
+    ///   * the function-body emit path: prepends a zero
+    ///     immediate before the trailing synthetic return so a
+    ///     caller that misclassifies the prototype reads `0`
+    ///     rather than stale accumulator state (C99 6.8.6.4p3).
     ///   * the `return` statement: bare `return;` in a void
-    ///     function emits the same `Imm 0` prefix; a `return
+    ///     function emits the same zero prefix; a `return
     ///     <expr>;` is rejected as a constraint violation
     ///     (C99 6.8.6.4p1).
     pub returns_void: bool,
@@ -187,8 +187,8 @@ pub(crate) struct Symbol {
     /// assigned but never used" diagnostic for dead stores.
     pub was_read: bool,
 
-    /// True once a store (`Op::Si` / `Op::Sc` / ...) of this
-    /// symbol's lvalue surface has been emitted, or a declaration
+    /// True once a scalar store of this symbol's lvalue surface
+    /// has been emitted, or a declaration
     /// initializer wrote the storage. Set by the assignment /
     /// compound-assignment / increment paths in the expression
     /// parser and by `allocate_local_with_init` for declarations

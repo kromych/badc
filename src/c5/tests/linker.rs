@@ -360,7 +360,7 @@ fn synthetic_ssa_funcs_round_trip_through_object() {
     // n_params, is_variadic, terminator binding index).
     // Sys-trampolines fire when a libc symbol is address-taken.
     // The synthesised callback below forces one; a plain call
-    // is lowered as a direct `Op::JsrExt` and doesn't go
+    // is lowered as a direct `Inst::CallExt` and doesn't go
     // through a trampoline.
     let a = compile_unit(
         "
@@ -883,15 +883,15 @@ fn cross_tu_call_through_secondary_dylib() {
     // Regression marker for the binding flat-index shift the
     // two-pass merge in `link.rs::merge` exists to prevent.
     //
-    // The parser encodes each `Op::JsrExt` operand as
+    // The parser encodes each `Inst::CallExt`'s `binding_idx` as
     // `sum(prior dylibs' sizes) + within-dylib position`. With
     // two units that share the first dylib (libc) and one of
     // them also references a binding past that prefix (sitting
     // in a separate dylib), a single-pass merge would append
     // unit 2's libc bindings AFTER computing unit 1's remap --
     // silently shifting where the secondary dylib starts and
-    // leaving unit 1's `JsrExt <secondary>` resolving to a
-    // random libc import. The resulting binary SIGSEGV'd on
+    // leaving unit 1's secondary-binding reference resolving to
+    // a random libc import. The resulting binary SIGSEGV'd on
     // Linux ELF / Windows PE and got "lucky" on macOS Mach-O
     // (the wrong-index lookup happened to land on a benign
     // libc import for the specific demo shapes).
@@ -899,8 +899,8 @@ fn cross_tu_call_through_secondary_dylib() {
     // Build two units with custom dylib tables that mimic the
     // header surface (libc has multiple bindings; libutil has
     // a single binding that unit 1 calls). Run the link and
-    // assert the merged Program's `Op::JsrExt` operand still
-    // names the libutil binding after merging.
+    // assert the merged Program's binding index still names the
+    // libutil binding after merging.
     use crate::c5::{Binding, DylibSpec, LinkSymbol, Linkage, SymbolKind};
 
     let mk_binding = |local: &str, real: &str| Binding {

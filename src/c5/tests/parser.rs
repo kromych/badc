@@ -483,10 +483,10 @@ fn float_modulo_rejected() {
 
 #[test]
 fn float_increment_not_yet_implemented() {
-    // `f++` on a float would need to lower to `f = f + 1.0`, but the
-    // current `++/--` lowering hard-codes integer arithmetic via
-    // `Op::Imm 1; Op::Add` patches over the lvalue load. The float
-    // path is still ahead of us.
+    // `f++` on a float would need to lower to `f = f + 1.0`, but
+    // the current `++/--` lowering hard-codes integer arithmetic
+    // (immediate 1 plus add) over the lvalue load. The float path
+    // is still ahead of us.
     expect_compile_error(
         "int main() { float x; x = 1.0; x++; return 0; }",
         "floating-point ++/-- not yet implemented",
@@ -496,10 +496,10 @@ fn float_increment_not_yet_implemented() {
 #[test]
 fn float_int_mixed_addition_auto_promotes() {
     // Mixed int / float operands now auto-promote -- the int side
-    // is lifted to f64 (via `Op::Fcvtif` for the RHS-int case, or
-    // via the spill-recover-Fcvtif sequence using `Op::StLocI` for
-    // the LHS-int case). `(double)i + 1.0` and bare `i + 1.0` both
-    // compile and produce the same result.
+    // is lifted to f64 (via int-to-float cast for the RHS-int
+    // case, or via the spill-recover-cast sequence using a
+    // store-local for the LHS-int case). `(double)i + 1.0` and
+    // bare `i + 1.0` both compile and produce the same result.
     let src = "int main() { int i; double y; i = 3; y = i + 1.5; return (int)y; }";
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     let vm_result = crate::c5::Vm::new(prog).run().unwrap();

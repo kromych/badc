@@ -68,6 +68,8 @@ enum PureKey {
     ImmCode(usize),
     Binop { op: BinOp, lhs: ValueId, rhs: ValueId },
     BinopI { op: BinOp, lhs: ValueId, rhs_imm: i64 },
+    Fneg(ValueId),
+    FpCast { kind: FpCastKind, value: ValueId },
 }
 
 #[derive(Clone, Copy)]
@@ -458,14 +460,28 @@ impl SsaBuilder {
         id
     }
 
-    /// `Inst::Fneg`.
+    /// `Inst::Fneg`. Pure value; same input -> same output bit
+    /// pattern. CSE-eligible.
     pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {
-        self.push(Inst::Fneg(v))
+        let key = PureKey::Fneg(v);
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::Fneg(v));
+        self.pure_cache.push(PureCacheEntry { key, value: id });
+        id
     }
 
-    /// `Inst::FpCast`.
+    /// `Inst::FpCast`. Pure value; same input + same kind ->
+    /// same output. CSE-eligible.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
-        self.push(Inst::FpCast { kind, value })
+        let key = PureKey::FpCast { kind, value };
+        if let Some(cached) = self.lookup_pure(key) {
+            return cached;
+        }
+        let id = self.push(Inst::FpCast { kind, value });
+        self.pure_cache.push(PureCacheEntry { key, value: id });
+        id
     }
 
     /// `Inst::Call` -- direct user-function call. Callees may

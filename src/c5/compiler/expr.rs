@@ -78,14 +78,15 @@ impl Cmp {
         }
     }
 
-    /// Return the (signed, unsigned, FP, name) tuple of `Op`
+    /// Return the (signed, unsigned, FP, name) tuple of `BinOp`
     /// tags + diagnostic spelling for this comparison.
-    fn ops(self) -> (Op, Op, Op, &'static str) {
+    fn ops(self) -> (super::super::ir::BinOp, super::super::ir::BinOp, super::super::ir::BinOp, &'static str) {
+        use super::super::ir::BinOp as B;
         match self {
-            Cmp::Lt => (Op::Lt, Op::Ult, Op::Flt, "<"),
-            Cmp::Gt => (Op::Gt, Op::Ugt, Op::Fgt, ">"),
-            Cmp::Le => (Op::Le, Op::Ule, Op::Fle, "<="),
-            Cmp::Ge => (Op::Ge, Op::Uge, Op::Fge, ">="),
+            Cmp::Lt => (B::Lt, B::Ult, B::Flt, "<"),
+            Cmp::Gt => (B::Gt, B::Ugt, B::Fgt, ">"),
+            Cmp::Le => (B::Le, B::Ule, B::Fle, "<="),
+            Cmp::Ge => (B::Ge, B::Uge, B::Fge, ">="),
         }
     }
 }
@@ -2009,17 +2010,18 @@ impl Compiler {
                 // variant and the `invert` flag handed to
                 // `emit_eq_with_common_width` differ.
                 let invert = self.lex.tk == Token::NeOp;
+                use super::super::ir::BinOp as B;
                 let (fp_op, name) = if invert {
-                    (Op::Fne, "!=")
+                    (B::Fne, "!=")
                 } else {
-                    (Op::Feq, "==")
+                    (B::Feq, "==")
                 };
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
-                    self.emit_op(fp_op);
+                    self.ast_binop(fp_op);
                 } else {
                     self.emit_eq_with_common_width(t, invert);
                 }
@@ -2033,11 +2035,11 @@ impl Compiler {
                 self.expr(Token::ShlOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
-                    self.emit_op(fp_op);
+                    self.ast_binop(fp_op);
                 } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(unsigned_op);
+                    self.ast_binop(unsigned_op);
                 } else {
-                    self.emit_op(signed_op);
+                    self.ast_binop(signed_op);
                 }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {

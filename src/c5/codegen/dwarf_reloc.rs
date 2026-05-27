@@ -498,6 +498,7 @@ fn build_debug_info(
     // DW_FORM_ref4 offset (CU-relative byte offset = body offset
     // + DEBUG_INFO_UNIT_HEADER_SIZE).
     let mut type_offsets: BTreeMap<TypeKey, u32> = BTreeMap::new();
+    let mut array_offsets: BTreeMap<(TypeKey, u32), u32> = BTreeMap::new();
     {
         // Gather distinct leaf bases and aggregates referenced
         // by this unit's variables and struct fields, along
@@ -588,6 +589,54 @@ fn build_debug_info(
                 prev_off = ptr_off;
             }
         }
+        // DW_TAG_array_type DIEs collected from both variable
+        // arrays (`int xs[N]` locals) and struct-field arrays
+        // (`int xs[N]` as a struct member). Element type must be
+        // scalar / pointer-to-scalar -- arrays of aggregates fall
+        // back to the decay-to-element shape because the aggregate
+        // DIE we'd reference hasn't been emitted yet at this
+        // point. C99 6.7.5.3p7 already decays parameter arrays to
+        // pointers, so only non-parameter locals contribute from
+        // the variable side.
+        {
+            let mut pending: BTreeMap<(TypeKey, u32), ()> = BTreeMap::new();
+            for v in &program.variables {
+                if v.array_size == 0 || v.is_parameter {
+                    continue;
+                }
+                let Some(key) = decompose_pointer_chain(v.type_tag) else {
+                    continue;
+                };
+                if matches!(key, TypeKey::Scalar { .. }) && type_offsets.contains_key(&key) {
+                    pending.insert((key, v.array_size), ());
+                }
+            }
+            for sd in &program.structs {
+                for f in &sd.fields {
+                    if f.array_size <= 0 {
+                        continue;
+                    }
+                    let Some(key) = decompose_pointer_chain(f.ty) else {
+                        continue;
+                    };
+                    if matches!(key, TypeKey::Scalar { .. }) && type_offsets.contains_key(&key) {
+                        pending.insert((key, f.array_size as u32), ());
+                    }
+                }
+            }
+            for (key, count) in pending.keys() {
+                let elem_off = *type_offsets.get(key).expect("element type present");
+                let arr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+                array_offsets.insert((*key, *count), arr_off);
+                write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
+                body.extend_from_slice(&elem_off.to_le_bytes());
+                // Subrange child: upper_bound = count - 1.
+                write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
+                write_uleb128(&mut body, (*count as u64).saturating_sub(1));
+                // Children-list terminator for the array_type DIE.
+                body.push(0);
+            }
+        }
         // Aggregate (struct / union) DIEs. Each carries
         // DW_TAG_member children referring back into the scalar
         // catalog above plus any earlier aggregate DIE the
@@ -612,8 +661,22 @@ fn build_debug_info(
                 let Some(field_key) = decompose_pointer_chain(f.ty) else {
                     continue;
                 };
-                let Some(&field_type_off) = type_offsets.get(&field_key) else {
+                let Some(&elem_off) = type_offsets.get(&field_key) else {
                     continue;
+                };
+                // True field array: ref the array_type DIE emitted
+                // above if one was collected for this (element,
+                // count) pair. Falls back to the element-type DIE
+                // for arrays-of-aggregate (the array DIE block
+                // skips those because the aggregate isn't emitted
+                // yet).
+                let field_type_off = if f.array_size > 0 && f.bit_width == 0 {
+                    array_offsets
+                        .get(&(field_key, f.array_size as u32))
+                        .copied()
+                        .unwrap_or(elem_off)
+                } else {
+                    elem_off
                 };
                 if f.bit_width > 0 {
                     // DWARF 4 5.6.6 bitfield: DW_AT_data_bit_offset
@@ -648,39 +711,6 @@ fn build_debug_info(
                 body.extend_from_slice(&prev_off.to_le_bytes());
                 prev_off = ptr_off;
             }
-        }
-    }
-
-    // DW_TAG_array_type DIEs for true local arrays. C99 6.7.5.3p7
-    // decays parameter arrays to pointers, so only non-parameter
-    // locals with `array_size > 0` contribute. Each unique
-    // (element_type, count) pair emits one array_type DIE with a
-    // subrange_type child carrying DW_AT_upper_bound = count - 1.
-    let mut array_offsets: BTreeMap<(TypeKey, u32), u32> = BTreeMap::new();
-    {
-        let mut pending: BTreeMap<(TypeKey, u32), ()> = BTreeMap::new();
-        for v in &program.variables {
-            if v.array_size == 0 || v.is_parameter {
-                continue;
-            }
-            let Some(key) = decompose_pointer_chain(v.type_tag) else {
-                continue;
-            };
-            if type_offsets.contains_key(&key) {
-                pending.insert((key, v.array_size), ());
-            }
-        }
-        for (key, count) in pending.keys() {
-            let elem_off = *type_offsets.get(key).expect("element type present");
-            let arr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
-            array_offsets.insert((*key, *count), arr_off);
-            write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
-            body.extend_from_slice(&elem_off.to_le_bytes());
-            // Subrange child: upper_bound = count - 1.
-            write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
-            write_uleb128(&mut body, (*count as u64).saturating_sub(1));
-            // Children-list terminator for the array_type DIE.
-            body.push(0);
         }
     }
 

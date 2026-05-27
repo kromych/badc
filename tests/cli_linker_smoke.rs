@@ -1242,6 +1242,79 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Struct fields declared as fixed-size arrays (e.g.
+/// `struct S { int xs[8]; }`) need to reference a
+/// DW_TAG_array_type DIE rather than decaying to the element
+/// type. Without it `(gdb) ptype struct S` shows `int xs;`
+/// instead of `int xs[8]`.
+#[test]
+fn multi_tu_link_emits_array_type_for_struct_field_arrays() {
+    let dir = tempdir("multi-tu-struct-array");
+    write_source(
+        &dir,
+        "helper.c",
+        "struct Buf { int xs[8]; };\n\
+         int helper(struct Buf *b) { return b->xs[0]; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "struct Buf { int xs[8]; };\n\
+         extern int helper(struct Buf *);\n\
+         int main(void) { struct Buf b; b.xs[0] = 9; return helper(&b); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    // The DW_TAG_array_type must exist and the `xs` member must
+    // sit downstream of an array DIE (proxied by the presence of
+    // both tags together).
+    assert!(
+        out_text.contains("DW_TAG_array_type"),
+        "expected DW_TAG_array_type for struct field `int xs[8]`:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("\"xs\""),
+        "expected member DW_AT_name `xs`:\n{out_text}",
+    );
+}
+
 /// Single-source compile through the amalg dwarf.rs path emits
 /// DW_TAG_array_type for true local arrays. Mirrors the multi-TU
 /// coverage in `multi_tu_link_emits_array_type_for_local_arrays`.

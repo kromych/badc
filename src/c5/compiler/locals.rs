@@ -29,9 +29,9 @@
 use alloc::format;
 
 use super::super::error::C5Error;
-use super::super::token::{Token, Ty};
+use super::super::token::Token;
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -779,21 +779,12 @@ impl Compiler {
             // FP storage is in struct fields (handled elsewhere),
             // so the integer-store ops match the local slot
             // width for every type we hit.
-            let unsigned = (ty & UNSIGNED_BIT) != 0;
-            let _ = unsigned; // bit kept for future narrowing-store dispatch
-            // Float / double element: the Si store widens to the
-            // full 8-byte slot and the FP bits survive intact
-            // because c5 holds doubles in 64-bit accumulator
-            // registers. A float (4-byte) element would still
-            // need an explicit cvt to single-precision; today no
-            // smoke target hits that shape.
-            let is_fp = (ty & !UNSIGNED_BIT) == Ty::Float as i64
-                || (ty & !UNSIGNED_BIT) == Ty::Double as i64;
-            if is_fp {
-                self.ast_assign();
-            } else {
-                self.ast_assign();
-            }
+            // The AST shape is the same regardless of element
+            // width or FP-vs-int -- `ast_assign` builds `Expr::Assign`
+            // on top of the lvalue + rvalue the parser already
+            // staged on the vstack. Walker downstream picks the
+            // matching store width from `field.ty`.
+            self.ast_assign();
             if let Some(value) = elem_ast {
                 self.pending_local_runtime_elements
                     .push(super::super::ast::RuntimeInitElement {

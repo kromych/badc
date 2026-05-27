@@ -112,8 +112,9 @@ impl Compiler {
     ///   * scalar `long long`        -> 8
     ///   * scalar `float`            -> 4 (IEEE 754 single-precision; the
     ///     accumulator widens to f64 across the `ScalarLoadKind::Lf` load and
-    ///     narrows back across `Op::Sf`, so c5-internal arithmetic
-    ///     keeps using the existing f64 op set without re-tagging)
+    ///     narrows back across the 4-byte float store, so c5-internal
+    ///     arithmetic keeps using the existing f64 op set without
+    ///     re-tagging)
     ///   * scalar `double`           -> 8
     ///   * struct values             -> recorded in the struct table
     pub(super) fn size_of_type(&self, ty: i64) -> usize {

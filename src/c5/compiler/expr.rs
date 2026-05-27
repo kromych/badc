@@ -164,9 +164,9 @@ impl Compiler {
             // C99 6.4.4.2: floating constant. The lexer parsed
             // `1.5` etc. into f64 and stored `f64::to_bits()` cast
             // to i64 in `ival`. The byte pattern flows through
-            // Op::Imm unmodified; the codegen reads it back via
-            // `f64::from_bits` when the surrounding `self.ty`
-            // marks the value as floating.
+            // the integer-literal emit unmodified; the codegen
+            // reads it back via `f64::from_bits` when the
+            // surrounding `self.ty` marks the value as floating.
             let bits = self.lex.ival as u64;
             self.emit_imm(self.lex.ival);
             self.ty = Ty::Double as i64;
@@ -247,7 +247,7 @@ impl Compiler {
                 // `#pragma intrinsic("name")`. Each intrinsic has
                 // its own fixed arity (alloca / __c5_aarch64_setjmp
                 // take one; __c5_aarch64_longjmp takes two) and the
-                // call site lowering produces `Op::Intrinsic <id>`
+                // call site lowering produces an `Inst::Intrinsic`
                 // with the operand layout each lowering expects.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
@@ -408,21 +408,20 @@ impl Compiler {
                     let mut nargs = 0;
                     // Snapshot the AST parser-side vstack depth so
                     // the call's per-arg emit sequence (per-arg
-                    // `Op::Lea + Op::Psh` temp setup, the right-to-
-                    // left `Op::Lea + ScalarLoadKind::Li + Op::Psh` re-push,
-                    // the optional struct-return out-pointer push)
-                    // can leak transient pushes without polluting
-                    // the outer expression's lvalue stack. The
-                    // matching pops on the AST side route through
-                    // `ast_apply_assign` for the per-arg `*temp =
-                    // arg` shape (the only Op::Si in this region),
-                    // which consumes one vstack slot per Op::Si.
-                    // The right-to-left re-push and the out-pointer
-                    // push are pure leaks -- truncate the vstack
-                    // back to this depth right before
-                    // `ast_emit_call` so the outer scalar
-                    // assign's `ast_apply_assign` sees the lvalue
-                    // it pushed.
+                    // address-of-temp setup, the right-to-left
+                    // re-push, the optional struct-return
+                    // out-pointer push) can leak transient pushes
+                    // without polluting the outer expression's
+                    // lvalue stack. The matching pops on the AST
+                    // side route through `ast_apply_assign` for
+                    // the per-arg `*temp = arg` shape (the only
+                    // store in this region), which consumes one
+                    // vstack slot per store. The right-to-left
+                    // re-push and the out-pointer push are pure
+                    // leaks -- truncate the vstack back to this
+                    // depth right before `ast_emit_call` so the
+                    // outer scalar assign's `ast_apply_assign`
+                    // sees the lvalue it pushed.
                     let saved_ast_vstack_depth = self.ast_vstack.len();
                     // For struct returns, allocate a result temp now
                     // so its address can be pushed before the
@@ -495,13 +494,13 @@ impl Compiler {
                             // arguments undergo the same assignment
                             // conversion as the `= expr` rule. If the
                             // prototype expects `double` and the
-                            // actual is an integer, lift via
-                            // `Op::Fcvtif` so the IEEE-754 bit pattern
-                            // reaches the FP-arg register the codegen
-                            // routes through (xmm_N / d_N). Without
-                            // this, the integer bit pattern lands in
-                            // the GPR-arg register and libm reads
-                            // garbage out of the FP register.
+                            // actual is an integer, lift through
+                            // the int-to-float cast so the IEEE-754
+                            // bit pattern reaches the FP-arg register
+                            // the codegen routes through (xmm_N / d_N).
+                            // Without this, the integer bit pattern
+                            // lands in the GPR-arg register and libm
+                            // reads garbage out of the FP register.
                             self.convert_assign_rhs(want);
                         } else if !expected_params.is_empty() && !is_variadic {
                             self.warn_at(
@@ -720,11 +719,10 @@ impl Compiler {
                 // becomes a user-visible pointer, so it gets the CODE_BASE
                 // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
-                // Op::Imm placeholder; the walker's `imm_code_extern`
-                // / `imm_code` emit resolves the function-pointer
-                // literal on the SSA side, so the operand isn't
-                // consulted by the codegen. emit_imm keeps the
-                // `last_imm_was_zero` peek flag honest.
+                // The integer-literal placeholder runs only to keep the
+                // trailing-emit peek flags honest; the walker's
+                // `imm_code_extern` / `imm_code` emit resolves the
+                // function-pointer literal on the SSA side.
                 self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
@@ -741,7 +739,7 @@ impl Compiler {
                 // is no compile-time GOT/IAT address to fold in,
                 // so the value points at a per-Sys trampoline (a
                 // tiny synthetic c5 function that re-dispatches
-                // through `Op::JsrExt`). The walker emits
+                // through `Inst::CallExt`). The walker emits
                 // `Inst::ImmCode` keyed on the trampoline's live
                 // `Symbol::val`, which
                 // [`Self::emit_sys_trampolines`] sets to the
@@ -750,11 +748,10 @@ impl Compiler {
                 // (aarch64) or RIP-relative LEA (x86_64)
                 // pointing at the trampoline.
                 let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
-                // Op::Imm placeholder; the walker reads the
-                // trampoline's live `Symbol::val` through `imm_code`
-                // post-`emit_sys_trampolines` and emits the
-                // matching `Inst::ImmCode`. The operand isn't
-                // consulted by the codegen.
+                // Integer-literal placeholder; the walker reads
+                // the trampoline's live `Symbol::val` through
+                // `imm_code` post-`emit_sys_trampolines` and emits
+                // the matching `Inst::ImmCode`.
                 self.emit_imm(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
                 // Dual-emit: the trampoline symbol is Token::Fun
@@ -773,11 +770,12 @@ impl Compiler {
                 } else if self.symbols[id_idx].class == Token::Glo as i64
                     && self.symbols[id_idx].is_thread_local
                 {
-                    // `_Thread_local` global: emit Op::TlsLea so
-                    // the codegen lowers via the per-target TLS
-                    // sequence (TPIDR_EL0 + offset on aarch64,
-                    // fs:0 + offset on x86_64). The operand is the
-                    // byte offset within the program's TLS block.
+                    // `_Thread_local` global: emit through the
+                    // TLS-address path so the codegen lowers via
+                    // the per-target TLS sequence (TPIDR_EL0 +
+                    // offset on aarch64, fs:0 + offset on x86_64).
+                    // The operand is the byte offset within the
+                    // program's TLS block.
                     self.mark_emit_other();
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
@@ -1382,10 +1380,10 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::SubOp {
             self.next()?;
-            // Constant-fold `-<int-literal>` into `Imm -N`. Float
-            // literals don't qualify -- Op::Fneg must apply to the
-            // parsed f64 bit pattern, not a sign flip on the
-            // integer-shaped operand.
+            // Constant-fold `-<int-literal>` into the negated
+            // integer literal. Float literals don't qualify --
+            // floating negation must apply to the parsed f64 bit
+            // pattern, not a sign flip on the integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;
                 let negated = val.wrapping_neg();
@@ -1539,17 +1537,18 @@ impl Compiler {
                 // `fp` is a function-pointer rvalue) is a no-op:
                 // the dereferenced "function lvalue" auto-decays
                 // back to a function pointer for any subsequent use.
-                // The unary `*` handler emits an `ScalarLoadKind::Li` regardless
-                // -- it can't tell at parse time that the operand
-                // will be called rather than loaded -- so the chain
-                // ends one Li too deep, with `a` holding the first
-                // 8 bytes of the callee's code instead of its
-                // address. We undo that here: if `self.ty` says we
-                // ended on a non-pointer (= the last `*` removed
-                // the final pointer level) and the most recent emit
-                // was an `ScalarLoadKind::Li`, pop the Li and restore one
-                // pointer level so the spill below sees the actual
-                // function pointer.
+                // The unary `*` handler emits a pointer-sized load
+                // regardless -- it can't tell at parse time that
+                // the operand will be called rather than loaded --
+                // so the chain ends one load too deep, with `a`
+                // holding the first 8 bytes of the callee's code
+                // instead of its address. Undo that here: if
+                // `self.ty` says we ended on a non-pointer (= the
+                // last `*` removed the final pointer level) and the
+                // most recent emit was a pointer-sized load, drop
+                // the trailing-load tag and restore one pointer
+                // level so the spill below sees the actual function
+                // pointer.
                 if !is_pointer_ty(self.ty) {
                     let trailing = self.pending.trailing_scalar_load;
                     let is_load = matches!(
@@ -1565,11 +1564,12 @@ impl Compiler {
                     }
                 }
                 self.next()?;
-                // Spill the FP into a fresh local temp via Op::StLocI.
-                // The plain `Lea N; Si` shape can't express this
-                // without losing `a` (Lea clobbers `a`), so the c5
-                // dialect carries a dedicated store-local op for the
-                // case where `a` already holds the value.
+                // Spill the FP into a fresh local temp through the
+                // store-local path. The plain "address-of-local
+                // then store" shape can't express this without
+                // losing the accumulator, so the dialect carries a
+                // dedicated store-local op for the case where the
+                // accumulator already holds the value.
                 self.loc_offs += 1;
                 if self.loc_offs > self.max_loc_offs {
                     self.max_loc_offs = self.loc_offs;
@@ -1646,21 +1646,21 @@ impl Compiler {
                 if lhs_is_struct_value {
                     // Struct-to-struct copy. The LHS already left
                     // its address in `a`; push it so the RHS can
-                    // produce the source address into `a`. Then
-                    // emit Op::Mcpy with the byte size; the runtime
-                    // (VM and both codegens) takes top-of-stack as
-                    // dst, accumulator as src, and copies `size`
-                    // bytes. Returns dst in `a` to mirror libc
-                    // memcpy.
+                    // produce the source address into `a`. The
+                    // walker emits `Inst::Mcpy` with the byte size;
+                    // the runtime (VM and both codegens) takes
+                    // top-of-stack as dst, accumulator as src, and
+                    // copies `size` bytes. Returns dst in `a` to
+                    // mirror libc memcpy.
                     //
-                    // This branch must run *before* the scalar Li/Lc
-                    // rewrite below: for `*pItem = struct_rvalue`
-                    // where pItem is a struct pointer, the deref
-                    // elides the trailing struct-value load but
-                    // leaves the pointer-load Li in place, so
-                    // `last == ScalarLoadKind::Li` would otherwise misroute us
-                    // into the scalar path and rewrite the wrong Li
-                    // into a Psh.
+                    // This branch must run *before* the scalar
+                    // load-rewrite below: for `*pItem =
+                    // struct_rvalue` where pItem is a struct
+                    // pointer, the deref elides the trailing
+                    // struct-value load but leaves the pointer-load
+                    // tag in place, so a `Some(ScalarLoadKind::Li)`
+                    // would otherwise misroute us into the scalar
+                    // path and rewrite the wrong tag.
                     let struct_lhs_ast = self.ast_acc.take();
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
@@ -1741,12 +1741,12 @@ impl Compiler {
                 // Compound assignment `a OP= b`. The lexer stuffed
                 // the underlying binop's Token into `lex.ival`. The
                 // shape mirrors plain `=`: rewrite the trailing
-                // load (ScalarLoadKind::Lc / ScalarLoadKind::Li) into Op::Psh so the
-                // address sits on the stack, then load it again
-                // via ScalarLoadKind::Li (or ScalarLoadKind::Lc), push, evaluate the RHS,
-                // emit the binop, and store. Only scalar / pointer
-                // lvalues qualify -- structs and bitfields don't
-                // accept compound assignment in c5.
+                // scalar load into a stack push so the address
+                // sits on the stack, then load it again, push,
+                // evaluate the RHS, emit the binop, and store.
+                // Only scalar / pointer lvalues qualify -- structs
+                // and bitfields don't accept compound assignment
+                // in c5.
                 let binop = self.lex.ival;
                 let compound_lhs_ast = self.ast_acc;
                 self.next()?;
@@ -2109,15 +2109,13 @@ impl Compiler {
                     let lhs_ty = t;
                     if self.is_ptr_scaling_nontrivial(rhs_ty) {
                         // Snapshot the AST operands before the
-                        // emit sequence: lhs (int) sits on the
-                        // parser-side vstack, rhs (ptr) is in
-                        // `ast_acc`. The `Op::StLocI` / `Op::Imm` /
-                        // `Op::Or` / `Op::Mul` / `Op::Psh` /
-                        // `Op::Lea` / `ScalarLoadKind::Li` sequence routes
-                        // through `ast_track_emit_op` and pops
-                        // the AST vstack on each `Op::Or` /
-                        // `ScalarLoadKind::Li`. Drain the outer vstack, push
-                        // a sentinel for the inner ops to consume,
+                        // pointer-scaling sequence: lhs (int) sits
+                        // on the parser-side vstack, rhs (ptr) is
+                        // in `ast_acc`. The store-local / multiply /
+                        // address-of-local / load-int emit chain
+                        // consumes one vstack slot per intermediate
+                        // store. Drain the outer vstack, push a
+                        // sentinel for the inner ops to consume,
                         // run the sequence, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
@@ -2279,17 +2277,16 @@ impl Compiler {
                     let common = usual_arith_common_ty(t, self.ty, self.target);
                     if is_unsigned_ty(common) {
                         // The masking sequence routes intermediate
-                        // ops (`Op::StLocI`, `Op::Or`,
-                        // `Op::And + mask`) through
-                        // `ast_track_emit_op`, which would
-                        // corrupt the AST vstack / accumulator.
-                        // Snapshot the AST operands first, save
-                        // the rest of the AST vstack, run the
-                        // emit sequence against a sentinel-padded
-                        // vstack so the inner `Op::Divu`'s
-                        // embedded pop consumes the sentinel
-                        // rather than an outer expression's
-                        // lvalue, then rebuild the Binary node
+                        // store-local / load-or / mask emits through
+                        // the AST tracker, which would corrupt the
+                        // AST vstack / accumulator. Snapshot the AST
+                        // operands first, save the rest of the AST
+                        // vstack, run the emit sequence against a
+                        // sentinel-padded vstack so the inner
+                        // unsigned-divide's embedded pop consumes
+                        // the sentinel rather than an outer
+                        // expression's lvalue, then rebuild the
+                        // Binary node
                         // manually. The walker re-derives the
                         // masking from the operand type.
                         let lhs_ast = self.ast_vstack.pop().flatten();
@@ -2613,9 +2610,9 @@ impl Compiler {
                             // `emit_bitfield_access` (self.expr).
                             // Its top-level AST id was stashed in
                             // `pending.bf_assign_rhs` ahead of the
-                            // storage Op::Si (whose
-                            // `ast_apply_assign` would otherwise
-                            // have cleared `ast_acc`).
+                            // storage emit (whose `ast_apply_assign`
+                            // would otherwise have cleared
+                            // `ast_acc`).
                             if let Some(rhs) = self.pending.bf_assign_rhs.take() {
                                 let res_ty = self.ty;
                                 self.ast_emit_bitfield_assign(

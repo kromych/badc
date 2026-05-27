@@ -536,8 +536,8 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
 ///
 /// The signed / unsigned split for `char` / `short` / `int`
 /// picks between the sign- and zero-extending load ops; the
-/// matching store widths (`Op::Sc` / `Op::Sh` / `Op::Sw` /
-/// `Op::Si`) don't care about signedness.
+/// matching store widths (1 / 2 / 4 / 8 bytes) don't care
+/// about signedness.
 pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> ScalarLoadKind {
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);

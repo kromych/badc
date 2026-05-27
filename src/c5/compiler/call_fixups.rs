@@ -15,7 +15,7 @@
 //!     "address of a libc function" idiom: there's no compile-time
 //!     libc address to fold in, so c5 synthesizes a tiny function
 //!     whose body re-pushes its declared params and re-dispatches
-//!     through `Op::JsrExt`. The synthetic symbol is allocated
+//!     through an external call. The synthetic symbol is allocated
 //!     lazily on first reference; the bodies are emitted in one
 //!     batch after every real function has landed so they never
 //!     split a caller mid-emission.
@@ -224,15 +224,14 @@ impl Compiler {
             // * Bindings with *no* declared params (just
             //   `int Name();`) -- e.g. kernel32 entries that
             //   real-world dispatch tables cast back to the
-            //   right arity at the call site -- get the
-            //   single-op `Op::TailExt` body. The trampoline is
-            //   `jmp [rip+iat]` and the caller's `Op::Jsri`
-            //   lowering owns the host-ABI arg setup, return-
-            //   register copy, and stack adjustment. Sub-word
-            //   extension is left to the caller (the call site
-            //   casts the result to the right type explicitly),
-            //   which matches what real-world dispatch-table
-            //   consumers already do.
+            //   right arity at the call site -- get a tail-call
+            //   body. The trampoline is `jmp [rip+iat]` and the
+            //   caller's indirect-call lowering owns the host-ABI
+            //   arg setup, return-register copy, and stack
+            //   adjustment. Sub-word extension is left to the
+            //   caller (the call site casts the result to the
+            //   right type explicitly), which matches what
+            //   real-world dispatch-table consumers already do.
             if fixed_nargs == 0 && !is_variadic {
                 // The SSA-tier trampoline body is fully built by
                 // SsaBuilder above; bump the parser PC counter by

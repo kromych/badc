@@ -731,8 +731,9 @@ impl Compiler {
                     // function's return type as if by assignment.
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function
-                    // lifts via `Op::Fcvtif` rather than landing
-                    // the integer's bit pattern in the FP slot.
+                    // lifts through the int-to-float cast rather
+                    // than landing the integer's bit pattern in
+                    // the FP slot.
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
                 }

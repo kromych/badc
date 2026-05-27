@@ -632,8 +632,9 @@ impl Compiler {
                     // freshly allocated local and re-point the
                     // param's symbol so subsequent accesses inside
                     // the function go to the local copy. The
-                    // sequence reuses Op::Mcpy so neither codegen
-                    // needs new shapes for parameter passing.
+                    // sequence reuses the struct-copy intrinsic so
+                    // neither codegen needs new shapes for
+                    // parameter passing.
                     for &idx in params.indices.iter() {
                         let pty = self.symbols[idx].type_;
                         if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {
@@ -673,9 +674,10 @@ impl Compiler {
                     // of the mantissa -- garbage, not the f32 of the
                     // passed value. The fix: at function entry,
                     // narrow each `float`-typed param through the
-                    // `Op::Sf` store path (`Li` reads the caller's
-                    // 8-byte f64 bits, `Sf` narrows to f32 and
-                    // writes 4 bytes into a fresh local slot). The
+                    // 4-byte store path (the 8-byte load reads the
+                    // caller's f64 bits, the 4-byte store narrows
+                    // to f32 and writes 4 bytes into a fresh local
+                    // slot). The
                     // symbol is repointed to that local; every
                     // subsequent body access goes through the
                     // narrow-storage path the rest of the

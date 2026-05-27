@@ -607,7 +607,7 @@ impl Compiler {
                 // can't be folded in at compile time, so we route the
                 // slot through a per-Sys trampoline (a tiny synthetic
                 // c5 function that re-pushes its declared args and
-                // re-dispatches via `Op::JsrExt`). The CodeReloc
+                // re-dispatches via an external call. The CodeReloc
                 // points at the trampoline's synthetic symbol; its
                 // `.val` holds the trampoline's `ent_pc` once
                 // [`Compiler::emit_sys_trampolines`] runs in the

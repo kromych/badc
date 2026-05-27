@@ -200,10 +200,10 @@ impl Compiler {
     }
 
     /// Like [`Self::type_warning`] but with an extra `actual_is_untyped_call`
-    /// flag. When set, the actual rvalue came from an `Op::Jsri`
-    /// indirect call whose return type the dialect can't track --
-    /// silence pointer-vs-int mismatches in either direction since
-    /// the register value is preserved bit-for-bit at the assignment
+    /// flag. When set, the actual rvalue came from an indirect
+    /// call whose return type the dialect can't track -- silence
+    /// pointer-vs-int mismatches in either direction since the
+    /// register value is preserved bit-for-bit at the assignment
     /// store regardless of the tag.
     pub(super) fn type_warning_with_flags(
         declared: i64,
@@ -215,7 +215,7 @@ impl Compiler {
             return None;
         }
         if actual_is_untyped_call {
-            // Indirect call's defaulted return type. `Op::Jsri`
+            // Indirect call's defaulted return type. The call
             // leaves the full 64-bit register value intact, so
             // pointer-vs-int doesn't truncate anything in
             // practice. Quiet either direction.
@@ -284,14 +284,14 @@ impl Compiler {
     /// Reconcile mixed int/float operands for an arithmetic /
     /// comparison op so the matching FP op can run. Two shapes
     /// need a lift:
-    ///   * LHS float, RHS int: RHS is in `a`; apply `Op::Fcvtif`
-    ///     in place to lift it to f64.
+    ///   * LHS float, RHS int: RHS is in `a`; apply the int-to-
+    ///     float cast in place to lift it to f64.
     ///   * LHS int, RHS float: LHS is on the c5 stack and `a`
-    ///     holds the float RHS. Spill RHS to a temp via
-    ///     `Op::StLocI`, recover LHS into `a` with `Imm 0; Or`
-    ///     (Or pops the stack into `a`), lift LHS via Fcvtif,
-    ///     push, then reload RHS into `a`. Net effect mirrors
-    ///     the float-float pattern.
+    ///     holds the float RHS. Spill RHS to a temp through the
+    ///     store-local emit, recover LHS into `a` via `Imm 0;
+    ///     Or` (Or pops the stack into `a`), lift LHS through
+    ///     int-to-float, push, then reload RHS into `a`. Net
+    ///     effect mirrors the float-float pattern.
     ///
     /// Returns `Ok(())` for both-float and both-int cases (no
     /// emit). The caller's `is_floating_scalar(t) ||
@@ -317,13 +317,13 @@ impl Compiler {
         // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.
         // Snapshot the AST operands first: lhs is the int sitting
         // on the parser-side vstack, rhs is the float currently
-        // in `ast_acc`. The intermediate `Op::StLocI` / `Op::Imm`
-        // / `Op::Or` / `Op::Fcvtif` / `Op::Psh` / `Op::Lea` /
-        // `ScalarLoadKind::Li` tags route through `ast_track_emit_op` and
-        // pop / push the AST vstack the outer call must preserve.
-        // Drain the outer vstack into a side buffer, push a
-        // single `None` sentinel for the inner ops to consume,
-        // run the sequence, then restore.
+        // in `ast_acc`. The intermediate store-local / immediate /
+        // Or / int-to-float / push / address-of-local / load
+        // emits route through the AST tracker and pop / push the
+        // AST vstack the outer call must preserve. Drain the outer
+        // vstack into a side buffer, push a single `None` sentinel
+        // for the inner ops to consume, run the sequence, then
+        // restore.
         // Finally rebuild the AST so the walker sees
         // `Expr::Cast { lhs_int_ast, to_ty = rhs_fp }` on the
         // vstack and the rhs float ast back on `ast_acc`.

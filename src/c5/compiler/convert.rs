@@ -28,9 +28,10 @@ use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arit
 impl Compiler {
     /// Apply the C99 6.5.16.1p2 assignment conversion: when the
     /// destination is a floating type and `a` holds an integer-
-    /// typed value, lift via `Op::Fcvtif`; when the destination
-    /// is an integer / pointer and `a` holds a float / double,
-    /// drop via `Op::Fcvtfi`. Same-class assignments leave the
+    /// typed value, lift through the int-to-float cast; when
+    /// the destination is an integer / pointer and `a` holds a
+    /// float / double, drop through the float-to-int cast.
+    /// Same-class assignments leave the
     /// bit pattern alone. Called from every scalar store path
     /// so an `unsigned char` initializer of a `float` local /
     /// global / struct field round-trips through the IEEE-754

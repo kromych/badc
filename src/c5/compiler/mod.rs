@@ -402,12 +402,12 @@ pub(in crate::c5::compiler) struct Pending {
 
     /// AST id of the rhs expression that the bitfield write path
     /// (`emit_bitfield_access`'s Assign branch) just parsed. The
-    /// storage Op::Si the same routine emits afterwards triggers
+    /// storage emit the same routine produces afterwards triggers
     /// `ast_apply_assign`, which clears `ast_acc` -- so the
     /// caller can't observe the rhs from `ast_acc`. Captured
-    /// here before the Op::Si runs and read by the Member
-    /// handler in `expr.rs` to build `Expr::BitfieldAssign`.
-    /// `None` outside the bitfield-assign window.
+    /// here before the store runs and read by the Member handler
+    /// in `expr.rs` to build `Expr::BitfieldAssign`. `None`
+    /// outside the bitfield-assign window.
     pub bf_assign_rhs: Option<crate::c5::ast::ExprId>,
     /// Compound-assignment counterpart of `bf_assign_rhs`. Holds
     /// `(rhs_ast_id, op)` where `op` is the binary operator the
@@ -417,16 +417,18 @@ pub(in crate::c5::compiler) struct Pending {
     pub bf_compound_assign: Option<(crate::c5::ast::ExprId, crate::c5::ir::BinOp)>,
 
     /// True while the trailing emit is an indirect-call shape
-    /// (`Op::Jsri`, optionally followed by `Op::Adj N`). Set at
-    /// the indirect-call site, preserved across the matching Adj
-    /// cleanup, cleared by any non-Adj emit. Read by
+    /// (the indirect-call tag, optionally followed by a
+    /// stack-arg cleanup). Set at the indirect-call site,
+    /// preserved across the matching cleanup, cleared by any
+    /// other emit. Read by
     /// `Self::last_emit_was_indirect_call` to suppress the
     /// type-warning on `T x = fp();` shapes where c5 can't see
     /// the callee's return type.
     pub last_emit_was_indirect_call: bool,
 
-    /// True while the trailing emit is `Op::Imm 0`. Set by
-    /// `emit_imm(0)`, cleared by every other emit. Read by
+    /// True while the trailing emit is a literal-zero integer
+    /// immediate. Set by `emit_imm(0)`, cleared by every other
+    /// emit. Read by
     /// `Self::last_emit_is_zero` to suppress the NULL-idiom
     /// warning on `pointer = 0`.
     pub last_imm_was_zero: bool,
@@ -499,17 +501,18 @@ pub struct Compiler {
     /// (parse_function_args) bumps it temporarily for each in-flight call's
     /// reverse-push temp slots and then restores it.
     loc_offs: i64,
-    /// Per-function high-water mark of `loc_offs` -- patched into `Op::Ent`
-    /// at the end of the function so the prologue reserves enough stack for
-    /// every nested-call temp the function ever needs.
+    /// Per-function high-water mark of `loc_offs` -- the SSA
+    /// builder uses it to size the function's local slot count
+    /// so the prologue reserves enough stack for every nested-call
+    /// temp the function ever needs.
     max_loc_offs: i64,
 
     /// True once the current function has emitted at least one
-    /// `Op::Intrinsic(Alloca)` call. Drives the function-end
-    /// backpatch that grows `Op::Ent`'s local count to include the
-    /// alloca arena and sets the matching `Op::AllocaInit`'s
-    /// operand to the alloca-top slot index. Reset on each new
-    /// function definition.
+    /// alloca intrinsic. Drives the function-end backpatch that
+    /// grows the function's local count to include the alloca
+    /// arena and sets the matching `Inst::AllocaInit`'s operand to
+    /// the alloca-top slot index. Reset on each new function
+    /// definition.
     uses_alloca_in_current_fn: bool,
 
     /// Per-function AST. The arena is reset at every function
@@ -525,10 +528,10 @@ pub struct Compiler {
     pub(super) ast_acc: Option<super::ast::ExprId>,
 
     /// ExprIds matching values on the c5 stack-machine stack --
-    /// the stack push (`Op::Psh`) records the current `ast_acc`
-    /// here, arithmetic / store ops pop the top entry. `Option`
+    /// the stack push records the current `ast_acc` here;
+    /// arithmetic / store ops pop the top entry. `Option`
     /// because some parser sites push address-only producers
-    /// (`Op::Lea <temp>`, `Op::Imm <data_off>` for an address)
+    /// (address-of-local for a temp, data-segment immediate)
     /// that aren't AST-wired yet; pushing `None` keeps the
     /// vstack depth in lockstep with the c5 stack so a later pop
     /// hits the right slot rather than a stale value
@@ -645,8 +648,8 @@ pub struct Compiler {
     /// `#pragma intrinsic("name")` map drained from the
     /// preprocessor. Used at declaration time to stamp
     /// `Symbol::intrinsic` on matching callables so the
-    /// call-site lowering can substitute `Op::Intrinsic <id>`
-    /// for the regular Psh/Jsr/JsrExt + Adj sequence.
+    /// call-site lowering can substitute an `Inst::Intrinsic`
+    /// emit for the regular call + stack-cleanup sequence.
     pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
 
     /// Thread-local data segment. Same shape as `data` but the
@@ -684,7 +687,7 @@ pub struct Compiler {
     /// writers patch the slot to the real code address at write or
     /// load time. The VM reads the slot directly because c5
     /// function pointers carry the small `CODE_BASE + ent_pc` bias
-    /// and `Op::Jsri` recognises that range.
+    /// and the indirect-call lowering recognises that range.
     code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Names from `#pragma export(<name>)` directives, in
     /// declaration order. Validated at the end of
@@ -705,12 +708,12 @@ pub struct Compiler {
 
     /// True while parsing the body of a function whose declared
     /// return type was bare `void`. Drives two emit decisions:
-    ///   * the trailing synthetic `Op::Lev` prepends `Op::Imm 0`
-    ///     so a caller that misclassifies the prototype reads
-    ///     `0` rather than stale accumulator bits (C99 6.8.6.4p3
-    ///     -- a `void` callee produces no value).
-    ///   * a `return;` statement emits the same `Imm 0` prefix
-    ///     before `Op::Lev`; a `return <expr>;` is rejected
+    ///   * the synthetic return prepended at function end
+    ///     emits a zero so a caller that misclassifies the
+    ///     prototype reads `0` rather than stale accumulator bits
+    ///     (C99 6.8.6.4p3 -- a `void` callee produces no value).
+    ///   * a `return;` statement emits the same zero prefix
+    ///     before the return; a `return <expr>;` is rejected
     ///     (C99 6.8.6.4p1 constraint violation).
     /// Set at function-body entry from the function's symbol
     /// (`Symbol::returns_void`), cleared at exit.
@@ -800,20 +803,15 @@ pub struct Compiler {
     /// `Symbol::val`.
     code_reloc_sym_idx: Vec<usize>,
 
-    /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
-    /// emitted as a `Token::Glo` address-of -- the data
-    /// reference shape that becomes a cross-TU reference when
-    /// the target global is defined in another translation
-    /// unit. Empty in single-TU compiles; the link-unit
-    /// conversion walks the list to diagnose unsupported
-    /// shapes (cross-TU TLS) before the walker's
-    /// `extern_imm_data_refs` / `extern_tls_refs` channels
-    /// take over resolution.
-    /// Parser-symbol indices for every `Op::Imm` emit whose
-    /// operand carries a global's tentative address. `link_unit`
-    /// walks the list at construction time to flag cross-TU
-    /// references to `_Thread_local` globals (which c5 doesn't
-    /// support yet).
+    /// Parser-symbol indices for every immediate emit whose
+    /// operand carries a global's tentative address. The data
+    /// reference shape becomes a cross-TU reference when the
+    /// target global is defined in another translation unit;
+    /// `link_unit` walks the list at construction time to flag
+    /// cross-TU references to `_Thread_local` globals (which c5
+    /// doesn't support yet) before the walker's
+    /// `extern_imm_data_refs` / `extern_tls_refs` channels take
+    /// over resolution. Empty in single-TU compiles.
     pub(super) glo_imm_refs: alloc::vec::Vec<usize>,
     /// Per-`data_relocs` originating symbol index. Tracks the
     /// `Token::Glo` whose address an initializer like
@@ -830,9 +828,10 @@ pub struct Compiler {
     /// either bare (`fp = lstat;`) or in a static initializer
     /// (a function-pointer dispatch table referencing libc) --
     /// c5 has no compile-time
-    /// libc address to fold in. Instead we synthesize a tiny
-    /// c5 function that re-pushes its parameters and re-dispatches
-    /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
+    /// libc address to fold in. Instead the parser synthesizes a
+    /// tiny c5 function that re-pushes its parameters and
+    /// re-dispatches through an external call. Each entry maps
+    /// `sys_sym_idx` to a
     /// fresh synthetic-symbol idx whose `.val` carries the
     /// trampoline's `ent_pc`; the walker reads that live `val`
     /// through `live_fun_val` when it emits the matching

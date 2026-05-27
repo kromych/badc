@@ -10,8 +10,8 @@
 //!      target is an undefined extern become
 //!      `RelocKind::DataCodeAbs64` relocations -- their
 //!      `target_ent_pc` field would otherwise be left at `0`.
-//!   2. `glo_imm_refs` entries (recorded at every `Op::Imm
-//!      <data_offset>` emit for a `Token::Glo` symbol) whose
+//!   2. `glo_imm_refs` entries (recorded at every
+//!      data-offset immediate emit for a `Token::Glo` symbol) whose
 //!      target is an undefined extern are dropped; the
 //!      walker's `extern_imm_data_refs` (or
 //!      `extern_tls_refs` for TLS globals) carries the

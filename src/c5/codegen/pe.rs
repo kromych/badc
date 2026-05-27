@@ -1882,19 +1882,23 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             image_base: IMAGE_BASE,
             section_alignment: SECTION_ALIGNMENT,
             file_alignment: FILE_ALIGNMENT,
-            // Windows 6.0 (Vista) is the earliest version that
-            // supports the modern PE security characteristics this
-            // image opts into (DYNAMIC_BASE + NX_COMPAT +
-            // HIGH_ENTROPY_VA). The previous 4.0 / 5.2 values
-            // (NT 4.0 + Windows Server 2003) leave the loader in a
-            // legacy code path that refuses to dispatch
-            // HIGH_ENTROPY_VA images on real Windows 10+; wine
-            // ignored the field and ran the binary anyway.
-            major_operating_system_version: 6,
+            // Windows 10 (10.0) -- the earliest version whose
+            // ucrtbase ships with the CRT surface the demos
+            // expect (the demos used to bind to msvcrt, but a
+            // number of recent demos rely on the ucrt-only entry
+            // points like `printf_s` and the C11 atomic shims).
+            // Bumping the PE header's MajorOperatingSystemVersion
+            // + MajorSubsystemVersion to 10.0 keeps the loader on
+            // the modern dispatch path and matches what clang /
+            // link.exe stamp by default. The previous Vista (6.0)
+            // value still produces a runnable image but signals to
+            // the loader an older minimum-OS contract than the
+            // CRT actually requires.
+            major_operating_system_version: 10,
             minor_operating_system_version: 0,
             major_image_version: 0,
             minor_image_version: 0,
-            major_subsystem_version: 6,
+            major_subsystem_version: 10,
             minor_subsystem_version: 0,
             win32_version_value: 0,
             size_of_image: inp.size_of_image,

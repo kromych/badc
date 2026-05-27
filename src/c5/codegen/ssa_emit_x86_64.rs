@@ -2759,13 +2759,32 @@ fn emit_return(
     } else {
         Place::None
     };
-    let return_src = int_reg(return_place);
     let return_is_fp = matches!(return_place, Place::FpReg(_));
-    if let Some(src) = return_src
-        && src.0 != Reg::RCX.0
-    {
-        emit_mov_rr(code, Reg::RCX, src);
-    }
+    // Stage the integer return into rcx before the GPR restore
+    // loop. Three Place shapes carry an int return:
+    //
+    //   * `IntReg(r)`  -- mov rcx, r (skip when r is already rcx).
+    //   * `Spill(slot)` -- mov rcx, [rsp + slot_off]. Without this
+    //     the return value sits in a frame slot and rax keeps the
+    //     last expression result (e.g. a libc call's int return),
+    //     so the caller observes the wrong value.
+    //   * `IntReg` placeholder for void / FP -- no integer to stage.
+    //
+    // `staged_int` records whether an int was parked in rcx so the
+    // post-restore mov rax,rcx fires only when something is there.
+    let staged_int = match return_place {
+        Place::IntReg(r) if r != Reg::RCX.0 => {
+            emit_mov_rr(code, Reg::RCX, Reg(r));
+            true
+        }
+        Place::IntReg(_) => true,
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot);
+            super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+            true
+        }
+        _ => false,
+    };
     if return_is_fp {
         // Materialize the f64 into xmm0 ahead of the restore. The
         // restore loop only writes GPRs, so xmm0 survives it.
@@ -2783,7 +2802,7 @@ fn emit_return(
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
     }
-    if return_src.is_some() {
+    if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
     } else if return_is_fp {
         // Mirror the f64 bit pattern into rax so an int-shaped

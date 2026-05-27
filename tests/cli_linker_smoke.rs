@@ -287,6 +287,59 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
 // the `.text` section symbol with `r_addend = native offset
 // of the target function`; the link / final-image writer
 // pair patches the slot to `text_vaddr + offset`.
+/// Regression: a function whose `return <int-literal>` statement
+/// had its constant value live in a spill slot at allocation time
+/// dropped the value on the floor at the epilogue. The x86_64 SSA
+/// emit's return path only staged `Place::IntReg` returns into rcx
+/// before the GPR restore, so spill-resident returns left rax with
+/// whatever the body parked there (typically the last libc call's
+/// `int` return). Surfaced as lua's `io` global being `nil` after
+/// `luaL_openlibs`: `luaopen_io` runs to completion, but its
+/// `return 1` -- the C-function-result count `lua_call` reads --
+/// reached the caller as zero, so the registered module was
+/// silently the empty stack tail (nil) instead of the `iolib`
+/// table.
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn int_literal_return_survives_libc_call_in_body() {
+    let dir = tempdir("ret-literal");
+    let src = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         int returns_one(void) {\n\
+             /* Push an external call between the body and the\n\
+                return so the allocator parks the return value\n\
+                in a spill slot; without the fix rax keeps the\n\
+                libc int return (printf's char count) and the\n\
+                caller observes the wrong value. */\n\
+             printf(\"side effect\\n\");\n\
+             return 1;\n\
+         }\n\
+         int main(void) {\n\
+             int v = returns_one();\n\
+             return v == 1 ? 42 : 7;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "expected return-1 to propagate through rax; got status={:?} stdout={:?}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn function_pointer_initializer_resolves_at_link_time() {

@@ -217,10 +217,12 @@ pub(crate) fn emit(
     build: &Build,
     source_path: &str,
     machine: super::Machine,
+    target: super::Target,
 ) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let (debug_info, info_relocs) = build_debug_info(source_path, program, build, machine);
+    let (debug_info, info_relocs) =
+        build_debug_info(source_path, program, build, machine, target);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,
@@ -330,6 +332,7 @@ fn build_debug_info(
     program: &Program,
     build: &Build,
     machine: super::Machine,
+    target: super::Target,
 ) -> (Vec<u8>, Vec<DwarfReloc>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
@@ -408,7 +411,7 @@ fn build_debug_info(
         // works too -- DWARF allows it -- but keeping the order
         // monotone keeps debuggers honest on older readers).
         for (&leaf, &max_depth) in &max_depth_per_leaf {
-            let Some(base) = base_type_for_leaf(leaf, machine) else {
+            let Some(base) = base_type_for_leaf(leaf, machine, target) else {
                 continue;
             };
             let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
@@ -862,7 +865,11 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<(i64, u8)> {
 /// attributes. Returns `None` for struct types and any tag
 /// outside the C99 scalar grid; the caller skips emitting a
 /// type DIE for those (debugger falls back to raw bytes).
-fn base_type_for_leaf(leaf: i64, _machine: super::Machine) -> Option<BaseTypeDesc> {
+fn base_type_for_leaf(
+    leaf: i64,
+    _machine: super::Machine,
+    target: super::Target,
+) -> Option<BaseTypeDesc> {
     const UNSIGNED_BIT: i64 = 1 << 30;
     let unsigned = (leaf & UNSIGNED_BIT) != 0;
     let bare = leaf & !UNSIGNED_BIT;
@@ -897,15 +904,14 @@ fn base_type_for_leaf(leaf: i64, _machine: super::Machine) -> Option<BaseTypeDes
             },
         }
     } else if bare == Ty::Long as i64 {
-        // The relocatable producer doesn't carry the Target
-        // enum, so the LP64 vs LLP64 distinction has to be
-        // re-stamped by the per-format writer if the eventual
-        // image is Windows. Default to LP64 (the Linux / macOS
-        // convention) until the writer layers that information
-        // in through the linker.
+        // LP64 (Linux / macOS): `long` = 8 bytes. LLP64
+        // (Windows): `long` = 4 bytes. Matches the c5
+        // codegen's load/store width pick in `load_op_for` and
+        // the amalg path's DWARF base_type emission.
+        let byte_size = if target.is_windows() { 4 } else { 8 };
         BaseTypeDesc {
             name: if unsigned { "unsigned long" } else { "long" },
-            byte_size: 8,
+            byte_size,
             encoding: if unsigned {
                 DW_ATE_UNSIGNED
             } else {

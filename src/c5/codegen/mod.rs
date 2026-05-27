@@ -1517,7 +1517,7 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             }
             Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
         };
-        return elf_reloc::write_relocatable(program, build, machine);
+        return elf_reloc::write_relocatable(program, build, machine, target);
     }
     // The no-std build can't reach the relocatable writer; the
     // `-c` path lives in the CLI, which itself is std-only. If

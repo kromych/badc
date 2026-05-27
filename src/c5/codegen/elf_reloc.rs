@@ -207,6 +207,7 @@ pub(super) fn write_relocatable(
     program: &Program,
     build: &Build,
     machine: Machine,
+    target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
     // The ET_REL writer doesn't emit `.tdata` / `.tbss` yet, so a
     // `_Thread_local`-bearing source would otherwise round-trip a
@@ -783,7 +784,7 @@ pub(super) fn write_relocatable(
     // up as placeholders paired with `DwarfReloc` records that
     // the loop below translates into ELF `.rela.debug_*`
     // entries.
-    let dwarf = dwarf_reloc::emit(program, build, source_path, machine);
+    let dwarf = dwarf_reloc::emit(program, build, source_path, machine, target);
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {
@@ -1305,7 +1306,13 @@ mod tests {
     fn empty_build_produces_valid_header() {
         let build = empty_build_for(Machine::X86_64);
         let program = empty_program("test.c");
-        let bytes = write_relocatable(&program, &build, Machine::X86_64).expect("write");
+        let bytes = write_relocatable(
+            &program,
+            &build,
+            Machine::X86_64,
+            crate::c5::Target::LinuxX64,
+        )
+        .expect("write");
         assert!(bytes.len() >= ELF64_EHDR_SIZE);
         assert_eq!(&bytes[0..4], b"\x7fELF");
         assert_eq!(bytes[4], ELF_CLASS_64);

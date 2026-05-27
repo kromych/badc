@@ -550,11 +550,23 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> ScalarLoadKi
         return ScalarLoadKind::Li;
     }
     if stripped == Ty::Char as i64 {
-        if unsigned { ScalarLoadKind::Lc } else { ScalarLoadKind::Lcs }
+        if unsigned {
+            ScalarLoadKind::Lc
+        } else {
+            ScalarLoadKind::Lcs
+        }
     } else if stripped == Ty::Short as i64 {
-        if unsigned { ScalarLoadKind::Lhu } else { ScalarLoadKind::Lh }
+        if unsigned {
+            ScalarLoadKind::Lhu
+        } else {
+            ScalarLoadKind::Lh
+        }
     } else if stripped == Ty::Int as i64 {
-        if unsigned { ScalarLoadKind::Lwu } else { ScalarLoadKind::Lw }
+        if unsigned {
+            ScalarLoadKind::Lwu
+        } else {
+            ScalarLoadKind::Lw
+        }
     } else if stripped == Ty::Float as i64 {
         // 4-byte single-precision load that widens to f64 in the
         // accumulator. `double` falls through to `ScalarLoadKind::Li` since
@@ -563,7 +575,11 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> ScalarLoadKi
         ScalarLoadKind::Lf
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
-        if unsigned { ScalarLoadKind::Lwu } else { ScalarLoadKind::Lw }
+        if unsigned {
+            ScalarLoadKind::Lwu
+        } else {
+            ScalarLoadKind::Lw
+        }
     } else {
         ScalarLoadKind::Li
     }

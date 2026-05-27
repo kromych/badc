@@ -1554,7 +1554,10 @@ impl Compiler {
                     let trailing = self.pending.trailing_scalar_load;
                     let is_load = matches!(
                         trailing,
-                        Some(ScalarLoadKind::Li) | Some(ScalarLoadKind::Lc) | Some(ScalarLoadKind::Lw) | Some(ScalarLoadKind::Lwu)
+                        Some(ScalarLoadKind::Li)
+                            | Some(ScalarLoadKind::Lc)
+                            | Some(ScalarLoadKind::Lw)
+                            | Some(ScalarLoadKind::Lwu)
                     );
                     if is_load {
                         self.clear_recent_emits();

@@ -69,9 +69,9 @@ pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    C5Error, CompileOptions, Compiler, Host, NativeOptions, OutputKind, Overwrite,
-    PredefinedKind, PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, embedded_headers,
-    emit_native, emit_native_with_options, jit_run, jit_run_with_options, predefined_symbols,
+    C5Error, CompileOptions, Compiler, Host, NativeOptions, OutputKind, Overwrite, PredefinedKind,
+    PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, embedded_headers, emit_native,
+    emit_native_with_options, jit_run, jit_run_with_options, predefined_symbols,
 };
 
 #[cfg(feature = "std")]

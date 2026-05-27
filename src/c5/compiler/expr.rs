@@ -80,7 +80,14 @@ impl Cmp {
 
     /// Return the (signed, unsigned, FP, name) tuple of `BinOp`
     /// tags + diagnostic spelling for this comparison.
-    fn ops(self) -> (super::super::ir::BinOp, super::super::ir::BinOp, super::super::ir::BinOp, &'static str) {
+    fn ops(
+        self,
+    ) -> (
+        super::super::ir::BinOp,
+        super::super::ir::BinOp,
+        super::super::ir::BinOp,
+        &'static str,
+    ) {
         use super::super::ir::BinOp as B;
         match self {
             Cmp::Lt => (B::Lt, B::Ult, B::Flt, "<"),

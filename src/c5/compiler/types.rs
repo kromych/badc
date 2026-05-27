@@ -568,4 +568,3 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
         Op::Li
     }
 }
-

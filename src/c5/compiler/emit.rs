@@ -1188,7 +1188,6 @@ impl Compiler {
         id
     }
 
-
     /// Build an `Expr::Binary` from the parser-side vstack-top
     /// (lhs) and the accumulator (rhs); leave the resulting
     /// ExprId in the accumulator. Result `ty` is whatever

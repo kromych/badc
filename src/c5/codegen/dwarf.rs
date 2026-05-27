@@ -142,6 +142,7 @@ const DW_LNS_COPY: u8 = 0x01;
 const DW_LNS_ADVANCE_PC: u8 = 0x02;
 const DW_LNS_ADVANCE_LINE: u8 = 0x03;
 const DW_LNS_SET_FILE: u8 = 0x04;
+const DW_LNS_SET_PROLOGUE_END: u8 = 0x0a;
 
 // Extended-opcode prefix is `0x00`; the byte after the length
 // names the extended op.
@@ -2242,7 +2243,8 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
                     row_emitted: &mut bool,
                     target_addr: u64,
                     line: i64,
-                    file: u64| {
+                    file: u64,
+                    mark_prologue_end: bool| {
         if target_addr > *state_addr {
             advance_pc(buf, target_addr - *state_addr);
             *state_addr = target_addr;
@@ -2260,6 +2262,9 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
             *row_emitted = false;
         }
         if !*row_emitted {
+            if mark_prologue_end {
+                buf.push(DW_LNS_SET_PROLOGUE_END);
+            }
             buf.push(DW_LNS_COPY);
             *row_emitted = true;
         }
@@ -2273,6 +2278,13 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     // `ssa_line_rows`; an empty vector means no code was emitted
     // and the closing `DW_LNE_end_sequence` below caps a zero-
     // length sequence.
+    // True once a function-entry synthetic row has fired but the
+    // matching post-prologue source row hasn't landed yet. The next
+    // emit_row that materialises a COPY stamps DW_LNS_set_prologue_end
+    // first so debuggers land "break main" past the prologue per
+    // DWARF 4 section 6.2.5.3.
+    let mut prologue_end_pending = false;
+
     for &(native, line, file_idx) in &build.ssa_line_rows {
         if line == 0 {
             continue;
@@ -2301,8 +2313,10 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
                 entry_addr,
                 line as i64,
                 file,
+                false,
             );
             func_start_iter.next();
+            prologue_end_pending = true;
         }
         emit_row(
             buf,
@@ -2313,7 +2327,9 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
             target_addr,
             line as i64,
             file,
+            prologue_end_pending,
         );
+        prologue_end_pending = false;
     }
 
     // Close the sequence with end_sequence at one past the last

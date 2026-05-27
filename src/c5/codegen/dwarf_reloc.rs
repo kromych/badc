@@ -151,6 +151,7 @@ const DW_LNS_COPY: u8 = 0x01;
 const DW_LNS_ADVANCE_PC: u8 = 0x02;
 const DW_LNS_ADVANCE_LINE: u8 = 0x03;
 const DW_LNS_SET_FILE: u8 = 0x04;
+const DW_LNS_SET_PROLOGUE_END: u8 = 0x0a;
 const DW_LNE_END_SEQUENCE: u8 = 0x01;
 const DW_LNE_SET_ADDRESS: u8 = 0x02;
 
@@ -816,6 +817,12 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     func_starts.dedup();
     let mut func_start_iter = func_starts.iter().copied().peekable();
     let mut row_emitted_at_state = false;
+    // True once a function-entry synthetic row has fired but the
+    // matching post-prologue source row hasn't landed yet. The next
+    // emit_row that materialises a COPY stamps DW_LNS_set_prologue_end
+    // first so debuggers land "break main" past the prologue per
+    // DWARF 4 section 6.2.5.3.
+    let mut prologue_end_pending = false;
 
     for &(native, line, file_idx) in &build.ssa_line_rows {
         if line == 0 {
@@ -840,8 +847,10 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
                 entry_addr,
                 line as i64,
                 file,
+                false,
             );
             func_start_iter.next();
+            prologue_end_pending = true;
         }
         emit_row(
             &mut prog,
@@ -852,7 +861,9 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
             target_addr,
             line as i64,
             file,
+            prologue_end_pending,
         );
+        prologue_end_pending = false;
     }
 
     // Close the sequence at one past the last byte of `.text`.
@@ -928,6 +939,7 @@ fn emit_row(
     target_addr: u64,
     line: i64,
     file: u64,
+    mark_prologue_end: bool,
 ) {
     if target_addr > *state_addr {
         advance_pc(buf, target_addr - *state_addr);
@@ -946,6 +958,9 @@ fn emit_row(
         *row_emitted = false;
     }
     if !*row_emitted {
+        if mark_prologue_end {
+            buf.push(DW_LNS_SET_PROLOGUE_END);
+        }
         buf.push(DW_LNS_COPY);
         *row_emitted = true;
     }

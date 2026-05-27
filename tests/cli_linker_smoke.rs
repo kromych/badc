@@ -876,6 +876,52 @@ fn debug_line_covers_each_function_entry_pc() {
     }
 }
 
+/// DWARF 4 section 6.2.5.3: the first row whose address is past
+/// the prologue should carry the `prologue_end` flag so debuggers
+/// land `break main` past the function prologue rather than at the
+/// entry PC. Both the amalg and multi-TU paths set the flag on the
+/// first real source row after each function-entry synthetic row.
+#[test]
+fn debug_line_flags_prologue_end_per_function() {
+    let dir = tempdir("dwarf-line-prologue-end");
+    let src = write_source(
+        &dir,
+        "f.c",
+        "int helper(int x) {\n    int y = x + 1;\n    return y;\n}\n\
+         int main(void) {\n    return helper(41);\n}\n",
+    );
+    let out = dir.join("f");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    let mut dd = Command::new("llvm-dwarfdump");
+    dd.arg("--debug-line").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("dwarfdump")
+                .arg("--debug-line")
+                .arg("--verbose")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    let lower = out_text.to_ascii_lowercase();
+    assert!(
+        lower.contains("prologue_end"),
+        "expected `prologue_end` flag in .debug_line for at least one row:\n{out_text}",
+    );
+}
+
 /// Locks the multi-TU DWARF link path: each input unit's
 /// compile-unit DIE should survive the merge with its own
 /// `DW_AT_name`, its `Abbrev Offset` should advance into the

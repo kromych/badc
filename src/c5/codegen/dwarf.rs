@@ -2208,6 +2208,64 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     let mut state_line: i64 = 1;
     let mut state_file: u64 = 1;
 
+    // Each function's native start PC. The SSA emit's
+    // `record_inst_src` only records a row when an instruction
+    // carries a non-zero `inst_src`, so the prologue (which the
+    // walker doesn't stamp) emits no row -- the first row in a
+    // function lands at the first body instruction, not the
+    // function entry. lldb / gdb need a row at the entry PC to
+    // attribute a function-name breakpoint to source; without
+    // it, a breakpoint at low_pc has no covering line entry and
+    // no source is shown. Seed an extra row at each function's
+    // entry PC, reusing the line and file from the body's first
+    // recorded row.
+    let mut func_starts: Vec<usize> = build
+        .func_ent_pcs
+        .iter()
+        .filter_map(|&pc| build.pc_to_native.get(pc).copied())
+        .filter(|&n| n != usize::MAX)
+        .collect();
+    func_starts.sort_unstable();
+    func_starts.dedup();
+    let mut func_start_iter = func_starts.iter().copied().peekable();
+
+    // Track whether the most recent state (addr, line, file)
+    // has already been emitted as a row. After
+    // `DW_LNE_set_address`, the state machine sits at
+    // (code_vmaddr, line=1, file=1, ...) but no row exists yet;
+    // a `DW_LNS_COPY` is what materialises the row.
+    let mut row_emitted_at_state: bool = false;
+
+    let emit_row = |buf: &mut Vec<u8>,
+                    state_addr: &mut u64,
+                    state_line: &mut i64,
+                    state_file: &mut u64,
+                    row_emitted: &mut bool,
+                    target_addr: u64,
+                    line: i64,
+                    file: u64| {
+        if target_addr > *state_addr {
+            advance_pc(buf, target_addr - *state_addr);
+            *state_addr = target_addr;
+            *row_emitted = false;
+        }
+        if file != *state_file {
+            buf.push(DW_LNS_SET_FILE);
+            write_uleb128(buf, file);
+            *state_file = file;
+            *row_emitted = false;
+        }
+        if line != *state_line {
+            advance_line(buf, line - *state_line);
+            *state_line = line;
+            *row_emitted = false;
+        }
+        if !*row_emitted {
+            buf.push(DW_LNS_COPY);
+            *row_emitted = true;
+        }
+    };
+
     // One row per source-position change the SSA emit recorded
     // against the emitted native byte offset. Provides per-
     // statement granularity inside each function. Native code
@@ -2225,21 +2283,38 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
             .copied()
             .unwrap_or(1);
         let target_addr = code_vmaddr + native as u64;
-        if target_addr > state_addr {
-            advance_pc(buf, target_addr - state_addr);
-            state_addr = target_addr;
+        // Drain every function start at-or-before this row.
+        // The drained start gets a synthetic row whose (line,
+        // file) match this row's, so the function-entry PC
+        // through the body's first statement reports the same
+        // source position.
+        while let Some(&fn_start) = func_start_iter.peek() {
+            let entry_addr = code_vmaddr + fn_start as u64;
+            if entry_addr > target_addr {
+                break;
+            }
+            emit_row(
+                buf,
+                &mut state_addr,
+                &mut state_line,
+                &mut state_file,
+                &mut row_emitted_at_state,
+                entry_addr,
+                line as i64,
+                file,
+            );
+            func_start_iter.next();
         }
-        if file != state_file {
-            buf.push(DW_LNS_SET_FILE);
-            write_uleb128(buf, file);
-            state_file = file;
-        }
-        let line_i = line as i64;
-        if line_i != state_line {
-            advance_line(buf, line_i - state_line);
-            state_line = line_i;
-        }
-        buf.push(DW_LNS_COPY);
+        emit_row(
+            buf,
+            &mut state_addr,
+            &mut state_line,
+            &mut state_file,
+            &mut row_emitted_at_state,
+            target_addr,
+            line as i64,
+            file,
+        );
     }
 
     // Close the sequence with end_sequence at one past the last

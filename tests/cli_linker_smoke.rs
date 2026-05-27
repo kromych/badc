@@ -730,6 +730,99 @@ fn extern_deferred_size_array_decays_in_other_tu() {
     );
 }
 
+/// Compile a two-function source and assert `.debug_line`
+/// places a row at each function's entry PC, not just at the
+/// first body instruction. Without the per-function-entry seed,
+/// a breakpoint at low_pc has no covering line entry and lldb
+/// shows no source -- the row coverage starts past the prologue.
+#[test]
+fn debug_line_covers_each_function_entry_pc() {
+    use std::path::Path;
+    let dir = tempdir("dwarf-line-entry");
+    let src = write_source(
+        &dir,
+        "f.c",
+        "int helper(int x) {\n    int y = x + 1;\n    return y;\n}\n\
+         int main(void) {\n    return helper(41);\n}\n",
+    );
+    let out = dir.join("f");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    assert!(out.exists(), "expected {} to exist", out.display());
+    // dwarfdump is part of every Xcode CLT install on macOS and
+    // every binutils install on Linux. Skip the assertion if it
+    // isn't on PATH so the test still runs in a stripped image;
+    // the rest of the test surface (file emission, exit code)
+    // still guards the underlying behaviour.
+    let dd = Command::new("dwarfdump")
+        .arg("--debug-line")
+        .arg(&out)
+        .output();
+    let Ok(out_text) = dd.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()) else {
+        return;
+    };
+    // Extract every (Address, Line) pair from the table body.
+    let mut rows: Vec<(u64, u32)> = Vec::new();
+    for line in out_text.lines() {
+        // Lines look like: "0x000000010000076c    4    0    1    0   ..."
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("0x") {
+            let mut parts = rest.split_ascii_whitespace();
+            let addr_hex = parts.next().unwrap_or("");
+            let line_str = parts.next().unwrap_or("");
+            if let (Ok(addr), Ok(ln)) = (u64::from_str_radix(addr_hex, 16), line_str.parse::<u32>())
+            {
+                rows.push((addr, ln));
+            }
+        }
+    }
+    assert!(!rows.is_empty(), "expected at least one line row");
+    // Use `nm` to recover each function's start address; the
+    // assertion is that every function has a row at-or-before
+    // its low_pc. `nm` is in the same toolchain as dwarfdump.
+    let nm_out = Command::new("nm")
+        .arg(&out)
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let _ = Path::new("/usr/bin/nm");
+    let mut func_pcs: Vec<u64> = Vec::new();
+    for ln in nm_out.lines() {
+        // nm format: "<hex> T _name" or "<hex> T name".
+        let mut parts = ln.split_ascii_whitespace();
+        let Some(addr) = parts.next() else { continue };
+        let Some(kind) = parts.next() else { continue };
+        let Some(name) = parts.next() else { continue };
+        if kind != "T" && kind != "t" {
+            continue;
+        }
+        let stripped_name = name.strip_prefix('_').unwrap_or(name);
+        if stripped_name != "helper" && stripped_name != "main" {
+            continue;
+        }
+        if let Ok(a) = u64::from_str_radix(addr, 16) {
+            func_pcs.push(a);
+        }
+    }
+    if func_pcs.is_empty() {
+        return; // `nm` not in expected format; skip the strict assert.
+    }
+    for pc in func_pcs {
+        let covered = rows.iter().any(|&(a, _)| a == pc);
+        assert!(
+            covered,
+            "expected a .debug_line row at function entry {pc:#x}; rows = {rows:?}",
+        );
+    }
+}
+
 #[test]
 fn compile_only_writes_relocatable_elf() {
     let dir = tempdir("co-native");

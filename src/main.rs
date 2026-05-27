@@ -493,12 +493,22 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Stdin is consumed exactly once. Both the LinkUnit pass below
+    // and the native-link `compile_one` closure further down call
+    // `read_stdin_source()`; cache the bytes in an Option so the
+    // second call sees the same source instead of reading an empty
+    // stream off the drained pipe.
+    let stdin_cache: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let read_stdin_source = || -> String {
+        if let Some(s) = stdin_cache.borrow().as_ref() {
+            return s.clone();
+        }
         let mut s = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut s) {
             eprint_diagnostic(format!("badc: error: error reading stdin: {e}"));
             std::process::exit(1);
         }
+        *stdin_cache.borrow_mut() = Some(s.clone());
         s
     };
 

@@ -203,7 +203,7 @@ fn num_sections(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
 ) -> usize {
     let mut n = 3; // .text, .pdata, .idata
     if data_section_present {
@@ -215,14 +215,15 @@ fn num_sections(
     if edata_section_present {
         n += 1;
     }
-    if dwarf_section_present {
-        // Five `__debug_*` sections (info / abbrev /
-        // line / str / frame). PE caps section names at 8 chars,
-        // so the leading dot is dropped (mingw-w64 convention) --
-        // dwarfdump / lldb / gdb all recognise the truncated
-        // names since they walk by content, not literal name.
-        n += 5;
-    }
+    // One section header per non-empty DWARF blob (info / abbrev /
+    // line / str / frame). The Windows image loader returns
+    // ERROR_BAD_EXE_FORMAT (193) when a SizeOfRawData == 0 section
+    // shares its VirtualAddress with the next one or sits at the
+    // SizeOfImage boundary, so empty blobs are dropped before they
+    // reach the section table. PE caps section names at 8 chars, so
+    // the leading dot is dropped (mingw-w64 convention) -- lldb /
+    // gdb / `llvm-dwarfdump` walk by content, not literal name.
+    n += dwarf_section_count;
     n
 }
 
@@ -239,7 +240,7 @@ fn headers_raw_size(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
 ) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
@@ -250,7 +251,7 @@ fn headers_raw_size(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
-                dwarf_section_present,
+                dwarf_section_count,
             );
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
@@ -426,14 +427,63 @@ pub(super) fn write(
     // string table are all skipped, `pointer_to_symbol_table`
     // returns to 0, and `SizeOfImage` shrinks accordingly.
     let dwarf_section_present = build.debug_info;
+    let text_rva: u32 = SECTION_ALIGNMENT;
+    // Build the DWARF section payloads up front so the section-
+    // header count is known before the layout pass. The Windows
+    // image loader rejects an image with ERROR_BAD_EXE_FORMAT
+    // (193) when two SizeOfRawData == 0 sections share a
+    // VirtualAddress, so empty blobs are dropped here and never
+    // reach the section table -- the multi-TU link path's
+    // `.debug_str` / `.debug_frame` are still empty until the
+    // linker merges those streams (TODO).
+    let dwarf_sections_raw = if let Some(md) = &build.merged_dwarf {
+        dwarf::DwarfSections {
+            debug_info: md.debug_info.clone(),
+            debug_abbrev: md.debug_abbrev.clone(),
+            debug_line: md.debug_line.clone(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    } else if dwarf_section_present {
+        dwarf::emit(
+            program,
+            build,
+            target,
+            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
+            &program.source_path,
+            None,
+        )
+    } else {
+        dwarf::DwarfSections {
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    };
+    // Order matches the original `DWARF_LONG_NAMES` table below;
+    // changing the order would change which section names land in
+    // the COFF string table.
+    let dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
+        (".debug_info", dwarf_sections_raw.debug_info.clone()),
+        (".debug_abbrev", dwarf_sections_raw.debug_abbrev.clone()),
+        (".debug_line", dwarf_sections_raw.debug_line.clone()),
+        (".debug_str", dwarf_sections_raw.debug_str.clone()),
+        (".debug_frame", dwarf_sections_raw.debug_frame.clone()),
+    ];
+    let dwarf_section_count = if dwarf_section_present {
+        dwarf_blobs.iter().filter(|(_, b)| !b.is_empty()).count()
+    } else {
+        0
+    };
     let headers_size = headers_raw_size(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
     ) as u32;
 
-    let text_rva: u32 = SECTION_ALIGNMENT;
     let text_file_off: u32 = headers_size;
     let text_size: u32 = text_prologue_len + build.text.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
@@ -603,50 +653,14 @@ pub(super) fn write(
         idata_rva + idata_size
     };
 
-    // Lay out the five DWARF debug sections after the
-    // existing ones. The mingw-w64 PE convention drops the leading
-    // dot to fit each name in PE's 8-char limit; lldb / gdb / `llvm-
-    // dwarfdump` all walk by section content rather than literal
-    // name and pick them up.
-    //
-    // Each section is `IMAGE_SCN_MEM_DISCARDABLE`, so the loader
-    // skips them at runtime even though they occupy RVA range --
-    // they only matter to the debugger walking the file image.
-    let dwarf_sections = if let Some(md) = &build.merged_dwarf {
-        // Multi-TU link: drop pre-baked linker-merged DWARF
-        // bytes into the PE's debug sections. `.debug_str` and
-        // `.debug_frame` aren't preserved by the linker yet (TODO).
-        dwarf::DwarfSections {
-            debug_info: md.debug_info.clone(),
-            debug_abbrev: md.debug_abbrev.clone(),
-            debug_line: md.debug_line.clone(),
-            debug_str: Vec::new(),
-            debug_frame: Vec::new(),
-        }
-    } else if dwarf_section_present {
-        // PE has its own entry stub, but the symptom
-        // (gdb's "Cannot find bounds of current function" after
-        // stepping past `return 0;` in main) was only verified
-        // on linux/aarch64. Pass `None` here -- the ELF writer
-        // wires up the stub range; PE can opt in when the
-        // symptom surfaces under windbg.
-        dwarf::emit(
-            program,
-            build,
-            target,
-            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
-            &program.source_path,
-            None,
-        )
-    } else {
-        dwarf::DwarfSections {
-            debug_info: Vec::new(),
-            debug_abbrev: Vec::new(),
-            debug_line: Vec::new(),
-            debug_str: Vec::new(),
-            debug_frame: Vec::new(),
-        }
-    };
+    // `dwarf_sections_raw` + `dwarf_blobs` were built earlier so
+    // the section-table count is known before the layout pass; the
+    // mingw-w64 PE convention drops the leading dot from each
+    // name to fit PE's 8-char `Name` field, and the COFF long-name
+    // strtab below carries the full names that lldb / gdb /
+    // `llvm-dwarfdump` walk by content. Each section is
+    // `IMAGE_SCN_MEM_DISCARDABLE`, so the loader skips them at
+    // runtime even though they occupy RVA range.
     /// One entry of the PE DWARF layout: section name (`/<offset>`
     /// indirection into the COFF string table for the full
     /// `.debug_*` name), the section's RVA + file offset, and the
@@ -670,13 +684,9 @@ pub(super) fn write(
     //
     // mingw-w64's `x86_64-w64-mingw32-gcc -g` produces the same
     // shape, which is why `llvm-dwarfdump` and `lldb` accept it.
-    const DWARF_LONG_NAMES: [&str; 5] = [
-        ".debug_info",
-        ".debug_abbrev",
-        ".debug_line",
-        ".debug_str",
-        ".debug_frame",
-    ];
+    // The long names live in `dwarf_blobs` above; the per-section
+    // loop below copies each one into the strtab when it emits
+    // the corresponding section header.
     let mut coff_strtab: Vec<u8> = Vec::new();
     let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
     // Build a per-trampoline COFF symbol table so a
@@ -697,47 +707,34 @@ pub(super) fn write(
         // 4-byte size header, patched at the end.
         coff_strtab.extend_from_slice(&0u32.to_le_bytes());
     }
+    // Per-blob COFF long-name entries are emitted only for the
+    // non-empty payloads so each section header maps to a real
+    // section. Empty blobs were dropped from the count above; this
+    // loop keeps the names aligned with the surviving entries.
+    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
     if dwarf_section_present {
-        for long_name in DWARF_LONG_NAMES {
+        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
+        let mut next_file_off = pre_dwarf_end_file_off;
+        for (long_name, bytes) in dwarf_blobs.iter() {
+            if bytes.is_empty() {
+                continue;
+            }
             let strtab_offset = coff_strtab.len() as u32;
             coff_strtab.extend_from_slice(long_name.as_bytes());
             coff_strtab.push(0);
-            // Format `/N` padded to 8 bytes.
             let mut name_field = [0u8; 8];
             let formatted = format!("/{strtab_offset}");
             let n = formatted.len().min(8);
             name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
             dwarf_section_names.push(name_field);
-        }
-    }
-    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
-    if dwarf_section_present {
-        let blobs: [Vec<u8>; 5] = [
-            dwarf_sections.debug_info.clone(),
-            dwarf_sections.debug_abbrev.clone(),
-            dwarf_sections.debug_line.clone(),
-            dwarf_sections.debug_str.clone(),
-            dwarf_sections.debug_frame.clone(),
-        ];
-        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
-        let mut next_file_off = pre_dwarf_end_file_off;
-        for (i, bytes) in blobs.into_iter().enumerate() {
             let raw_size = round_up(bytes.len() as u32, FILE_ALIGNMENT);
             dwarf_pe_sections.push(DwarfPeSlot {
-                name: dwarf_section_names[i],
+                name: name_field,
                 rva: next_rva,
                 file_off: next_file_off,
-                bytes,
+                bytes: bytes.clone(),
             });
-            // PE/COFF rejects two sections sharing a VirtualAddress;
-            // an empty blob would leave `next_rva` unchanged, so the
-            // following section would land at the same RVA and
-            // Windows refuses to load the image with
-            // ERROR_BAD_EXE_FORMAT (193). Always advance by at
-            // least one page so each section header carries a
-            // distinct VirtualAddress.
-            let virtual_advance = raw_size.max(SECTION_ALIGNMENT);
-            next_rva = round_up(next_rva + virtual_advance, SECTION_ALIGNMENT);
+            next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
             next_file_off += raw_size;
         }
     }
@@ -912,7 +909,7 @@ pub(super) fn write(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
         coff_symtab_file_off,
         n_coff_symbols,
         coff_strtab_file_off,
@@ -983,7 +980,7 @@ pub(super) fn write(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
     ));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
@@ -1706,7 +1703,7 @@ fn write_coff_header(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
     coff_symtab_file_off: u32,
     n_coff_symbols: u32,
     coff_strtab_file_off: u32,
@@ -1729,7 +1726,7 @@ fn write_coff_header(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
-                dwarf_section_present,
+                dwarf_section_count,
             ) as u16,
             time_date_stamp: 0,
             // PE images carry a COFF strtab at the file

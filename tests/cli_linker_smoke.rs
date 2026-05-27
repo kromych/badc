@@ -1242,6 +1242,65 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Every c5-emitted subprogram has DW_AT_prototyped set per
+/// DWARF 4 section 3.3.3.7 -- c5 rejects K&R-style identifier-
+/// list declarators (C99 6.7.6.3p14) so every function is
+/// prototyped at the source level. Debuggers rely on this flag
+/// to know the formal-parameter list is authoritative.
+#[test]
+fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
+    let dir = tempdir("multi-tu-prototyped");
+    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_AT_prototyped"),
+        "expected DW_AT_prototyped on at least one subprogram:\n{out_text}",
+    );
+}
+
 /// DW_AT_decl_line on variable + formal_parameter DIEs lets the
 /// debugger show the declaration's source line in `info args`
 /// / `info locals`. Symbol::decl_line is captured at parse time

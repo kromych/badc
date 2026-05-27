@@ -100,6 +100,7 @@ const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
 const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
 const DW_AT_DECL_LINE: u32 = 0x3b;
+const DW_AT_PROTOTYPED: u32 = 0x27;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -1172,6 +1173,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // than DW_FORM_addr and matches gcc / clang's DWARF 4 output.
     write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
     write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
+    write_attr(&mut buf, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
     write_attr(&mut buf, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);

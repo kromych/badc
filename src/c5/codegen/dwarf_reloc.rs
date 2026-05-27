@@ -123,6 +123,7 @@ const DW_AT_BIT_SIZE: u8 = 0x0d;
 const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 const DW_AT_EXTERNAL: u8 = 0x3f;
 const DW_AT_DECL_LINE: u8 = 0x3b;
+const DW_AT_PROTOTYPED: u8 = 0x27;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -277,7 +278,9 @@ fn build_debug_abbrev() -> Vec<u8> {
     // the function has no variables. DW_AT_external is
     // DW_FORM_flag_present (zero-byte payload) and matches the
     // amalg dwarf.rs shape so debuggers treat user-defined
-    // functions as cross-CU-visible.
+    // functions as cross-CU-visible. DW_AT_prototyped is always
+    // set: c5 rejects K&R-style identifier-list declarators per
+    // C99 6.7.6.3p14, so every emitted subprogram is prototyped.
     write_uleb128(&mut out, ABBREV_SUBPROGRAM_LEAF);
     out.push(DW_TAG_SUBPROGRAM);
     out.push(DW_CHILDREN_NO);
@@ -285,6 +288,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
+    push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
     out.push(0);
     out.push(0);
     // Abbrev 3: subprogram with variable / parameter children.
@@ -297,6 +301,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
+    push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
     push_attr(&mut out, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
     out.push(0);
     out.push(0);

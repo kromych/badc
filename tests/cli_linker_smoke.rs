@@ -996,6 +996,23 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
         out_text.contains("DW_OP_fbreg"),
         "expected formal_parameter DW_AT_location as DW_OP_fbreg:\n{out_text}",
     );
+    // The type catalog (`DW_TAG_base_type` per distinct
+    // leaf scalar type, plus pointer wrappers) lets the
+    // debugger print typed values for parameters and locals.
+    // Both fixture functions take `int` and the test runs the
+    // helper through main, so an `int` base_type DIE must land
+    // in each CU that names a function. Per-CU duplication is
+    // fine (the type catalog isn't deduped across CUs).
+    let base_type_count = out_text.matches("DW_TAG_base_type").count();
+    assert!(
+        base_type_count >= 2,
+        "expected at least one DW_TAG_base_type per user CU (helper + main), \
+         got {base_type_count}:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_AT_type") && out_text.contains("DW_ATE_signed"),
+        "expected DW_AT_type cross-refs + DW_ATE_signed encoding on int base_type:\n{out_text}",
+    );
 }
 
 /// Multi-TU links populate `.debug_frame` from the merged

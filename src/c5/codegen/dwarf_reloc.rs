@@ -1,9 +1,11 @@
 //! Relocatable DWARF emitter for `OutputKind::Relocatable` output.
 //!
-//! Produces a minimal but standards-compliant slice of DWARF 4
-//! sections suitable for placement in an ELF ET_REL object:
+//! Produces a DWARF 4 triple suitable for placement in an ELF
+//! ET_REL object:
 //!
-//!   * `.debug_info`   -- one compilation-unit DIE per `.o`.
+//!   * `.debug_info`   -- one compilation-unit DIE per `.o` with
+//!                        type catalog + subprogram DIEs + their
+//!                        formal_parameter / variable children.
 //!   * `.debug_abbrev` -- the matching abbreviation table.
 //!   * `.debug_line`   -- one line-number program covering the unit's
 //!                        `.text`.
@@ -11,24 +13,27 @@
 //! Every address slot is emitted as a placeholder paired with an
 //! [`DwarfReloc`] record so the linker can rebase the section once
 //! the per-unit `.text` / `.debug_line` / `.debug_abbrev` bases are
-//! known. This is the standard ELF DWARF emission shape (matching
-//! gcc / clang `-c -g` output for c5's subset).
+//! known. This matches gcc / clang `-c -g` output for c5's subset.
 //!
-//! Subprogram DIEs, type DIEs, variable / parameter locations and
-//! `.debug_frame` are deliberately out of scope for the relocatable
-//! path -- lldb / gdb resolve function names through the static
-//! symbol table, and the line program is enough to drive source
-//! display at breakpoints. The richer DIE tree the amalg path
-//! emits remains available there; it can be added to the
-//! relocatable path under the same reloc machinery in a follow-up.
+//! Each CU lays out its children in this order: type catalog
+//! (base_type + pointer_type DIEs) then subprograms. Subprograms
+//! carry `DW_AT_frame_base` and emit formal_parameter / variable
+//! children with `DW_AT_location` (DW_OP_fbreg + offset) and
+//! `DW_AT_type` cross-DIE references (`DW_FORM_ref4`) to the type
+//! catalog earlier in the same CU. `.debug_frame` is regenerated
+//! by the merged-image writer from `synth_build`'s symbol set
+//! instead of being carried per-`.o`. Struct / union types and
+//! the C99 `long`-on-Windows narrowing land in a follow-up.
 
 #![allow(dead_code)]
 
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::program::Program;
+use super::super::token::Ty;
 use super::Build;
 
 /// Section that an emitted reloc lives in. Used to route the
@@ -86,6 +91,8 @@ const DW_TAG_COMPILE_UNIT: u8 = 0x11;
 const DW_TAG_SUBPROGRAM: u8 = 0x2e;
 const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
 const DW_TAG_VARIABLE: u8 = 0x34;
+const DW_TAG_BASE_TYPE: u8 = 0x24;
+const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -96,6 +103,9 @@ const DW_AT_COMP_DIR: u8 = 0x1b;
 const DW_AT_PRODUCER: u8 = 0x25;
 const DW_AT_LOCATION: u8 = 0x02;
 const DW_AT_FRAME_BASE: u8 = 0x40;
+const DW_AT_BYTE_SIZE: u8 = 0x0b;
+const DW_AT_ENCODING: u8 = 0x3e;
+const DW_AT_TYPE: u8 = 0x49;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -103,6 +113,14 @@ const DW_FORM_STRING: u8 = 0x08;
 const DW_FORM_DATA1: u8 = 0x0b;
 const DW_FORM_SEC_OFFSET: u8 = 0x17;
 const DW_FORM_EXPRLOC: u8 = 0x18;
+const DW_FORM_REF4: u8 = 0x13;
+
+// DW_ATE_* encoding values for DW_TAG_base_type.
+const DW_ATE_SIGNED: u8 = 0x05;
+const DW_ATE_UNSIGNED: u8 = 0x07;
+const DW_ATE_SIGNED_CHAR: u8 = 0x06;
+const DW_ATE_UNSIGNED_CHAR: u8 = 0x08;
+const DW_ATE_FLOAT: u8 = 0x04;
 
 const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
 const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
@@ -129,6 +147,8 @@ const ABBREV_SUBPROGRAM_LEAF: u64 = 2;
 const ABBREV_SUBPROGRAM_WITH_CHILDREN: u64 = 3;
 const ABBREV_FORMAL_PARAMETER: u64 = 4;
 const ABBREV_VARIABLE: u64 = 5;
+const ABBREV_BASE_TYPE: u64 = 6;
+const ABBREV_POINTER_TYPE: u64 = 7;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -249,25 +269,48 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
     out.push(0);
     out.push(0);
-    // Abbrev 4: formal_parameter -- name + fbreg location.
-    // Sub-int / type DIEs ship in a follow-up alongside the type
-    // catalog; without DW_AT_type the debugger treats the value
-    // as a raw integer.
+    // Abbrev 4: formal_parameter -- name + fbreg location +
+    // DW_AT_type cross-DIE reference to a type DIE earlier in
+    // the same CU.
     write_uleb128(&mut out, ABBREV_FORMAL_PARAMETER);
     out.push(DW_TAG_FORMAL_PARAMETER);
     out.push(DW_CHILDREN_NO);
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
     out.push(0);
     out.push(0);
-    // Abbrev 5: variable -- name + fbreg location. Same shape
-    // as formal_parameter but with the DW_TAG_variable tag so
-    // debuggers distinguish args from locals.
+    // Abbrev 5: variable -- same shape as formal_parameter but
+    // with the DW_TAG_variable tag so debuggers distinguish args
+    // from locals.
     write_uleb128(&mut out, ABBREV_VARIABLE);
     out.push(DW_TAG_VARIABLE);
     out.push(DW_CHILDREN_NO);
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    out.push(0);
+    out.push(0);
+    // Abbrev 6: base_type -- name + byte_size + DWARF encoding
+    // (DW_ATE_*). Used for every C99 scalar (char / short / int
+    // / long / long long / float / double, signed and unsigned
+    // variants).
+    write_uleb128(&mut out, ABBREV_BASE_TYPE);
+    out.push(DW_TAG_BASE_TYPE);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    push_attr(&mut out, DW_AT_ENCODING, DW_FORM_DATA1);
+    out.push(0);
+    out.push(0);
+    // Abbrev 7: pointer_type -- 8-byte pointer wrapping a
+    // referenced type DIE. C99 6.2.5p20: pointer size is
+    // implementation-defined; c5 picks 8 bytes everywhere.
+    write_uleb128(&mut out, ABBREV_POINTER_TYPE);
+    out.push(DW_TAG_POINTER_TYPE);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -336,6 +379,60 @@ fn build_debug_info(
         super::Machine::X86_64 => DW_OP_REG6,
     };
 
+    // Collect every distinct (base_leaf, pointer_depth) tuple
+    // referenced by this unit's variables. Emit base_type DIEs
+    // followed by pointer_type wrappers; pointer levels chain
+    // via DW_AT_type ref4 to the next-shallower wrapper (or to
+    // the leaf base_type at depth 1). Map keys back to the
+    // DW_FORM_ref4 offset (CU-relative byte offset = body offset
+    // + DEBUG_INFO_UNIT_HEADER_SIZE).
+    let mut type_offsets: BTreeMap<(i64, u8), u32> = BTreeMap::new();
+    {
+        // Gather distinct leaf bases and the maximum pointer
+        // depth each one needs. The walker uses `Ty::Ptr` to
+        // encode pointer levels via additive arithmetic, so the
+        // depth comes from successive `Ty::Ptr` subtraction
+        // until the result lands in the leaf band.
+        let mut max_depth_per_leaf: BTreeMap<i64, u8> = BTreeMap::new();
+        for v in &program.variables {
+            let Some((leaf, depth)) = decompose_pointer_chain(v.type_tag) else {
+                continue;
+            };
+            let entry = max_depth_per_leaf.entry(leaf).or_insert(0);
+            if depth > *entry {
+                *entry = depth;
+            }
+        }
+        // Emit base_type DIEs first so the pointer wrappers can
+        // reference them at smaller offsets (a forward-ref4
+        // works too -- DWARF allows it -- but keeping the order
+        // monotone keeps debuggers honest on older readers).
+        for (&leaf, &max_depth) in &max_depth_per_leaf {
+            let Some(base) = base_type_for_leaf(leaf, machine) else {
+                continue;
+            };
+            let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+            type_offsets.insert((leaf, 0), off);
+            write_uleb128(&mut body, ABBREV_BASE_TYPE);
+            push_string(&mut body, base.name);
+            body.push(base.byte_size);
+            body.push(base.encoding);
+            // Pointer wrappers: one DIE per depth from 1 to
+            // max_depth. Each wrapper references the
+            // next-shallower entry (depth N references depth
+            // N-1).
+            let mut prev_off = off;
+            for depth in 1..=max_depth {
+                let ptr_off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
+                type_offsets.insert((leaf, depth), ptr_off);
+                write_uleb128(&mut body, ABBREV_POINTER_TYPE);
+                body.push(8);
+                body.extend_from_slice(&prev_off.to_le_bytes());
+                prev_off = ptr_off;
+            }
+        }
+    }
+
     // Subprogram child DIEs. One per defined function in the
     // unit. With parameters / variables present, the subprogram
     // takes the with-children abbrev (carries DW_AT_frame_base)
@@ -393,6 +490,12 @@ fn build_debug_info(
             write_uleb128(&mut body, 1);
             body.push(frame_base_op);
             for v in &vars {
+                let Some((leaf, depth)) = decompose_pointer_chain(v.type_tag) else {
+                    continue;
+                };
+                let Some(&type_off) = type_offsets.get(&(leaf, depth)) else {
+                    continue;
+                };
                 let fp_byte_offset = fp_byte_offset_for_slot(v.fp_slot);
                 let abbrev = if v.is_parameter {
                     ABBREV_FORMAL_PARAMETER
@@ -409,6 +512,9 @@ fn build_debug_info(
                 write_sleb128(&mut expr, fp_byte_offset);
                 write_uleb128(&mut body, expr.len() as u64);
                 body.extend_from_slice(&expr);
+                // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
+                // offset of the matching type DIE emitted above.
+                body.extend_from_slice(&type_off.to_le_bytes());
             }
             // End-of-children marker for this subprogram.
             body.push(0);
@@ -693,6 +799,135 @@ fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
 /// carry user-visible values.
 fn fp_byte_offset_for_slot(slot: i64) -> i64 {
     if slot >= 2 { (slot - 1) * 16 } else { slot * 8 }
+}
+
+/// Wire-form attributes for a DWARF base_type DIE.
+struct BaseTypeDesc {
+    name: &'static str,
+    byte_size: u8,
+    encoding: u8,
+}
+
+/// Split a c5 type tag into its leaf scalar tag (with the
+/// unsigned bit preserved) and pointer depth. Mirror of the
+/// amalg-path `classify` band layout: each non-integer scalar
+/// type occupies a 100-wide band; pointer depth is encoded as
+/// `bare_band_offset / Ty::Ptr`. The integer family shares the
+/// `[0, 100)` band with even values for char and odd values for
+/// int. Struct types live past `STRUCT_BASE`; skip them.
+fn decompose_pointer_chain(type_tag: i64) -> Option<(i64, u8)> {
+    const UNSIGNED_BIT: i64 = 1 << 30;
+    const TY_PTR: i64 = Ty::Ptr as i64;
+    const BAND_SIZE: i64 = 100;
+    // STRUCT_BASE sits well above the scalar bands; the
+    // relocatable producer doesn't materialise struct types
+    // yet.
+    const STRUCT_BASE: i64 = 1_000_000;
+    let unsigned = (type_tag & UNSIGNED_BIT) != 0;
+    let bare = type_tag & !UNSIGNED_BIT;
+    if !(0..STRUCT_BASE).contains(&bare) {
+        return None;
+    }
+    let (leaf, depth) = if bare < BAND_SIZE {
+        let leaf = if bare % TY_PTR == 0 {
+            Ty::Char as i64
+        } else {
+            Ty::Int as i64
+        };
+        (leaf, (bare / TY_PTR) as u8)
+    } else if (Ty::Float as i64..Ty::Float as i64 + BAND_SIZE).contains(&bare) {
+        (Ty::Float as i64, ((bare - Ty::Float as i64) / TY_PTR) as u8)
+    } else if (Ty::Double as i64..Ty::Double as i64 + BAND_SIZE).contains(&bare) {
+        (
+            Ty::Double as i64,
+            ((bare - Ty::Double as i64) / TY_PTR) as u8,
+        )
+    } else if (Ty::Long as i64..Ty::Long as i64 + BAND_SIZE).contains(&bare) {
+        (Ty::Long as i64, ((bare - Ty::Long as i64) / TY_PTR) as u8)
+    } else if (Ty::Short as i64..Ty::Short as i64 + BAND_SIZE).contains(&bare) {
+        (Ty::Short as i64, ((bare - Ty::Short as i64) / TY_PTR) as u8)
+    } else if (Ty::LongLong as i64..Ty::LongLong as i64 + BAND_SIZE).contains(&bare) {
+        (
+            Ty::LongLong as i64,
+            ((bare - Ty::LongLong as i64) / TY_PTR) as u8,
+        )
+    } else {
+        return None;
+    };
+    let leaf = if unsigned { leaf | UNSIGNED_BIT } else { leaf };
+    Some((leaf, depth))
+}
+
+/// Map a c5 leaf scalar type tag to its DWARF base_type
+/// attributes. Returns `None` for struct types and any tag
+/// outside the C99 scalar grid; the caller skips emitting a
+/// type DIE for those (debugger falls back to raw bytes).
+fn base_type_for_leaf(leaf: i64, _machine: super::Machine) -> Option<BaseTypeDesc> {
+    const UNSIGNED_BIT: i64 = 1 << 30;
+    let unsigned = (leaf & UNSIGNED_BIT) != 0;
+    let bare = leaf & !UNSIGNED_BIT;
+    let desc = if bare == Ty::Char as i64 {
+        BaseTypeDesc {
+            name: if unsigned { "unsigned char" } else { "char" },
+            byte_size: 1,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED_CHAR
+            } else {
+                DW_ATE_SIGNED_CHAR
+            },
+        }
+    } else if bare == Ty::Short as i64 {
+        BaseTypeDesc {
+            name: if unsigned { "unsigned short" } else { "short" },
+            byte_size: 2,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Int as i64 {
+        BaseTypeDesc {
+            name: if unsigned { "unsigned int" } else { "int" },
+            byte_size: 4,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Long as i64 {
+        // The relocatable producer doesn't carry the Target
+        // enum, so the LP64 vs LLP64 distinction has to be
+        // re-stamped by the per-format writer if the eventual
+        // image is Windows. Default to LP64 (the Linux / macOS
+        // convention) until the writer layers that information
+        // in through the linker.
+        BaseTypeDesc {
+            name: if unsigned { "unsigned long" } else { "long" },
+            byte_size: 8,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Float as i64 {
+        BaseTypeDesc {
+            name: "float",
+            byte_size: 4,
+            encoding: DW_ATE_FLOAT,
+        }
+    } else if bare == Ty::Double as i64 {
+        BaseTypeDesc {
+            name: "double",
+            byte_size: 8,
+            encoding: DW_ATE_FLOAT,
+        }
+    } else {
+        return None;
+    };
+    Some(desc)
 }
 
 fn write_sleb128(out: &mut Vec<u8>, mut value: i64) {

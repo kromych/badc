@@ -166,31 +166,41 @@ jobs:
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
         run: cargo test --locked --verbose
-      - name: capture libc_basic SIGSEGV under strace + dmesg (ubuntu-latest only, on failure)
+      - name: compare fib vs libc_basic ELFs (ubuntu-latest only, on failure)
         # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
-        # macOS/aarch64 lanes pass identical bytes. badc's ELF
-        # omits section headers so gdb 15.1 refuses to load the
-        # binary -- fall back to strace (which traces syscalls
-        # regardless) and dmesg's segfault row (which carries the
-        # faulting RIP + RSP + RW flags). Both run only when the
-        # cargo test step failed and only on ubuntu-latest.
+        # macOS/aarch64 lanes pass identical bytes. The perf-table
+        # job's fib.c binary works on the same hardware. Build both
+        # via the CLI path and diff their ELF headers / segment
+        # layouts / dynamic section to find what shape only the
+        # failing one has.
         if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get install -y -qq strace || true
           cargo build --release --locked --bin badc
-          ./target/release/badc tests/fixtures/c/libc_basic.c -o /tmp/libc_basic
-          echo === strace ===
           set +e
-          strace -f -o /tmp/strace.log /tmp/libc_basic 2>&1 | head -5
-          echo === tail strace ===
-          tail -40 /tmp/strace.log
-          echo === dmesg segfault ===
-          dmesg 2>/dev/null | tail -10 || true
-          # Run with ptrace-style attach via strace -i to print the
-          # instruction pointer alongside each syscall so the last
-          # entry pins the user-side PC just before the fault.
-          echo === strace with insn pointer ===
-          strace -i /tmp/libc_basic 2>&1 | tail -25 || true
+          BADC=./target/release/badc
+          echo '#include <stdio.h>'                                  > /tmp/pf.c
+          echo 'int main(void){printf("ok\n");return 0;}'           >> /tmp/pf.c
+          $BADC tests/fixtures/c/libc_basic.c -o /tmp/libc_basic
+          $BADC tests/perf/fib.c -o /tmp/fib
+          $BADC /tmp/pf.c -o /tmp/pf
+          echo
+          echo '=== /tmp/pf (hello) run ==='
+          /tmp/pf; echo exit=$?
+          echo '=== /tmp/fib run ==='
+          timeout 5 /tmp/fib 2>&1 | head -3; echo exit=$?
+          echo '=== /tmp/libc_basic run ==='
+          /tmp/libc_basic; echo exit=$?
+          for b in /tmp/pf /tmp/fib /tmp/libc_basic; do
+            echo "=== readelf -h $b ==="
+            readelf -h "$b" | head -20
+            echo "=== readelf -l $b ==="
+            readelf -l "$b" | head -30
+            echo "=== readelf -d $b ==="
+            readelf -d "$b" | head -20
+          done
+          echo '=== strace -i /tmp/libc_basic (post-load) ==='
+          strace -i /tmp/libc_basic 2>&1 | tail -30
           true
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-

@@ -250,9 +250,9 @@ pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 }
 
 /// Add `bytes` to SP using the same 24-bit reach as
-/// [`emit_sub_sp_imm`]. Used by `Op::Adj` for argument-cleanup
-/// after a call, and by anything else that needs to grow the
-/// stack pointer back by more than 4 KiB in one go.
+/// [`emit_sub_sp_imm`]. Used for stack-arg cleanup after a call
+/// and by anything else that needs to grow the stack pointer
+/// back by more than 4 KiB in one go.
 pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if bytes == 0 {
         return;
@@ -473,8 +473,8 @@ pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
-/// store. Same encoding family as [`enc_ldr_s_imm`]; companion to
-/// [`Op::Sf`].
+/// store. Same encoding family as [`enc_ldr_s_imm`]; companion
+/// to the `StoreKind::F32` lowering.
 pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
     debug_assert!(imm.is_multiple_of(4) && imm < 16380);
@@ -523,8 +523,8 @@ pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
 
 /// `FCVT <Sd>, <Dn>` -- narrow double-precision to single-precision
 /// with round-to-nearest-ties-to-even (matching IEEE 754 and the
-/// VM's `f64 as f32` semantics). Used by [`Op::Sf`] before the
-/// single-precision store.
+/// VM's `f64 as f32` semantics). Used by the `StoreKind::F32`
+/// lowering before the single-precision store.
 pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
     debug_assert!(sd < 32 && dn < 32);
     0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
@@ -576,7 +576,7 @@ impl Cond {
 
     /// Logical complement of the condition as another [`Cond`]
     /// variant. Used by the cmp+branch fusion peephole: when a
-    /// compare op `Op::Lt` is followed by `Op::Bz target`, the
+    /// `BinOp::Lt` is followed by a `Terminator::Bz`, the
     /// branch fires on "(lhs < rhs) is false", i.e. "lhs >= rhs"
     /// -- so `Cond::Lt.flip() == Cond::Ge`.
     fn flip(self) -> Cond {
@@ -661,10 +661,10 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
 }
 
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
-/// the `Op::TailExt` lowering to forward control to the IAT/GOT-
-/// resolved libc address without saving a return point: the libc
-/// fn's `RET` lands back at the c5 caller's post-Jsri continuation
-/// instead of bouncing back through the trampoline.
+/// the `Terminator::TailExt` lowering to forward control to the
+/// IAT/GOT-resolved libc address without saving a return point:
+/// the libc fn's `RET` lands back at the c5 caller's post-call
+/// continuation instead of bouncing back through the trampoline.
 pub(super) fn enc_br(rn: Reg) -> u32 {
     0xD61F_0000 | ((rn.0 as u32) << 5)
 }
@@ -718,7 +718,7 @@ pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
-/// [`enc_ldr32_imm`] for [`Op::Sw`].
+/// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
 pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
     let scaled = imm / 4;
@@ -830,7 +830,7 @@ pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
-/// [`enc_ldrh_imm`] for [`Op::Sh`].
+/// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
 pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
     let scaled = imm / 2;
@@ -1005,9 +1005,10 @@ pub(super) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
 //      compiles to these because they update sp in the same instruction.
 
 /// `STR <Xt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback.
-/// Use with `imm = -16` for `Op::Psh`: store accumulator and bump sp
-/// down by 16 bytes (we keep sp 16-byte aligned even for 8-byte
-/// pushes so calls into libc satisfy AAPCS64).
+/// Use with `imm = -16` for the accumulator push: store
+/// accumulator and bump sp down by 16 bytes (the VM stack stays
+/// 16-byte aligned even for 8-byte pushes so calls into libc
+/// satisfy AAPCS64).
 pub(super) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(
         (-256..256).contains(&imm),
@@ -1149,9 +1150,10 @@ pub(super) struct Fixup {
 ///
 /// Calling convention (Phase 1):
 /// * VM accumulator `a` lives in `x19` (callee-saved across calls).
-/// * The VM stack rides on the native stack: `Op::Psh` is `str x19,
-///   [sp, #-16]!`, every binary op pops with `ldr <tmp>, [sp], #16`.
-///   Push slots are 16 bytes (not 8) so SP stays aligned for libc calls.
+/// * The VM stack rides on the native stack: an accumulator
+///   push lowers to `str x19, [sp, #-16]!`, every binary op
+///   pops with `ldr <tmp>, [sp], #16`. Push slots are 16 bytes
+///   (not 8) so SP stays aligned for libc calls.
 /// * `x16`/`x17` (IP0/IP1) are the AAPCS64-blessed temporaries we use
 ///   for popped operands and large-immediate scratch.
 /// * Each function's prologue is the standard AAPCS64 sequence;
@@ -1184,14 +1186,14 @@ pub(super) fn lower(
     // `pc_to_native`, so we record (adrp_offset, target_ent_pc)
     // here and rewrite into `Build::func_fixups` once the map is final.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
-    // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
-    // when targeting Windows. The PE writer reserves the
-    // `_tls_index` DWORD slot and patches each fixup with the
+    // Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
+    // lowering site when targeting Windows. The PE writer reserves
+    // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     // macOS arm64 TLV: each unique TLS variable's offset gets a
     // descriptor index; the writer emits a 24-byte
-    // `__thread_vars` descriptor per index. Each `Op::TlsLea`
+    // `__thread_vars` descriptor per index. Each `Inst::TlsAddr`
     // site records an `adrp + add` pair via `macho_tlv_fixups`.
     let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
     let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
@@ -1386,12 +1388,13 @@ pub(super) fn lower(
     // Function-pointer fixups resolve to each callee's body offset
     // directly: every function's prologue already spills the host
     // arg registers into the c5 cdecl slots that the body reads
-    // via `Op::Lea`, so a host caller (`pthread_create`, `qsort`,
-    // a static dispatch table, ...) can land on the body itself.
-    // Variadic c5 functions keep the c5-stack-based ABI and reach
-    // only via `Op::Jsri` callers that lay args onto the c5 stack
-    // first; their fn-pointer fixups also land on the body, which
-    // keeps that contract intact.
+    // through the address-of-local path, so a host caller
+    // (`pthread_create`, `qsort`, a static dispatch table, ...)
+    // can land on the body itself. Variadic c5 functions keep the
+    // c5-stack-based ABI and reach only via indirect c5 callers
+    // that lay args onto the c5 stack first; their fn-pointer
+    // fixups also land on the body, which keeps that contract
+    // intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_ent_pc) in pending_func_fixups {
         // Cross-TU target: the placeholder ent_pc has no entry
@@ -1575,7 +1578,7 @@ pub(super) struct PltCallFixup {
 /// `B <plt_trampoline>` placeholder. libc's `RET` returns
 /// directly to the c5 caller of the trampoline, skipping
 /// both this `B` and the trampoline entirely on the way back.
-/// Used by `Op::TailExt`.
+/// Used by the `Terminator::TailExt` lowering.
 pub(super) fn emit_got_tail_jump(
     code: &mut Vec<u8>,
     plt_call_fixups: &mut Vec<PltCallFixup>,

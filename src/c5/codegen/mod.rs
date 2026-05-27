@@ -207,11 +207,11 @@ pub(crate) enum ReturnExt {
 }
 
 /// Distance from a function's `ent_pc` to the synthetic
-/// post-prologue PC slot in `pc_to_native`. Matches the i64-word
-/// stride the legacy bytecode encoder reserved for `Op::Ent` (one
-/// opcode word + one operand word), kept as a numeric constant so
-/// the codegen no longer reaches into the `op` module just to
-/// recover it. The DWARF CFI pass reads
+/// post-prologue PC slot in `pc_to_native`. The parser still
+/// strides PCs by 2 per source op (an opcode word plus an
+/// operand word from the legacy bytecode layout), so the
+/// post-prologue slot is the second entry after the function's
+/// entry. The DWARF CFI pass reads
 /// `pc_to_native[ent_pc + POST_PROLOGUE_PC_OFFSET]` to encode
 /// `DW_CFA_advance_loc <prologue bytes>`.
 pub(super) const POST_PROLOGUE_PC_OFFSET: usize = 2;
@@ -252,10 +252,10 @@ pub(super) fn pc_extent_for_lowering(
 
 /// Where a single call argument lands on the host ABI. Produced
 /// by [`plan_call_args`], consumed by the per-arch lowering at
-/// `Op::JsrExt` and (in non-variadic shape) at `Op::Jsr` /
-/// `Op::Jsri`. The placement is target-agnostic; the per-arch
-/// emitter turns each variant into the right load / store
-/// instruction pair.
+/// `Inst::CallExt` and (in non-variadic shape) at `Inst::Call`
+/// / `Inst::CallIndirect`. The placement is target-agnostic; the
+/// per-arch emitter turns each variant into the right load /
+/// store instruction pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ArgPlacement {
     /// Goes into an integer arg register. Index is into
@@ -453,17 +453,18 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
 }
 
 /// One resolved external import: a binding the program reaches
-/// for via `Op::JsrExt`, plus everything the codegen and writer
-/// need to wire it up. Built once per compilation by
+/// for via `Inst::CallExt`, plus everything the codegen and
+/// writer need to wire it up. Built once per compilation by
 /// [`ResolvedImports::resolve`] from the `#pragma binding(...)`
 /// table the preprocessor parsed out of the included headers.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedImport {
     /// Flat index into the program's `#pragma binding(...)` table
     /// -- the value the parser stored in the symbol's `val` field
-    /// and emitted as the operand of `Op::JsrExt`. The lowering
-    /// uses [`ResolvedImports::index_of_binding`] to translate this
-    /// back into a GOT / IAT slot index when patching call sites.
+    /// and emitted as `Inst::CallExt`'s `binding_idx`. The
+    /// lowering uses [`ResolvedImports::index_of_binding`] to
+    /// translate this back into a GOT / IAT slot index when
+    /// patching call sites.
     pub binding_idx: i64,
     /// The portable c5-side name (`"printf"`). Used by the VM to
     /// dispatch to the right Rust shim, and in compile-error
@@ -617,8 +618,8 @@ impl ResolvedImports {
     /// Look up the slot index for a given binding-flat index.
     /// `None` if the program doesn't reach for that binding --
     /// callers should treat that as a codegen bug (lowering
-    /// shouldn't emit a fixup for an `Op::JsrExt` operand that
-    /// isn't in the resolved set).
+    /// shouldn't emit a fixup for an `Inst::CallExt` whose
+    /// `binding_idx` isn't in the resolved set).
     pub fn index_of_binding(&self, binding_idx: i64) -> Option<usize> {
         self.imports
             .iter()
@@ -756,8 +757,8 @@ impl ResolvedImports {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
-                        "Op::JsrExt operand {binding_idx} is out of range for the program's \
-                     `#pragma binding(...)` table"
+                        "Inst::CallExt binding_idx {binding_idx} is out of range for the \
+                     program's `#pragma binding(...)` table"
                     ),
                 )));
             };
@@ -940,29 +941,29 @@ pub(crate) struct Build {
     /// `Program::tls_data`. The writer routes the first
     /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
     /// and the remainder to `.tbss` (zero-fill TLS bss). The
-    /// per-target codegen lowering for `Op::TlsLea` reads
+    /// per-target codegen lowering for `Inst::TlsAddr` reads
     /// `tls_data.len()` to compute variant-2 (x86_64) negative
     /// offsets at emit time.
     pub tls_data: Vec<u8>,
     /// Number of `tls_data` bytes that are statically initialised.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
-    /// Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
-    /// on a Win64 target. The writer reserves a 4-byte
-    /// `_tls_index` slot in `.data`, builds the
+    /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
+    /// lowering site on a Win64 target. The writer reserves a
+    /// 4-byte `_tls_index` slot in `.data`, builds the
     /// `IMAGE_TLS_DIRECTORY`, and patches each fixup with the
     /// displacement to the slot. Empty for non-Win64 targets and
     /// for Win64 programs with no `_Thread_local` globals.
     pub tls_index_fixups: Vec<TlsIndexFixup>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
-    /// `Op::TlsLea` site on macOS. Each records an
+    /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the
     /// per-variable `__thread_vars` descriptor.
     pub macho_tlv_fixups: Vec<MachoTlvFixup>,
     /// macOS arm64 TLV descriptors. One entry per distinct TLS
     /// variable referenced by the program; each descriptor's
     /// `offset_in_block` is the byte offset within
-    /// `Build::tls_data` (matching what `Op::TlsLea` records).
+    /// `Build::tls_data` (matching `Inst::TlsAddr`'s operand).
     /// The writer emits a 24-byte descriptor per entry into the
     /// `__DATA,__thread_vars` section: `[ __tlv_bootstrap | 0 |
     /// offset_in_block ]`. Empty unless the target is macOS arm64
@@ -1031,11 +1032,11 @@ pub(crate) struct Build {
     /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
     /// instructions on aarch64 / 1 instruction on x86_64) that
     /// the per-arch lowering emits at the tail of the user code.
-    /// Every `Op::JsrExt` / `Op::TailExt` call site now branches
-    /// here via `bl` / `call rel32` instead of inlining the GOT
-    /// load -- so a debugger's `b malloc` resolves against this
-    /// in-image local symbol rather than getting lost in the
-    /// dynamic linker's macro-expansion sites.
+    /// Every `Inst::CallExt` / `Terminator::TailExt` lowering
+    /// branches here via `bl` / `call rel32` instead of inlining
+    /// the GOT load -- so a debugger's `b malloc` resolves
+    /// against this in-image local symbol rather than getting
+    /// lost in the dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<usize>,
 }
 
@@ -1045,7 +1046,7 @@ pub(crate) struct Build {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MachoTlvDescriptor {
     /// Byte offset within `Build::tls_data` where this variable
-    /// starts. Mirrors `Op::TlsLea`'s operand.
+    /// starts. Mirrors `Inst::TlsAddr`'s operand.
     pub offset_in_block: u64,
 }
 
@@ -1062,10 +1063,10 @@ pub(crate) struct GotFixup {
     pub import_index: usize,
 }
 
-/// Relocation for `Op::Imm <data_offset>`: the codegen emits an
-/// `adrp + add` placeholder pair to materialize the address into the
-/// VM accumulator, and the writer patches both halves once it knows
-/// where `__data` lands in vmaddr space.
+/// Relocation for `Inst::ImmData`: the codegen emits an
+/// `adrp + add` placeholder pair to materialize the address into
+/// the VM accumulator, and the writer patches both halves once
+/// it knows where `__data` lands in vmaddr space.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DataFixup {
     /// Byte offset within `Build::text` of the adrp instruction.
@@ -1079,7 +1080,7 @@ pub(crate) struct DataFixup {
 // the per-target TLS offset (variant-1 TCB_HEAD + offset on
 // aarch64, variant-2 -(tls_size - offset) on x86_64) only depends
 // on the total TLS block size, which is known when the codegen
-// lowers `Op::TlsLea`. The codegen materialises the final
+// lowers `Inst::TlsAddr`. The codegen materialises the final
 // immediate inline; the writer just needs `Build::tls_data` /
 // `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
 //
@@ -1089,8 +1090,8 @@ pub(crate) struct DataFixup {
 // access (so the same compiled image works regardless of which
 // slot the loader picked). The address of `_tls_index` isn't
 // known until the writer lays out the data segments, so each
-// `Op::TlsLea` records a [`TlsIndexFixup`] for the writer to
-// patch.
+// `Inst::TlsAddr` lowering site records a [`TlsIndexFixup`] for
+// the writer to patch.
 
 /// Relocation for a Win64 TLS access. Records a code site whose
 /// instruction needs to be patched with the displacement to the
@@ -1214,9 +1215,9 @@ pub(crate) struct UserExternDataRef {
     pub symbol_name: alloc::string::String,
 }
 
-/// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).
-/// Same `adrp + add` shape as [`DataFixup`], but the target is another
-/// position inside `Build::text` rather than `Build::data`.
+/// Relocation for a function-pointer literal (`Inst::ImmCode`).
+/// Same `adrp + add` shape as [`DataFixup`], but the target is
+/// another position inside `Build::text` rather than `Build::data`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FuncFixup {
     /// Byte offset within `Build::text` of the adrp instruction.

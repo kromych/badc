@@ -313,7 +313,7 @@ pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i3
 /// `MOV [base + disp], r32` -- 32-bit memory store of the low half
 /// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
 /// operand register needs the high bank). Companion to
-/// [`emit_movsxd_r_mem`] for [`Op::Sw`].
+/// [`emit_movsxd_r_mem`] for the `StoreKind::I32` lowering.
 pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     let needs_rex = src.high() || base.high();
     if needs_rex {
@@ -346,7 +346,8 @@ pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: 
 /// `MOV [base + disp], r16` -- 16-bit memory store of the low half-
 /// word of `src`. Encoding: `66` prefix (operand-size override to
 /// 16-bit) + optional REX (no W) + `89 /r`. Companion to
-/// [`emit_movsx_r_mem16`] / [`emit_movzx_r_mem16`] for [`Op::Sh`].
+/// [`emit_movsx_r_mem16`] / [`emit_movzx_r_mem16`] for the
+/// `StoreKind::I16` lowering.
 pub(super) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, 0x66);
     let needs_rex = src.high() || base.high();
@@ -676,8 +677,8 @@ pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: 
 
 /// `MOVSS [base+disp32], xmm` -- store 4 bytes from the low dword of
 /// an XMM register. Encoding: `F3 0F 11 /r`. Companion to
-/// [`emit_movss_xmm_mem`]; the [`Op::Sf`] handler uses this for the
-/// final narrowed store.
+/// [`emit_movss_xmm_mem`]; the `StoreKind::F32` lowering uses
+/// this for the final narrowed store.
 pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
     emit_byte(code, 0xF3);
     if xmm.high() || base.high() {
@@ -705,8 +706,9 @@ pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 
 /// `CVTSD2SS xmm, xmm` -- narrow double-precision to single-precision
 /// with round-to-nearest-ties-to-even (matching IEEE 754 and the
-/// VM's `f64 as f32` semantics). Encoding: `F2 0F 5A /r`. Used by
-/// [`Op::Sf`] before the single-precision store.
+/// VM's `f64 as f32` semantics). Encoding: `F2 0F 5A /r`. Used
+/// by the `StoreKind::F32` lowering before the single-precision
+/// store.
 pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF2);
     if dst.high() || src.high() {
@@ -745,7 +747,7 @@ pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
 }
 
 /// `SHR r/m64, cl` -- logical right shift (zero fills high bits).
-/// ModR/M.reg = 5. Used by [`Op::Shru`] / unsigned `>>`.
+/// ModR/M.reg = 5. Used by [`BinOp::Shru`] / unsigned `>>`.
 pub(super) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xD3);
@@ -816,8 +818,9 @@ pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 7, dst, imm);
 }
 
-// ---- 8-bit memory + setcc. Used for `ScalarLoadKind::Lc` / `Op::Sc` and for
-//      the comparison ops that produce 0/1 in the low byte.
+// ---- 8-bit memory + setcc. Used for `LoadKind::U8` /
+//      `StoreKind::I8` and for the comparison ops that produce
+//      0/1 in the low byte.
 
 /// Condition codes for `Jcc` and `setcc`. Values match Intel's CC
 /// encoding so the opcode byte for `Jcc` is `0F 8X+cc` and for
@@ -856,9 +859,10 @@ pub(super) enum Cc {
 
 impl Cc {
     /// Logical complement of the condition. The cmp+branch
-    /// fusion peephole calls this when `Op::Bz` (test for boolean
-    /// zero) lands on a compare op whose `setcc` was elided: the
-    /// branch must fire on the inverted predicate. Mirror of
+    /// fusion peephole calls this when a `Terminator::Bz` (test
+    /// for boolean zero) lands on a compare op whose `setcc` was
+    /// elided: the branch must fire on the inverted predicate.
+    /// Mirror of
     /// [`super::aarch64::Cond::flip`].
     fn flip(self) -> Cc {
         match self {
@@ -977,7 +981,8 @@ pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
 /// `JMP qword ptr [rip+disp32]` -- 6-byte indirect tail-jump
 /// through a memory operand. Same `FF /4` opcode family as the
 /// indirect `CALL` above; only the `/4` ModR/M extension changes
-/// (4 = JMP, 2 = CALL). Used by `Op::TailExt` to forward control
+/// (4 = JMP, 2 = CALL). Used by the `Terminator::TailExt`
+/// lowering to forward control
 /// from a c5 trampoline to the IAT/GOT-resolved libc address
 /// without disturbing the caller's argument registers or shadow
 /// space. Disp32 measurement origin is the byte just past the
@@ -1335,11 +1340,12 @@ pub(super) struct Fixup {
     pub(super) kind: BranchKind,
 }
 
-/// Translate a c5 `Op::Lea` offset (in 8-byte VM-slot units) into
-/// the matching native byte offset from rbp. Same convention as the
-/// aarch64 backend: locals (val < 2) keep `* 8`; args (val >= 2)
-/// switch to `* 16` because Op::Psh writes 16-byte slots so SP stays
-/// aligned at libc-call sites.
+/// Translate a c5 address-of-local offset (in 8-byte VM-slot
+/// units) into the matching native byte offset from rbp. Same
+/// convention as the aarch64 backend: locals (val < 2) keep
+/// `* 8`; args (val >= 2) switch to `* 16` because the
+/// accumulator push writes 16-byte slots so SP stays aligned at
+/// libc-call sites.
 fn lea_offset_bytes(offset: i64) -> i64 {
     if offset >= 2 {
         (offset - 1) * 16
@@ -1375,9 +1381,9 @@ pub(super) fn lower(
     // Function-pointer Imms get their target resolved post-walk
     // against `pc_to_native`, mirroring aarch64::lower.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
-    // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
-    // when targeting Windows. The PE writer reserves the
-    // `_tls_index` DWORD slot and patches each fixup with the
+    // Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
+    // lowering site when targeting Windows. The PE writer reserves
+    // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     // Lift the program into SSA once and run the linear-scan
@@ -1564,7 +1570,7 @@ pub(super) fn lower(
     // a host caller (`pthread_create`, `CreateThread`, `qsort`,
     // a static dispatch table) can call the body straight. Variadic
     // c5 functions keep the c5-stack-based ABI and reach only via
-    // `Op::Jsri` callers that lay args onto the c5 stack first;
+    // indirect c5 callers that lay args onto the c5 stack first;
     // their fn-pointer fixups also land on the body, which keeps
     // that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
@@ -1719,8 +1725,9 @@ pub(super) struct PltCallFixup {
     pub(super) instr_offset: usize,
     /// Import slot the call should reach via its trampoline.
     pub(super) import_index: usize,
-    /// `true` -> emit `JMP rel32` (tail jump from `Op::TailExt`);
-    /// `false` -> emit `CALL rel32` (regular `Op::JsrExt` site).
+    /// `true` -> emit `JMP rel32` (tail jump from
+    /// `Terminator::TailExt`); `false` -> emit `CALL rel32`
+    /// (regular `Inst::CallExt` site).
     /// Both are 5 bytes, both use the same disp32 measurement
     /// origin (one byte past the instruction).
     pub(super) is_tail: bool,

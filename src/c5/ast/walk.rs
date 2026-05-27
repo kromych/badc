@@ -1326,9 +1326,9 @@ impl<'a> Walker<'a> {
                 //   * Non-Ident callee (struct-field-then-call,
                 //     `*fp(...)`, ...): the parser's Pratt loop
                 //     evaluates the callee before reaching `(` and
-                //     spills it to a temp via `Op::StLocI`. The
-                //     walker evaluates the callee FIRST and
-                //     stashes the resulting ValueId.
+                //     spills it to a temp through the store-local
+                //     path. The walker evaluates the callee FIRST
+                //     and stashes the resulting ValueId.
                 //   * Ident callee of class Loc / Glo (simple
                 //     function-pointer variable): the parser's
                 //     dedicated `()`-after-identifier path
@@ -1547,8 +1547,8 @@ impl<'a> Walker<'a> {
                 // compatible in the accumulator -- the c5
                 // accumulator carries f64 bits; narrowing /
                 // widening between float and double happens at
-                // the `Op::Sf` / `ScalarLoadKind::Lf` boundary. No inline
-                // conversion required.
+                // the `StoreKind::F32` / `LoadKind::F32` boundary.
+                // No inline conversion required.
                 if target_is_fp && source_is_fp {
                     return Ok(v);
                 }
@@ -1894,14 +1894,15 @@ impl<'a> Walker<'a> {
         is_thread_local: bool,
         array_size: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        // The parser snapshotted `val` as the `Op::Ent` PC at
-        // emit time; for `Token::Fun` references the live PC
-        // lives on `self.symbols[sym].val` (sys trampolines
-        // patch theirs late). Other classes (`Token::Loc` /
-        // `Token::Glo` / `Token::Num`) carry a stable per-frame
-        // slot / data offset / constant, so the snapshot stays
-        // correct. Glo non-TLS routes through `live_glo_addr`
-        // which discriminates a cross-TU extern from an
+        // The parser snapshotted `val` as the function's
+        // entry-PC at emit time; for `Token::Fun` references the
+        // live PC lives on `self.symbols[sym].val` (sys
+        // trampolines patch theirs late). Other classes
+        // (`Token::Loc` / `Token::Glo` / `Token::Num`) carry a
+        // stable per-frame slot / data offset / constant, so the
+        // snapshot stays correct. Glo non-TLS routes through
+        // `live_glo_addr` which discriminates a cross-TU extern
+        // from an
         // intra-unit data offset without a 0 sentinel.
         let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
             Some(self.live_glo_addr(_sym, val))

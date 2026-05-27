@@ -224,7 +224,16 @@ pub(super) fn pc_extent_for_lowering(
     program: &Program,
     ssa_funcs: &[crate::c5::ir::FunctionSsa],
 ) -> usize {
-    let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
+    // `record_post_prologue_pc` writes at `ent_pc +
+    // POST_PROLOGUE_PC_OFFSET` for every function, which can
+    // sit past `end_pc` when a function compiles down to fewer
+    // than POST_PROLOGUE_PC_OFFSET ops. Include the offset in
+    // the per-function bound so the post-prologue slot fits.
+    let from_ssa = ssa_funcs
+        .iter()
+        .map(|f| f.end_pc.max(f.ent_pc + POST_PROLOGUE_PC_OFFSET))
+        .max()
+        .unwrap_or(0);
     // Cross-TU function-import placeholders sit past the
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to

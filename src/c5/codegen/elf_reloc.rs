@@ -91,6 +91,14 @@ const STT_SECTION: u8 = 3;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 
+/// Name prefix for the synthetic STB_LOCAL STT_NOTYPE symbols
+/// the writer emits at each function's post-prologue native byte
+/// offset. The linker's merge pass keys on this prefix to collect
+/// the resolved offsets into `MergedNative::prologue_ends`; the
+/// suffix is the source function name. Kept in sync with
+/// `link.rs::PROLOGUE_END_PREFIX`.
+pub(super) const PROLOGUE_END_PREFIX: &str = ".Lc5_prologue_end_";
+
 const ELF64_EHDR_SIZE: usize = 64;
 const ELF64_SHDR_SIZE: usize = 64;
 const ELF64_SYM_SIZE: usize = 24;
@@ -335,6 +343,20 @@ pub(super) fn write_relocatable(
     let mut local_func_idxs: Vec<usize> = Vec::new();
     let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
+    // Synthetic STB_LOCAL STT_NOTYPE symbols anchored at each
+    // function's post-prologue native byte offset. The linker's
+    // merge pass collects them by name prefix and exposes their
+    // resolved offsets through `MergedNative::prologue_ends`; the
+    // synth path then populates `pc_to_native[ent_pc + 2]` so
+    // `dwarf::build_debug_frame` emits `DW_CFA_advance_loc
+    // <prologue_size>` before the post-prologue CFA rule. Without
+    // them, multi-TU FDEs install the CFA rule at byte 0 of the
+    // function (suboptimal for unwinds caught inside the prologue
+    // range). Format: `.Lc5_prologue_end_<funcname>` -- the
+    // leading `.L` matches the conventional compiler-local
+    // prefix `nm` / `objdump` filter out by default.
+    let mut prologue_end_entries: Vec<(usize, usize)> = Vec::new();
+    let mut prologue_end_names: Vec<String> = Vec::new();
     for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
         // FunctionSsa::name is the canonical source for the
         // symbol-table name: the walker copies it from
@@ -349,6 +371,19 @@ pub(super) fn write_relocatable(
             .filter(|s| !s.is_empty())
             .cloned()
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
+        // Build the synthetic prologue_end entry for this
+        // function before consuming `name`. The post-prologue
+        // native byte offset lives at `pc_to_native[ent_pc +
+        // POST_PROLOGUE_PC_OFFSET]`; skip when the SSA emit
+        // didn't record one (synthetic CRT trampolines without
+        // a standard prologue shape).
+        let post_pp_pc = ent_pc + super::POST_PROLOGUE_PC_OFFSET;
+        if let Some(&post_native) = build.pc_to_native.get(post_pp_pc)
+            && post_native != usize::MAX
+        {
+            prologue_end_entries.push((i, post_native));
+            prologue_end_names.push(alloc::format!("{PROLOGUE_END_PREFIX}{name}"));
+        }
         func_strs.push(name);
         match func_linkage_by_pc.get(&ent_pc) {
             Some(crate::c5::symbol::Linkage::Internal) => local_func_idxs.push(i),
@@ -460,6 +495,10 @@ pub(super) fn write_relocatable(
     for name in &user_extern_data_names {
         all_names.push(*name);
     }
+    let prologue_end_names_start = all_names.len();
+    for s in &prologue_end_names {
+        all_names.push(s.as_str());
+    }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
     // strtab.
@@ -496,6 +535,20 @@ pub(super) fn write_relocatable(
             st_shndx: SHIDX_TEXT,
             st_value: lo as u64,
             st_size: hi.saturating_sub(lo) as u64,
+            ..Default::default()
+        });
+    }
+    // Prologue_end synthetic locals (also STB_LOCAL, also
+    // pre-first_global). Each one's `st_value` is the native
+    // byte offset of the first post-prologue instruction; size
+    // stays zero (a marker, not a code region).
+    for (j, &(_i, post_native)) in prologue_end_entries.iter().enumerate() {
+        symbols.push(Elf64Sym {
+            st_name: name_offs[prologue_end_names_start + j],
+            st_info: pack_sym_info(STB_LOCAL, STT_NOTYPE),
+            st_shndx: SHIDX_TEXT,
+            st_value: post_native as u64,
+            st_size: 0,
             ..Default::default()
         });
     }

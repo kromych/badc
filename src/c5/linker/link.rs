@@ -121,6 +121,16 @@ pub struct MergedNative {
     /// the result in little-endian over `width` bytes.
     pub debug_info_text_relocs: Vec<DebugTextReloc>,
     pub debug_line_text_relocs: Vec<DebugTextReloc>,
+    /// Per-function post-prologue byte offset in [`Self::text`].
+    /// Sourced from the writer's synthetic
+    /// `.Lc5_prologue_end_<funcname>` STB_LOCAL STT_NOTYPE symbols
+    /// (see `elf_reloc::PROLOGUE_END_PREFIX`), rebased by the
+    /// per-unit text base. The synth path consults this to
+    /// populate `pc_to_native[ent_pc + POST_PROLOGUE_PC_OFFSET]`
+    /// so `dwarf::build_debug_frame` emits
+    /// `DW_CFA_advance_loc <prologue_size>` ahead of the
+    /// post-prologue CFA rule.
+    pub prologue_ends: BTreeMap<String, u64>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -268,6 +278,33 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 )));
             }
             defined.insert(sym.name.clone(), merged);
+        }
+    }
+
+    // Pass 2.1 -- collect synthetic prologue-end anchors. The
+    // per-`.o` writer (`elf_reloc.rs`) emits one
+    // STB_LOCAL STT_NOTYPE symbol per function at the post-
+    // prologue native byte offset, named with the
+    // `PROLOGUE_END_PREFIX` prefix; rebase its value by the
+    // unit's text base and key it on the source function name
+    // (the suffix). Duplicate names lose to the first writer
+    // (matches the `defined` rule for STB_GLOBAL above).
+    let mut prologue_ends: BTreeMap<String, u64> = BTreeMap::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for sym in &obj.symbols {
+            if !matches!(sym.section, NativeSymSection::Text) {
+                continue;
+            }
+            let Some(fn_name) = sym.name.strip_prefix(PROLOGUE_END_PREFIX) else {
+                continue;
+            };
+            if fn_name.is_empty() {
+                continue;
+            }
+            let merged_offset = text_bases[i] as u64 + sym.value;
+            prologue_ends
+                .entry(fn_name.to_string())
+                .or_insert(merged_offset);
         }
     }
 
@@ -779,8 +816,16 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         unit_for_debug_line_reloc,
         debug_info_text_relocs,
         debug_line_text_relocs,
+        prologue_ends,
     })
 }
+
+/// Name prefix the per-`.o` writer (`elf_reloc.rs`) gives the
+/// synthetic STB_LOCAL STT_NOTYPE symbol that anchors each
+/// function's post-prologue native byte offset. The suffix is
+/// the source function name. Kept in sync with
+/// `elf_reloc::PROLOGUE_END_PREFIX`.
+pub(super) const PROLOGUE_END_PREFIX: &str = ".Lc5_prologue_end_";
 
 /// One text-targeting DWARF reloc that survives the link pass.
 /// The placeholder at `byte_offset` inside its parent DWARF

@@ -1033,6 +1033,18 @@ fn multi_tu_link_populates_debug_frame() {
         "expected at least two FDEs (helper + main) in merged .debug_frame, \
          got {fde_count}:\n{frame_text}",
     );
+    // Each FDE should advance past the prologue before installing
+    // the post-prologue CFA rule. Without the synthetic
+    // prologue-end symbols, `prologue_size_for` returns 0 on the
+    // merged path and the FDE installs the rule at the function's
+    // first byte (wrong for the prologue range).
+    let advance_loc_count = frame_text.matches("DW_CFA_advance_loc").count();
+    assert!(
+        advance_loc_count >= 2,
+        "expected at least two DW_CFA_advance_loc opcodes \
+         (one per user function's prologue) in merged .debug_frame, \
+         got {advance_loc_count}:\n{frame_text}",
+    );
 }
 
 #[test]

@@ -1046,6 +1046,7 @@ mod tests {
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
+            prologue_ends: alloc::collections::BTreeMap::new(),
         }
     }
 

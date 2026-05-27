@@ -66,6 +66,7 @@ enum PureKey {
     Imm(i64),
     ImmData(i64),
     ImmCode(usize),
+    TlsAddr(i64),
     Binop { op: BinOp, lhs: ValueId, rhs: ValueId },
     BinopI { op: BinOp, lhs: ValueId, rhs_imm: i64 },
     Fneg(ValueId),
@@ -336,10 +337,21 @@ impl SsaBuilder {
     }
 
     /// `Inst::TlsAddr`. Same alias-escape rationale as
-    /// `local_addr`.
+    /// `local_addr` for the load-local cache. TlsAddr itself is
+    /// pure (a per-thread block + offset materialization with no
+    /// per-arch fusion against subsequent Load / Store), so the
+    /// address ValueId is CSE-eligible.
     pub(crate) fn tls_addr(&mut self, off: i64) -> ValueId {
+        if let Some(cached) = self.lookup_pure(PureKey::TlsAddr(off)) {
+            return cached;
+        }
         self.local_cache.clear();
-        self.push(Inst::TlsAddr(off))
+        let id = self.push(Inst::TlsAddr(off));
+        self.pure_cache.push(PureCacheEntry {
+            key: PureKey::TlsAddr(off),
+            value: id,
+        });
+        id
     }
 
     /// `Inst::TlsAddr(0)` whose target lives in another TU.

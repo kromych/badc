@@ -1175,7 +1175,20 @@ pub(super) fn write(
     } else {
         None
     };
-    let dwarf_sections = if emit_dwarf {
+    let dwarf_sections = if let Some(md) = &build.merged_dwarf {
+        // Multi-TU link: drop pre-baked linker-merged DWARF
+        // bytes into the output sections. `.debug_str` and
+        // `.debug_frame` aren't preserved by the linker yet
+        // (TODO); empty payloads keep the segment layout
+        // self-consistent.
+        dwarf::DwarfSections {
+            debug_info: md.debug_info.clone(),
+            debug_abbrev: md.debug_abbrev.clone(),
+            debug_line: md.debug_line.clone(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    } else if emit_dwarf {
         dwarf::emit(
             program,
             build,

@@ -612,7 +612,18 @@ pub(super) fn write(
     // Each section is `IMAGE_SCN_MEM_DISCARDABLE`, so the loader
     // skips them at runtime even though they occupy RVA range --
     // they only matter to the debugger walking the file image.
-    let dwarf_sections = if dwarf_section_present {
+    let dwarf_sections = if let Some(md) = &build.merged_dwarf {
+        // Multi-TU link: drop pre-baked linker-merged DWARF
+        // bytes into the PE's debug sections. `.debug_str` and
+        // `.debug_frame` aren't preserved by the linker yet (TODO).
+        dwarf::DwarfSections {
+            debug_info: md.debug_info.clone(),
+            debug_abbrev: md.debug_abbrev.clone(),
+            debug_line: md.debug_line.clone(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    } else if dwarf_section_present {
         // PE has its own entry stub, but the symptom
         // (gdb's "Cannot find bounds of current function" after
         // stepping past `return 0;` in main) was only verified

@@ -260,10 +260,12 @@ fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfRel
         addend: 0,
     });
 
-    // Closing null DIE -- the abbrev marks `DW_CHILDREN_NO`, but
-    // DWARF still tolerates a terminating zero byte after the
-    // CU's last child run.
-    body.push(0);
+    // No closing null DIE. DWARF 4 5.7.2: the null-DIE
+    // sibling-list terminator is only emitted after a DIE marked
+    // `DW_CHILDREN_yes`. Appending one to a `DW_CHILDREN_no` CU
+    // makes `llvm-dwarfdump` / GNU `objdump` warn `Bogus
+    // end-of-siblings marker detected` and skips the bytes that
+    // follow it (= the next concatenated CU).
 
     // Unit header. `unit_length` covers everything after itself
     // (version + debug_abbrev_offset + address_size + body).

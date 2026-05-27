@@ -1507,12 +1507,7 @@ pub(super) fn lower(
         }
         out
     };
-    apply_fixups(
-        &mut code,
-        &resolved_fixups,
-        &pc_to_native,
-        pc_extent,
-    )?;
+    apply_fixups(&mut code, &resolved_fixups, &pc_to_native, pc_extent)?;
 
     // Append one PLT trampoline per import. CALL rel32 /
     // JMP rel32 placeholders recorded in `plt_call_fixups` get
@@ -1559,6 +1554,19 @@ pub(super) fn lower(
     // that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (instr_offset, target_ent_pc) in pending_func_fixups {
+        // Cross-TU target: the placeholder ent_pc has no entry in
+        // `pc_to_native`. Route to the named-symbol channel that
+        // data extern refs use; the linker resolves the LEA's
+        // disp32 (or the writer's named reloc) to `text_vaddr +
+        // target` via the data_abs_relocs Text-section path.
+        // Mirrors the aarch64 lowering's identical short-circuit.
+        if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
+            user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: (*name).into(),
+            });
+            continue;
+        }
         if target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(

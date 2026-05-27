@@ -67,10 +67,21 @@ enum PureKey {
     ImmData(i64),
     ImmCode(usize),
     TlsAddr(i64),
-    Binop { op: BinOp, lhs: ValueId, rhs: ValueId },
-    BinopI { op: BinOp, lhs: ValueId, rhs_imm: i64 },
+    Binop {
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    BinopI {
+        op: BinOp,
+        lhs: ValueId,
+        rhs_imm: i64,
+    },
     Fneg(ValueId),
-    FpCast { kind: FpCastKind, value: ValueId },
+    FpCast {
+        kind: FpCastKind,
+        value: ValueId,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -392,7 +403,11 @@ impl SsaBuilder {
             }
         }
         let v = self.push(Inst::LoadLocal { off, kind });
-        self.local_cache.push(LocalCacheEntry { off, kind, value: v });
+        self.local_cache.push(LocalCacheEntry {
+            off,
+            kind,
+            value: v,
+        });
         v
     }
 
@@ -1062,10 +1077,7 @@ mod tests {
         b.jmp(body);
         b.switch_to(body);
         let v_body = b.imm(7);
-        assert_ne!(
-            v_entry, v_body,
-            "imm across block boundary must emit fresh",
-        );
+        assert_ne!(v_entry, v_body, "imm across block boundary must emit fresh",);
         b.return_(v_body);
     }
 }

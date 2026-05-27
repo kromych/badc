@@ -877,11 +877,7 @@ fn emit_native_then_link_native_resolves_cross_unit_call() {
 #[test]
 fn macos_native_link_two_sources_with_libc() {
     let dir = tempdir("macos-native-link");
-    write_source(
-        &dir,
-        "helper.c",
-        "int helper(int x) { return x * 6; }\n",
-    );
+    write_source(&dir, "helper.c", "int helper(int x) { return x * 6; }\n");
     write_source(
         &dir,
         "main.c",
@@ -920,10 +916,7 @@ fn macos_native_link_two_sources_with_libc() {
     let out = Command::new(&exe).output().expect("run prog");
     assert_eq!(out.status.code(), Some(0), "exit status mismatch");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("answer=42"),
-        "unexpected stdout: {stdout}"
-    );
+    assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
 // Windows arm64 PE .o link path through the synthesizer. Compiles
@@ -943,11 +936,7 @@ fn windows_aarch64_native_link_two_sources_with_libc() {
         return;
     }
     let dir = tempdir("windows-arm64-native-link");
-    write_source(
-        &dir,
-        "helper.c",
-        "int helper(int x) { return x * 6; }\n",
-    );
+    write_source(&dir, "helper.c", "int helper(int x) { return x * 6; }\n");
     write_source(
         &dir,
         "main.c",
@@ -1002,10 +991,7 @@ fn windows_aarch64_native_link_two_sources_with_libc() {
     };
     assert_eq!(out.status.code(), Some(0), "exit status mismatch");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("answer=42"),
-        "unexpected stdout: {stdout}"
-    );
+    assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
 
 // Windows x64 PE .o link path through the synthesizer. Mirror of
@@ -1028,11 +1014,7 @@ fn windows_x64_native_link_two_sources_with_libc() {
         return;
     }
     let dir = tempdir("windows-x64-native-link");
-    write_source(
-        &dir,
-        "helper.c",
-        "int helper(int x) { return x * 6; }\n",
-    );
+    write_source(&dir, "helper.c", "int helper(int x) { return x * 6; }\n");
     write_source(
         &dir,
         "main.c",
@@ -1087,8 +1069,5 @@ fn windows_x64_native_link_two_sources_with_libc() {
     };
     assert_eq!(out.status.code(), Some(0), "exit status mismatch");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("answer=42"),
-        "unexpected stdout: {stdout}"
-    );
+    assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }

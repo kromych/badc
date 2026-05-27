@@ -619,4 +619,3 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
         // address-side rewrites are in place.
         || op_val == Op::Lf as i64
 }
-

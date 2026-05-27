@@ -1307,10 +1307,7 @@ fn build_export_directory(
 
     // AddressOfFunctions -- RVA of each function.
     for exp in exports {
-        let native_off = pc_to_native
-            .get(exp.ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
+        let native_off = pc_to_native.get(exp.ent_pc).copied().unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(

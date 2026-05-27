@@ -110,14 +110,12 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
         }
     }
 
-    let mut by_pc: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
+    let mut by_pc: alloc::collections::BTreeMap<usize, usize> = alloc::collections::BTreeMap::new();
     for (i, f) in funcs.iter().enumerate() {
         by_pc.insert(f.ent_pc, i);
     }
 
-    let mut reachable: alloc::collections::BTreeSet<usize> =
-        alloc::collections::BTreeSet::new();
+    let mut reachable: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let mut queue: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
 
     for f in funcs.iter() {
@@ -166,7 +164,8 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
         if !keep && std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
             std::eprintln!(
                 "[static_dce] dropping unreachable function `{}` ent_pc={}",
-                f.name, f.ent_pc,
+                f.name,
+                f.ent_pc,
             );
         }
         keep

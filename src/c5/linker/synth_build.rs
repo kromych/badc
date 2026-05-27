@@ -251,12 +251,7 @@ fn synth_fixups(
                 )?;
             }
             NativeMachine::X86_64 => {
-                project_x86_64_pending(
-                    reloc,
-                    &mut got_fixups,
-                    &mut data_fixups,
-                    &mut func_fixups,
-                )?;
+                project_x86_64_pending(reloc, &mut got_fixups, &mut data_fixups, &mut func_fixups)?;
             }
         }
     }
@@ -572,4 +567,3 @@ mod tests {
         );
     }
 }
-

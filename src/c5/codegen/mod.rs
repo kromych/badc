@@ -1391,7 +1391,10 @@ fn append_build_info(build: &mut Build) {
 /// Write a native image for `target` given an already-lowered `build`
 /// and its source `program`. Internal entry point shared between
 /// [`emit_native_with_options`] (single-TU path) and the linker's
-/// MergedNative-to-Build synthesizer (multi-TU `.o` link path).
+/// MergedNative-to-Build synthesizer (multi-TU `.o` link path). The
+/// synthesizer is gated behind the `linker` + `std` features; the
+/// no-default-features build has no consumer for this entry point.
+#[cfg(all(feature = "linker", feature = "std"))]
 pub(crate) fn write_native_image(
     program: &Program,
     build: &Build,

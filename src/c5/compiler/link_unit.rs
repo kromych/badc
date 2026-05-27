@@ -394,10 +394,7 @@ impl Compiler {
         let entry_name = self.pp_entrypoint.clone();
         let exports = core::mem::take(&mut self.pending_exports)
             .into_iter()
-            .map(|name| crate::c5::program::ExportedFunction {
-                name,
-                ent_pc: 0,
-            })
+            .map(|name| crate::c5::program::ExportedFunction { name, ent_pc: 0 })
             .collect::<Vec<_>>();
         // Resolve each export's ent_pc against the now-
         // finalised symbol table. Mirrors `resolve_exports`.

@@ -34,9 +34,9 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
+use super::unit::LinkUnit;
 use super::unit_reloc::{Reloc, RelocKind};
 use super::unit_symbol::{LinkSymbol, SymbolKind};
-use super::unit::LinkUnit;
 
 /// On-disk magic + version inside `.badc.meta`. Independent of
 /// the ELF wrapper -- a future version of the linker that reads
@@ -2395,10 +2395,7 @@ fn read_exports(body: &[u8]) -> Result<Vec<crate::c5::program::ExportedFunction>
         }
         let bc = u64_at(body, cursor) as usize;
         cursor += 8;
-        out.push(crate::c5::program::ExportedFunction {
-            name,
-            ent_pc: bc,
-        });
+        out.push(crate::c5::program::ExportedFunction { name, ent_pc: bc });
     }
     Ok(out)
 }

@@ -1346,12 +1346,7 @@ pub(super) fn lower(
         }
         out
     };
-    apply_fixups(
-        &mut code,
-        &resolved_fixups,
-        &pc_to_native,
-        pc_extent,
-    )?;
+    apply_fixups(&mut code, &resolved_fixups, &pc_to_native, pc_extent)?;
 
     // Append one PLT trampoline per import. Every BL/B
     // placeholder recorded in `plt_call_fixups` now gets its imm26
@@ -1432,15 +1427,12 @@ pub(super) fn lower(
         });
     }
 
-    let entry_offset = pc_to_native
-        .get(program.entry_pc)
-        .copied()
-        .ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: entry_pc {} is out of PC range",
-                program.entry_pc
-            )))
-        })?;
+    let entry_offset = pc_to_native.get(program.entry_pc).copied().ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            "native codegen: entry_pc {} is out of PC range",
+            program.entry_pc
+        )))
+    })?;
     if entry_offset == usize::MAX {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             &format!(

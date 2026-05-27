@@ -52,11 +52,6 @@
 //! source-file table, and DWARF variable list.
 
 mod archive;
-pub(crate) mod unit_link;
-mod unit_object;
-mod unit_reloc;
-mod unit_symbol;
-mod unit;
 #[cfg(feature = "std")]
 mod image;
 #[cfg(feature = "std")]
@@ -65,15 +60,13 @@ pub(crate) mod link;
 mod object;
 #[cfg(feature = "std")]
 mod synth_build;
+mod unit;
+pub(crate) mod unit_link;
+mod unit_object;
+mod unit_reloc;
+mod unit_symbol;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
-pub use unit_link::{LinkArchive, LinkOptions, link_units};
-pub use unit_object::{read_object, write_object};
-#[cfg(test)]
-pub(crate) use unit_object::{read_ssa_func, write_ssa_func};
-pub use unit_reloc::{Reloc, RelocKind};
-pub use unit_symbol::{LinkSymbol, SymbolKind};
-pub use unit::LinkUnit;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;
@@ -92,3 +85,10 @@ pub use object::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use synth_build::write_native_image_from_merged;
+pub use unit::LinkUnit;
+pub use unit_link::{LinkArchive, LinkOptions, link_units};
+pub use unit_object::{read_object, write_object};
+#[cfg(test)]
+pub(crate) use unit_object::{read_ssa_func, write_ssa_func};
+pub use unit_reloc::{Reloc, RelocKind};
+pub use unit_symbol::{LinkSymbol, SymbolKind};

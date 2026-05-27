@@ -611,13 +611,7 @@ fn collect_subprograms(
         .filter(|(_, n)| !n.is_empty())
         .collect();
     let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
-    ent_pcs.sort_unstable_by_key(|&pc| {
-        build
-            .pc_to_native
-            .get(pc)
-            .copied()
-            .unwrap_or(usize::MAX)
-    });
+    ent_pcs.sort_unstable_by_key(|&pc| build.pc_to_native.get(pc).copied().unwrap_or(usize::MAX));
     // Sentinel for end-of-last-function range. The PLT trampoline
     // pool is appended to `build.text` after the last user
     // function; addresses inside the pool must NOT fall inside any

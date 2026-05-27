@@ -1818,93 +1818,47 @@ impl Compiler {
                     // the FP binop.
                     compound_rhs_ast = self.ast_acc.or(compound_rhs_ast);
                 }
-                let op = match binop {
+                use super::super::ir::BinOp as B;
+                let bop = match binop {
                     x if x == Token::AddOp as i64 => {
-                        if lhs_is_fp {
-                            Op::Fadd
-                        } else {
-                            Op::Add
-                        }
+                        if lhs_is_fp { B::Fadd } else { B::Add }
                     }
                     x if x == Token::SubOp as i64 => {
-                        if lhs_is_fp {
-                            Op::Fsub
-                        } else {
-                            Op::Sub
-                        }
+                        if lhs_is_fp { B::Fsub } else { B::Sub }
                     }
                     x if x == Token::MulOp as i64 => {
-                        if lhs_is_fp {
-                            Op::Fmul
-                        } else {
-                            Op::Mul
-                        }
+                        if lhs_is_fp { B::Fmul } else { B::Mul }
                     }
                     x if x == Token::DivOp as i64 => {
                         if lhs_is_fp {
-                            Op::Fdiv
+                            B::Fdiv
                         } else if is_unsigned_ty(lhs_ty) {
-                            Op::Divu
+                            B::Divu
                         } else {
-                            Op::Div
+                            B::Div
                         }
                     }
                     x if x == Token::ModOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) {
-                            Op::Modu
-                        } else {
-                            Op::Mod
-                        }
+                        if is_unsigned_ty(lhs_ty) { B::Modu } else { B::Mod }
                     }
-                    x if x == Token::AndOp as i64 => Op::And,
-                    x if x == Token::OrOp as i64 => Op::Or,
-                    x if x == Token::XorOp as i64 => Op::Xor,
-                    x if x == Token::ShlOp as i64 => Op::Shl,
+                    x if x == Token::AndOp as i64 => B::And,
+                    x if x == Token::OrOp as i64 => B::Or,
+                    x if x == Token::XorOp as i64 => B::Xor,
+                    x if x == Token::ShlOp as i64 => B::Shl,
                     x if x == Token::ShrOp as i64 => {
-                        if is_unsigned_ty(lhs_ty) {
-                            Op::Shru
-                        } else {
-                            Op::Shr
-                        }
+                        if is_unsigned_ty(lhs_ty) { B::Shru } else { B::Shr }
                     }
                     _ => {
                         return Err(self.compile_err("unknown compound-assign opcode"));
                     }
                 };
-                self.emit_op(op);
+                self.ast_binop(bop);
                 self.ty = lhs_ty;
                 self.ast_assign();
                 if let Some(idx) = assigned_local {
                     self.record_local_store(idx, line);
                 }
-                // Build `Expr::CompoundAssign`. Map the selected
-                // `Op` to the matching `BinOp` so the walker
-                // reproduces the binop without re-running the
-                // FP-vs-int dispatch.
-                use super::super::ir::BinOp as B;
-                let ast_binop = match op {
-                    Op::Add => Some(B::Add),
-                    Op::Sub => Some(B::Sub),
-                    Op::Mul => Some(B::Mul),
-                    Op::Div => Some(B::Div),
-                    Op::Mod => Some(B::Mod),
-                    Op::Divu => Some(B::Divu),
-                    Op::Modu => Some(B::Modu),
-                    Op::Or => Some(B::Or),
-                    Op::Xor => Some(B::Xor),
-                    Op::And => Some(B::And),
-                    Op::Shl => Some(B::Shl),
-                    Op::Shr => Some(B::Shr),
-                    Op::Shru => Some(B::Shru),
-                    Op::Fadd => Some(B::Fadd),
-                    Op::Fsub => Some(B::Fsub),
-                    Op::Fmul => Some(B::Fmul),
-                    Op::Fdiv => Some(B::Fdiv),
-                    _ => None,
-                };
-                if let (Some(lhs), Some(rhs), Some(bop)) =
-                    (compound_lhs_ast, compound_rhs_ast, ast_binop)
-                {
+                if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
                     let ca_ty = self.ty;
                     self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty);
                 }

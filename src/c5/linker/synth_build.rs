@@ -423,7 +423,7 @@ fn project_x86_64_pending(
     // instruction, four bytes past the displacement field). The
     // writer's data / function patchers operate on the actual
     // target offset within the merged section, so add 4 back here.
-    let target_byte_offset = (reloc.addend as i64).wrapping_add(4);
+    let target_byte_offset = reloc.addend.wrapping_add(4);
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {

@@ -115,6 +115,8 @@ const DW_AT_BYTE_SIZE: u8 = 0x0b;
 const DW_AT_ENCODING: u8 = 0x3e;
 const DW_AT_TYPE: u8 = 0x49;
 const DW_AT_DATA_MEMBER_LOCATION: u8 = 0x38;
+const DW_AT_BIT_SIZE: u8 = 0x0d;
+const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -162,6 +164,7 @@ const ABBREV_POINTER_TYPE: u64 = 7;
 const ABBREV_STRUCTURE_TYPE: u64 = 8;
 const ABBREV_UNION_TYPE: u64 = 9;
 const ABBREV_MEMBER: u64 = 10;
+const ABBREV_BITFIELD_MEMBER: u64 = 11;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -355,6 +358,18 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA);
     out.push(0);
     out.push(0);
+    // Abbrev 11: bitfield member -- name + type ref4 +
+    // DWARF 4 DW_AT_data_bit_offset (absolute bit offset from
+    // the start of the aggregate) + DW_AT_bit_size (bit width).
+    write_uleb128(&mut out, ABBREV_BITFIELD_MEMBER);
+    out.push(DW_TAG_MEMBER);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
+    push_attr(&mut out, DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA);
+    push_attr(&mut out, DW_AT_BIT_SIZE, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
     // End of abbrev table.
     out.push(0);
     out
@@ -518,11 +533,6 @@ fn build_debug_info(
             push_string(&mut body, &sd.name);
             write_uleb128(&mut body, sd.size as u64);
             for f in &sd.fields {
-                if f.bit_width > 0 {
-                    // Bitfield members need DW_AT_bit_offset +
-                    // DW_AT_bit_size; skip for now.
-                    continue;
-                }
                 let Some(TypeKey::Scalar { leaf, depth }) = decompose_pointer_chain(f.ty) else {
                     continue;
                 };
@@ -530,10 +540,26 @@ fn build_debug_info(
                 else {
                     continue;
                 };
-                write_uleb128(&mut body, ABBREV_MEMBER);
-                push_string(&mut body, &f.name);
-                body.extend_from_slice(&field_type_off.to_le_bytes());
-                write_uleb128(&mut body, f.offset as u64);
+                if f.bit_width > 0 {
+                    // DWARF 4 5.6.6 bitfield: DW_AT_data_bit_offset
+                    // is the absolute bit offset from the start of
+                    // the aggregate. c5's StructField stores
+                    // `offset` as the byte offset of the storage
+                    // unit and `bit_offset` as the bit offset
+                    // within that unit, so the absolute bit
+                    // offset is `offset * 8 + bit_offset`.
+                    let data_bit_offset = (f.offset as u64) * 8 + f.bit_offset as u64;
+                    write_uleb128(&mut body, ABBREV_BITFIELD_MEMBER);
+                    push_string(&mut body, &f.name);
+                    body.extend_from_slice(&field_type_off.to_le_bytes());
+                    write_uleb128(&mut body, data_bit_offset);
+                    write_uleb128(&mut body, f.bit_width as u64);
+                } else {
+                    write_uleb128(&mut body, ABBREV_MEMBER);
+                    push_string(&mut body, &f.name);
+                    body.extend_from_slice(&field_type_off.to_le_bytes());
+                    write_uleb128(&mut body, f.offset as u64);
+                }
             }
             // End-of-children marker for the structure DIE.
             body.push(0);

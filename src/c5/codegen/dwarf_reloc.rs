@@ -126,6 +126,8 @@ const DW_AT_DATA_BIT_OFFSET: u8 = 0x6b;
 const DW_AT_EXTERNAL: u8 = 0x3f;
 const DW_AT_DECL_LINE: u8 = 0x3b;
 const DW_AT_PROTOTYPED: u8 = 0x27;
+const DW_AT_CALLING_CONVENTION: u8 = 0x36;
+const DW_CC_NORMAL: u8 = 0x01;
 const DW_AT_UPPER_BOUND: u8 = 0x2f;
 
 const DW_FORM_ADDR: u8 = 0x01;
@@ -286,6 +288,9 @@ fn build_debug_abbrev() -> Vec<u8> {
     // functions as cross-CU-visible. DW_AT_prototyped is always
     // set: c5 rejects K&R-style identifier-list declarators per
     // C99 6.7.6.3p14, so every emitted subprogram is prototyped.
+    // DW_AT_calling_convention pins the ABI to DW_CC_normal --
+    // SysV / Win64 / AAPCS64 all fall under the C standard
+    // convention per DWARF 4 section 3.3.1.1.
     write_uleb128(&mut out, ABBREV_SUBPROGRAM_LEAF);
     out.push(DW_TAG_SUBPROGRAM);
     out.push(DW_CHILDREN_NO);
@@ -294,6 +299,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
     push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
+    push_attr(&mut out, DW_AT_CALLING_CONVENTION, DW_FORM_DATA1);
     out.push(0);
     out.push(0);
     // Abbrev 3: subprogram with variable / parameter children.
@@ -307,6 +313,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
     push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
+    push_attr(&mut out, DW_AT_CALLING_CONVENTION, DW_FORM_DATA1);
     push_attr(&mut out, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
     out.push(0);
     out.push(0);
@@ -775,6 +782,10 @@ fn build_debug_info(
             addend: lo as i64,
         });
         body.extend_from_slice(&size.to_le_bytes());
+        // DW_AT_calling_convention -- c5's user-defined functions
+        // all use the host C ABI; debuggers treat that as
+        // DW_CC_normal.
+        body.push(DW_CC_NORMAL);
         if has_children {
             // DW_AT_frame_base: exprloc with a single
             // DW_OP_reg<fp> byte. ULEB128 length(1) + opcode.

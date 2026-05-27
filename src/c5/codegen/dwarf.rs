@@ -104,6 +104,8 @@ const DW_AT_BIT_SIZE: u32 = 0x0d;
 const DW_AT_DECL_LINE: u32 = 0x3b;
 const DW_AT_PROTOTYPED: u32 = 0x27;
 const DW_AT_UPPER_BOUND: u32 = 0x2f;
+const DW_AT_CALLING_CONVENTION: u32 = 0x36;
+const DW_CC_NORMAL: u8 = 0x01;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -1182,6 +1184,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
     write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
     write_attr(&mut buf, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
+    write_attr(&mut buf, DW_AT_CALLING_CONVENTION, DW_FORM_DATA1);
     write_attr(&mut buf, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
@@ -1572,6 +1575,10 @@ fn build_debug_info(
         body.extend_from_slice(&s.low_pc.to_le_bytes());
         body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
         // DW_AT_external is DW_FORM_flag_present -- no bytes.
+        // DW_AT_prototyped is DW_FORM_flag_present -- no bytes.
+        // DW_AT_calling_convention: DW_CC_normal pins user-defined
+        // functions to the host C ABI (SysV / Win64 / AAPCS64).
+        body.push(DW_CC_NORMAL);
         // DW_AT_frame_base (DW_FORM_exprloc): "frame base is
         // x29 + 0", encoded as `DW_OP_breg29 0`. Two bytes:
         // opcode + sleb128(0).

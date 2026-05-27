@@ -1242,6 +1242,70 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Every subprogram DIE carries DW_AT_calling_convention =
+/// DW_CC_normal (1) per DWARF 4 section 3.3.1.1. SysV / Win64 /
+/// AAPCS64 all fall under the C standard convention as far as
+/// debuggers are concerned.
+#[test]
+fn multi_tu_link_emits_calling_convention_on_subprograms() {
+    let dir = tempdir("multi-tu-calling-convention");
+    write_source(&dir, "helper.c", "int helper(int x) { return x + 1; }\n");
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_AT_calling_convention"),
+        "expected DW_AT_calling_convention on at least one subprogram:\n{out_text}",
+    );
+    // DW_CC_normal renders as `DW_CC_normal` in llvm-dwarfdump's
+    // verbose output and `(DW_CC_normal)` in macOS dwarfdump.
+    assert!(
+        out_text.contains("DW_CC_normal"),
+        "expected DW_CC_normal value on at least one subprogram:\n{out_text}",
+    );
+}
+
 /// Amalg dwarf.rs counterpart of
 /// `multi_tu_link_emits_array_type_for_struct_field_arrays`.
 /// Single-source compile through the amalg path also needs to

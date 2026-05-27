@@ -961,7 +961,13 @@ fn main() {
             // the linker picks the entry once it merges every
             // TU. Reuses the standard compile path otherwise
             // (preprocessor, walker, etc.).
-            let copts = badc::CompileOptions::default().with_no_entry_point(true);
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src_path.to_string())
+                .with_no_entry_point(true);
             let program = match Compiler::with_options(src_bytes, target, copts).compile() {
                 Ok(p) => p,
                 Err(e) => {
@@ -1037,7 +1043,13 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let copts = badc::CompileOptions::default().with_no_entry_point(true);
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src_path.to_string())
+                .with_no_entry_point(true);
             let program = match Compiler::with_options(src_bytes, target, copts).compile() {
                 Ok(p) => p,
                 Err(e) => {

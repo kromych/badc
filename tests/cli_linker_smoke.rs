@@ -767,6 +767,50 @@ fn compile_only_writes_relocatable_elf() {
     assert_eq!(bytes[5], 1, "expected ELFDATA2LSB");
 }
 
+/// `-c` must plumb `-D`, `-I`, and `-include` to the
+/// preprocessor. A prior CLI build seeded the per-TU compile
+/// with `CompileOptions::default()`, dropping every flag --
+/// the preprocessor then never expanded `#include` directives
+/// nor saw the user's `-D` macros, and a typedef chain like
+/// miniz's `sizeof(uint16_t) == 2 ? 1 : -1` array probe
+/// folded against an undefined typedef. C99 6.10.2 requires
+/// the include search path to be the implementation-defined
+/// set the driver was invoked with.
+#[test]
+fn compile_only_propagates_preprocessor_flags() {
+    let dir = tempdir("co-pp-flags");
+    std::fs::create_dir_all(dir.join("inc")).expect("mkdir inc");
+    std::fs::write(dir.join("inc").join("k.h"), "#define K 7\n").expect("write header");
+    std::fs::write(dir.join("inc").join("forced.h"), "typedef int forced_t;\n")
+        .expect("write force-include");
+    let src = write_source(
+        &dir,
+        "u.c",
+        "#include \"k.h\"\nforced_t pick(void) { return K + GATE; }\n",
+    );
+    let out = dir.join("u.o");
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("-DGATE=1")
+            .arg("-Iinc")
+            .arg("-include")
+            .arg("forced.h")
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile-only with -D/-I/-include",
+    );
+    assert!(out.exists(), "expected {} to exist", out.display());
+    let bytes = std::fs::read(&out).expect("read .o");
+    assert!(
+        bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
+        "expected ELF magic; got {:?}",
+        &bytes.get(..16),
+    );
+}
+
 #[test]
 fn compile_only_with_minus_o_writes_named_object() {
     let dir = tempdir("co-o");

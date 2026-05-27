@@ -37,11 +37,16 @@ void __c5_exit(int rc) {
 }
 
 // POSIX `environ` -- defined here as the single canonical
-// slot. Bundled headers (`<unistd.h>`, `<stdlib.h>`'s _WIN32
-// section) declare it as `extern char **environ;` so each TU
-// references this one definition rather than contributing a
-// tentative def of its own. Coalescing tentative defs into a
-// SHN_COMMON slot is filed under task #89; until that lands,
-// hosting the definition in the runtime side-steps the
-// multiple-definition collision.
+// slot. Bundled headers (`<unistd.h>`, `<stdlib.h>`) declare
+// it as `extern char **environ;` so each TU references this
+// one definition rather than contributing a tentative def of
+// its own. Coalescing tentative defs into a SHN_COMMON slot
+// is a separate TODO; until that lands, hosting the definition
+// in the runtime side-steps the multiple-definition collision.
 char **environ;
+
+// msvcrt's environment-vector alias on Windows. `<stdlib.h>`'s
+// `_WIN32` section declares it `extern char **_environ;` for
+// the same reason `environ` lives here -- a per-TU tentative
+// def would collide once two Windows TUs land in the same link.
+char **_environ;

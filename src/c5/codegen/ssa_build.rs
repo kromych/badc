@@ -36,6 +36,21 @@ use super::super::ir::{
     Terminator, ValueId,
 };
 
+/// Cached `(off, kind, value)` for a previously-pushed
+/// `Inst::LoadLocal` or `Inst::StoreLocal`. A subsequent
+/// `load_local` with the same `(off, kind)` returns the cached
+/// `value` without emitting a new instruction, matching standard
+/// in-block common-subexpression elimination for stack slots.
+/// Entries clear on stores / calls / address-of-local / block
+/// transitions -- anything that could write the slot through
+/// aliasing.
+#[derive(Clone, Copy)]
+struct LocalCacheEntry {
+    off: i64,
+    kind: LoadKind,
+    value: ValueId,
+}
+
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
 /// returns its [`ValueId`]; terminators close the current block.
 pub(crate) struct SsaBuilder {
@@ -44,6 +59,13 @@ pub(crate) struct SsaBuilder {
     /// terminator closes the block until [`Self::switch_to`] picks
     /// another one.
     current: Option<BlockId>,
+    /// Per-block CSE cache for `load_local` / `store_local`. The
+    /// list stays short in practice (typical block touches a
+    /// handful of slots), so a linear scan beats a BTreeMap. The
+    /// cache invalidates entirely on calls / generic stores /
+    /// address-of-local / block transitions; individual entries
+    /// invalidate when their slot is `store_local`-overwritten.
+    local_cache: Vec<LocalCacheEntry>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
     /// as `usize`. Set on [`Self::new_block`] and re-anchored by
     /// [`Self::switch_to`] -- the latter is what guarantees the
@@ -95,6 +117,7 @@ impl SsaBuilder {
         let mut b = Self {
             func,
             current: None,
+            local_cache: Vec::new(),
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
@@ -154,6 +177,10 @@ impl SsaBuilder {
         self.block_starts[idx] = self.func.insts.len() as u32;
         self.current = Some(block);
         self.last_def = NO_VALUE;
+        // Entering a new block starts a fresh CSE region. Stale
+        // entries from the prior block don't dominate the new
+        // block's first uses (would need phi to merge them).
+        self.local_cache.clear();
     }
 
     /// The implicit entry block (block 0). Always exists.
@@ -223,13 +250,18 @@ impl SsaBuilder {
         self.push(Inst::AllocaInit(slot))
     }
 
-    /// `Inst::LocalAddr`.
+    /// `Inst::LocalAddr`. The address of a local escapes; any
+    /// subsequent generic store could write through it, so drop
+    /// every CSE entry that's currently keyed on a local slot.
     pub(crate) fn local_addr(&mut self, off: i64) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::LocalAddr(off))
     }
 
-    /// `Inst::TlsAddr`.
+    /// `Inst::TlsAddr`. Same alias-escape rationale as
+    /// `local_addr`.
     pub(crate) fn tls_addr(&mut self, off: i64) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::TlsAddr(off))
     }
 
@@ -249,18 +281,43 @@ impl SsaBuilder {
 
     /// `Inst::Store` through a precomputed address. Returns the
     /// stored value's id (matches c5 semantics: a `Op::Si` leaves
-    /// the stored value in the accumulator).
+    /// the stored value in the accumulator). The address may
+    /// alias a local whose address escaped earlier; drop every
+    /// CSE entry so a later `load_local` re-reads the slot.
     pub(crate) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::Store { addr, value, kind })
     }
 
     /// `Inst::LoadLocal` -- fused [`Inst::LocalAddr`] + [`Inst::Load`].
+    /// In-block CSE: a prior `load_local` / `store_local` of the
+    /// same `(off, kind)` whose cache entry hasn't been invalidated
+    /// returns its `ValueId` directly. The downstream passes
+    /// (allocator, per-arch emit) see fewer redundant load
+    /// instructions; the codegen drops one local-slot load per
+    /// match.
     pub(crate) fn load_local(&mut self, off: i64, kind: LoadKind) -> ValueId {
-        self.push(Inst::LoadLocal { off, kind })
+        for entry in &self.local_cache {
+            if entry.off == off && entry.kind == kind {
+                return entry.value;
+            }
+        }
+        let v = self.push(Inst::LoadLocal { off, kind });
+        self.local_cache.push(LocalCacheEntry { off, kind, value: v });
+        v
     }
 
     /// `Inst::StoreLocal` -- fused [`Inst::LocalAddr`] + [`Inst::Store`].
+    /// Invalidates every CSE entry for the same slot. Does NOT
+    /// re-seed the cache with the just-stored value: narrowing
+    /// stores (I8 / I16 / I32 / F32) followed by a widening load
+    /// of the same width truncate-then-extend the value, so the
+    /// load result is not bit-identical to the source register
+    /// for inputs outside the narrow range. I64-store-then-I64-
+    /// load would be safe, but special-casing it isn't worth the
+    /// surface area; the next `load_local` simply re-emits.
     pub(crate) fn store_local(&mut self, off: i64, value: ValueId, kind: StoreKind) -> ValueId {
+        self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal { off, value, kind })
     }
 
@@ -320,8 +377,12 @@ impl SsaBuilder {
         self.push(Inst::FpCast { kind, value })
     }
 
-    /// `Inst::Call` -- direct user-function call.
+    /// `Inst::Call` -- direct user-function call. Callees may
+    /// write through any pointer they receive (including ones
+    /// derived from local addresses that escaped earlier in the
+    /// caller), so every CSE entry invalidates.
     pub(crate) fn call(&mut self, target_pc: usize, args: Vec<ValueId>) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::Call { target_pc, args })
     }
 
@@ -330,6 +391,7 @@ impl SsaBuilder {
     /// symbol index in `extern_call_refs` so the linker can
     /// resolve to the merged ent_pc after symbol unification.
     pub(crate) fn call_extern(&mut self, sym_idx: u32, args: Vec<ValueId>) -> ValueId {
+        self.local_cache.clear();
         let v = self.push(Inst::Call { target_pc: 0, args });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -337,22 +399,28 @@ impl SsaBuilder {
 
     /// `Inst::CallIndirect` -- function-pointer call.
     pub(crate) fn call_indirect(&mut self, target: ValueId, args: Vec<ValueId>) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::CallIndirect { target, args })
     }
 
     /// `Inst::Mcpy` -- whole-struct / aggregate memory copy of
     /// `size` bytes from `src` to `dst`. Used by the AST walker's
     /// `LocalInit::Aggregate` lowering when a brace-list
-    /// initializer's bytes were staged in `.data`.
+    /// initializer's bytes were staged in `.data`. dst may alias
+    /// any escaped local; invalidate the CSE cache.
     pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64) {
+        self.local_cache.clear();
         self.push(Inst::Mcpy { dst, src, size });
     }
 
     /// `Inst::Intrinsic` -- compiler-builtin (alloca / setjmp /
     /// longjmp / va_*). The `kind` is the discriminant from
     /// `crate::c5::op::Intrinsic`; the per-arch SSA emit reads it
-    /// to pick the right lowering.
+    /// to pick the right lowering. Conservative: invalidate the
+    /// CSE cache -- setjmp / longjmp move control across the
+    /// block, va_start / va_arg may write through caller buffers.
     pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::Intrinsic { kind, args })
     }
 
@@ -367,13 +435,17 @@ impl SsaBuilder {
         -self.func.locals
     }
 
-    /// `Inst::CallExt` -- libc / external call.
+    /// `Inst::CallExt` -- libc / external call. libc body may
+    /// write through caller-supplied pointers, including ones
+    /// derived from escaped local addresses; invalidate the
+    /// CSE cache.
     pub(crate) fn call_ext(
         &mut self,
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
     ) -> ValueId {
+        self.local_cache.clear();
         self.push(Inst::CallExt {
             binding_idx,
             args,
@@ -703,5 +775,100 @@ mod tests {
             let alloc = super::super::ssa_alloc::allocate(&func, target);
             assert_eq!(alloc.places.len(), func.insts.len());
         }
+    }
+
+    /// Back-to-back `load_local` of the same slot inside a block
+    /// returns the same ValueId without emitting a second
+    /// `Inst::LoadLocal`. Implements the in-block CSE described in
+    /// `load_local`'s doc-comment.
+    #[test]
+    fn load_local_cse_collapses_repeats() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v_first = b.load_local(2, LoadKind::I32);
+        let v_second = b.load_local(2, LoadKind::I32);
+        assert_eq!(v_first, v_second, "repeat load_local must reuse ValueId");
+        // Different kind on same slot is a fresh load -- the byte
+        // pattern read differs (sign / zero extension width).
+        let v_third = b.load_local(2, LoadKind::I64);
+        assert_ne!(v_first, v_third, "different kind must emit a new load");
+        b.return_(v_first);
+        let func = b.finish();
+        let load_count = func
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .count();
+        assert_eq!(load_count, 2, "two distinct LoadLocal insts (I32 + I64)");
+    }
+
+    /// `store_local` to the same slot invalidates the CSE cache:
+    /// the next `load_local` re-emits rather than returning the
+    /// stale pre-store value.
+    #[test]
+    fn store_local_invalidates_cse_entry() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v_first = b.load_local(2, LoadKind::I64);
+        let v_imm = b.imm(7);
+        let _ = b.store_local(2, v_imm, StoreKind::I64);
+        let v_second = b.load_local(2, LoadKind::I64);
+        assert_ne!(
+            v_first, v_second,
+            "load after store must re-emit, not reuse pre-store value",
+        );
+        b.return_(v_second);
+        let func = b.finish();
+        let load_count = func
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .count();
+        assert_eq!(load_count, 2, "two loads of slot 2 separated by a store");
+    }
+
+    /// Block transitions clear the CSE cache: a `load_local` in
+    /// the entry block doesn't reach into the body. Without this,
+    /// a value defined in the entry block would surface as a use
+    /// in another block with no phi node to merge it.
+    #[test]
+    fn block_transition_clears_cse() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v_entry = b.load_local(2, LoadKind::I32);
+        let body = b.new_block();
+        b.jmp(body);
+        b.switch_to(body);
+        let v_body = b.load_local(2, LoadKind::I32);
+        assert_ne!(
+            v_entry, v_body,
+            "load across block boundary must emit a fresh inst",
+        );
+        b.return_(v_body);
+        let func = b.finish();
+        let load_count = func
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .count();
+        assert_eq!(
+            load_count, 2,
+            "entry-block load + body-block load are distinct"
+        );
+    }
+
+    /// `call` invalidates the CSE cache: a callee may write
+    /// through any pointer derived from an escaped local address,
+    /// so the next `load_local` re-reads even when no local
+    /// escaped in this caller. The pessimisation is intentional
+    /// -- escape analysis would shrink it.
+    #[test]
+    fn call_invalidates_cse() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let v_pre = b.load_local(2, LoadKind::I32);
+        let _ = b.call(0, alloc::vec![]);
+        let v_post = b.load_local(2, LoadKind::I32);
+        assert_ne!(
+            v_pre, v_post,
+            "load across a call must re-emit (conservative alias model)",
+        );
+        b.return_(v_post);
     }
 }

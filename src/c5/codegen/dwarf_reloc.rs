@@ -115,6 +115,65 @@ const OPCODE_BASE: u8 = 13;
 
 const ABBREV_CU: u64 = 1;
 
+/// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
+/// form). Follows the spec table exactly.
+#[repr(C, packed)]
+#[derive(Clone, Copy)]
+struct DebugInfoUnitHeader {
+    unit_length: u32,
+    version: u16,
+    debug_abbrev_offset: u32,
+    address_size: u8,
+}
+
+const DEBUG_INFO_UNIT_HEADER_SIZE: u64 = 11;
+const _: () =
+    assert!(core::mem::size_of::<DebugInfoUnitHeader>() == DEBUG_INFO_UNIT_HEADER_SIZE as usize);
+
+/// `.debug_line` unit header (DWARF 4, 32-bit form).
+#[repr(C, packed)]
+#[derive(Clone, Copy)]
+struct DebugLineUnitHeader {
+    unit_length: u32,
+    version: u16,
+    header_length: u32,
+}
+
+const DEBUG_LINE_UNIT_HEADER_SIZE: u64 = 10;
+const _: () =
+    assert!(core::mem::size_of::<DebugLineUnitHeader>() == DEBUG_LINE_UNIT_HEADER_SIZE as usize);
+
+/// Fixed-shape prefix of the `.debug_line` program (the bytes
+/// between the unit header's `header_length` field and the
+/// variable include_directories / file_names lists). DWARF 4
+/// section 6.2.4.
+#[repr(C, packed)]
+#[derive(Clone, Copy)]
+struct DebugLineProgramHeader {
+    minimum_instruction_length: u8,
+    maximum_operations_per_instruction: u8,
+    default_is_stmt: u8,
+    line_base: i8,
+    line_range: u8,
+    opcode_base: u8,
+    /// `standard_opcode_lengths[i]` is the operand count for
+    /// standard opcode `i+1`. Sized for the twelve DWARF 4
+    /// standard opcodes (`DW_LNS_copy` through `DW_LNS_set_isa`).
+    standard_opcode_lengths: [u8; 12],
+}
+
+const DEBUG_LINE_PROGRAM_HEADER_SIZE: u64 = 18;
+const _: () = assert!(
+    core::mem::size_of::<DebugLineProgramHeader>() == DEBUG_LINE_PROGRAM_HEADER_SIZE as usize
+);
+
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
 /// Emit the relocatable DWARF triple plus the address-reloc list.
 /// `source_path` becomes the CU's `DW_AT_name`; the line table's
 /// file numbering reuses [`Program::source_files`].
@@ -174,16 +233,11 @@ fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfRel
     body.push(DW_LANG_C99);
     push_string(&mut body, source_path);
     push_string(&mut body, ""); // DW_AT_comp_dir
-    // DW_AT_low_pc -- 8-byte placeholder, reloc against .text.
-    // Section offset = (unit header length) + body so far. The
-    // header is 4 (unit_length) + 2 (version) + 4 (abbrev_off) +
-    // 1 (addr_size) = 11 bytes.
-    let header_size: u64 = 11;
     let low_pc_off_in_body = body.len() as u64;
     body.extend_from_slice(&[0u8; 8]);
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Info,
-        offset: header_size + low_pc_off_in_body,
+        offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off_in_body,
         width: DwarfRelocWidth::W8,
         target: DwarfRelocTarget::Text,
         addend: 0,
@@ -200,35 +254,40 @@ fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfRel
     body.extend_from_slice(&[0u8; 4]);
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Info,
-        offset: header_size + stmt_list_off_in_body,
+        offset: DEBUG_INFO_UNIT_HEADER_SIZE + stmt_list_off_in_body,
         width: DwarfRelocWidth::W4,
         target: DwarfRelocTarget::DebugLine,
         addend: 0,
     });
 
-    // Final null DIE -- terminates the CU's child list (we emit
-    // no children; the abbrev's `DW_CHILDREN_NO` is what
-    // documents that, but DWARF still tolerates a closing null).
+    // Closing null DIE -- the abbrev marks `DW_CHILDREN_NO`, but
+    // DWARF still tolerates a terminating zero byte after the
+    // CU's last child run.
     body.push(0);
 
-    // Unit header. `unit_length` covers everything after itself:
-    // version(2) + debug_abbrev_offset(4) + address_size(1) + body.
-    let unit_length: u32 = (2 + 4 + 1 + body.len()) as u32;
-    let mut out: Vec<u8> = Vec::with_capacity(4 + unit_length as usize);
-    out.extend_from_slice(&unit_length.to_le_bytes());
-    out.extend_from_slice(&4u16.to_le_bytes()); // version
-    // debug_abbrev_offset -- 4-byte placeholder, reloc against
-    // .debug_abbrev (each `.o`'s abbrev table starts at offset 0).
-    let abbrev_off_pos = out.len() as u64;
-    out.extend_from_slice(&[0u8; 4]);
+    // Unit header. `unit_length` covers everything after itself
+    // (version + debug_abbrev_offset + address_size + body).
+    let unit_length: u32 = (DEBUG_INFO_UNIT_HEADER_SIZE as u32 - 4) + body.len() as u32;
+    let header = DebugInfoUnitHeader {
+        unit_length,
+        version: 4,
+        debug_abbrev_offset: 0,
+        address_size: 8,
+    };
+    let mut out: Vec<u8> = Vec::with_capacity(DEBUG_INFO_UNIT_HEADER_SIZE as usize + body.len());
+    write_struct(&mut out, &header);
+    // debug_abbrev_offset slot inside the header gets a reloc
+    // against the `.debug_abbrev` section symbol; each `.o`'s
+    // abbrev table starts at offset 0 inside its own
+    // `.debug_abbrev`, so addend stays zero and the linker
+    // rebases to the merged offset.
     relocs.push(DwarfReloc {
         section: DwarfSectionKind::Info,
-        offset: abbrev_off_pos,
+        offset: 6, // unit_length(4) + version(2)
         width: DwarfRelocWidth::W4,
         target: DwarfRelocTarget::DebugAbbrev,
         addend: 0,
     });
-    out.push(8); // address_size
     out.extend_from_slice(&body);
 
     (out, relocs)
@@ -241,36 +300,23 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     // primary file is index 1; every other entry the lexer
     // recorded follows. The `<source>` placeholder is the lexer's
     // pre-marker default and gets folded into entry 1.
-    // Header byte budget (post-length): version(2) + header_length(4)
-    // + minimum_instruction_length(1) + maximum_operations_per_instruction(1)
-    // + default_is_stmt(1) + line_base(1) + line_range(1) +
-    // opcode_base(1) + standard_opcode_lengths(opcode_base-1) +
-    // include_directories(null) + file_names(...) + terminator.
-    let mut hdr: Vec<u8> = alloc::vec![
-        1, // minimum_instruction_length
-        1, // maximum_operations_per_instruction
-        1, // default_is_stmt
-        LINE_BASE as u8,
-        LINE_RANGE,
-        OPCODE_BASE,
-        // standard_opcode_lengths for DW_LNS_{copy, advance_pc,
-        // advance_line, set_file, set_column, negate_stmt,
-        // set_basic_block, const_add_pc, fixed_advance_pc,
-        // set_prologue_end, set_epilogue_begin, set_isa}.
-        0,
-        1,
-        1,
-        1,
-        1,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0, // include_directories terminator
-    ];
+    // Fixed-shape header prefix per DWARF 4 section 6.2.4.
+    // `standard_opcode_lengths` carries the operand count for
+    // each of the 12 DWARF 4 standard opcodes (DW_LNS_copy
+    // through DW_LNS_set_isa); the table value matches
+    // DWARF 4 Figure 38.
+    let prog_header = DebugLineProgramHeader {
+        minimum_instruction_length: 1,
+        maximum_operations_per_instruction: 1,
+        default_is_stmt: 1,
+        line_base: LINE_BASE,
+        line_range: LINE_RANGE,
+        opcode_base: OPCODE_BASE,
+        standard_opcode_lengths: [0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1],
+    };
+    let mut hdr: Vec<u8> = Vec::new();
+    write_struct(&mut hdr, &prog_header);
+    hdr.push(0); // include_directories terminator
     push_file_entry(&mut hdr, default_file_name(program));
     let mut next_dwarf_idx: u64 = 2;
     let mut dwarf_file_for_lex_idx: Vec<u64> = Vec::with_capacity(program.source_files.len());
@@ -361,13 +407,16 @@ fn build_debug_line(program: &Program, build: &Build) -> (Vec<u8>, Vec<DwarfRelo
     }
     write_extended(&mut prog, DW_LNE_END_SEQUENCE, &[]);
 
-    // Stitch: 4-byte unit_length + 2-byte version + 4-byte
-    // header_length + header bytes + program bytes.
-    let unit_length: u32 = (2 + 4 + hdr.len() + prog.len()) as u32;
-    let mut out: Vec<u8> = Vec::with_capacity(4 + unit_length as usize);
-    out.extend_from_slice(&unit_length.to_le_bytes());
-    out.extend_from_slice(&4u16.to_le_bytes()); // version
-    out.extend_from_slice(&header_length.to_le_bytes());
+    let unit_length: u32 =
+        (DEBUG_LINE_UNIT_HEADER_SIZE as u32 - 4) + hdr.len() as u32 + prog.len() as u32;
+    let header = DebugLineUnitHeader {
+        unit_length,
+        version: 4,
+        header_length,
+    };
+    let mut out: Vec<u8> =
+        Vec::with_capacity(DEBUG_LINE_UNIT_HEADER_SIZE as usize + hdr.len() + prog.len());
+    write_struct(&mut out, &header);
     out.extend_from_slice(&hdr);
     out.extend_from_slice(&prog);
 

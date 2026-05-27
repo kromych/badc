@@ -256,7 +256,7 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// Compiler-builtin call (alloca, memset, setjmp, longjmp,
-    /// ...). `kind` is the `Op::Intrinsic` discriminant; the
+    /// ...). `kind` is the `Intrinsic` enum discriminant; the
     /// walker forwards it to `Inst::Intrinsic`.
     Intrinsic {
         kind: i64,
@@ -452,7 +452,7 @@ pub(crate) struct FinishedFunction {
     /// Byte size of the returned struct when `returns_struct`
     /// is true. Zero otherwise.
     pub return_struct_size: i64,
-    /// `slot` operand for the function's `Op::AllocaInit`. Non-
+    /// `slot` operand for the function's `Inst::AllocaInit`. Non-
     /// zero when the body contains an `alloca` call: codegen
     /// reserves a per-frame arena and uses this local slot for
     /// the running top. Zero when `alloca` is unused, in which

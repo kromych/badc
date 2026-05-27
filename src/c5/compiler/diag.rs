@@ -114,8 +114,8 @@ impl Compiler {
     }
 
     /// Emit one dead-store diagnostic per pending entry, then
-    /// clear. Called at function-terminating ops (`Op::Lev`,
-    /// `Op::TailExt`) where no successor exists -- every
+    /// clear. Called at function-terminating points (return,
+    /// tail-call) where no successor exists -- every
     /// pending store is unambiguously dead because nothing
     /// further runs to read the value.
     pub(super) fn emit_dead_stores_and_flush(&mut self) {

@@ -1480,7 +1480,7 @@ impl<'a> Walker<'a> {
                 let arr = self.walk_expr_rvalue(b, *array)?;
                 let i = self.walk_expr_rvalue(b, *idx)?;
                 // The parser already scaled `idx` by the element
-                // size (via `emit_binop_with_imm(Op::Mul, scale)`)
+                // size (via `emit_binop_with_imm(BinOp::Mul, scale)`)
                 // when the pointee size is non-trivial. The
                 // resulting child `Binary{Mul, idx, scale}` rides
                 // through `walk_expr_rvalue` above; for a

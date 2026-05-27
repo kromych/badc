@@ -301,8 +301,8 @@ fn signed_holds_unsigned(signed_rank: u8, unsigned_rank: u8, target: super::supe
 
 /// C99 6.3.1.8 usual arithmetic conversions: pick the common type
 /// for a binary integer operation. Used by relational compares to
-/// decide between the signed (`Op::Lt/Gt/Le/Ge`) and unsigned
-/// (`Op::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
+/// decide between the signed (`BinOp::Lt/Gt/Le/Ge`) and unsigned
+/// (`BinOp::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
 /// result type so subsequent shifts / compares route correctly.
 ///
 /// Algorithm:

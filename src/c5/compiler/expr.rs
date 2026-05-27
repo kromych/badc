@@ -1372,7 +1372,7 @@ impl Compiler {
             // promotes to `int`, which the `+` doesn't undo).
             // Critically, FP operands must keep their FP type --
             // otherwise `+0.5` poses as an integer and a later
-            // `r + (+0.5)` lowers to `Op::Add` instead of `Op::Fadd`.
+            // `r + (+0.5)` lowers to `BinOp::Add` instead of `BinOp::Fadd`.
             self.next()?;
             self.expr(Token::Inc as i64)?;
             if !is_floating_scalar(self.ty) {
@@ -1803,7 +1803,7 @@ impl Compiler {
                 let mut compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
                 // Floating-point lvalue (`double x; x *= 2.0;`) needs
                 // the FP variant of the binop, not the integer one.
-                // Without this, `x *= y` lowered to `Op::Mul` which
+                // Without this, `x *= y` lowered to `BinOp::Mul` which
                 // multiplied the bit patterns of the two doubles as
                 // signed integers, producing a useless result. Same
                 // shape applies to `+=` / `-=` / `/=` on doubles.
@@ -2267,7 +2267,7 @@ impl Compiler {
                 } else {
                     // C99 6.3.1.8: when either operand is unsigned, the
                     // common type is unsigned, so the divide is unsigned
-                    // too. Route to Op::Divu (UDIV / DIV instead of
+                    // too. Route to BinOp::Divu (UDIV / DIV instead of
                     // SDIV / IDIV). When the common type is narrower
                     // than the 8-byte register, mix-of-signed-and-
                     // unsigned operands need C99 conversion to the

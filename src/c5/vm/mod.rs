@@ -87,13 +87,14 @@ impl<H: Host> Vm<H> {
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
         // Concatenate the TLS block onto the data segment so
-        // Op::TlsLea N can resolve to `tls_base + N` and ride the
-        // existing data-side access checks. The starting offset is
-        // captured before the TLS bytes are appended.
+        // `Inst::TlsAddr` resolutions ride the existing data-side
+        // access checks. The starting offset is captured before
+        // the TLS bytes are appended.
         let mut data = program.data;
         // Apply CodeReloc entries: function-pointer initializers in
-        // the data segment store `CODE_BASE + ent_pc` so Op::Jsri
-        // recognises the slot's value as a code address. The
+        // the data segment store `CODE_BASE + ent_pc` so the
+        // indirect-call dispatch recognises the slot's value as a
+        // code address. The
         // compiler can't bake this in directly because the VM's
         // CODE_BASE constant lives in this crate; we patch each
         // slot here at VM construction time.

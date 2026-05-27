@@ -621,9 +621,9 @@ fn collect_subprograms(
     let total_native = end_of_user_text(build);
 
     // c5's source-function tracking sometimes attributes
-    // `Op::Ent`s to the wrong containing C function -- in a
-    // large translation unit dozens of Ents may carry the same
-    // source-name even though their actual code belongs to
+    // function entries to the wrong containing C function -- in
+    // a large translation unit dozens of entries may carry the
+    // same source-name even though their actual code belongs to
     // unrelated functions. Without disambiguation,
     // lldb's `b name` returns N matches and the user can't tell
     // which is the real one. Suffix duplicates with `.<N>` so

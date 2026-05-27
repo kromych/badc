@@ -541,8 +541,8 @@ pub struct Compiler {
     pub(super) ast_vstack: Vec<Option<super::ast::ExprId>>,
 
     /// Per-function AST snapshots, captured at every function's
-    /// closing `Op::Lev`. The codegen entry walks these in order
-    /// to produce one `FunctionSsa` per source function. Order
+    /// closing return. The codegen entry walks these in order to
+    /// produce one `FunctionSsa` per source function. Order
     /// matches function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
@@ -790,7 +790,8 @@ pub struct Compiler {
     /// `watchpoint set variable foo` work for c5-emitted code.
     variables: Vec<crate::c5::program::VariableInfo>,
     /// Name of the C function whose body is currently being
-    /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
+    /// emitted. Set on function-entry emit and cleared on the
+    /// closing return.
     current_function_name: String,
     /// Parallel symbol index for each entry in `code_relocs`.
     /// `parse_constant_init_value` records a CodeReloc with the

@@ -52,8 +52,9 @@ pub(super) fn bail_msg(backend: &str, reason: &str) {
     let _ = (backend, reason);
 }
 
-/// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
-/// byte offset relative to fp / rbp. Locals (`off < 0`) sit at
+/// Translate a c5-stack slot index (the operand of an
+/// address-of-local emit) into a byte offset relative to fp /
+/// rbp. Locals (`off < 0`) sit at
 /// `off * 8`; parameters (`off >= 2`) sit at `(off - 1) * 16` to
 /// reflect the 16-byte caller-push slots c5's cdecl uses.
 pub(super) fn c5_slot_to_fp_offset(off: i64) -> i64 {
@@ -161,7 +162,7 @@ pub(super) fn is_dead_pure(
 /// Record the native byte offset of a block's first
 /// instruction against its ent_pc. Skips the entry block
 /// because the outer codegen walk already pinned the
-/// function's `Op::Ent` PC to the prologue start; overwriting
+/// function's entry PC to the prologue start; overwriting
 /// it would redirect every `bl <function>` to land past the
 /// prologue's setup.
 pub(super) fn record_block_start_pc(

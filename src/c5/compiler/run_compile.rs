@@ -446,7 +446,7 @@ impl Compiler {
                     self.symbols[id_idx].is_variadic = params.is_variadic;
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
-                    // accumulator before `Op::Lev`, and so a
+                    // accumulator before the trailing return, and so a
                     // future call-site check can reject value-
                     // context use of a void callee. Prototypes
                     // pick it up too -- a later body that
@@ -757,7 +757,7 @@ impl Compiler {
                     self.ast.body = Some(body_root);
                     // C99 6.8.6.4p3: a `void`-returning function
                     // doesn't produce a value. Zero the accumulator
-                    // before the trailing synthetic `Op::Lev` so a
+                    // before the trailing synthetic return so a
                     // caller that misclassifies the prototype (or
                     // invokes the function through a typed
                     // function-pointer table whose slot was set

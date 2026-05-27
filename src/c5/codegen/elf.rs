@@ -609,8 +609,8 @@ fn build_dynsym(
                 st_name: name_off,
                 // c5's only dynamic-import mechanism today is
                 // `#pragma binding(<lib>::<name>, "<sym>")`, and
-                // every binding is reached via `Op::JsrExt` (a
-                // call site) -- there's no path that imports a
+                // every binding is reached via `Inst::CallExt`
+                // (a call site) -- there's no path that imports a
                 // data symbol. So tagging every import `STT_FUNC`
                 // is correct in practice and gives `gdb` / `nm`
                 // the right hint about callability. If we ever
@@ -2140,16 +2140,16 @@ mod tests {
     /// Smallest plausible Build that exercises the writer end to end.
     /// 8 bytes of code (movz x0, #42; ret), no fixups.
     ///
-    /// Carries a fake `Op::Exit` import: the aarch64 `_start` stub
-    /// always calls libc's `exit` after main returns, so ELF writes
-    /// without that entry would error out before producing any bytes
-    /// for the structural assertions to inspect. This mirrors what
-    /// real programs get from `<stdlib.h>`.
+    /// Carries a fake `exit` import: the aarch64 `_start` stub
+    /// always calls libc's `exit` after main returns, so ELF
+    /// writes without that entry would error out before producing
+    /// any bytes for the structural assertions to inspect. This
+    /// mirrors what real programs get from `<stdlib.h>`.
     /// Empty `Program` paired with `tiny_build`. The DWARF
-    /// emitter walks `Program::text` for `Op::Ent`s; an empty
-    /// vec produces an empty subprogram list and trivial
-    /// section bytes, which is enough for the structural
-    /// invariants the tests check.
+    /// emitter walks the program for function entries; an empty
+    /// vec produces an empty subprogram list and trivial section
+    /// bytes, which is enough for the structural invariants the
+    /// tests check.
     fn tiny_program() -> Program {
         Program {
             data: Vec::new(),

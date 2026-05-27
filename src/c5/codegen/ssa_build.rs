@@ -175,8 +175,7 @@ impl SsaBuilder {
     }
 
     /// Record that the function reserves `n` natural-width local
-    /// bytes (the value Op::Ent's operand would carry under the c5
-    /// path). Consumed by the per-arch emit's frame layout.
+    /// bytes. Consumed by the per-arch emit's frame layout.
     pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
     }
@@ -380,8 +379,9 @@ impl SsaBuilder {
     }
 
     /// `Inst::Store` through a precomputed address. Returns the
-    /// stored value's id (matches c5 semantics: a `Op::Si` leaves
-    /// the stored value in the accumulator). The address may
+    /// stored value's id (matches c5 semantics: a scalar store
+    /// leaves the stored value in the accumulator). The address
+    /// may
     /// alias a local whose address escaped earlier; drop every
     /// CSE entry so a later `load_local` re-reads the slot.
     pub(crate) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {

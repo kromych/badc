@@ -1287,7 +1287,7 @@ fn patch_adrp_add(
     Ok(())
 }
 
-/// Patch each `Op::Imm <data_offset>` site. The target is
+/// Patch each `Inst::ImmData` lowering site. The target is
 /// `data_section_vmaddr + data_offset`.
 fn apply_data_fixups(
     out: &mut [u8],
@@ -2443,8 +2443,8 @@ mod tests {
     /// output worth asserting on. Real lowering populates this
     /// from the program's `#pragma binding`s.
     /// Empty `Program` paired with `tiny_build`. The DWARF
-    /// emitter needs *a* program to walk for `Op::Ent`s --
-    /// passing the matching empty `text` + `source_*` keeps
+    /// emitter needs *a* program to walk for function entries
+    /// -- passing the matching empty `text` + `source_*` keeps
     /// the debug-segment payload trivial without changing
     /// the structural invariants the tests check.
     fn tiny_program() -> Program {

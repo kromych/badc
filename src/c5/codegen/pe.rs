@@ -43,27 +43,26 @@
 //! so the CRT atexit chain runs (without it printf to a pipe loses
 //! its tail line because msvcrt block-buffers non-tty stdout).
 //!
-//! ## Op-to-DLL binding
+//! ## POSIX-to-DLL binding
 //!
-//! Most c4 ops map straight onto a msvcrt or kernel32 export. Two
-//! corners worth flagging:
+//! Most c5 intrinsic ops map straight onto a msvcrt or kernel32
+//! export. Two corners worth flagging:
 //!
-//! * `Op::Senv` (POSIX `setenv(name, value, overwrite)`) binds to
-//!   msvcrt's `_putenv_s(name, value)`. The 3rd arg lands in `r8`
-//!   per Win64 calling convention; `_putenv_s` ignores it. The
+//! * `setenv(name, value, overwrite)` binds to msvcrt's
+//!   `_putenv_s(name, value)`. The 3rd arg lands in `r8` per
+//!   Win64 calling convention; `_putenv_s` ignores it. The
 //!   semantics differ when `overwrite == 0`, but most c5 callers
 //!   pass `overwrite = 1` and don't notice.
-//! * `Op::Dler` (POSIX `dlerror()`) binds to kernel32's
-//!   `GetLastError`. Both return zero when there's no pending
-//!   error; a c5 program that *prints* `dlerror()` would see
-//!   garbage on Windows, but the common `if (dlerror()) { ... }`
-//!   shape works.
-//! * `Op::Mpro` (POSIX `mprotect(addr, len, prot)`) is not
-//!   currently supported on Windows; the binding goes to
-//!   `VirtualProtect`, but the calling convention mismatch (Windows
-//!   takes a 4th `OldProt` out-pointer the c5 program doesn't
-//!   provide) makes it unsafe to invoke. Programs that don't call
-//!   `mprotect` are unaffected.
+//! * `dlerror()` binds to kernel32's `GetLastError`. Both return
+//!   zero when there's no pending error; a c5 program that
+//!   *prints* `dlerror()` would see garbage on Windows, but the
+//!   common `if (dlerror()) { ... }` shape works.
+//! * `mprotect(addr, len, prot)` is not currently supported on
+//!   Windows; the binding goes to `VirtualProtect`, but the
+//!   calling convention mismatch (Windows takes a 4th `OldProt`
+//!   out-pointer the c5 program doesn't provide) makes it unsafe
+//!   to invoke. Programs that don't call `mprotect` are
+//!   unaffected.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -397,8 +396,8 @@ pub(super) fn write(
     let dlls = group_imports_by_dll(&imports);
 
     // 4) Compute layout. Combined .text is `entry stub |
-    //    build.text`; the program's `Op::Mpro` calls go through
-    //    the regular IAT lookup just like every other libc op.
+    //    build.text`; the program's `mprotect` calls go through
+    //    the regular IAT lookup just like every other libc call.
     let stub_len = stub.bytes.len() as u32;
     let text_prologue_len = stub_len;
 
@@ -881,8 +880,9 @@ pub(super) fn write(
     }
 
     // Program-side fixups land inside build.text, which is offset
-    // by text_prologue_len in the combined .text. All libc ops --
-    // including `Op::Mpro` -- now go through the regular IAT slot;
+    // by text_prologue_len in the combined .text. All libc calls
+    // -- including `mprotect` -- now go through the regular IAT
+    // slot;
     // the per-target header's `#pragma binding` decides whether
     // mprotect resolves at all (POSIX targets bind it, Windows
     // doesn't, sources gate the call on `__BADC_WINDOWS__`).
@@ -910,7 +910,8 @@ pub(super) fn write(
         patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
 
-    // TLS-index fixups. Every `Op::TlsLea` recorded a code site
+    // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
+    // a code site
     // that needs the address of the `_tls_index` DWORD slot the
     // loader fills in. The slot lives at the tail of `.data` (see
     // `tls_layout` and the data emission below). Each per-arch

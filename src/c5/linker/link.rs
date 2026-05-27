@@ -92,6 +92,26 @@ pub struct MergedNative {
     /// `dylibs` order; entries from later units that name the
     /// same import are ignored (first writer wins).
     pub import_dylib_map: BTreeMap<String, u32>,
+    /// Concatenated standard DWARF byte streams from every
+    /// input unit. Each unit's blob starts at
+    /// `debug_*_bases[unit_idx]` inside the merged stream; the
+    /// per-unit relocs (below) have their `r_offset` rebased to
+    /// land inside the merged sections.
+    pub debug_info: Vec<u8>,
+    pub debug_abbrev: Vec<u8>,
+    pub debug_line: Vec<u8>,
+    pub debug_info_bases: Vec<usize>,
+    pub debug_abbrev_bases: Vec<usize>,
+    pub debug_line_bases: Vec<usize>,
+    /// DWARF reloc lists (rebased). `sym_idx` is the per-unit
+    /// symtab index of the target section symbol; the parallel
+    /// `unit_for_*_reloc` records which unit each reloc came
+    /// from so the writer can resolve through that unit's
+    /// symbol table when applying.
+    pub debug_info_relocs: Vec<super::object::NativeReloc>,
+    pub debug_line_relocs: Vec<super::object::NativeReloc>,
+    pub unit_for_debug_info_reloc: Vec<usize>,
+    pub unit_for_debug_line_reloc: Vec<usize>,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -602,6 +622,46 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Merge DWARF sections + their relocs. Each unit's blob is
+    // appended to the corresponding merged section; relocs have
+    // their `r_offset` shifted by the per-unit base so the
+    // writer can apply them once against the merged blob. The
+    // reloc's `sym_idx` stays per-unit -- the writer reads it
+    // through that unit's symbol table to learn whether the
+    // reloc target is `.text` / `.debug_line` / `.debug_abbrev`.
+    let mut debug_info: Vec<u8> = Vec::new();
+    let mut debug_abbrev: Vec<u8> = Vec::new();
+    let mut debug_line: Vec<u8> = Vec::new();
+    let mut debug_info_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut debug_abbrev_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut debug_line_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut debug_info_relocs: Vec<super::object::NativeReloc> = Vec::new();
+    let mut debug_line_relocs: Vec<super::object::NativeReloc> = Vec::new();
+    let mut unit_for_debug_info_reloc: Vec<usize> = Vec::new();
+    let mut unit_for_debug_line_reloc: Vec<usize> = Vec::new();
+    for (unit_idx, obj) in objs.iter().enumerate() {
+        debug_info_bases.push(debug_info.len());
+        debug_abbrev_bases.push(debug_abbrev.len());
+        debug_line_bases.push(debug_line.len());
+        let info_base = debug_info.len() as u64;
+        let line_base = debug_line.len() as u64;
+        debug_info.extend_from_slice(&obj.debug_info);
+        debug_abbrev.extend_from_slice(&obj.debug_abbrev);
+        debug_line.extend_from_slice(&obj.debug_line);
+        for r in &obj.debug_info_relocs {
+            let mut shifted = r.clone();
+            shifted.offset = r.offset.wrapping_add(info_base);
+            debug_info_relocs.push(shifted);
+            unit_for_debug_info_reloc.push(unit_idx);
+        }
+        for r in &obj.debug_line_relocs {
+            let mut shifted = r.clone();
+            shifted.offset = r.offset.wrapping_add(line_base);
+            debug_line_relocs.push(shifted);
+            unit_for_debug_line_reloc.push(unit_idx);
+        }
+    }
+
     Ok(MergedNative {
         text,
         data,
@@ -613,6 +673,16 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         machine,
         dylibs,
         import_dylib_map,
+        debug_info,
+        debug_abbrev,
+        debug_line,
+        debug_info_bases,
+        debug_abbrev_bases,
+        debug_line_bases,
+        debug_info_relocs,
+        debug_line_relocs,
+        unit_for_debug_info_reloc,
+        unit_for_debug_line_reloc,
     })
 }
 

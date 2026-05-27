@@ -535,6 +535,16 @@ mod tests {
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             dylibs: alloc::vec![],
+            debug_info: alloc::vec![],
+            debug_abbrev: alloc::vec![],
+            debug_line: alloc::vec![],
+            debug_info_bases: alloc::vec![],
+            debug_abbrev_bases: alloc::vec![],
+            debug_line_bases: alloc::vec![],
+            debug_info_relocs: alloc::vec![],
+            debug_line_relocs: alloc::vec![],
+            unit_for_debug_info_reloc: alloc::vec![],
+            unit_for_debug_line_reloc: alloc::vec![],
         }
     }
 

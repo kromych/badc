@@ -781,6 +781,7 @@ pub struct DebugTextReloc {
     pub width: u8,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_debug_reloc(
     machine: NativeMachine,
     section_bytes: &mut [u8],

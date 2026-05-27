@@ -960,6 +960,24 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
         nonzero_abbrev_offsets >= 1,
         "expected at least one CU's Abbrev Offset to land past the first abbrev table:\n{out_text}",
     );
+    // Each user CU should carry a DW_TAG_subprogram DIE naming
+    // its defined function. Without the subprogram emit in
+    // `dwarf_reloc.rs`, debuggers fall back to the static
+    // symbol table for function names and can't drive
+    // `frame variable` / `info locals` at non-line-row
+    // breakpoints.
+    let subprog_count = out_text.matches("DW_TAG_subprogram").count();
+    assert!(
+        subprog_count >= 2,
+        "expected at least two DW_TAG_subprogram DIEs (helper + main) in merged .debug_info, \
+         got {subprog_count}:\n{out_text}",
+    );
+    for name in ["\"helper\"", "\"main\""] {
+        assert!(
+            out_text.contains(name),
+            "expected subprogram DW_AT_name {name} in merged .debug_info:\n{out_text}",
+        );
+    }
 }
 
 /// Multi-TU links populate `.debug_frame` from the merged

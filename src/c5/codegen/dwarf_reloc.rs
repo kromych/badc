@@ -83,6 +83,7 @@ pub(crate) struct DwarfRelocatable {
 }
 
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
+const DW_TAG_SUBPROGRAM: u8 = 0x2e;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -99,6 +100,7 @@ const DW_FORM_DATA1: u8 = 0x0b;
 const DW_FORM_SEC_OFFSET: u8 = 0x17;
 
 const DW_CHILDREN_NO: u8 = 0x00;
+const DW_CHILDREN_YES: u8 = 0x01;
 
 const DW_LANG_C99: u8 = 0x0c;
 
@@ -114,6 +116,7 @@ const LINE_RANGE: u8 = 14;
 const OPCODE_BASE: u8 = 13;
 
 const ABBREV_CU: u64 = 1;
+const ABBREV_SUBPROGRAM: u64 = 2;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -180,8 +183,7 @@ fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
 pub(crate) fn emit(program: &Program, build: &Build, source_path: &str) -> DwarfRelocatable {
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_relocs) = build_debug_line(program, build);
-    let text_size = build.text.len() as u64;
-    let (debug_info, info_relocs) = build_debug_info(source_path, text_size);
+    let (debug_info, info_relocs) = build_debug_info(source_path, build);
     DwarfRelocatable {
         debug_info,
         debug_abbrev,
@@ -194,11 +196,11 @@ pub(crate) fn emit(program: &Program, build: &Build, source_path: &str) -> Dwarf
 // ---- .debug_abbrev ----
 
 fn build_debug_abbrev() -> Vec<u8> {
-    // One abbrev entry describing a leaf compile_unit DIE.
     let mut out = Vec::new();
+    // Abbrev 1: compile_unit with subprogram children.
     write_uleb128(&mut out, ABBREV_CU);
     out.push(DW_TAG_COMPILE_UNIT);
-    out.push(DW_CHILDREN_NO);
+    out.push(DW_CHILDREN_YES);
     push_attr(&mut out, DW_AT_PRODUCER, DW_FORM_STRING);
     push_attr(&mut out, DW_AT_LANGUAGE, DW_FORM_DATA1);
     push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
@@ -206,7 +208,17 @@ fn build_debug_abbrev() -> Vec<u8> {
     push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
     push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     push_attr(&mut out, DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET);
-    // Terminator: two zero ULEB128s.
+    out.push(0);
+    out.push(0);
+    // Abbrev 2: subprogram leaf -- name + extent only. No
+    // children. Parameters / locals / type DIEs land in a follow-
+    // up alongside the type catalog and DW_AT_frame_base wiring.
+    write_uleb128(&mut out, ABBREV_SUBPROGRAM);
+    out.push(DW_TAG_SUBPROGRAM);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
+    push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -221,7 +233,7 @@ fn push_attr(out: &mut Vec<u8>, name: u8, form: u8) {
 
 // ---- .debug_info ----
 
-fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfReloc>) {
+fn build_debug_info(source_path: &str, build: &Build) -> (Vec<u8>, Vec<DwarfReloc>) {
     let mut body: Vec<u8> = Vec::new();
     let mut relocs: Vec<DwarfReloc> = Vec::new();
 
@@ -245,6 +257,7 @@ fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfRel
     // DW_AT_high_pc as DATA8 (size in bytes from low_pc). No reloc
     // needed; the linker keeps low_pc + size pointing at the same
     // span because the per-unit `.text` slice is contiguous.
+    let text_size = build.text.len() as u64;
     body.extend_from_slice(&text_size.to_le_bytes());
     // DW_AT_stmt_list -- 4-byte section offset into .debug_line.
     // Each `.o` has exactly one CU and its line program lands at
@@ -260,12 +273,49 @@ fn build_debug_info(source_path: &str, text_size: u64) -> (Vec<u8>, Vec<DwarfRel
         addend: 0,
     });
 
-    // No closing null DIE. DWARF 4 5.7.2: the null-DIE
-    // sibling-list terminator is only emitted after a DIE marked
-    // `DW_CHILDREN_yes`. Appending one to a `DW_CHILDREN_no` CU
-    // makes `llvm-dwarfdump` / GNU `objdump` warn `Bogus
-    // end-of-siblings marker detected` and skips the bytes that
-    // follow it (= the next concatenated CU).
+    // Subprogram child DIEs. One per defined function in the
+    // unit. Each carries NAME (inline string), LOW_PC (8-byte
+    // text reloc), HIGH_PC (DATA8 size). Sub-int metadata
+    // (parameters, locals, types, frame_base) lands in a
+    // follow-up that ships alongside the type catalog.
+    for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
+        let lo = match build.pc_to_native.get(ent_pc).copied() {
+            Some(off) if off != usize::MAX => off as u64,
+            _ => continue,
+        };
+        let hi = build
+            .func_ent_pcs
+            .get(i + 1)
+            .and_then(|&next_ent| build.pc_to_native.get(next_ent).copied())
+            .unwrap_or(build.text.len()) as u64;
+        let size = hi.saturating_sub(lo);
+        if size == 0 {
+            continue;
+        }
+        let name = build
+            .func_names
+            .get(i)
+            .map(|s| s.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("<unknown>");
+        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
+        push_string(&mut body, name);
+        let low_pc_off = body.len() as u64;
+        body.extend_from_slice(&[0u8; 8]);
+        relocs.push(DwarfReloc {
+            section: DwarfSectionKind::Info,
+            offset: DEBUG_INFO_UNIT_HEADER_SIZE + low_pc_off,
+            width: DwarfRelocWidth::W8,
+            target: DwarfRelocTarget::Text,
+            addend: lo as i64,
+        });
+        body.extend_from_slice(&size.to_le_bytes());
+    }
+
+    // DWARF 4 5.7.2: end-of-children marker for the CU's
+    // DW_CHILDREN_yes DIE. Single null entry closes the sibling
+    // list.
+    body.push(0);
 
     // Unit header. `unit_length` covers everything after itself
     // (version + debug_abbrev_offset + address_size + body).

@@ -729,7 +729,15 @@ pub(super) fn write(
                 file_off: next_file_off,
                 bytes,
             });
-            next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
+            // PE/COFF rejects two sections sharing a VirtualAddress;
+            // an empty blob would leave `next_rva` unchanged, so the
+            // following section would land at the same RVA and
+            // Windows refuses to load the image with
+            // ERROR_BAD_EXE_FORMAT (193). Always advance by at
+            // least one page so each section header carries a
+            // distinct VirtualAddress.
+            let virtual_advance = raw_size.max(SECTION_ALIGNMENT);
+            next_rva = round_up(next_rva + virtual_advance, SECTION_ALIGNMENT);
             next_file_off += raw_size;
         }
     }

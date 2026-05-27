@@ -32,7 +32,7 @@
 //! plenty of room for deeply-nested pointer levels without colliding
 //! with the next struct id.
 
-use super::super::op::ScalarLoadKind;
+use super::super::ir::LoadKind;
 use super::super::token::{Tok, Token, Ty};
 
 /// Base of the struct-tag namespace. Every primitive (including
@@ -458,7 +458,7 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
         // Bare `float*` -- pointee is a 4-byte single-precision
         // float; `(float *)p + 1` strides four bytes, and the
-        // single-precision narrow-load `ScalarLoadKind::Lf` reads the same
+        // single-precision narrow-load `LoadKind::F32` reads the same
         // 4 bytes.
         4
     } else {
@@ -524,21 +524,21 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
 
 /// Pick the right load op for the given `ty`, factoring in the
 /// target's data model (LP64 vs LLP64 picks for `long`).
-///   * `Ty::Char` (scalar)   -> `ScalarLoadKind::Lc` / `ScalarLoadKind::Lcs` (1-byte)
-///   * `Ty::Short` (scalar)  -> `ScalarLoadKind::Lh` / `ScalarLoadKind::Lhu` (2-byte)
-///   * `Ty::Int` (scalar)    -> `ScalarLoadKind::Lw`  / `ScalarLoadKind::Lwu` (4-byte)
+///   * `Ty::Char` (scalar)   -> `LoadKind::U8` / `LoadKind::I8` (1-byte)
+///   * `Ty::Short` (scalar)  -> `LoadKind::I16` / `LoadKind::U16` (2-byte)
+///   * `Ty::Int` (scalar)    -> `LoadKind::I32`  / `LoadKind::U32` (4-byte)
 ///   * `Ty::Long` (scalar)   -> 4-byte on Windows / 8-byte on Unix
-///   * `Ty::LongLong` (scalar) -> always 8-byte (`ScalarLoadKind::Li`)
-///   * everything else       -> `ScalarLoadKind::Li`
+///   * `Ty::LongLong` (scalar) -> always 8-byte (`LoadKind::I64`)
+///   * everything else       -> `LoadKind::I64`
 ///
-/// Pointers (any base type) go through `ScalarLoadKind::Li` because every
+/// Pointers (any base type) go through `LoadKind::I64` because every
 /// pointer is 8 bytes regardless of its pointee width or target.
 ///
 /// The signed / unsigned split for `char` / `short` / `int`
 /// picks between the sign- and zero-extending load ops; the
 /// matching store widths (1 / 2 / 4 / 8 bytes) don't care
 /// about signedness.
-pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> ScalarLoadKind {
+pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
@@ -546,41 +546,37 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> ScalarLoadKi
         // width). The Long-vs-LongLong distinction here would
         // wrongly route `long *` through Lw on Windows; the
         // Float-vs-Double distinction would wrongly route
-        // `float *` through ScalarLoadKind::Lf.
-        return ScalarLoadKind::Li;
+        // `float *` through LoadKind::F32.
+        return LoadKind::I64;
     }
     if stripped == Ty::Char as i64 {
-        if unsigned {
-            ScalarLoadKind::Lc
-        } else {
-            ScalarLoadKind::Lcs
-        }
+        if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
         if unsigned {
-            ScalarLoadKind::Lhu
+            LoadKind::U16
         } else {
-            ScalarLoadKind::Lh
+            LoadKind::I16
         }
     } else if stripped == Ty::Int as i64 {
         if unsigned {
-            ScalarLoadKind::Lwu
+            LoadKind::U32
         } else {
-            ScalarLoadKind::Lw
+            LoadKind::I32
         }
     } else if stripped == Ty::Float as i64 {
         // 4-byte single-precision load that widens to f64 in the
-        // accumulator. `double` falls through to `ScalarLoadKind::Li` since
+        // accumulator. `double` falls through to `LoadKind::I64` since
         // c5's f64 arithmetic ops carry the bit pattern verbatim
         // and the 8-byte slot needs no narrowing.
-        ScalarLoadKind::Lf
+        LoadKind::F32
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
         if unsigned {
-            ScalarLoadKind::Lwu
+            LoadKind::U32
         } else {
-            ScalarLoadKind::Lw
+            LoadKind::I32
         }
     } else {
-        ScalarLoadKind::Li
+        LoadKind::I64
     }
 }

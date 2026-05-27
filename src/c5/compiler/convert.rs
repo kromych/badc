@@ -21,7 +21,7 @@
 //! `expr()`; centralising them here keeps the per-operator branches
 //! readable.
 
-use super::super::op::ScalarLoadKind;
+use super::super::ir::LoadKind;
 use super::Compiler;
 use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
 
@@ -95,7 +95,7 @@ impl Compiler {
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         self.ast_psh();
         self.emit_lea(temp);
-        self.emit_op(ScalarLoadKind::Li);
+        self.emit_op(LoadKind::I64);
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
     }
 
@@ -159,8 +159,8 @@ impl Compiler {
     /// the other isn't. e.g. `(int)-1 == (uint)0xFFFFFFFF` should be
     /// true at the common `unsigned int` width, but the LHS lives
     /// in the register as 0xFFFFFFFFFFFFFFFF (sign-extended via
-    /// `ScalarLoadKind::Lw`) and the RHS as 0x00000000FFFFFFFF (zero-extended
-    /// via `ScalarLoadKind::Lwu`), so straight `Eq` returns false.
+    /// `LoadKind::I32`) and the RHS as 0x00000000FFFFFFFF (zero-extended
+    /// via `LoadKind::U32`), so straight `Eq` returns false.
     ///
     /// Strategy: if the common type is narrower than 8 bytes, fold
     /// the LHS-on-stack and RHS-in-acc through XOR (which pops the

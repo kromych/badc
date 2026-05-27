@@ -12,7 +12,7 @@
 
 use super::super::ast::Expr;
 use super::super::error::C5Error;
-use super::super::op::ScalarLoadKind;
+use super::super::ir::LoadKind;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
@@ -345,7 +345,7 @@ impl Compiler {
         self.ast_psh();
         // Reload RHS into `a`.
         self.emit_lea(rhs_temp);
-        self.emit_op(ScalarLoadKind::Li);
+        self.emit_op(LoadKind::I64);
         self.ty = rhs_ty;
         self.ast_vstack.clear();
         self.ast_vstack.extend(saved_vstack);

@@ -464,7 +464,7 @@ pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
 /// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/4`;
 /// caller passes raw bytes (must be multiple of 4 in 0..16380).
-/// Used by [`ScalarLoadKind::Lf`] to load a `float`-typed lvalue's storage
+/// Used by [`LoadKind::F32`] to load a `float`-typed lvalue's storage
 /// directly into the `sN` half of `dN` before the widening fcvt.
 pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
@@ -514,7 +514,7 @@ pub(super) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
 
 /// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
 /// (bit-exact for any finite single value, matching the IEEE
-/// short-to-long conversion). Used by [`ScalarLoadKind::Lf`] after the
+/// short-to-long conversion). Used by [`LoadKind::F32`] after the
 /// single-precision load.
 pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
     debug_assert!(dd < 32 && sn < 32);
@@ -707,7 +707,7 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
-/// [`ScalarLoadKind::Lw`] for signed `int` lvalue reads -- the C signed-int
+/// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
 pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
@@ -808,7 +808,7 @@ pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 
 /// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
-/// [`ScalarLoadKind::Lh`] for `short` lvalue reads. Encoding: opc=10
+/// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
 pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
@@ -819,7 +819,7 @@ pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
 /// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
-/// scaled by 2. Used by [`ScalarLoadKind::Lhu`] for `unsigned short` lvalue
+/// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
 pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
@@ -848,7 +848,7 @@ pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
-/// the full 64-bit `Xt`. Used by [`ScalarLoadKind::Lcs`] for `signed char`
+/// the full 64-bit `Xt`. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
 pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {

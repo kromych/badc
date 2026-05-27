@@ -176,7 +176,7 @@ pub(crate) struct Symbol {
     /// mentioned in the body.
     pub was_referenced: bool,
 
-    /// True once a scalar load (`ScalarLoadKind::Li` / `ScalarLoadKind::Lc` / ...) of
+    /// True once a scalar load (`LoadKind::I64` / `LoadKind::U8` / ...) of
     /// this symbol's value survives in the parser's recent-emit
     /// ring -- i.e., the runtime would actually read the stored
     /// value. Distinct from `was_referenced`: the identifier-

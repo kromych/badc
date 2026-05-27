@@ -21,7 +21,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::ScalarLoadKind;
+use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
@@ -654,7 +654,7 @@ impl Compiler {
                         // val from the param-base-aware
                         // numbering above)
                         self.emit_lea(param_val);
-                        self.emit_op(ScalarLoadKind::Li);
+                        self.emit_op(LoadKind::I64);
                         self.mark_emit_other();
                         // The symbol now points at the local copy.
                         self.symbols[idx].val = local_val;
@@ -667,7 +667,7 @@ impl Compiler {
                     // c5-stack slot holding the value's `f64::to_bits`
                     // (the caller's `expr` left an `f64` in the
                     // accumulator and `Si` wrote all 8 bytes). With
-                    // `sizeof(float) == 4`, the matching `ScalarLoadKind::Lf`
+                    // `sizeof(float) == 4`, the matching `LoadKind::F32`
                     // load that the body would emit reads only the
                     // *low* 4 bytes of the slot, which for a typical
                     // `double`-shaped bit pattern is the *low* half
@@ -703,7 +703,7 @@ impl Compiler {
                         // and the f32 information lives across all
                         // 8 of them (as an f64).
                         self.emit_lea(param_val);
-                        self.emit_op(ScalarLoadKind::Li);
+                        self.emit_op(LoadKind::I64);
                         // Narrow to f32 + write 4 bytes to the local.
                         // The rounding is round-to-nearest-ties-to-
                         // even, matching `f64 as f32` in Rust and

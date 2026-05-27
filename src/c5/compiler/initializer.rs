@@ -1015,7 +1015,7 @@ impl Compiler {
             // store 4 bytes. The slot reserved by
             // `local_storage_slots` is still an 8-byte c5 stack
             // word, so the upper 4 bytes stay whatever they were;
-            // the matching `ScalarLoadKind::Lf` reads only the low 4 and
+            // the matching `LoadKind::F32` reads only the low 4 and
             // widens them back to f64.
             self.ast_assign();
         } else {

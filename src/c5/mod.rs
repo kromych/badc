@@ -35,7 +35,6 @@ pub use {
     headers::embedded_headers,
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
-    op::ScalarLoadKind,
     program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };

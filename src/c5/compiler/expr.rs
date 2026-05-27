@@ -34,7 +34,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::ScalarLoadKind;
+use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
@@ -557,7 +557,7 @@ impl Compiler {
                     // declared param ends up on top of the c5 stack.
                     for &temp_off in temp_offsets.iter().rev() {
                         self.emit_lea(temp_off);
-                        self.emit_op(ScalarLoadKind::Li);
+                        self.emit_op(LoadKind::I64);
                         self.ast_psh();
                     }
                     // For struct-returning callees, push the hidden
@@ -1553,10 +1553,10 @@ impl Compiler {
                     let trailing = self.pending.trailing_scalar_load;
                     let is_load = matches!(
                         trailing,
-                        Some(ScalarLoadKind::Li)
-                            | Some(ScalarLoadKind::Lc)
-                            | Some(ScalarLoadKind::Lw)
-                            | Some(ScalarLoadKind::Lwu)
+                        Some(LoadKind::I64)
+                            | Some(LoadKind::U8)
+                            | Some(LoadKind::I32)
+                            | Some(LoadKind::U32)
                     );
                     if is_load {
                         self.clear_recent_emits();
@@ -1658,7 +1658,7 @@ impl Compiler {
                     // struct_rvalue` where pItem is a struct
                     // pointer, the deref elides the trailing
                     // struct-value load but leaves the pointer-load
-                    // tag in place, so a `Some(ScalarLoadKind::Li)`
+                    // tag in place, so a `Some(LoadKind::I64)`
                     // would otherwise misroute us into the scalar
                     // path and rewrite the wrong tag.
                     let struct_lhs_ast = self.ast_acc.take();
@@ -2133,7 +2133,7 @@ impl Compiler {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                         self.ast_psh();
                         self.emit_lea(rhs_temp);
-                        self.emit_op(ScalarLoadKind::Li);
+                        self.emit_op(LoadKind::I64);
                         self.ast_binop(crate::c5::ir::BinOp::Add);
                         self.ast_vstack.clear();
                         self.ast_vstack.extend(saved_vstack);
@@ -2514,7 +2514,7 @@ impl Compiler {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
                 // upstream: `->` runs on a struct pointer (which the
-                // preceding subexpression loaded into `a` via ScalarLoadKind::Li),
+                // preceding subexpression loaded into `a` via LoadKind::I64),
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.

@@ -10,11 +10,14 @@
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by
 //!     `emit_sys_trampolines` and other parser-side synthesis.
 //!
-//! Variant names mirror the c5 [`super::op::ScalarLoadKind`] set so a reader
-//! can map each Inst back to the matching parser-side op without
-//! consulting a separate table; the in-memory shape stays stable
-//! across producers so the allocator and emitters need no parallel
-//! paths.
+//! Variants mirror the per-arch native instruction set wherever a
+//! single Inst lowers to a single instruction (one ldr per Load,
+//! one str per Store, ...). Where multiple variants pack identical
+//! payload but differ in semantic meaning (`Inst::Imm` vs
+//! `ImmData` vs `ImmCode`), the discriminator names the
+//! relocation kind the writer applies. The in-memory shape stays
+//! stable across producers so the allocator and emitters need no
+//! parallel paths.
 
 #![allow(dead_code)]
 

@@ -437,10 +437,25 @@ pub(super) fn write(
     // `.debug_str` / `.debug_frame` are still empty until the
     // linker merges those streams (TODO).
     let dwarf_sections_raw = if let Some(md) = &build.merged_dwarf {
+        // The linker leaves text-targeting placeholders cleared
+        // because the writer commits the merged-text runtime
+        // address. Apply them here against the actual `text_rva +
+        // text_prologue_len` so DW_AT_low_pc / line-program
+        // addresses point at the function bodies in the final
+        // image.
+        let text_vmaddr = IMAGE_BASE + (text_rva + text_prologue_len) as u64;
+        let mut debug_info = md.debug_info.clone();
+        let mut debug_line = md.debug_line.clone();
+        for r in &md.debug_info_text_relocs {
+            super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
+        }
+        for r in &md.debug_line_text_relocs {
+            super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
+        }
         dwarf::DwarfSections {
-            debug_info: md.debug_info.clone(),
+            debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
-            debug_line: md.debug_line.clone(),
+            debug_line,
             debug_str: Vec::new(),
             debug_frame: Vec::new(),
         }

@@ -535,6 +535,38 @@ pub(crate) struct DwarfTextReloc {
     pub width: u8,
 }
 
+/// Write the runtime address of a text-targeting DWARF
+/// placeholder over its preserved location in a merged DWARF
+/// section. The linker leaves `r.byte_offset` cleared; the
+/// writer adds `text_vmaddr` to `r.merged_text_offset` and writes
+/// the matching `r.width` bytes (4 or 8) little-endian.
+pub(super) fn apply_merged_dwarf_text_reloc(
+    section_bytes: &mut [u8],
+    r: &DwarfTextReloc,
+    text_vmaddr: u64,
+) -> Result<(), C5Error> {
+    let off = r.byte_offset as usize;
+    let end = off.checked_add(r.width as usize).ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            "DWARF text reloc offset 0x{off:x} + width {} overflows",
+            r.width,
+        )))
+    })?;
+    if end > section_bytes.len() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "DWARF text reloc past section end (offset 0x{off:x}, width {}, section length {})",
+                r.width,
+                section_bytes.len(),
+            ),
+        )));
+    }
+    let resolved = text_vmaddr.wrapping_add(r.merged_text_offset);
+    let bytes = &resolved.to_le_bytes()[..r.width as usize];
+    section_bytes[off..end].copy_from_slice(bytes);
+    Ok(())
+}
+
 /// One resolved dylib the program needs at load time. Distinct from
 /// [`super::preprocessor::DylibSpec`] in that this only contains the
 /// dylibs whose bindings the program *uses* -- declaring `<windows.h>`

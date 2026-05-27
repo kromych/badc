@@ -1973,10 +1973,23 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         // by the linker yet (TODO); the writer emits empty
         // sections so the load-command layout stays stable.
         let s = if let Some(md) = &build.merged_dwarf {
+            // Text-targeting placeholders the linker couldn't
+            // apply (low_pc / high_pc + line-program addresses
+            // need `text_vaddr + merged_text_offset`) are
+            // rewritten here against the writer's committed
+            // text base.
+            let mut debug_info = md.debug_info.clone();
+            let mut debug_line = md.debug_line.clone();
+            for r in &md.debug_info_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, code_vmaddr_base)?;
+            }
+            for r in &md.debug_line_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
+            }
             dwarf::DwarfSections {
-                debug_info: md.debug_info.clone(),
+                debug_info,
                 debug_abbrev: md.debug_abbrev.clone(),
-                debug_line: md.debug_line.clone(),
+                debug_line,
                 debug_str: Vec::new(),
                 debug_frame: Vec::new(),
             }

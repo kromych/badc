@@ -1547,7 +1547,7 @@ impl<'a> Walker<'a> {
                 // compatible in the accumulator -- the c5
                 // accumulator carries f64 bits; narrowing /
                 // widening between float and double happens at
-                // the `Op::Sf` / `Op::Lf` boundary. No inline
+                // the `Op::Sf` / `ScalarLoadKind::Lf` boundary. No inline
                 // conversion required.
                 if target_is_fp && source_is_fp {
                     return Ok(v);

@@ -10,7 +10,7 @@
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by
 //!     `emit_sys_trampolines` and other parser-side synthesis.
 //!
-//! Variant names mirror the c5 [`super::op::Op`] set so a reader
+//! Variant names mirror the c5 [`super::op::ScalarLoadKind`] set so a reader
 //! can map each Inst back to the matching parser-side op without
 //! consulting a separate table; the in-memory shape stays stable
 //! across producers so the allocator and emitters need no parallel
@@ -164,21 +164,21 @@ pub(crate) enum Inst {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoadKind {
-    /// `Op::Li` -- 8-byte signed integer.
+    /// `ScalarLoadKind::Li` -- 8-byte signed integer.
     I64,
-    /// `Op::Lc` -- 1-byte unsigned char, zero-extended.
+    /// `ScalarLoadKind::Lc` -- 1-byte unsigned char, zero-extended.
     U8,
-    /// `Op::Lcs` -- 1-byte signed char, sign-extended.
+    /// `ScalarLoadKind::Lcs` -- 1-byte signed char, sign-extended.
     I8,
-    /// `Op::Lw` -- 4-byte signed int, sign-extended.
+    /// `ScalarLoadKind::Lw` -- 4-byte signed int, sign-extended.
     I32,
-    /// `Op::Lwu` -- 4-byte unsigned int, zero-extended.
+    /// `ScalarLoadKind::Lwu` -- 4-byte unsigned int, zero-extended.
     U32,
-    /// `Op::Lh` -- 2-byte signed short, sign-extended.
+    /// `ScalarLoadKind::Lh` -- 2-byte signed short, sign-extended.
     I16,
-    /// `Op::Lhu` -- 2-byte unsigned short, zero-extended.
+    /// `ScalarLoadKind::Lhu` -- 2-byte unsigned short, zero-extended.
     U16,
-    /// `Op::Lf` -- 4-byte float widened to f64.
+    /// `ScalarLoadKind::Lf` -- 4-byte float widened to f64.
     F32,
 }
 
@@ -197,7 +197,7 @@ pub(crate) enum StoreKind {
 }
 
 /// Integer / FP binary opcode. Variant names match the
-/// `super::op::Op` set; the planner's choice between signed /
+/// `super::op::ScalarLoadKind` set; the planner's choice between signed /
 /// unsigned forms is preserved (Div vs Divu, Shr vs Shru).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BinOp {

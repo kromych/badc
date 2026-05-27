@@ -12,7 +12,7 @@
 
 use super::super::ast::Expr;
 use super::super::error::C5Error;
-use super::super::op::Op;
+use super::super::op::ScalarLoadKind;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
@@ -319,7 +319,7 @@ impl Compiler {
         // on the parser-side vstack, rhs is the float currently
         // in `ast_acc`. The intermediate `Op::StLocI` / `Op::Imm`
         // / `Op::Or` / `Op::Fcvtif` / `Op::Psh` / `Op::Lea` /
-        // `Op::Li` tags route through `ast_track_emit_op` and
+        // `ScalarLoadKind::Li` tags route through `ast_track_emit_op` and
         // pop / push the AST vstack the outer call must preserve.
         // Drain the outer vstack into a side buffer, push a
         // single `None` sentinel for the inner ops to consume,
@@ -345,7 +345,7 @@ impl Compiler {
         self.ast_psh();
         // Reload RHS into `a`.
         self.emit_lea(rhs_temp);
-        self.emit_op(Op::Li);
+        self.emit_op(ScalarLoadKind::Li);
         self.ty = rhs_ty;
         self.ast_vstack.clear();
         self.ast_vstack.extend(saved_vstack);

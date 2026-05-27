@@ -34,7 +34,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
+use super::super::op::ScalarLoadKind;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
@@ -409,7 +409,7 @@ impl Compiler {
                     // Snapshot the AST parser-side vstack depth so
                     // the call's per-arg emit sequence (per-arg
                     // `Op::Lea + Op::Psh` temp setup, the right-to-
-                    // left `Op::Lea + Op::Li + Op::Psh` re-push,
+                    // left `Op::Lea + ScalarLoadKind::Li + Op::Psh` re-push,
                     // the optional struct-return out-pointer push)
                     // can leak transient pushes without polluting
                     // the outer expression's lvalue stack. The
@@ -558,7 +558,7 @@ impl Compiler {
                     // declared param ends up on top of the c5 stack.
                     for &temp_off in temp_offsets.iter().rev() {
                         self.emit_lea(temp_off);
-                        self.emit_op(Op::Li);
+                        self.emit_op(ScalarLoadKind::Li);
                         self.ast_psh();
                     }
                     // For struct-returning callees, push the hidden
@@ -1539,7 +1539,7 @@ impl Compiler {
                 // `fp` is a function-pointer rvalue) is a no-op:
                 // the dereferenced "function lvalue" auto-decays
                 // back to a function pointer for any subsequent use.
-                // The unary `*` handler emits an `Op::Li` regardless
+                // The unary `*` handler emits an `ScalarLoadKind::Li` regardless
                 // -- it can't tell at parse time that the operand
                 // will be called rather than loaded -- so the chain
                 // ends one Li too deep, with `a` holding the first
@@ -1547,14 +1547,14 @@ impl Compiler {
                 // address. We undo that here: if `self.ty` says we
                 // ended on a non-pointer (= the last `*` removed
                 // the final pointer level) and the most recent emit
-                // was an `Op::Li`, pop the Li and restore one
+                // was an `ScalarLoadKind::Li`, pop the Li and restore one
                 // pointer level so the spill below sees the actual
                 // function pointer.
                 if !is_pointer_ty(self.ty) {
                     let trailing = self.pending.trailing_scalar_load;
                     let is_load = matches!(
                         trailing,
-                        Some(Op::Li) | Some(Op::Lc) | Some(Op::Lw) | Some(Op::Lwu)
+                        Some(ScalarLoadKind::Li) | Some(ScalarLoadKind::Lc) | Some(ScalarLoadKind::Lw) | Some(ScalarLoadKind::Lwu)
                     );
                     if is_load {
                         self.clear_recent_emits();
@@ -1655,7 +1655,7 @@ impl Compiler {
                     // where pItem is a struct pointer, the deref
                     // elides the trailing struct-value load but
                     // leaves the pointer-load Li in place, so
-                    // `last == Op::Li` would otherwise misroute us
+                    // `last == ScalarLoadKind::Li` would otherwise misroute us
                     // into the scalar path and rewrite the wrong Li
                     // into a Psh.
                     let struct_lhs_ast = self.ast_acc.take();
@@ -1738,9 +1738,9 @@ impl Compiler {
                 // Compound assignment `a OP= b`. The lexer stuffed
                 // the underlying binop's Token into `lex.ival`. The
                 // shape mirrors plain `=`: rewrite the trailing
-                // load (Op::Lc / Op::Li) into Op::Psh so the
+                // load (ScalarLoadKind::Lc / ScalarLoadKind::Li) into Op::Psh so the
                 // address sits on the stack, then load it again
-                // via Op::Li (or Op::Lc), push, evaluate the RHS,
+                // via ScalarLoadKind::Li (or ScalarLoadKind::Lc), push, evaluate the RHS,
                 // emit the binop, and store. Only scalar / pointer
                 // lvalues qualify -- structs and bitfields don't
                 // accept compound assignment in c5.
@@ -2110,10 +2110,10 @@ impl Compiler {
                         // parser-side vstack, rhs (ptr) is in
                         // `ast_acc`. The `Op::StLocI` / `Op::Imm` /
                         // `Op::Or` / `Op::Mul` / `Op::Psh` /
-                        // `Op::Lea` / `Op::Li` sequence routes
+                        // `Op::Lea` / `ScalarLoadKind::Li` sequence routes
                         // through `ast_track_emit_op` and pops
                         // the AST vstack on each `Op::Or` /
-                        // `Op::Li`. Drain the outer vstack, push
+                        // `ScalarLoadKind::Li`. Drain the outer vstack, push
                         // a sentinel for the inner ops to consume,
                         // run the sequence, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
@@ -2132,7 +2132,7 @@ impl Compiler {
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                         self.ast_psh();
                         self.emit_lea(rhs_temp);
-                        self.emit_op(Op::Li);
+                        self.emit_op(ScalarLoadKind::Li);
                         self.ast_binop(crate::c5::ir::BinOp::Add);
                         self.ast_vstack.clear();
                         self.ast_vstack.extend(saved_vstack);
@@ -2514,7 +2514,7 @@ impl Compiler {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
                 // upstream: `->` runs on a struct pointer (which the
-                // preceding subexpression loaded into `a` via Op::Li),
+                // preceding subexpression loaded into `a` via ScalarLoadKind::Li),
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.

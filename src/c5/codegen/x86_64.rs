@@ -287,7 +287,7 @@ pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg)
 }
 
 /// `MOVSXD r64, [base + disp]` -- 32-bit load sign-extended into a
-/// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`Op::Lw`]
+/// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`ScalarLoadKind::Lw`]
 /// for signed `int` lvalue reads -- C signed semantics require the
 /// high bit of the 4-byte slot to propagate.
 pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
@@ -299,7 +299,7 @@ pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 /// `MOV r32, [base + disp]` -- 32-bit load. The CPU implicitly
 /// zero-extends every write to a 32-bit GPR into the full 64-bit
 /// register, so this doubles as a zero-extending u32 load. Used by
-/// [`Op::Lwu`] for `unsigned int` lvalue reads. Encoding: no REX.W,
+/// [`ScalarLoadKind::Lwu`] for `unsigned int` lvalue reads. Encoding: no REX.W,
 /// just `8B /r` (with REX only if any operand needs the high bank).
 pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     let needs_rex = dst.high() || base.high();
@@ -324,7 +324,7 @@ pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
 }
 
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
-/// sign-extended into a 64-bit register. Used by [`Op::Lh`] for
+/// sign-extended into a 64-bit register. Used by [`ScalarLoadKind::Lh`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
 pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
@@ -334,7 +334,7 @@ pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: 
 }
 
 /// `MOVZX r64, [base + disp]` (16-bit memory source) -- 16-bit load
-/// zero-extended into a 64-bit register. Used by [`Op::Lhu`] for
+/// zero-extended into a 64-bit register. Used by [`ScalarLoadKind::Lhu`] for
 /// `unsigned short` / `u16` lvalue reads. Encoding: `REX.W + 0F B7 /r`.
 pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
@@ -658,7 +658,7 @@ pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 
 /// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
 /// the low dword of an XMM register, zeroing the rest. Encoding:
-/// `F3 0F 10 /r`. Used by [`Op::Lf`] to pull a `float`-typed lvalue
+/// `F3 0F 10 /r`. Used by [`ScalarLoadKind::Lf`] to pull a `float`-typed lvalue
 /// out of its 4-byte storage before the widening `cvtss2sd`.
 pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
     emit_byte(code, 0xF3);
@@ -816,7 +816,7 @@ pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 7, dst, imm);
 }
 
-// ---- 8-bit memory + setcc. Used for `Op::Lc` / `Op::Sc` and for
+// ---- 8-bit memory + setcc. Used for `ScalarLoadKind::Lc` / `Op::Sc` and for
 //      the comparison ops that produce 0/1 in the low byte.
 
 /// Condition codes for `Jcc` and `setcc`. Values match Intel's CC
@@ -902,7 +902,7 @@ pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
 }
 
 /// `MOVSX r64, byte ptr [base + disp]` -- load a byte sign-extended
-/// into a 64-bit register. Used by [`Op::Lcs`] for `signed char`
+/// into a 64-bit register. Used by [`ScalarLoadKind::Lcs`] for `signed char`
 /// lvalue reads. Encoding: `REX.W + 0F BE /r`.
 pub(super) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));

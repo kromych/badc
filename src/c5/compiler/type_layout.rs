@@ -111,7 +111,7 @@ impl Compiler {
     ///   * scalar `long`             -> 4 on Windows (LLP64), 8 on Unix (LP64)
     ///   * scalar `long long`        -> 8
     ///   * scalar `float`            -> 4 (IEEE 754 single-precision; the
-    ///     accumulator widens to f64 across the `Op::Lf` load and
+    ///     accumulator widens to f64 across the `ScalarLoadKind::Lf` load and
     ///     narrows back across `Op::Sf`, so c5-internal arithmetic
     ///     keeps using the existing f64 op set without re-tagging)
     ///   * scalar `double`           -> 8

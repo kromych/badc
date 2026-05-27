@@ -15,7 +15,7 @@
 
 use super::super::ast::{Expr, ExprId, SrcPos};
 use super::super::error::C5Error;
-use super::super::op::Op;
+use super::super::op::ScalarLoadKind;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -61,7 +61,7 @@ impl Compiler {
     /// `mark_emit_other`, ...). Records the load kind in
     /// `trailing_scalar_load` so the lvalue-rewrite path can
     /// detect a trailing scalar load and pop it.
-    pub(super) fn emit_op(&mut self, op: Op) {
+    pub(super) fn emit_op(&mut self, op: ScalarLoadKind) {
         // Any emit invalidates the function-pointer chain
         // tracking. Identifier loads and the unary `*` handler
         // re-seed it after their own emits when the symbol /
@@ -261,8 +261,8 @@ impl Compiler {
         self.pending.last_emit_was_indirect_call
     }
 
-    /// If the most recently emitted op is a scalar load (`Op::Lc`
-    /// / `Op::Lw` / `Op::Li`), rewrite it in place to `Op::Psh` and
+    /// If the most recently emitted op is a scalar load (`ScalarLoadKind::Lc`
+    /// / `ScalarLoadKind::Lw` / `ScalarLoadKind::Li`), rewrite it in place to `Op::Psh` and
     /// return the matching reload op so the caller can `emit_op` it
     /// to put the original loaded value back into the accumulator.
     /// Returns `None` if the trailing op isn't a scalar load, in
@@ -272,9 +272,9 @@ impl Compiler {
     /// assignment, and compound assignment. Centralising the
     /// `last() / last_mut() / Op::Psh` triple keeps the four
     /// call sites in sync when new load-op variants are added.
-    pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
+    pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<ScalarLoadKind> {
         let load_op = self.pending.trailing_scalar_load.take()?;
-        // Mirror what the equivalent Op::Lc/Lh/Lw/Li -> Op::Psh
+        // Mirror what the equivalent ScalarLoadKind::Lc/Lh/Lw/Li -> Op::Psh
         // tag rewrite did: the address producer's value moves to
         // the c5 stack; push the current `ast_acc` slot onto the
         // parser vstack and clear the accumulator. `None` here
@@ -318,8 +318,8 @@ impl Compiler {
         Some(idx)
     }
 
-    /// If the most recently emitted op is a scalar load (`Op::Lc`
-    /// / `Op::Lw` / `Op::Li`), pop it -- the load's address-
+    /// If the most recently emitted op is a scalar load (`ScalarLoadKind::Lc`
+    /// / `ScalarLoadKind::Lw` / `ScalarLoadKind::Li`), pop it -- the load's address-
     /// producing source op then sits at the new tail, ready to
     /// drive the surrounding lvalue operation. Returns `true` on
     /// success. Used by `&expr` to convert an rvalue load chain
@@ -377,10 +377,10 @@ impl Compiler {
         // load eight bytes -- doing so would mix in adjacent
         // fields and the subsequent merge would clobber them.
         let load_op = match unit_size {
-            1 => Op::Lc,
-            2 => Op::Lh,
-            4 => Op::Lw,
-            _ => Op::Li,
+            1 => ScalarLoadKind::Lc,
+            2 => ScalarLoadKind::Lh,
+            4 => ScalarLoadKind::Lw,
+            _ => ScalarLoadKind::Li,
         };
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The storage address

@@ -118,7 +118,7 @@ fn c99_arith_common_width_full() {
 
 #[test]
 fn u16_load_store_is_two_bytes() {
-    // `*(u16*)p` reads/writes exactly 2 bytes via Op::Lh / Op::Lhu
+    // `*(u16*)p` reads/writes exactly 2 bytes via ScalarLoadKind::Lh / ScalarLoadKind::Lhu
     // / Op::Sh and the matching aarch64 LDRSH / LDRH / STRH and
     // x86_64 movsx16 / movzx16 / mov16 helpers.
     let exit = jit_fixture_exit("u16_load_store.c");

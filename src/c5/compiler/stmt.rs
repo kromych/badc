@@ -25,7 +25,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
+use super::super::op::ScalarLoadKind;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_pointer_ty, is_struct_ty, struct_ptr_depth};
@@ -707,7 +707,7 @@ impl Compiler {
                     // call so the assignment has a stable
                     // address to copy from.
                     self.emit_lea(2);
-                    self.emit_op(Op::Li);
+                    self.emit_op(ScalarLoadKind::Li);
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {

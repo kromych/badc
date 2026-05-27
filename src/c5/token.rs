@@ -239,9 +239,9 @@ pub(crate) enum Token {
     /// `short` modifier -- a real 2-byte width specifier. Drives
     /// `parse_decl_base_type` to pick `Ty::Short` rather than
     /// `Ty::Int`, so `short` declarations get a 2-byte slot,
-    /// `Op::Lh` / `Op::Sh` for memory access, and proper sign /
+    /// `ScalarLoadKind::Lh` / `Op::Sh` for memory access, and proper sign /
     /// zero extension on load. `unsigned short` ORs in
-    /// `UNSIGNED_BIT` and switches the load to `Op::Lhu`.
+    /// `UNSIGNED_BIT` and switches the load to `ScalarLoadKind::Lhu`.
     Short,
     /// `signed` modifier -- separated from the rest of [`IntMod`]
     /// because c5 needs to know specifically when `signed` was

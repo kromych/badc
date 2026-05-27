@@ -8,7 +8,7 @@
 /// mistaken for a load tag.
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Op {
+pub enum ScalarLoadKind {
     /// `i64` lvalue read. Source widths: `long` / `long long` /
     /// pointer / `double` (the 8-byte slot holds the f64 bit
     /// pattern verbatim).

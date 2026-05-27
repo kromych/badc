@@ -366,8 +366,8 @@ pub(in crate::c5::compiler) struct Pending {
     pub fn_ptr_chain_depth: i64,
 
     /// Symbol index of the Token::Loc whose value was loaded by
-    /// the most recently emitted scalar load (`Op::Li` /
-    /// `Op::Lc` / `Op::Lh` / `Op::Lw`, or the fused local-load
+    /// the most recently emitted scalar load (`ScalarLoadKind::Li` /
+    /// `ScalarLoadKind::Lc` / `ScalarLoadKind::Lh` / `ScalarLoadKind::Lw`, or the fused local-load
     /// shorthand) in the identifier-rvalue path. The
     /// assignment / address-of
     /// callers consult this when they pop or rewrite that
@@ -432,13 +432,13 @@ pub(in crate::c5::compiler) struct Pending {
     pub last_imm_was_zero: bool,
 
     /// `Some(load_op)` while the trailing emit is a scalar load
-    /// (`Op::Li`, `Op::Lc`, `Op::Lcs`, `Op::Lh`, `Op::Lhu`,
-    /// `Op::Lw`, `Op::Lwu`, `Op::Lf`). Set by `emit_op` on the
+    /// (`ScalarLoadKind::Li`, `ScalarLoadKind::Lc`, `ScalarLoadKind::Lcs`, `ScalarLoadKind::Lh`, `ScalarLoadKind::Lhu`,
+    /// `ScalarLoadKind::Lw`, `ScalarLoadKind::Lwu`, `ScalarLoadKind::Lf`). Set by `emit_op` on the
     /// matching variants, cleared by every other emit. Drives
     /// `pop_trailing_scalar_load` (lvalue conversion for `&expr`)
     /// and `rewrite_trailing_load_as_psh` (assignment / inc /
     /// compound-assign reload).
-    pub trailing_scalar_load: Option<crate::c5::op::Op>,
+    pub trailing_scalar_load: Option<crate::c5::op::ScalarLoadKind>,
 }
 
 impl Default for Pending {

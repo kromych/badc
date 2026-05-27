@@ -1242,6 +1242,51 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Single-source compile through the amalg dwarf.rs path emits
+/// DW_TAG_array_type for true local arrays. Mirrors the multi-TU
+/// coverage in `multi_tu_link_emits_array_type_for_local_arrays`.
+#[test]
+fn amalg_compile_emits_array_type_for_local_arrays() {
+    let dir = tempdir("amalg-array-type");
+    let src = write_source(
+        &dir,
+        "f.c",
+        "int main(void) {\n    int xs[5];\n    xs[0] = 7;\n    return xs[0];\n}\n",
+    );
+    let out = dir.join("f");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_array_type"),
+        "expected DW_TAG_array_type for `int xs[5]` in amalg compile:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("DW_TAG_subrange_type"),
+        "expected DW_TAG_subrange_type child:\n{out_text}",
+    );
+}
+
 /// True local arrays (`int xs[N]`) get DW_TAG_array_type with a
 /// DW_TAG_subrange_type child carrying DW_AT_upper_bound = N - 1
 /// per DWARF 4 section 5.13. `ptype xs` in gdb then shows

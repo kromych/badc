@@ -71,6 +71,8 @@ const DW_TAG_MEMBER: u8 = 0x0d;
 /// `is_variadic` flag is set so gdb / lldb render the signature
 /// with an ellipsis (`printf (fmt, ...)`).
 const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
+const DW_TAG_ARRAY_TYPE: u8 = 0x01;
+const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -101,6 +103,7 @@ const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
 const DW_AT_DECL_LINE: u32 = 0x3b;
 const DW_AT_PROTOTYPED: u32 = 0x27;
+const DW_AT_UPPER_BOUND: u32 = 0x2f;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -478,6 +481,10 @@ struct SubprogVar {
     /// Source line of the declaration; surfaces as
     /// `DW_AT_decl_line` on the DIE. Zero when unknown.
     decl_line: u32,
+    /// Element count for true local arrays. Drives DW_TAG_array_type
+    /// emission. Zero for scalars and for parameters (the latter
+    /// decay to pointers per C99 6.7.5.3p7).
+    array_size: u32,
 }
 
 /// Native bytes from a function's `low_pc` to the first byte of
@@ -700,6 +707,7 @@ fn collect_subprograms(
                     v.fp_slot * 8
                 },
                 decl_line: v.decl_line,
+                array_size: v.array_size,
             })
             .collect();
 
@@ -1340,6 +1348,27 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
+    // Abbrev 15: DW_TAG_array_type. True local arrays
+    // (`int xs[N]`) reference the element type via DW_AT_type and
+    // carry a single DW_TAG_subrange_type child describing the
+    // bound. Parameters decay to pointers per C99 6.7.5.3p7 and
+    // use the pointer_type DIE instead.
+    write_uleb128(&mut buf, 15);
+    write_uleb128(&mut buf, DW_TAG_ARRAY_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+    // Abbrev 16: DW_TAG_subrange_type child of the array_type DIE.
+    // DW_AT_upper_bound = element_count - 1 per DWARF 4 section
+    // 5.13.
+    write_uleb128(&mut buf, 16);
+    write_uleb128(&mut buf, DW_TAG_SUBRANGE_TYPE as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_UPPER_BOUND, DW_FORM_UDATA);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
     // End of abbreviation table.
     write_uleb128(&mut buf, 0);
     buf
@@ -1435,6 +1464,38 @@ fn build_debug_info(
         emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
     }
 
+    // DW_TAG_array_type DIEs for true local arrays. C99 6.7.5.3p7
+    // decays parameter arrays to pointers, so only non-parameter
+    // locals with `array_size > 0` contribute. Side-table keyed by
+    // (element_offset, count) so multiple variables sharing a
+    // shape collapse to a single DIE.
+    let mut array_offsets: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    {
+        let mut pending: BTreeMap<(u32, u32), ()> = BTreeMap::new();
+        for s in subs {
+            for v in &s.variables {
+                if v.array_size == 0 || v.is_parameter {
+                    continue;
+                }
+                let entry = classify(v.type_tag, target);
+                if let Some(&elem_off) = entry_offsets.get(&entry) {
+                    pending.insert((elem_off, v.array_size), ());
+                }
+            }
+        }
+        for (elem_off, count) in pending.keys() {
+            let arr_off = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
+            array_offsets.insert((*elem_off, *count), arr_off);
+            write_uleb128(&mut body, 15);
+            body.extend_from_slice(&elem_off.to_le_bytes());
+            // Subrange child: upper_bound = count - 1.
+            write_uleb128(&mut body, 16);
+            write_uleb128(&mut body, (*count as u64).saturating_sub(1));
+            // Children-list terminator for the array_type DIE.
+            body.push(0);
+        }
+    }
+
     // Subprogram children, each with its own variable /
     // formal_parameter children.
     for s in subs {
@@ -1467,9 +1528,21 @@ fn build_debug_info(
             // every captured variable, so a lookup miss is
             // impossible.
             let entry = classify(v.type_tag, target);
-            let type_off = *entry_offsets
+            let elem_off = *entry_offsets
                 .get(&entry)
                 .expect("catalog includes every entry produced by classify()");
+            // True local arrays reference the array_type DIE if one
+            // was emitted for this (element, count) pair above;
+            // every other variable references the element / scalar
+            // / pointer DIE directly.
+            let type_off = if v.array_size > 0 && !v.is_parameter {
+                array_offsets
+                    .get(&(elem_off, v.array_size))
+                    .copied()
+                    .unwrap_or(elem_off)
+            } else {
+                elem_off
+            };
             body.extend_from_slice(&type_off.to_le_bytes());
             // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
             let mut loc: Vec<u8> = Vec::with_capacity(8);

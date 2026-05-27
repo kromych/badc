@@ -569,32 +569,6 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
     }
 }
 
-/// Mirror of [`load_op_for`] for stores.
-pub(super) fn store_op_for(ty: i64, target: super::super::Target) -> Op {
-    let stripped = strip_unsigned(ty);
-    if is_pointer_ty(ty) {
-        return Op::Si;
-    }
-    if stripped == Ty::Char as i64 {
-        Op::Sc
-    } else if stripped == Ty::Short as i64 {
-        Op::Sh
-    } else if stripped == Ty::Int as i64 {
-        Op::Sw
-    } else if stripped == Ty::Float as i64 {
-        // 4-byte single-precision store that narrows the
-        // accumulator's f64 bits via round-to-nearest-ties-to-even.
-        // `double` falls through to `Op::Si` since the 8-byte slot
-        // holds the bit pattern verbatim.
-        Op::Sf
-    } else if stripped == Ty::Long as i64 && target.is_windows() {
-        // LLP64: `long` stores as 4 bytes, same as int.
-        Op::Sw
-    } else {
-        Op::Si
-    }
-}
-
 /// True if `op_val` (the trailing word in `self.text`) is a scalar
 /// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Lwu` /
 /// `Op::Li`. The parser uses this in every "rewrite the trailing

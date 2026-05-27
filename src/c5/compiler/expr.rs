@@ -40,7 +40,7 @@ use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
-    is_struct_ty, is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
+    is_struct_ty, is_unsigned_ty, load_op_for, struct_id_of, struct_ptr_depth,
     usual_arith_common_ty,
 };
 
@@ -1466,7 +1466,7 @@ impl Compiler {
             } else {
                 Op::Sub
             });
-            self.emit_op(store_op_for(self.ty, self.target));
+            self.ast_assign();
             // Build the AST `Expr::PreInc` whose `by` is signed
             // by the op direction so the walker routes to a
             // single `binop_imm(Add, lvalue, by)` rather than
@@ -1719,7 +1719,7 @@ impl Compiler {
                     // representation rather than the source's.
                     self.convert_assign_rhs(t);
                     self.ty = t;
-                    self.emit_op(store_op_for(self.ty, self.target));
+                    self.ast_assign();
                     if let Some(idx) = assigned_local {
                         self.record_local_store(idx, line);
                     }
@@ -1873,7 +1873,7 @@ impl Compiler {
                 };
                 self.emit_op(op);
                 self.ty = lhs_ty;
-                self.emit_op(store_op_for(self.ty, self.target));
+                self.ast_assign();
                 if let Some(idx) = assigned_local {
                     self.record_local_store(idx, line);
                 }
@@ -2402,7 +2402,7 @@ impl Compiler {
                 } else {
                     Op::Sub
                 });
-                self.emit_op(store_op_for(self.ty, self.target));
+                self.ast_assign();
                 self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc {

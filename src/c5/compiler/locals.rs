@@ -29,7 +29,6 @@
 use alloc::format;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
@@ -747,12 +746,6 @@ impl Compiler {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         let elem_size = self.size_of_type(ty) as i64;
-        let store_op = match elem_size {
-            1 => Op::Sc,
-            2 => Op::Sh,
-            4 => Op::Sw,
-            _ => Op::Si,
-        };
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
             if i >= max {
@@ -799,7 +792,7 @@ impl Compiler {
             if is_fp {
                 self.ast_assign();
             } else {
-                self.emit_op(store_op);
+                self.ast_assign();
             }
             if let Some(value) = elem_ast {
                 self.pending_local_runtime_elements
@@ -918,14 +911,7 @@ impl Compiler {
             self.ast_psh();
             self.expr(Token::Assign as i64)?;
             let field_ast = self.ast_acc;
-            let elem_size = self.size_of_type(field.ty);
-            let store_op = match elem_size {
-                1 => Op::Sc,
-                2 => Op::Sh,
-                4 => Op::Sw,
-                _ => Op::Si,
-            };
-            self.emit_op(store_op);
+            self.ast_assign();
             if let Some(value) = field_ast {
                 self.pending_local_runtime_elements
                     .push(super::super::ast::RuntimeInitElement {

@@ -381,11 +381,11 @@ impl Compiler {
         // the load / store opcode pair. Sub-word units must not
         // load eight bytes -- doing so would mix in adjacent
         // fields and the subsequent merge would clobber them.
-        let (load_op, store_op) = match unit_size {
-            1 => (Op::Lc, Op::Sc),
-            2 => (Op::Lh, Op::Sh),
-            4 => (Op::Lw, Op::Sw),
-            _ => (Op::Li, Op::Si),
+        let load_op = match unit_size {
+            1 => Op::Lc,
+            2 => Op::Lh,
+            4 => Op::Lw,
+            _ => Op::Li,
         };
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The storage address
@@ -419,7 +419,7 @@ impl Compiler {
             // stack: [..., field_addr]. The trailing Si pops
             // field_addr as the destination.
             self.ast_binop(crate::c5::ir::BinOp::Or);
-            self.emit_op(store_op); // pops field_addr, stores a (=combined).
+            self.ast_assign(); // pops field_addr, stores a (=combined).
             self.ty = Ty::Int as i64;
             Ok(())
         } else if self.lex.tk == Token::AssignOp {
@@ -489,7 +489,7 @@ impl Compiler {
             self.emit_op(Op::LdLocI);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
             self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
-            self.emit_op(store_op); // pops field_addr, stores a
+            self.ast_assign(); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
             Ok(())
         } else {

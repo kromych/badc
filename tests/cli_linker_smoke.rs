@@ -1102,6 +1102,100 @@ fn multi_tu_link_emits_struct_dies() {
     );
 }
 
+/// Nested aggregate-as-field types (struct embedded inside
+/// another struct) need the type catalog to emit the inner
+/// struct before the outer one so the outer's
+/// `DW_TAG_member` can DW_AT_type-reference the inner DIE's
+/// CU-relative offset. The topological sort over the
+/// aggregate-id dependency graph drives the emit order;
+/// pointer-to-aggregate fields don't contribute edges (their
+/// pointer_type wrappers forward-ref4 cleanly).
+#[test]
+fn multi_tu_link_emits_nested_struct_dies() {
+    let dir = tempdir("multi-tu-nested-struct");
+    write_source(
+        &dir,
+        "helper.c",
+        "struct Inner { int x; int y; };\n\
+         struct Outer { int tag; struct Inner inner; };\n\
+         int helper(struct Outer o) { return o.tag + o.inner.x + o.inner.y; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "struct Inner { int x; int y; };\n\
+         struct Outer { int tag; struct Inner inner; };\n\
+         extern int helper(struct Outer);\n\
+         int main(void) {\n\
+             struct Outer o; o.tag = 7; o.inner.x = 2; o.inner.y = 3;\n\
+             return helper(o);\n\
+         }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    for name in ["\"Inner\"", "\"Outer\""] {
+        assert!(
+            out_text.contains(name),
+            "expected DW_AT_name {name} on a structure_type DIE:\n{out_text}",
+        );
+    }
+    // The outer struct's `inner` member should DW_AT_type to
+    // the inner struct's DIE -- evidence the topological sort
+    // placed Inner ahead of Outer so the ref4 is a backward
+    // reference.
+    assert!(
+        out_text.contains("\"inner\""),
+        "expected nested `inner` member's DW_AT_name in merged debug_info:\n{out_text}",
+    );
+    let outer_member_inner = out_text
+        .lines()
+        .skip_while(|l| !l.contains("\"inner\""))
+        .take(3)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        outer_member_inner.contains("\"Inner\""),
+        "expected `inner` member to DW_AT_type-reference the Inner struct DIE:\n{outer_member_inner}",
+    );
+}
+
 /// Multi-TU links populate `.debug_frame` from the merged
 /// Text-section symbol set: `synth_build.rs` walks every defined
 /// symbol and surfaces its `(ent_pc, name)` to `dwarf::emit`,

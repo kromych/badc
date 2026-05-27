@@ -25,10 +25,13 @@
 //! 8 bytes on Linux / macOS (LP64). Struct / union types are
 //! emitted as `DW_TAG_structure_type` / `DW_TAG_union_type` DIEs
 //! with `DW_TAG_member` children; member `DW_AT_type` refs the
-//! scalar catalog above. Nested aggregate fields and bitfield
-//! `DW_AT_bit_offset` encoding stay deferred. `.debug_frame`
-//! regenerates from `synth_build`'s symbol set on the merged
-//! image rather than being carried per-`.o`.
+//! scalar catalog above plus any earlier aggregate the topo
+//! sort placed before this one. Bitfield members carry
+//! `DW_AT_data_bit_offset` + `DW_AT_bit_size`. Pointer-to-
+//! aggregate members rely on the pointer_type wrapper's forward
+//! ref4 to the target struct. `.debug_frame` regenerates from
+//! `synth_build`'s symbol set on the merged image rather than
+//! being carried per-`.o`.
 
 #![allow(dead_code)]
 
@@ -472,18 +475,39 @@ fn build_debug_info(
         }
         // Pull in field types: aggregates whose fields reference
         // scalar / pointer-to-scalar leafs need those DIEs in
-        // the catalog. Nested aggregate fields stay deferred
-        // (TODO -- needs topological sort) and surface without
-        // DW_AT_type.
-        for &id in max_depth_per_aggregate.keys() {
-            if let Some(sd) = program.structs.get(id) {
-                for f in &sd.fields {
-                    if let Some(TypeKey::Scalar { leaf, depth }) = decompose_pointer_chain(f.ty) {
+        // the catalog. Aggregate-typed fields (depth 0) drag
+        // their target struct id into `max_depth_per_aggregate`
+        // and contribute a dependency edge for the topo sort
+        // below; pointer-to-aggregate fields (depth >= 1)
+        // forward-reference safely and only need the pointer
+        // wrapper.
+        let mut worklist: Vec<usize> = max_depth_per_aggregate.keys().copied().collect();
+        while let Some(id) = worklist.pop() {
+            let Some(sd) = program.structs.get(id) else {
+                continue;
+            };
+            for f in &sd.fields {
+                match decompose_pointer_chain(f.ty) {
+                    Some(TypeKey::Scalar { leaf, depth }) => {
                         let e = max_depth_per_scalar.entry(leaf).or_insert(0);
                         if depth > *e {
                             *e = depth;
                         }
                     }
+                    Some(TypeKey::Aggregate {
+                        id: dep_id,
+                        depth: dep_depth,
+                    }) => {
+                        let added = !max_depth_per_aggregate.contains_key(&dep_id);
+                        let e = max_depth_per_aggregate.entry(dep_id).or_insert(0);
+                        if dep_depth > *e {
+                            *e = dep_depth;
+                        }
+                        if added {
+                            worklist.push(dep_id);
+                        }
+                    }
+                    None => {}
                 }
             }
         }
@@ -516,12 +540,14 @@ fn build_debug_info(
         }
         // Aggregate (struct / union) DIEs. Each carries
         // DW_TAG_member children referring back into the scalar
-        // catalog above; nested-aggregate members get skipped
-        // for now and surface without DW_AT_type.
-        for (&id, &max_depth) in &max_depth_per_aggregate {
+        // catalog above plus any earlier aggregate DIE the
+        // topological sort places ahead of this one.
+        let aggregate_order = topo_sort_aggregates(program, &max_depth_per_aggregate);
+        for &id in &aggregate_order {
             let Some(sd) = program.structs.get(id) else {
                 continue;
             };
+            let max_depth = max_depth_per_aggregate.get(&id).copied().unwrap_or(0);
             let off = body.len() as u32 + DEBUG_INFO_UNIT_HEADER_SIZE as u32;
             type_offsets.insert(TypeKey::Aggregate { id, depth: 0 }, off);
             let abbrev = if sd.is_union {
@@ -533,11 +559,10 @@ fn build_debug_info(
             push_string(&mut body, &sd.name);
             write_uleb128(&mut body, sd.size as u64);
             for f in &sd.fields {
-                let Some(TypeKey::Scalar { leaf, depth }) = decompose_pointer_chain(f.ty) else {
+                let Some(field_key) = decompose_pointer_chain(f.ty) else {
                     continue;
                 };
-                let Some(&field_type_off) = type_offsets.get(&TypeKey::Scalar { leaf, depth })
-                else {
+                let Some(&field_type_off) = type_offsets.get(&field_key) else {
                     continue;
                 };
                 if f.bit_width > 0 {
@@ -932,6 +957,73 @@ fn write_uleb128(out: &mut Vec<u8>, mut value: u64) {
         }
         out.push(byte | 0x80);
     }
+}
+
+/// Topologically order the aggregate ids in
+/// `max_depth_per_aggregate` so each struct's directly-embedded
+/// aggregate fields (depth 0) reach their dependency's DIE
+/// offset before the outer struct's member emit needs it.
+/// Pointer-to-aggregate fields (depth >= 1) don't contribute
+/// edges -- a pointer_type wrapper's `DW_AT_type` ref4 works as
+/// a forward reference, which the cycle case
+/// (`struct A { struct B *b; }; struct B { struct A *a; }`)
+/// relies on. If a cycle ever shows up at depth 0 (a struct
+/// directly containing itself, which C99 6.7.2.1 forbids), the
+/// remaining ids appear in their original insertion order so
+/// the emit still completes.
+fn topo_sort_aggregates(program: &Program, used: &BTreeMap<usize, u8>) -> alloc::vec::Vec<usize> {
+    let mut deps: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut indeg: BTreeMap<usize, usize> = used.keys().map(|&id| (id, 0)).collect();
+    for &id in used.keys() {
+        let Some(sd) = program.structs.get(id) else {
+            continue;
+        };
+        for f in &sd.fields {
+            if let Some(TypeKey::Aggregate {
+                id: dep_id,
+                depth: 0,
+            }) = decompose_pointer_chain(f.ty)
+            {
+                if dep_id == id {
+                    continue;
+                }
+                if indeg.contains_key(&dep_id) {
+                    deps.entry(dep_id).or_default().push(id);
+                    *indeg.entry(id).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    let mut ready: Vec<usize> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(&id, _)| id)
+        .collect();
+    let mut out: Vec<usize> = Vec::with_capacity(used.len());
+    while let Some(id) = ready.pop() {
+        out.push(id);
+        if let Some(consumers) = deps.get(&id) {
+            for &c in consumers {
+                let e = indeg.entry(c).or_insert(0);
+                if *e > 0 {
+                    *e -= 1;
+                }
+                if *e == 0 {
+                    ready.push(c);
+                }
+            }
+        }
+    }
+    // Any id with a remaining indeg > 0 sits on a cycle; emit
+    // it last in insertion order so the output still covers
+    // every used aggregate (the DIE's aggregate-field DW_AT_type
+    // ref4 falls through to None and the member is skipped).
+    for &id in used.keys() {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
 }
 
 /// c5's frame-slot index to native byte offset from the frame

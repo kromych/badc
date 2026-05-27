@@ -136,6 +136,7 @@ fn synth_program_and_build(
         merged_dwarf: if merged.debug_info.is_empty()
             && merged.debug_abbrev.is_empty()
             && merged.debug_line.is_empty()
+            && merged.debug_str.is_empty()
         {
             None
         } else {
@@ -143,6 +144,7 @@ fn synth_program_and_build(
                 debug_info: merged.debug_info.clone(),
                 debug_abbrev: merged.debug_abbrev.clone(),
                 debug_line: merged.debug_line.clone(),
+                debug_str: merged.debug_str.clone(),
                 debug_info_text_relocs: merged
                     .debug_info_text_relocs
                     .iter()
@@ -604,9 +606,11 @@ mod tests {
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],
+            debug_str: alloc::vec![],
             debug_info_bases: alloc::vec![],
             debug_abbrev_bases: alloc::vec![],
             debug_line_bases: alloc::vec![],
+            debug_str_bases: alloc::vec![],
             debug_info_relocs: alloc::vec![],
             debug_line_relocs: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],

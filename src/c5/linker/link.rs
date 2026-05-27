@@ -100,9 +100,11 @@ pub struct MergedNative {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    pub debug_str: Vec<u8>,
     pub debug_info_bases: Vec<usize>,
     pub debug_abbrev_bases: Vec<usize>,
     pub debug_line_bases: Vec<usize>,
+    pub debug_str_bases: Vec<usize>,
     /// DWARF reloc lists (rebased). `sym_idx` is the per-unit
     /// symtab index of the target section symbol; the parallel
     /// `unit_for_*_reloc` records which unit each reloc came
@@ -423,7 +425,8 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                             | NativeSymSection::Common
                             | NativeSymSection::Tls
                             | NativeSymSection::DebugAbbrev
-                            | NativeSymSection::DebugLine => {
+                            | NativeSymSection::DebugLine
+                            | NativeSymSection::DebugStr => {
                                 return Err(err(&format!(
                                     "link_native_objects: defined entry for `{}` has \
                                      non-progbits section {:?}",
@@ -506,7 +509,9 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         sym.name,
                     )));
                 }
-                NativeSymSection::DebugAbbrev | NativeSymSection::DebugLine => {
+                NativeSymSection::DebugAbbrev
+                | NativeSymSection::DebugLine
+                | NativeSymSection::DebugStr => {
                     // `.rela.text` shouldn't target a DWARF section
                     // symbol; the producer routes those through
                     // `.rela.debug_info` / `.rela.debug_line` instead.
@@ -577,7 +582,9 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         sym.name,
                     )));
                 }
-                NativeSymSection::DebugAbbrev | NativeSymSection::DebugLine => {
+                NativeSymSection::DebugAbbrev
+                | NativeSymSection::DebugLine
+                | NativeSymSection::DebugStr => {
                     return Err(err(&format!(
                         "link_native_objects: .rela.data points at {:?} symbol `{}`",
                         sym.section, sym.name,
@@ -656,9 +663,11 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
     let mut debug_info: Vec<u8> = Vec::new();
     let mut debug_abbrev: Vec<u8> = Vec::new();
     let mut debug_line: Vec<u8> = Vec::new();
+    let mut debug_str: Vec<u8> = Vec::new();
     let mut debug_info_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_abbrev_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_line_bases: Vec<usize> = Vec::with_capacity(objs.len());
+    let mut debug_str_bases: Vec<usize> = Vec::with_capacity(objs.len());
     let mut debug_info_relocs: Vec<super::object::NativeReloc> = Vec::new();
     let mut debug_line_relocs: Vec<super::object::NativeReloc> = Vec::new();
     let mut unit_for_debug_info_reloc: Vec<usize> = Vec::new();
@@ -667,11 +676,13 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_info_bases.push(debug_info.len());
         debug_abbrev_bases.push(debug_abbrev.len());
         debug_line_bases.push(debug_line.len());
+        debug_str_bases.push(debug_str.len());
         let info_base = debug_info.len() as u64;
         let line_base = debug_line.len() as u64;
         debug_info.extend_from_slice(&obj.debug_info);
         debug_abbrev.extend_from_slice(&obj.debug_abbrev);
         debug_line.extend_from_slice(&obj.debug_line);
+        debug_str.extend_from_slice(&obj.debug_str);
         for r in &obj.debug_info_relocs {
             let mut shifted = *r;
             shifted.offset = r.offset.wrapping_add(info_base);
@@ -717,6 +728,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             &text_bases,
             &debug_abbrev_bases,
             &debug_line_bases,
+            &debug_str_bases,
         )?;
     }
     for (i, reloc) in debug_line_relocs.iter().enumerate() {
@@ -738,6 +750,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             &text_bases,
             &debug_abbrev_bases,
             &debug_line_bases,
+            &debug_str_bases,
         )?;
     }
 
@@ -755,9 +768,11 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_info,
         debug_abbrev,
         debug_line,
+        debug_str,
         debug_info_bases,
         debug_abbrev_bases,
         debug_line_bases,
+        debug_str_bases,
         debug_info_relocs,
         debug_line_relocs,
         unit_for_debug_info_reloc,
@@ -792,36 +807,39 @@ fn resolve_debug_reloc(
     text_bases: &[usize],
     debug_abbrev_bases: &[usize],
     debug_line_bases: &[usize],
+    debug_str_bases: &[usize],
 ) -> Result<(), C5Error> {
     let patch_off = reloc.offset as usize;
     let unit_target_base = match sym.section {
         NativeSymSection::Text => text_bases[unit_idx] as u64,
         NativeSymSection::DebugAbbrev => debug_abbrev_bases[unit_idx] as u64,
         NativeSymSection::DebugLine => debug_line_bases[unit_idx] as u64,
+        NativeSymSection::DebugStr => debug_str_bases[unit_idx] as u64,
         other => {
             return Err(err(&format!(
                 "link_native_objects: DWARF reloc targets {other:?}; only Text / DebugAbbrev / \
-                 DebugLine are supported",
+                 DebugLine / DebugStr are supported",
             )));
         }
     };
     let resolved = unit_target_base
         .wrapping_add(sym.value)
         .wrapping_add(reloc.addend as u64);
-    let (width, is_text_targeting) = match (machine, reloc.rtype, sym.section) {
-        (NativeMachine::X86_64, R_X86_64_64, NativeSymSection::Text)
-        | (NativeMachine::Aarch64, R_AARCH64_ABS64, NativeSymSection::Text) => (8u8, true),
-        (NativeMachine::X86_64, R_X86_64_32, _)
-        | (NativeMachine::Aarch64, R_AARCH64_ABS32, _) => (4u8, false),
-        (NativeMachine::X86_64, R_X86_64_64, _)
-        | (NativeMachine::Aarch64, R_AARCH64_ABS64, _) => (8u8, false),
-        _ => {
-            return Err(err(&format!(
-                "link_native_objects: unsupported DWARF reloc type {} for {:?}",
-                reloc.rtype, machine,
-            )));
-        }
-    };
+    let (width, is_text_targeting) =
+        match (machine, reloc.rtype, sym.section) {
+            (NativeMachine::X86_64, R_X86_64_64, NativeSymSection::Text)
+            | (NativeMachine::Aarch64, R_AARCH64_ABS64, NativeSymSection::Text) => (8u8, true),
+            (NativeMachine::X86_64, R_X86_64_32, _)
+            | (NativeMachine::Aarch64, R_AARCH64_ABS32, _) => (4u8, false),
+            (NativeMachine::X86_64, R_X86_64_64, _)
+            | (NativeMachine::Aarch64, R_AARCH64_ABS64, _) => (8u8, false),
+            _ => {
+                return Err(err(&format!(
+                    "link_native_objects: unsupported DWARF reloc type {} for {:?}",
+                    reloc.rtype, machine,
+                )));
+            }
+        };
     let end = patch_off.checked_add(width as usize).ok_or_else(|| {
         err(&format!(
             "link_native_objects: DWARF reloc offset 0x{patch_off:x} + width {width} overflows",
@@ -1610,6 +1628,7 @@ mod tests {
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
             debug_info_relocs: alloc::vec::Vec::new(),
             debug_line_relocs: alloc::vec::Vec::new(),
         };
@@ -1670,6 +1689,7 @@ mod tests {
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
             debug_info_relocs: alloc::vec::Vec::new(),
             debug_line_relocs: alloc::vec::Vec::new(),
         };
@@ -1705,6 +1725,7 @@ mod tests {
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
+            debug_str: alloc::vec::Vec::new(),
             debug_info_relocs: alloc::vec::Vec::new(),
             debug_line_relocs: alloc::vec::Vec::new(),
         };

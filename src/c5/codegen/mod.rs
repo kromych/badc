@@ -512,6 +512,7 @@ pub(crate) struct MergedDwarf {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    pub debug_str: Vec<u8>,
     /// Text-targeting DWARF relocs the linker couldn't apply
     /// without the writer's committed `.text` runtime address.
     /// Each entry stores the placeholder offset inside its

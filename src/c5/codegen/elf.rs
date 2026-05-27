@@ -1177,10 +1177,9 @@ pub(super) fn write(
     };
     let dwarf_sections = if let Some(md) = &build.merged_dwarf {
         // Multi-TU link: drop pre-baked linker-merged DWARF
-        // bytes into the output sections. `.debug_str` and
-        // `.debug_frame` aren't preserved by the linker yet
-        // (TODO); empty payloads keep the segment layout
-        // self-consistent.
+        // bytes into the output sections. `.debug_frame` isn't
+        // preserved by the linker yet (TODO); the empty payload
+        // keeps the segment layout self-consistent.
         //
         // Text-targeting placeholders the linker couldn't apply
         // (DW_AT_low_pc / DW_AT_high_pc / line-program addresses
@@ -1198,7 +1197,7 @@ pub(super) fn write(
             debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
             debug_line,
-            debug_str: Vec::new(),
+            debug_str: md.debug_str.clone(),
             debug_frame: Vec::new(),
         }
     } else if emit_dwarf {

@@ -183,6 +183,12 @@ pub enum NativeSymSection {
     /// and by `.rela.debug_line` for any cross-line-table
     /// references.
     DebugLine,
+    /// `STT_SECTION` symbol pointing at the unit's `.debug_str`
+    /// section. `.rela.debug_info` references it through
+    /// `DW_FORM_strp` (4-byte offset into `.debug_str`); the
+    /// linker rebases the offset by the unit's merged
+    /// `.debug_str` base.
+    DebugStr,
 }
 
 /// One entry from the unit's `.symtab`. Section symbols (the
@@ -274,11 +280,17 @@ pub struct NativeObject {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
+    /// `.debug_str` -- NUL-terminated strings the `.debug_info`
+    /// references through `DW_FORM_strp`. The producer emits one
+    /// entry per unique CU / file / function name; the linker
+    /// concatenates per unit and rebases the matching
+    /// `.rela.debug_info` slot via [`Self::debug_info_relocs`].
+    pub debug_str: Vec<u8>,
     /// `.rela.debug_info` and `.rela.debug_line` entries. Each
     /// reloc records the byte offset inside its section, the
     /// target section symbol (`.text` / `.debug_line` /
-    /// `.debug_abbrev`), the addend, and the reloc kind (4-byte
-    /// vs 8-byte slot).
+    /// `.debug_abbrev` / `.debug_str`), the addend, and the
+    /// reloc kind (4-byte vs 8-byte slot).
     pub debug_info_relocs: Vec<NativeReloc>,
     pub debug_line_relocs: Vec<NativeReloc>,
 }
@@ -384,6 +396,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut debug_info_idx: Option<usize> = None;
     let mut debug_abbrev_idx: Option<usize> = None;
     let mut debug_line_idx: Option<usize> = None;
+    let mut debug_str_idx: Option<usize> = None;
     let mut rela_debug_info_idx: Option<usize> = None;
     let mut rela_debug_line_idx: Option<usize> = None;
     for (i, sh) in shdrs.iter().enumerate() {
@@ -406,6 +419,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
         if name == ".debug_line" {
             debug_line_idx = Some(i);
+            continue;
+        }
+        if name == ".debug_str" {
+            debug_str_idx = Some(i);
             continue;
         }
         if name == ".rela.debug_info" {
@@ -552,6 +569,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             &tls_base_per_shndx,
             debug_abbrev_idx,
             debug_line_idx,
+            debug_str_idx,
         );
         symbols.push(NativeSymbol {
             name: if sym.st_name == 0 {
@@ -717,6 +735,11 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     } else {
         Vec::new()
     };
+    let debug_str = if let Some(i) = debug_str_idx {
+        section_slice(bytes, &shdrs[i])?.to_vec()
+    } else {
+        Vec::new()
+    };
     let debug_info_relocs = if let Some(i) = rela_debug_info_idx {
         parse_rela(bytes, &shdrs[i])?
     } else {
@@ -743,6 +766,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_info,
         debug_abbrev,
         debug_line,
+        debug_str,
         debug_info_relocs,
         debug_line_relocs,
     })
@@ -834,6 +858,7 @@ fn strtab_str(strtab: &[u8], off: usize) -> Result<&str, C5Error> {
 /// any section not in the family maps surfaces as UNDEF so the
 /// linker treats it as a missing reference rather than silently
 /// miscategorising it.
+#[allow(clippy::too_many_arguments)]
 fn section_of_shndx(
     shndx: u16,
     text_base_per_shndx: &[(usize, u64)],
@@ -842,6 +867,7 @@ fn section_of_shndx(
     tls_base_per_shndx: &[(usize, u64)],
     debug_abbrev_idx: Option<usize>,
     debug_line_idx: Option<usize>,
+    debug_str_idx: Option<usize>,
 ) -> (NativeSymSection, u64) {
     if shndx == SHN_UNDEF {
         return (NativeSymSection::Undef, 0);
@@ -874,6 +900,9 @@ fn section_of_shndx(
     }
     if Some(i) == debug_line_idx {
         return (NativeSymSection::DebugLine, 0);
+    }
+    if Some(i) == debug_str_idx {
+        return (NativeSymSection::DebugStr, 0);
     }
     (NativeSymSection::Undef, 0)
 }

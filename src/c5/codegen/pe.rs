@@ -456,7 +456,7 @@ pub(super) fn write(
             debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
             debug_line,
-            debug_str: Vec::new(),
+            debug_str: md.debug_str.clone(),
             debug_frame: Vec::new(),
         }
     } else if dwarf_section_present {

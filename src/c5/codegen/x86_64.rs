@@ -1215,15 +1215,21 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 // block-buffers non-tty stdout.
 // ------------------------------------------------------------------
 
-/// Length of the libc-routed `_start` stub: 14 bytes of prefix
-/// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) + 3 bytes of
-/// `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
-pub(super) const START_STUB_LEN: u64 = 23;
+/// Length of the libc-routed `_start` stub: 21 bytes of prefix
+/// (mov rdi, [rsp]; lea rsi, [rsp+8]; sub rsp, 8; call rel32) +
+/// 3 bytes of `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
+/// The `sub rsp, 8` lands rsp at `16k + 8` so the `call` that
+/// follows pushes the return address into the 16-aligned slot
+/// SysV requires on callee entry; without it every libc call
+/// `main` makes (e.g. `printf`) reaches glibc with rsp off by 8
+/// and SSE-aligned spill instructions inside libc fault on real
+/// Intel hardware (QEMU emulation tolerates the misalignment).
+pub(super) const START_STUB_LEN: u64 = 30;
 /// Length of the syscall-tail `_start` stub. One byte
 /// longer than the libc tail because `mov eax, 231` (5 bytes) +
 /// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
 /// qword [rip+disp32]` (6 bytes).
-pub(super) const START_STUB_LEN_SYSCALL: u64 = 24;
+pub(super) const START_STUB_LEN_SYSCALL: u64 = 31;
 
 /// Emit the `_start` prologue. When `use_libc_exit` is true, the
 /// stub's tail is `call qword [rip+disp32]` through the libc
@@ -1251,6 +1257,18 @@ pub(super) fn emit_start_stub(
     emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
     // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
     emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
+
+    // SysV x86_64 ABI 3.4.1: the call instruction must land rsp at
+    // a 16-byte boundary on callee entry, i.e. rsp must end in 8
+    // before the call so the call's return-address push leaves
+    // rsp 16-aligned. The kernel hands `_start` rsp at a 16-byte
+    // boundary directly (no pushed return address), so the stub
+    // has to drop 8 bytes before the call to satisfy the
+    // alignment contract. `main` and every function it transitively
+    // calls then receives the rsp shape the ABI guarantees, and
+    // any SSE-aligned spill SSE / AVX instruction inside libc
+    // (movaps / movdqa / ...) loads through an aligned pointer.
+    emit_sub_rsp_imm32(code, 8);
 
     // call main. Target byte offset (within the code blob) is
     // start_stub_len + main_offset_in_code; the rel32 for `call`
@@ -1954,6 +1972,7 @@ mod tests {
         // immediately after the stub). The stub is:
         //   mov rdi, [rsp]              ; argc
         //   lea rsi, [rsp+8]            ; argv
+        //   sub rsp, 8                  ; SysV ABI alignment
         //   call main                   ; rel32 placeholder
         //   mov rdi, rax                ; pass to libc exit
         //   call qword [rip + disp32]   ; libc exit slot
@@ -1964,14 +1983,16 @@ mod tests {
         assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
         // lea rsi, [rsp+8]            -> 48 8D 74 24 08
         assert_eq!(&buf[4..9], &[0x48, 0x8D, 0x74, 0x24, 0x08]);
-        // call main rel32 = (23 - (9+5)) = 9 -> E8 09 00 00 00
-        assert_eq!(&buf[9..14], &[0xE8, 0x09, 0x00, 0x00, 0x00]);
+        // sub rsp, 8                  -> 48 81 EC 08 00 00 00
+        assert_eq!(&buf[9..16], &[0x48, 0x81, 0xEC, 0x08, 0x00, 0x00, 0x00]);
+        // call main rel32 = (30 - (16+5)) = 9 -> E8 09 00 00 00
+        assert_eq!(&buf[16..21], &[0xE8, 0x09, 0x00, 0x00, 0x00]);
         // mov rdi, rax                -> 48 89 C7
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
+        assert_eq!(&buf[21..24], &[0x48, 0x89, 0xC7]);
         // call qword [rip + 0]        -> FF 15 00 00 00 00
-        assert_eq!(exit_off, Some(17));
+        assert_eq!(exit_off, Some(24));
         assert_eq!(
-            &buf[17..23],
+            &buf[24..30],
             &[0xFF, 0x15, 0x00, 0x00, 0x00, 0x00],
             "call qword [rip+0] placeholder"
         );
@@ -1985,18 +2006,18 @@ mod tests {
         //   mov rdi, rax        (3 bytes, rax = main's return)
         //   mov eax, 231        (5 bytes, sys_exit_group)
         //   syscall             (2 bytes)
-        // Total stub length: 14 (prefix) + 10 (tail) = 24 bytes,
-        // one longer than the libc tail.
+        // The 18-byte prefix carries the new `sub rsp, 8`
+        // alignment adjustment so the tail starts at byte 18.
         let mut buf = Vec::new();
         let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
         assert_eq!(exit_off, None, "syscall tail returns no GotFixup offset");
         assert_eq!(buf.len() as u64, START_STUB_LEN_SYSCALL);
         // mov rdi, rax (= status from main's return value).
-        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
+        assert_eq!(&buf[21..24], &[0x48, 0x89, 0xC7]);
         // mov eax, 231 (= sys_exit_group on Linux x86_64).
-        assert_eq!(&buf[17..22], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
+        assert_eq!(&buf[24..29], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
         // syscall.
-        assert_eq!(&buf[22..24], &[0x0f, 0x05]);
+        assert_eq!(&buf[29..31], &[0x0f, 0x05]);
     }
 
     /// `#pragma entrypoint(WinMain)` on Windows x64 must spill

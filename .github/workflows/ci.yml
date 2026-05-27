@@ -634,8 +634,14 @@ jobs:
         run: cargo build --locked --all-features --verbose
 
   perf-table:
-    name: perf comparison (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: perf comparison (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
     # Don't gate CI on perf numbers -- a regression should surface in
     # the job summary but not block the merge. Hard failures from the
     # harness (no compilers found, fixture missing) still fail the job.
@@ -648,7 +654,7 @@ jobs:
           python-version: '3.x'
       - uses: Swatinem/rust-cache@v2
         with:
-          key: perf
+          key: perf-${{ matrix.os }}
       - name: build badc release
         run: cargo build --release --locked
       - name: fetch vendored tinycc sources
@@ -659,7 +665,7 @@ jobs:
         run: |
           python3 tests/perf/run.py | tee /tmp/perf.md
           {
-            echo "## badc vs tcc / clang on fib + qsort"
+            echo "## badc vs tcc / clang on fib + qsort (${{ matrix.os }})"
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"

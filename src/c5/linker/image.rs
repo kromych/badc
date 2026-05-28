@@ -1033,6 +1033,7 @@ mod tests {
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),
             exports: alloc::vec![],
+            tls_index_fixups: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],

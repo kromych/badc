@@ -1512,7 +1512,7 @@ fn build_debug_info(
     let mut body: Vec<u8> = Vec::with_capacity(64 + subs.len() * 48);
 
     // CU DIE: abbrev 1.
-    write_uleb128(&mut body, 1);
+    write_uleb128(&mut body, ABBREV_COMPILE_UNIT);
     body.extend_from_slice(&producer_off.to_le_bytes());
     body.push(DW_LANG_C99);
     body.extend_from_slice(&cu_name_off.to_le_bytes());
@@ -1619,10 +1619,10 @@ fn build_debug_info(
             "array layout disagreed with the emitter for ({entry:?}, {count})",
         );
         let elem_off = entry_offsets[&entry];
-        write_uleb128(&mut body, 15);
+        write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
         body.extend_from_slice(&elem_off.to_le_bytes());
         // Subrange child: upper_bound = count - 1.
-        write_uleb128(&mut body, 16);
+        write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
         write_uleb128(&mut body, (count as u64).saturating_sub(1));
         // Children-list terminator for the array_type DIE.
         body.push(0);
@@ -1637,12 +1637,12 @@ fn build_debug_info(
         if ed.name.is_empty() || ed.constants.is_empty() {
             continue;
         }
-        write_uleb128(&mut body, 17);
+        write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
         body.extend_from_slice(ed.name.as_bytes());
         body.push(0);
         body.push(4);
         for (cname, cval) in &ed.constants {
-            write_uleb128(&mut body, 18);
+            write_uleb128(&mut body, ABBREV_ENUMERATOR);
             body.extend_from_slice(cname.as_bytes());
             body.push(0);
             write_sleb128(&mut body, *cval);
@@ -1653,7 +1653,7 @@ fn build_debug_info(
     // Subprogram children, each with its own variable /
     // formal_parameter children.
     for s in subs {
-        write_uleb128(&mut body, 2);
+        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
         body.extend_from_slice(&s.name_off.to_le_bytes());
         body.extend_from_slice(&s.low_pc.to_le_bytes());
         body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
@@ -1665,7 +1665,7 @@ fn build_debug_info(
         // DW_AT_frame_base (DW_FORM_exprloc): "frame base is
         // x29 + 0", encoded as `DW_OP_breg29 0`. Two bytes:
         // opcode + sleb128(0).
-        write_uleb128(&mut body, 2);
+        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
         body.push(DW_OP_BREG29);
         body.push(0);
 
@@ -1676,7 +1676,11 @@ fn build_debug_info(
         let mut sorted: Vec<&SubprogVar> = s.variables.iter().collect();
         sorted.sort_by_key(|v| (!v.is_parameter, v.fp_byte_offset));
         for v in sorted {
-            let abbrev = if v.is_parameter { 5 } else { 4 };
+            let abbrev = if v.is_parameter {
+                ABBREV_FORMAL_PARAMETER
+            } else {
+                ABBREV_VARIABLE
+            };
             write_uleb128(&mut body, abbrev);
             body.extend_from_slice(&v.name_off.to_le_bytes());
             // Resolve this variable's c5 type tag through the
@@ -1741,7 +1745,7 @@ fn build_debug_info(
     };
     for plt in plt_subs {
         // Abbrev 11: name, low_pc, high_pc, external, type.
-        write_uleb128(&mut body, 11);
+        write_uleb128(&mut body, ABBREV_PLT_SUBPROGRAM);
         body.extend_from_slice(&plt.name_off.to_le_bytes());
         body.extend_from_slice(&plt.low_pc.to_le_bytes());
         body.extend_from_slice(&(plt.high_pc - plt.low_pc).to_le_bytes());
@@ -1774,7 +1778,7 @@ fn build_debug_info(
             let name_off = plt.param_name_offs[slot];
             match dwarf_arg_reg(target, slot) {
                 Some(reg) => {
-                    write_uleb128(&mut body, 14);
+                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER_LOC);
                     body.extend_from_slice(&name_off.to_le_bytes());
                     body.extend_from_slice(&type_off.to_le_bytes());
                     // DW_OP_reg<N> is one byte for N <= 31; every
@@ -1784,7 +1788,7 @@ fn build_debug_info(
                     body.push(DW_OP_REG_BASE + reg);
                 }
                 None => {
-                    write_uleb128(&mut body, 12);
+                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER);
                     body.extend_from_slice(&name_off.to_le_bytes());
                     body.extend_from_slice(&type_off.to_le_bytes());
                 }
@@ -1794,7 +1798,7 @@ fn build_debug_info(
         // surface as `printf(char *, ...)` rather than just
         // `printf(char *)`.
         if plt.is_variadic {
-            write_uleb128(&mut body, 13);
+            write_uleb128(&mut body, ABBREV_UNSPECIFIED_PARAMETERS);
         }
         // Children-list terminator for this PLT subprogram.
         body.push(0);
@@ -1841,7 +1845,7 @@ fn emit_type_die(
                 .get(key)
                 .copied()
                 .expect("collect() interned every base in base_names");
-            write_uleb128(body, 3);
+            write_uleb128(body, ABBREV_BASE_TYPE);
             body.extend_from_slice(&name_off.to_le_bytes());
             body.push(key.byte_size);
             body.push(key.encoding);
@@ -1858,7 +1862,7 @@ fn emit_type_die(
             let pointee_off = *entry_offsets
                 .get(&pointee)
                 .expect("chain insertion guarantees the pointee was placed");
-            write_uleb128(body, 6);
+            write_uleb128(body, ABBREV_POINTER_TYPE);
             body.push(8);
             body.extend_from_slice(&pointee_off.to_le_bytes());
         }
@@ -1874,7 +1878,7 @@ fn emit_type_die(
             let pointee_off = *entry_offsets
                 .get(&pointee)
                 .expect("chain insertion guarantees the pointee was placed");
-            write_uleb128(body, 6);
+            write_uleb128(body, ABBREV_POINTER_TYPE);
             body.push(8);
             body.extend_from_slice(&pointee_off.to_le_bytes());
         }
@@ -1882,7 +1886,11 @@ fn emit_type_die(
             let s = structs
                 .get(*id as usize)
                 .expect("Struct entries only land in the catalog when the id is in-range");
-            let abbrev = if s.is_union { 8 } else { 7 };
+            let abbrev = if s.is_union {
+                ABBREV_UNION_TYPE
+            } else {
+                ABBREV_STRUCTURE_TYPE
+            };
             let name_off = catalog
                 .struct_names
                 .get(id)
@@ -1927,7 +1935,7 @@ fn emit_type_die(
 
                 if f.bit_width == 0 {
                     // Regular member: abbrev 9.
-                    write_uleb128(body, 9);
+                    write_uleb128(body, ABBREV_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
@@ -1938,7 +1946,7 @@ fn emit_type_die(
                     // MSB-relative `DW_AT_bit_offset` on
                     // little-endian targets:
                     //   dwarf_bit_offset = 64 - lsb_offset - width
-                    write_uleb128(body, 10);
+                    write_uleb128(body, ABBREV_BITFIELD_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
@@ -1958,7 +1966,7 @@ fn emit_type_die(
             // `void *` in user-facing rendering -- once unknown
             // tags are extinct this entry can be removed
             // entirely.
-            write_uleb128(body, 3);
+            write_uleb128(body, ABBREV_BASE_TYPE);
             body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
             body.push(8);
             body.push(DW_ATE_ADDRESS);

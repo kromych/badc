@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{CompileOptions, Compiler, LinkOptions, Target, emit_native, link_units};
+use crate::{CompileOptions, Compiler, Target, emit_native, link_units};
 
 /// Compile the inline source with the standard prelude and write
 /// an ad-hoc-signed Mach-O into a unique temp file. The path is
@@ -420,7 +420,7 @@ fn build_signed_mach_o_two_units(
     unit_a.source_path = label_a.to_string();
     unit_b.source_path = label_b.to_string();
     // `main`-bearing unit first so link_units anchors the entry on it.
-    let mut program = link_units(alloc::vec![unit_b, unit_a], &[], LinkOptions::default())
+    let mut program = link_units(alloc::vec![unit_b, unit_a])
         .unwrap_or_else(|e| panic!("link_units failed: {e}"));
     if program.source_path.is_empty() {
         program.source_path = label_b.to_string();

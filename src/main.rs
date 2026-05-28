@@ -1230,25 +1230,17 @@ fn main() {
         return;
     }
 
-    // Parse positional + resolved archives. The order matches
-    // command-line order so a later `-l` overrides an earlier
-    // one's symbol resolution (gcc / ld convention).
-    let mut link_archives: Vec<badc::LinkArchive> = Vec::with_capacity(archives.len());
-    for a in &archives {
-        let bytes = match std::fs::read(a) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{a}`: {e}"));
-                std::process::exit(1);
-            }
-        };
-        match badc::LinkArchive::parse(a.clone(), &bytes) {
-            Ok(la) => link_archives.push(la),
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {a}: {e}"));
-                std::process::exit(1);
-            }
-        }
+    // This path links source-derived `LinkUnit`s only. Object and
+    // archive inputs travel through the native-link path above;
+    // reaching here with any of them means a mode that path does not
+    // cover (a `_Thread_local` Mach-O / PE build that fell back to
+    // the in-memory linker), where they are not supported.
+    if !objects.is_empty() || !archives.is_empty() {
+        eprint_diagnostic(
+            "badc: error: object / archive inputs are linked through the native path; \
+             they cannot be combined with this build mode",
+        );
+        std::process::exit(1);
     }
 
     // Drive the link step. `program` ends up the same shape
@@ -1256,8 +1248,8 @@ fn main() {
     let path = unit_source_paths
         .first()
         .cloned()
-        .unwrap_or_else(|| objects.first().cloned().unwrap_or_else(|| "-".to_string()));
-    let mut program = match badc::link_units(units, &link_archives, badc::LinkOptions::default()) {
+        .unwrap_or_else(|| "-".to_string());
+    let mut program = match badc::link_units(units) {
         Ok(p) => p,
         Err(e) => {
             eprint_diagnostic(e);

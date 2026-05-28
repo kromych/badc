@@ -40,107 +40,21 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 use crate::c5::error::C5Error;
 use crate::c5::preprocessor::DylibSpec;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
-use super::archive::{ArchiveMember, read_archive};
 use super::unit::LinkUnit;
-use super::unit_object::read_object;
 use super::unit_reloc::{Reloc, RelocKind};
 use super::unit_symbol::SymbolKind;
 
-/// Tunable knobs for [`link_units`]. Today this just toggles
-/// the diagnostic shape; future per-link options (output kind
-/// hints, archive search policy) will land here without
-/// reshuffling the public signature.
-#[derive(Debug, Clone, Default)]
-pub struct LinkOptions {
-    /// When set, the link refuses to pull in any archive
-    /// member -- only the root units participate. Used by
-    /// the CLI driver when the user asked to bundle a
-    /// specific set of `.o` files without `-l`-driven
-    /// archive search.
-    pub no_archive_pullin: bool,
-}
-
-/// One archive-on-disk + its parsed members. The linker walks
-/// `members` looking for any name that satisfies an unresolved
-/// reference, and pulls in matching members on demand.
-#[derive(Debug, Clone)]
-pub struct LinkArchive {
-    /// Filesystem path of the archive, for diagnostics.
-    pub path: String,
-    pub members: Vec<ArchiveMember>,
-}
-
-impl LinkArchive {
-    /// Parse `bytes` and bundle them with `path`.
-    pub fn parse(path: String, bytes: &[u8]) -> Result<Self, C5Error> {
-        let members = read_archive(bytes)?;
-        Ok(Self { path, members })
-    }
-}
-
-/// Drive a multi-TU link from a set of root `LinkUnit`s plus a
-/// list of archives. Returns the merged [`Program`].
-pub fn link_units(
-    mut units: Vec<LinkUnit>,
-    archives: &[LinkArchive],
-    options: LinkOptions,
-) -> Result<Program, C5Error> {
+/// Drive a multi-TU link from a set of root `LinkUnit`s.
+/// Returns the merged [`Program`].
+pub fn link_units(units: Vec<LinkUnit>) -> Result<Program, C5Error> {
     if units.is_empty() {
         return Err(link_err("no input objects to link"));
-    }
-
-    // Archive pull-in. Iterate until no new members are added.
-    // Each pass collects every undefined external reference
-    // across `units`, then walks archives in declared order
-    // looking for a defining member; the first match wins.
-    //
-    // Within one pass, after pulling member `M` to satisfy
-    // `needed_a`, the same member typically also defines
-    // `needed_b` from the same iteration's undefined list. We
-    // mark that name as just-satisfied so the next `needed_b`
-    // iteration doesn't pull `M` a second time -- otherwise the
-    // produced link unit would carry duplicate definitions and
-    // trip the multiple-definition check below.
-    if !options.no_archive_pullin {
-        loop {
-            let (defined, undefined) = collect_defined_undefined(&units);
-            let mut pulled = false;
-            let mut just_pulled_defs: HashSet<String> = HashSet::new();
-            for needed in &undefined {
-                if defined.contains_key(needed) || just_pulled_defs.contains(needed) {
-                    continue;
-                }
-                for ar in archives {
-                    if let Some(mem) = find_defining_member(&ar.members, needed)? {
-                        let pulled_unit = read_object(&mem.bytes).map_err(|e| {
-                            link_err(&format!(
-                                "failed to parse archive `{}` member `{}`: {}",
-                                ar.path, mem.name, e
-                            ))
-                        })?;
-                        for sym in &pulled_unit.symbols {
-                            if matches!(sym.linkage, crate::c5::symbol::Linkage::External)
-                                && !matches!(sym.kind, SymbolKind::Undefined)
-                            {
-                                just_pulled_defs.insert(sym.name.clone());
-                            }
-                        }
-                        units.push(pulled_unit);
-                        pulled = true;
-                        break;
-                    }
-                }
-            }
-            if !pulled {
-                break;
-            }
-        }
     }
 
     // Final unresolved-symbol check.
@@ -230,29 +144,6 @@ fn collect_defined_undefined(
         }
     }
     (defined, undefined)
-}
-
-fn find_defining_member<'a>(
-    members: &'a [ArchiveMember],
-    name: &str,
-) -> Result<Option<&'a ArchiveMember>, C5Error> {
-    for m in members {
-        let unit = read_object(&m.bytes).map_err(|e| {
-            link_err(&format!(
-                "failed to parse archive member `{}`: {}",
-                m.name, e
-            ))
-        })?;
-        for s in &unit.symbols {
-            if s.name == name
-                && !matches!(s.kind, SymbolKind::Undefined)
-                && !matches!(s.linkage, crate::c5::symbol::Linkage::Internal)
-            {
-                return Ok(Some(m));
-            }
-        }
-    }
-    Ok(None)
 }
 
 fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result<Program, C5Error> {
@@ -726,41 +617,16 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             // binding's `val` is the binding-flat index, not a
             // PC, so the class check excludes it.
             //
-            // Sources for the (name -> post-link PC) map:
-            //  * `merged` (concatenated parser_symbols) for units
-            //    parsed in this invocation -- their `defined_here`
-            //    bit + the `text_base`-shifted val already point at
-            //    the right PC.
-            //  * Each unit's [`LinkSymbol`] table for archive-pulled
-            //    units. `read_object` does not round-trip
-            //    `parser_symbols`, so those entries never reach
-            //    `merged`; the c5 object format carries the same
-            //    function names through the standard SYMTAB section
-            //    instead. Pull them in here so the walker's
-            //    `live_fun_val(sym)` resolves cross-unit
-            //    archive-defined callees instead of returning 0
-            //    (which collides with the first function in the
-            //    merged PC space -- usually `main`).
+            // The (name -> post-link PC) map is built from `merged`
+            // (concatenated parser_symbols): each defining unit's
+            // `defined_here` bit plus its `text_base`-shifted val
+            // already point at the right PC.
             use crate::c5::symbol::Linkage;
             let mut fun_def_by_name: alloc::collections::BTreeMap<alloc::string::String, i64> =
                 alloc::collections::BTreeMap::new();
             for s in &merged {
                 if s.class == fun_class && s.defined_here && s.linkage == Linkage::External {
                     fun_def_by_name.insert(s.name.clone(), s.val);
-                }
-            }
-            for (i, unit) in units.iter().enumerate() {
-                let base = text_base[i] as i64;
-                for ls in &unit.symbols {
-                    if !matches!(ls.kind, SymbolKind::Function) {
-                        continue;
-                    }
-                    if !matches!(ls.linkage, Linkage::External) {
-                        continue;
-                    }
-                    fun_def_by_name
-                        .entry(ls.name.clone())
-                        .or_insert(base + ls.value as i64);
                 }
             }
             for s in &mut merged {

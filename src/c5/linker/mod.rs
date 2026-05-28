@@ -62,7 +62,6 @@ mod object;
 mod synth_build;
 mod unit;
 pub(crate) mod unit_link;
-mod unit_object;
 mod unit_reloc;
 mod unit_symbol;
 
@@ -86,9 +85,6 @@ pub use object::{
 #[allow(unused_imports)]
 pub use synth_build::write_native_image_from_merged;
 pub use unit::LinkUnit;
-pub use unit_link::{LinkArchive, LinkOptions, link_units};
-pub use unit_object::{read_object, write_object};
-#[cfg(test)]
-pub(crate) use unit_object::{read_ssa_func, write_ssa_func};
+pub use unit_link::link_units;
 pub use unit_reloc::{Reloc, RelocKind};
 pub use unit_symbol::{LinkSymbol, SymbolKind};

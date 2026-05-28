@@ -28,7 +28,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use crate::{CompileOptions, Compiler, LinkOptions, LinkUnit, Target, jit_run, link_units};
+use crate::{CompileOptions, Compiler, LinkUnit, Target, jit_run, link_units};
 
 /// Compile a fixture and run it through the JIT, returning the
 /// exit code. Routes through `compile_to_link_unit` + the
@@ -55,7 +55,7 @@ fn jit_fixture_exit(name: &str) -> i32 {
             .expect("compile runtime");
         units.push(unit);
     }
-    let program = link_units(units, &[], LinkOptions::default()).expect("link_units failed");
+    let program = link_units(units).expect("link_units failed");
     let argv = vec![name.to_string()];
     jit_run(&program, &argv).expect("jit_run failed")
 }

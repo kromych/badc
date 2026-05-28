@@ -65,10 +65,8 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     }
     // Parser-emitted helpers (sys-trampolines) come through
     // `program.synthetic_ssa_funcs`. `program.user_ssa_funcs`
-    // carries every other walker-translated function from
-    // units that didn't survive into `finished_functions`
-    // (typically a `.o` reload whose AST snapshot got stripped
-    // during write_object). Merge both into the output, keyed
+    // carries every other walker-translated function not present
+    // in `finished_functions`. Merge both into the output, keyed
     // by ent_pc to keep the entry-per-PC invariant.
     let mut covered_pcs: alloc::collections::BTreeSet<usize> = walker_pcs.iter().copied().collect();
     for f in &program.synthetic_ssa_funcs {

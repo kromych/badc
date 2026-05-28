@@ -45,8 +45,8 @@ pub use host::StdHost;
 #[cfg(feature = "linker")]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveMember, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind,
-    link_units, read_archive, read_object, write_archive, write_object,
+    ArchiveMember, LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind, link_units, read_archive,
+    write_archive,
 };
 #[cfg(all(feature = "linker", feature = "std"))]
 #[allow(unused_imports)]

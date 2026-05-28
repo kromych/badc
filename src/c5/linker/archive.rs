@@ -35,7 +35,8 @@ pub struct ArchiveMember {
     /// `"foo.o"`.
     pub name: String,
     /// Member body bytes. For a c5 object file member, this is
-    /// the ELF blob that [`super::object::read_object`] parses.
+    /// the native ELF object that [`super::object::parse_native_elf`]
+    /// parses.
     pub bytes: Vec<u8>,
 }
 

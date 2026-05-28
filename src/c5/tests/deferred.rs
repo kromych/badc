@@ -28,13 +28,12 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use crate::{CompileOptions, Compiler, LinkUnit, Target, jit_run, link_units};
+use crate::{Compiler, jit_run};
 
 /// Compile a fixture and run it through the JIT, returning the
-/// exit code. Routes through `compile_to_link_unit` + the
-/// embedded runtime sources so the merged Program carries
-/// everything `lib/*.c` provides (libc-`exit` wrapper,
-/// `environ` slot, ...). Panics on compile / load failure.
+/// exit code. The JIT loader resolves libc and the host runtime
+/// itself, so the fixture compiles as a single translation unit.
+/// Panics on compile / load failure.
 fn jit_fixture_exit(name: &str) -> i32 {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -43,19 +42,9 @@ fn jit_fixture_exit(name: &str) -> i32 {
     path.push(name);
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let target = Target::default_target();
-    let user = Compiler::new(super::with_prelude(&src))
-        .compile_to_link_unit()
+    let program = Compiler::new(super::with_prelude(&src))
+        .compile()
         .expect("compile failed");
-    let mut units: Vec<LinkUnit> = vec![user];
-    for (rt_name, rt_body) in crate::embedded_runtime() {
-        let copts = CompileOptions::default().with_source_label((*rt_name).to_string());
-        let unit = Compiler::with_options(rt_body.to_string(), target, copts)
-            .compile_to_link_unit()
-            .expect("compile runtime");
-        units.push(unit);
-    }
-    let program = link_units(units).expect("link_units failed");
     let argv = vec![name.to_string()];
     jit_run(&program, &argv).expect("jit_run failed")
 }

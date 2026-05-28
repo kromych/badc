@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{CompileOptions, Compiler, Target, emit_native, link_units};
+use crate::{CompileOptions, Compiler, Target, emit_native};
 
 /// Compile the inline source with the standard prelude and write
 /// an ad-hoc-signed Mach-O into a unique temp file. The path is
@@ -388,12 +388,13 @@ fn lldb_resolves_bitfield_widths() {
     let _ = std::fs::remove_file(&path);
 }
 
-/// Compile two inline TUs with distinct source labels, link them
-/// through `link_units`, and write an ad-hoc-signed Mach-O. The
-/// distinct source labels propagate through the preprocessor into
-/// each unit's `source_files[0]`; after the linker merges them, the
-/// resulting `program.source_files` carries both names and the
-/// DWARF line-program emitter places one file-table entry per TU.
+/// Compile two inline TUs with distinct source labels to ET_REL,
+/// link them through the native path, and write an ad-hoc-signed
+/// Mach-O. The distinct source labels propagate through the
+/// preprocessor into each object's `.debug_*`; after
+/// `link_native_objects` merges them, the DWARF line program places
+/// one file-table entry per TU. The embedded runtime is linked in
+/// too so the image launches under lldb.
 fn build_signed_mach_o_two_units(
     src_a: &str,
     label_a: &str,
@@ -401,32 +402,44 @@ fn build_signed_mach_o_two_units(
     label_b: &str,
     stem: &str,
 ) -> PathBuf {
-    let unit_a = Compiler::with_options(
-        super::with_prelude(src_a),
-        Target::MacOSAarch64,
-        CompileOptions::default().with_source_label(label_a),
-    )
-    .compile_to_link_unit()
-    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_a}: {e}"));
-    let unit_b = Compiler::with_options(
-        super::with_prelude(src_b),
-        Target::MacOSAarch64,
-        CompileOptions::default().with_source_label(label_b),
-    )
-    .compile_to_link_unit()
-    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_b}: {e}"));
-    let mut unit_a = unit_a;
-    let mut unit_b = unit_b;
-    unit_a.source_path = label_a.to_string();
-    unit_b.source_path = label_b.to_string();
-    // `main`-bearing unit first so link_units anchors the entry on it.
-    let mut program = link_units(alloc::vec![unit_b, unit_a])
-        .unwrap_or_else(|e| panic!("link_units failed: {e}"));
-    if program.source_path.is_empty() {
-        program.source_path = label_b.to_string();
+    let target = Target::MacOSAarch64;
+    let mut reloc_opts = crate::NativeOptions::new().with_debug_info(true);
+    reloc_opts.output_kind = crate::OutputKind::Relocatable;
+    let compile_rel = |src: String, label: &str| -> crate::NativeObject {
+        let program = Compiler::with_options(
+            super::with_prelude(&src),
+            target,
+            CompileOptions::default()
+                .with_source_label(label)
+                .with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile failed for {label}: {e}"));
+        let bytes = crate::emit_native_with_options(&program, target, reloc_opts)
+            .unwrap_or_else(|e| panic!("emit_native_with_options failed for {label}: {e}"));
+        crate::parse_native_elf(&bytes)
+            .unwrap_or_else(|e| panic!("parse_native_elf failed for {label}: {e}"))
+    };
+    let mut objs = alloc::vec![
+        compile_rel(src_a.to_string(), label_a),
+        compile_rel(src_b.to_string(), label_b),
+    ];
+    for (rt_name, rt_body) in crate::embedded_runtime() {
+        objs.push(compile_rel(rt_body.to_string(), rt_name));
     }
-    let bytes = emit_native(&program, Target::MacOSAarch64)
-        .unwrap_or_else(|e| panic!("emit_native failed for {stem}: {e}"));
+    let mut merged = crate::link_native_objects(&objs)
+        .unwrap_or_else(|e| panic!("link_native_objects failed: {e}"));
+    let plt = crate::emit_aarch64_plt(&mut merged)
+        .unwrap_or_else(|e| panic!("emit_aarch64_plt failed: {e}"));
+    let bytes = crate::write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        crate::OutputKind::Executable,
+        target,
+    )
+    .unwrap_or_else(|e| panic!("write_native_image_from_merged failed for {stem}: {e}"));
 
     let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
     {

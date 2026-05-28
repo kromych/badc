@@ -92,6 +92,11 @@ pub struct MergedNative {
     /// `dylibs` order; entries from later units that name the
     /// same import are ignored (first writer wins).
     pub import_dylib_map: BTreeMap<String, u32>,
+    /// Source-declared export names, unioned across input objects
+    /// from each unit's `NT_BADC_EXPORTS` note. The final-image
+    /// writer promotes each to the export table when emitting a
+    /// shared library (resolving the name through [`Self::defined`]).
+    pub exports: Vec<String>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -732,6 +737,19 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Union the `#pragma export` names across units, first-seen
+    // order. Each name resolves against the merged `defined` table
+    // when the final-image writer builds the export table.
+    let mut exports: Vec<String> = Vec::new();
+    let mut seen_exports: BTreeSet<String> = BTreeSet::new();
+    for obj in objs {
+        for name in &obj.exports {
+            if seen_exports.insert(name.clone()) {
+                exports.push(name.clone());
+            }
+        }
+    }
+
     // Merge DWARF sections + their relocs. Each unit's blob is
     // appended to the corresponding merged section; relocs have
     // their `r_offset` shifted by the per-unit base so the
@@ -844,6 +862,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         machine,
         dylibs,
         import_dylib_map,
+        exports,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1714,6 +1733,7 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1775,6 +1795,7 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1811,6 +1832,7 @@ mod tests {
             data_relocs: alloc::vec::Vec::new(),
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
+            exports: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

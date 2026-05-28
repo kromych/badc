@@ -365,8 +365,15 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         "initialised TLS image must survive the merge"
     );
     let plt = emit_x86_64_plt(&mut merged).expect("plt");
-    let exe = write_native_image_from_merged(&merged, &plt, "main", None, Target::LinuxX64)
-        .expect("write executable");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+    )
+    .expect("write executable");
     // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
     // e_phnum @ 0x38 (u16). Scan the program header table for a
     // PT_TLS (p_type == 7) whose p_filesz covers the 4-byte int.
@@ -395,6 +402,68 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         p_memsz,
         program.tls_data.len() as u64,
         "PT_TLS p_memsz must cover the full per-thread TLS block"
+    );
+}
+
+#[test]
+fn pragma_export_round_trips_into_shared_library() {
+    // `#pragma export(<name>)` rides the ET_REL `.note.badc`
+    // NT_BADC_EXPORTS record: `parse_native_elf` recovers the name,
+    // `link_native_objects` unions it, and the shared-library writer
+    // promotes only the exported name. A symbol not named by the
+    // pragma stays private.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         #pragma export(exported_fn)\n\
+         int exported_fn(int x) {{ return x + 1; }}\n\
+         int internal_fn(int x) {{ return x + 2; }}\n\
+         int main(void) {{ return exported_fn(1) + internal_fn(1); }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    assert!(
+        program.exports.iter().any(|e| e.name == "exported_fn"),
+        "compiler must record the `#pragma export` name"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.exports.contains(&"exported_fn".to_string()),
+        "export name must round-trip through the `.note.badc` record"
+    );
+    assert!(
+        !obj.exports.contains(&"internal_fn".to_string()),
+        "a symbol not named by `#pragma export` must not appear in the note"
+    );
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.exports,
+        alloc::vec!["exported_fn".to_string()],
+        "linker unions only the exported names"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let so = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+    )
+    .expect("write shared library");
+    // e_type @ 0x10: ET_DYN (3) for a shared object.
+    assert_eq!(
+        u16::from_le_bytes(so[0x10..0x12].try_into().unwrap()),
+        3,
+        "shared library must be ET_DYN"
     );
 }
 

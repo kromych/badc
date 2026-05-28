@@ -30,7 +30,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::program::Program;
+use super::super::program::{ExportedFunction, Program};
 use super::Build;
 use super::Machine;
 use super::dwarf_reloc::{self, DwarfReloc, DwarfRelocTarget, DwarfRelocWidth};
@@ -63,6 +63,14 @@ const NT_BADC_DYLIBS: u32 = 1;
 // `kernel32.dll` while `printf` is from `ucrtbase.dll`) is not
 // found at process startup.
 const NT_BADC_BINDING_MAP: u32 = 2;
+// Source-declared exports. desc is a NUL-separated list of the names
+// named by `#pragma export(<name>)`. The export name equals the
+// defined symbol's name; the final-image writers resolve each to its
+// `.symtab` entry when building the export table (PE export directory,
+// ELF dynsym, Mach-O export trie). Carried so a shared library links
+// the intended export set through the native path rather than every
+// `.text`-defined symbol.
+const NT_BADC_EXPORTS: u32 = 3;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -1030,7 +1038,7 @@ pub(super) fn write_relocatable(
     //                           under the right loader entry.
     // Standard ELF tooling ignores unknown note types; the badc
     // reader picks the entries up by name + type.
-    let note_bytes = build_badc_note(&build.imports);
+    let note_bytes = build_badc_note(&build.imports, &program.exports);
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
     out.extend_from_slice(&note_bytes);
@@ -1203,14 +1211,17 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
     (bind << 4) | (ty & 0xf)
 }
 
-/// Build the `.note.badc` section body. Emits two records:
+/// Build the `.note.badc` section body. Emits up to three records:
 ///   NT_BADC_DYLIBS       -- NUL-separated dylib paths.
 ///   NT_BADC_BINDING_MAP  -- per-import (u32 dylib_index, NUL
 ///                           import name)+.
-/// Both records share the namesz="badc\0" namespace; the parser
+///   NT_BADC_EXPORTS      -- NUL-separated `#pragma export` names.
+/// All records share the namesz="badc\0" namespace; the parser
 /// distinguishes by `type`. Each note is independently padded to
-/// the 4-byte ELF gABI boundary.
-fn build_badc_note(imports: &super::ResolvedImports) -> Vec<u8> {
+/// the 4-byte ELF gABI boundary. The binding-map and exports
+/// records are omitted when empty so a TU with neither still
+/// round-trips through the older single-record shape.
+fn build_badc_note(imports: &super::ResolvedImports, exports: &[ExportedFunction]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
 
@@ -1245,6 +1256,24 @@ fn build_badc_note(imports: &super::ResolvedImports) -> Vec<u8> {
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&bm_desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 3: source-declared export names. Omitted when the TU
+    // declared no `#pragma export`, matching the binding map's
+    // conditional emit.
+    if !exports.is_empty() {
+        let mut ex_desc: Vec<u8> = Vec::new();
+        for e in exports {
+            ex_desc.extend_from_slice(e.name.as_bytes());
+            ex_desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(ex_desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_EXPORTS.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&ex_desc);
         pad_to_4(&mut out);
     }
     out

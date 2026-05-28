@@ -765,7 +765,10 @@ fn main() {
             | Target::WindowsX64
             | Target::WindowsAarch64
     );
-    if mode == Mode::NativeExecutable && !compile_only && take_native_link_path {
+    if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary)
+        && !compile_only
+        && take_native_link_path
+    {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
@@ -975,11 +978,17 @@ fn main() {
                 }
             };
             let entry_name = entry_override.as_deref().unwrap_or("main");
+            let native_output_kind = if mode == Mode::SharedLibrary {
+                OutputKind::SharedLibrary
+            } else {
+                OutputKind::Executable
+            };
             let write_result = badc::write_native_image_from_merged(
                 &merged,
                 &plt,
                 entry_name,
                 subsystem_override,
+                native_output_kind,
                 target,
             );
             let bytes = match write_result {

@@ -273,6 +273,12 @@ pub struct NativeObject {
     /// table. The linker merges across units and remaps the
     /// dylib_index to the merged `dylibs` order.
     pub import_dylib_map: Vec<(String, u32)>,
+    /// Source-declared export names (`NT_BADC_EXPORTS`), one per
+    /// `#pragma export(<name>)`. Each names a defined symbol in this
+    /// object. The final-image writer promotes them to the export
+    /// table when emitting a shared library; the linker takes the
+    /// union across units.
+    pub exports: Vec<String>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -650,16 +656,19 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
-    // `.note.badc` -- vendor note section. Two record types:
+    // `.note.badc` -- vendor note section. Record types:
     //   type=1 NT_BADC_DYLIBS       -- NUL-separated dylib paths.
     //   type=2 NT_BADC_BINDING_MAP  -- per-import dylib routing,
     //                                  encoded as (u32 LE
     //                                  dylib_index, NUL import
     //                                  name)+.
+    //   type=3 NT_BADC_EXPORTS      -- NUL-separated `#pragma export`
+    //                                  names.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
     let mut import_dylib_map: Vec<(String, u32)> = Vec::new();
+    let mut exports: Vec<String> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -705,6 +714,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                                 String::from_utf8_lossy(&body[name_start..name_end]).into_owned();
                             bm_cur = name_end + 1;
                             import_dylib_map.push((imp_name, idx));
+                        }
+                    }
+                    3 => {
+                        for chunk in body[cur..desc_end].split(|&b| b == 0) {
+                            if chunk.is_empty() {
+                                continue;
+                            }
+                            exports.push(String::from_utf8_lossy(chunk).into_owned());
                         }
                     }
                     _ => {}
@@ -763,6 +780,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         data_relocs,
         dylibs,
         import_dylib_map,
+        exports,
         debug_info,
         debug_abbrev,
         debug_line,

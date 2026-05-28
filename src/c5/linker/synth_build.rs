@@ -55,9 +55,11 @@ pub fn write_native_image_from_merged(
     plt: &[PltTrampoline],
     entry_name: &str,
     subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
     target: Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let (program, build) = synth_program_and_build(merged, plt, entry_name, subsystem, target)?;
+    let (program, build) =
+        synth_program_and_build(merged, plt, entry_name, subsystem, output_kind, target)?;
     write_native_image(&program, &build, target)
 }
 
@@ -66,10 +68,18 @@ fn synth_program_and_build(
     plt: &[PltTrampoline],
     entry_name: &str,
     subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    output_kind: OutputKind,
     target: Target,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
-    let entry_offset = resolve_entry_offset(merged, entry_name)?;
+    // A shared library has no process entry point (ELF ET_DYN sets
+    // e_entry = 0, and the Mach-O / PE writers skip the start stub),
+    // so the entry symbol need not exist; executables resolve it.
+    let entry_offset = if output_kind == OutputKind::SharedLibrary {
+        0
+    } else {
+        resolve_entry_offset(merged, entry_name)?
+    };
     let imports = synth_imports(merged, target);
     let SynthFixups {
         got: got_fixups,
@@ -170,7 +180,7 @@ fn synth_program_and_build(
         data_relocs,
         code_relocs,
         exports: exports.clone(),
-        output_kind: OutputKind::Executable,
+        output_kind,
         dllmain_pc: None,
         // Multi-TU links carry pre-baked DWARF byte streams from
         // every input unit (`linker/link::link_native_objects`
@@ -595,15 +605,22 @@ fn synth_pc_to_native(
 /// executable carries the same names the AOT path would dump under
 /// `nm -a`.
 fn synth_exports(merged: &MergedNative) -> Vec<ExportedFunction> {
+    // Promote the source-declared `#pragma export` names (unioned by
+    // the linker into `merged.exports`) to export-table records,
+    // resolving each to its `.text`-defined entry. Names that resolve
+    // to a non-text or undefined symbol are skipped. The per-format
+    // writers consume this only for shared-library output; an
+    // executable's export list is ignored.
     let mut exports: Vec<ExportedFunction> = Vec::new();
-    for (name, sym) in &merged.defined {
-        if !matches!(sym.section, NativeSymSection::Text) {
-            continue;
+    for name in &merged.exports {
+        if let Some(sym) = merged.defined.get(name)
+            && matches!(sym.section, NativeSymSection::Text)
+        {
+            exports.push(ExportedFunction {
+                name: name.clone(),
+                ent_pc: sym.value as usize,
+            });
         }
-        exports.push(ExportedFunction {
-            name: name.clone(),
-            ent_pc: sym.value as usize,
-        });
     }
     exports
 }
@@ -648,6 +665,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
+            exports: alloc::vec![],
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
@@ -721,7 +739,12 @@ mod tests {
     }
 
     #[test]
-    fn synth_exports_lists_every_text_defined_symbol() {
+    fn synth_exports_resolves_pragma_export_names_only() {
+        // synth_exports promotes the `#pragma export` union
+        // (merged.exports) to records, resolving each against the
+        // defined table. A text symbol not named by an export stays
+        // private; a name resolving to a data symbol is dropped; an
+        // exported text symbol is surfaced with its entry offset.
         let mut merged = tiny_aarch64_main();
         merged.defined.insert(
             "helper".to_string(),
@@ -739,13 +762,24 @@ mod tests {
                 size: 4,
             },
         );
+        // `main` is defined but not exported; `helper` and `g_count`
+        // are named by `#pragma export`, but `g_count` is data.
+        merged.exports = alloc::vec!["helper".to_string(), "g_count".to_string()];
         let exports = synth_exports(&merged);
         let names: alloc::vec::Vec<&str> = exports.iter().map(|e| e.name.as_str()).collect();
-        assert!(names.contains(&"main"), "main missing from exports");
-        assert!(names.contains(&"helper"), "helper missing from exports");
+        assert!(names.contains(&"helper"), "exported text symbol missing");
+        assert_eq!(
+            exports.iter().find(|e| e.name == "helper").unwrap().ent_pc,
+            0x40,
+            "helper export resolved to the wrong entry offset"
+        );
+        assert!(
+            !names.contains(&"main"),
+            "non-exported symbol must stay private"
+        );
         assert!(
             !names.contains(&"g_count"),
-            "data symbol surfaced as text export"
+            "data symbol named by export must be dropped"
         );
     }
 }

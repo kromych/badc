@@ -1039,7 +1039,17 @@ pub(super) fn write(
         &export_name_offsets,
         &export_addrs_placeholder,
     );
-    let hash = build_hash(&name_offsets, &dynstr);
+    // The hash table must cover every `.dynsym` entry, in dynsym
+    // order: imports occupy indices [1, 1+n_imports), exports the
+    // range after. Hashing only the imports leaves `dlsym` unable
+    // to resolve an exported symbol (its name never lands in a
+    // bucket chain). Executables export nothing, so this is the
+    // import list alone for them.
+    let mut hash_name_offsets: Vec<u32> =
+        Vec::with_capacity(name_offsets.len() + export_name_offsets.len());
+    hash_name_offsets.extend_from_slice(&name_offsets);
+    hash_name_offsets.extend_from_slice(&export_name_offsets);
+    let hash = build_hash(&hash_name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
 
     let interp_path_str = interp_path(machine);

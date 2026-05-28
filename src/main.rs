@@ -512,6 +512,102 @@ fn main() {
         s
     };
 
+    // `--jit` / `--interp` run one translation unit in-process. There
+    // is no link step: the first `.c` is the unit and must define
+    // `main` and resolve every symbol it references on its own. Any
+    // further command-line inputs are the hosted program's argv, not
+    // additional units -- so `badc --jit c4.c hello.c` runs c4 with
+    // argv `["c4.c", "hello.c"]`, the self-hosting form c4 expects.
+    // Object / archive inputs cannot be linked here and are rejected.
+    // The unit compiles straight to a `Program` -- no LinkUnit, and no
+    // DWARF, which neither the JIT loader nor the SSA interpreter
+    // consumes.
+    if mode == Mode::Jit || mode == Mode::Interp {
+        if !objects.is_empty() || !archives.is_empty() {
+            eprint_diagnostic(format!(
+                "badc: error: {} runs a single `.c` source and does not link \
+                 object / archive inputs",
+                mode.flag_name()
+            ));
+            std::process::exit(1);
+        }
+        let src_path = sources[0].clone();
+        let contents = if src_path == "-" {
+            read_stdin_source()
+        } else {
+            match std::fs::read_to_string(&src_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            }
+        };
+        let copts = badc::CompileOptions::default()
+            .with_defines(defines.clone())
+            .with_undefines(undefines.clone())
+            .with_include_paths(include_paths.clone())
+            .with_force_includes(force_includes.clone())
+            .with_source_label(src_path.clone())
+            .with_show_includes(show_includes)
+            .with_warn_dead_store(warn_dead_store);
+        let mut compiler = Compiler::with_options(contents, target, copts);
+        if show_includes {
+            for line in compiler.take_include_trace() {
+                eprintln!("{line}");
+            }
+        }
+        let program = match compiler.compile() {
+            Ok(p) => p,
+            Err(e) => {
+                eprint_diagnostic(e);
+                std::process::exit(1);
+            }
+        };
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        for w in &program.warnings {
+            eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+        }
+        // argv[0] is the unit path; argv[1..] are every following
+        // input (extra `.c` paths the hosted program opens itself)
+        // plus any trailing non-input tokens.
+        let mut c_args: Vec<String> = sources.clone();
+        if prog_args_start < args.len() {
+            c_args.extend(args[prog_args_start..].iter().cloned());
+        }
+        if mode == Mode::Jit {
+            // The JIT lowers for the host; --target plays no part.
+            let mut jit_opts = NativeOptions::new();
+            if optimize_flag {
+                jit_opts = jit_opts.with_optimize();
+            }
+            match jit_run_with_options(&program, &c_args, jit_opts) {
+                Ok(code) => std::process::exit(code),
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        let mut vm = Vm::new(program).with_args(c_args);
+        if track_pointers {
+            vm = vm.with_pointer_tracking();
+        }
+        if trace {
+            vm = vm.with_trace();
+        }
+        match vm.run() {
+            Ok(res) => {
+                println!("exit({res})");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprint_diagnostic(e);
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Compile sources to LinkUnits.
     let mut units: Vec<badc::LinkUnit> = Vec::with_capacity(sources.len() + objects.len());
     let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
@@ -1163,50 +1259,8 @@ fn main() {
     }
 
     match mode {
-        Mode::Jit => {
-            // The JIT loader picks the host arch on its own; --target is
-            // ignored (the JIT can't cross-compile, and the lowering it
-            // does is determined by the host).
-            // argv[0] = first source path so the hosted program sees a
-            // sensible name; argv[1..] = whatever followed the inputs
-            // on the command line.
-            let mut c_args: Vec<String> = Vec::new();
-            c_args.push(path.clone());
-            if prog_args_start < args.len() {
-                c_args.extend(args[prog_args_start..].iter().cloned());
-            }
-            match jit_run_with_options(&program, &c_args, native_opts) {
-                Ok(code) => std::process::exit(code),
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Mode::Interp => {
-            // Pass everything from argv[1] onward to the C program -- argv[0]
-            // of the hosted program is the source file name, argv[1..] are
-            // its own args.
-            let mut c_args: Vec<String> = Vec::new();
-            c_args.push(path.clone());
-            if prog_args_start < args.len() {
-                c_args.extend(args[prog_args_start..].iter().cloned());
-            }
-            let mut vm = Vm::new(program).with_args(c_args);
-            if track_pointers {
-                vm = vm.with_pointer_tracking();
-            }
-            if trace {
-                vm = vm.with_trace();
-            }
-            match vm.run() {
-                Ok(res) => println!("exit({})", res),
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
-        }
+        Mode::Jit => unreachable!("handled above"),
+        Mode::Interp => unreachable!("handled above"),
         Mode::NativeExecutable | Mode::SharedLibrary => {
             // Default: lower to a native binary, write it, mark
             // it executable, and (on macOS hosts emitting Mach-O)

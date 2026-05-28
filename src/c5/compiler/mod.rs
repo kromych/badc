@@ -34,6 +34,20 @@ mod stmt;
 mod type_layout;
 pub(crate) mod types;
 
+/// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
+/// enums collapse to `int` in c5 -- the tag carries no semantic
+/// weight at the type level -- but preserving the (name, value)
+/// pairs lets the DWARF emitter produce DW_TAG_enumeration_type
+/// + DW_TAG_enumerator children so `(gdb) ptype enum Tag` works.
+/// Anonymous enums (no tag) skip emission; their constants stay
+/// reachable through plain integer DW_AT_const_value lookups in
+/// the symbol table.
+#[derive(Debug, Clone)]
+pub struct EnumDef {
+    pub name: String,
+    pub constants: Vec<(String, i64)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct StructDef {
     pub name: String,
@@ -610,6 +624,10 @@ pub struct Compiler {
 
     /// Defined struct types, indexed by struct id.
     pub(super) structs: Vec<StructDef>,
+    /// Captured enum definitions. Populated by `parse_enum_body`
+    /// when the parser sees `enum Tag { ... }`; the (tag, constants)
+    /// pairs feed the DWARF emitter's enum DIEs.
+    pub(super) enums: Vec<EnumDef>,
 
     /// Type-mismatch warnings collected during compilation. Stored as
     /// formatted lines so the final consumer (CLI / test) can dump them
@@ -1009,6 +1027,7 @@ impl Compiler {
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
+            enums: Vec::new(),
             warnings: pp_warnings,
             include_trace: pp_include_trace,
             pp_entrypoint,
@@ -1265,6 +1284,7 @@ impl Compiler {
             // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
+            enums: self.enums,
             // Resolved entry name. Includes the value from a
             // source-level `#pragma entrypoint(<name>)` plus the
             // CRT-recognised fallbacks (`wmain`, `WinMain`,

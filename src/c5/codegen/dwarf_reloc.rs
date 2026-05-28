@@ -107,6 +107,8 @@ const DW_TAG_MEMBER: u8 = 0x0d;
 const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
 const DW_TAG_ARRAY_TYPE: u8 = 0x01;
 const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
+const DW_TAG_ENUMERATION_TYPE: u8 = 0x04;
+const DW_TAG_ENUMERATOR: u8 = 0x28;
 
 const DW_AT_NAME: u8 = 0x03;
 const DW_AT_STMT_LIST: u8 = 0x10;
@@ -130,6 +132,7 @@ const DW_AT_PROTOTYPED: u8 = 0x27;
 const DW_AT_CALLING_CONVENTION: u8 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
 const DW_AT_UPPER_BOUND: u8 = 0x2f;
+const DW_AT_CONST_VALUE: u8 = 0x1c;
 
 const DW_FORM_ADDR: u8 = 0x01;
 const DW_FORM_DATA8: u8 = 0x07;
@@ -140,6 +143,7 @@ const DW_FORM_EXPRLOC: u8 = 0x18;
 const DW_FORM_REF4: u8 = 0x13;
 const DW_FORM_UDATA: u8 = 0x0f;
 const DW_FORM_FLAG_PRESENT: u8 = 0x19;
+const DW_FORM_SDATA: u8 = 0x0d;
 
 // DW_ATE_* encoding values for DW_TAG_base_type.
 const DW_ATE_SIGNED: u8 = 0x05;
@@ -183,6 +187,8 @@ const ABBREV_BITFIELD_MEMBER: u64 = 11;
 const ABBREV_UNSPECIFIED_PARAMETERS: u64 = 12;
 const ABBREV_ARRAY_TYPE: u64 = 13;
 const ABBREV_SUBRANGE_TYPE: u64 = 14;
+const ABBREV_ENUMERATION_TYPE: u64 = 15;
+const ABBREV_ENUMERATOR: u64 = 16;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
 /// form). Follows the spec table exactly.
@@ -431,6 +437,26 @@ fn build_debug_abbrev() -> Vec<u8> {
     out.push(DW_TAG_SUBRANGE_TYPE);
     out.push(DW_CHILDREN_NO);
     push_attr(&mut out, DW_AT_UPPER_BOUND, DW_FORM_UDATA);
+    out.push(0);
+    out.push(0);
+    // Abbrev 15: enumeration_type -- a tagged enum (C99 6.7.2.2).
+    // Children are DW_TAG_enumerator DIEs; the enum collapses to
+    // `int` in c5's type system so DW_AT_byte_size is 4.
+    write_uleb128(&mut out, ABBREV_ENUMERATION_TYPE);
+    out.push(DW_TAG_ENUMERATION_TYPE);
+    out.push(DW_CHILDREN_YES);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    out.push(0);
+    out.push(0);
+    // Abbrev 16: enumerator -- one (name, value) pair under an
+    // enumeration_type DIE. DW_AT_const_value is signed since
+    // enum constants can be negative in C99.
+    write_uleb128(&mut out, ABBREV_ENUMERATOR);
+    out.push(DW_TAG_ENUMERATOR);
+    out.push(DW_CHILDREN_NO);
+    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
+    push_attr(&mut out, DW_AT_CONST_VALUE, DW_FORM_SDATA);
     out.push(0);
     out.push(0);
     // End of abbrev table.
@@ -722,6 +748,27 @@ fn build_debug_info(
                 prev_off = ptr_off;
             }
         }
+    }
+
+    // DW_TAG_enumeration_type DIEs for every tagged enum the
+    // parser captured. Standalone definitions -- no variable
+    // references them at the type level because c5 collapses
+    // enums to `int`, but the DIE still lets `(gdb) ptype enum
+    // Tag` resolve the named constants.
+    for ed in &program.enums {
+        if ed.name.is_empty() || ed.constants.is_empty() {
+            continue;
+        }
+        write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
+        push_string(&mut body, &ed.name);
+        body.push(4);
+        for (cname, cval) in &ed.constants {
+            write_uleb128(&mut body, ABBREV_ENUMERATOR);
+            push_string(&mut body, cname);
+            write_sleb128(&mut body, *cval);
+        }
+        // End-of-children marker for the enumeration_type DIE.
+        body.push(0);
     }
 
     // Subprogram child DIEs. One per defined function in the

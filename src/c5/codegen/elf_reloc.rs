@@ -1339,6 +1339,7 @@ mod tests {
             source_path: path.into(),
             variables: Vec::new(),
             structs: Vec::new(),
+            enums: Vec::new(),
             entry_name: None,
             subsystem: None,
             finished_functions: Vec::new(),

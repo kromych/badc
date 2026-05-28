@@ -2166,6 +2166,7 @@ mod tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            enums: Vec::new(),
             entry_name: None,
             subsystem: None,
             finished_functions: alloc::vec::Vec::new(),

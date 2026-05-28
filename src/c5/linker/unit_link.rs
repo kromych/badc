@@ -566,6 +566,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     }
 
     Ok(Program {
+        enums: Vec::new(),
         data: merged_data,
         entry_pc,
         warnings: merged_warnings,

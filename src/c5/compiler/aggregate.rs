@@ -245,17 +245,20 @@ impl Compiler {
             } else if self.lex.tk == Token::Enum {
                 // C99 6.7.2.2: an `enum X` field collapses to plain
                 // `int` in c5's type system the same way every other
-                // enum reference does. Consume any tag name and the
-                // optional body; the field width / alignment is the
-                // 4-byte `int` fallback. Mirrors the
-                // `parse_decl_base_type` enum branch so the same
-                // shape works at file scope and inside a struct.
+                // enum reference does. Capture the tag and the
+                // optional body's constants for DWARF; the field
+                // width / alignment is the 4-byte `int` fallback.
                 self.next()?;
-                if self.lex.tk == Token::Id {
+                let tag_name = if self.lex.tk == Token::Id {
+                    let id_idx = self.lex.curr_id_idx;
+                    let name = self.symbols[id_idx].name.clone();
                     self.next()?;
-                }
+                    name
+                } else {
+                    alloc::string::String::new()
+                };
                 if self.lex.tk == '{' {
-                    self.parse_enum_body()?;
+                    self.parse_enum_body(&tag_name)?;
                 }
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {

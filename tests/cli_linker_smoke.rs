@@ -1242,6 +1242,81 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Tagged enums emit DW_TAG_enumeration_type with one
+/// DW_TAG_enumerator per constant. C99 6.7.2.2 enums collapse to
+/// `int` in c5's type system, so the DIE is standalone (no
+/// variable references it via DW_AT_type) but `(gdb) ptype enum
+/// Tag` still resolves the named constants. Anonymous enums
+/// (no tag) skip emission.
+#[test]
+fn multi_tu_link_emits_enumeration_type_for_tagged_enum() {
+    let dir = tempdir("multi-tu-enum-die");
+    write_source(
+        &dir,
+        "helper.c",
+        "enum Color { Red, Green = 10, Blue };\n\
+         int helper(int c) { return c + Red + Green + Blue; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int helper(int);\nint main(void) { return helper(0); }\n",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("helper.c"))
+            .current_dir(&dir),
+        "compile helper.c",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "compile main.c",
+    );
+    let out = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(dir.join("main.o"))
+            .arg(dir.join("helper.o"))
+            .current_dir(&dir),
+        "link main.o helper.o",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_enumeration_type"),
+        "expected DW_TAG_enumeration_type for `enum Color`:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("\"Color\""),
+        "expected DW_AT_name `Color` on the enumeration_type:\n{out_text}",
+    );
+    for cname in ["\"Red\"", "\"Green\"", "\"Blue\""] {
+        assert!(
+            out_text.contains(cname),
+            "expected enumerator {cname}:\n{out_text}",
+        );
+    }
+}
+
 /// DW_AT_decl_file on variable + formal_parameter DIEs lets the
 /// debugger show the declaration's source file. Symbol::decl_file
 /// is captured at parse time from the lexer's intern_source_file

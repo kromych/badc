@@ -210,6 +210,13 @@ pub struct Program {
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
+    /// Captured enum definitions. Sourced from
+    /// `Compiler::enums` at `compile()`; the DWARF emitter walks
+    /// this to produce DW_TAG_enumeration_type + DW_TAG_enumerator
+    /// DIEs so `(gdb) ptype enum Tag` shows the named constants.
+    /// Empty for archive-reloaded units (enum tags don't round-trip
+    /// through the `.o` format yet).
+    pub enums: Vec<crate::c5::compiler::EnumDef>,
     /// Resolved entry-function name: `#pragma entrypoint(<name>)`
     /// when present, otherwise whichever of `main` / `wmain` /
     /// `WinMain` / `wWinMain` the source defines. `None` for

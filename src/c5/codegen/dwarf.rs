@@ -1165,11 +1165,34 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
 
 // ---- .debug_abbrev ----
 
+// Abbreviation codes. `build_debug_abbrev` declares each entry under
+// its code; `build_debug_info` and `emit_type_die` reference the same
+// codes when starting a DIE. Naming them keeps the two sides legible
+// and matches the ET_REL emitter (`dwarf_reloc`).
+const ABBREV_COMPILE_UNIT: u64 = 1;
+const ABBREV_SUBPROGRAM: u64 = 2;
+const ABBREV_BASE_TYPE: u64 = 3;
+const ABBREV_VARIABLE: u64 = 4;
+const ABBREV_FORMAL_PARAMETER: u64 = 5;
+const ABBREV_POINTER_TYPE: u64 = 6;
+const ABBREV_STRUCTURE_TYPE: u64 = 7;
+const ABBREV_UNION_TYPE: u64 = 8;
+const ABBREV_MEMBER: u64 = 9;
+const ABBREV_BITFIELD_MEMBER: u64 = 10;
+const ABBREV_PLT_SUBPROGRAM: u64 = 11;
+const ABBREV_PLT_FORMAL_PARAMETER: u64 = 12;
+const ABBREV_UNSPECIFIED_PARAMETERS: u64 = 13;
+const ABBREV_PLT_FORMAL_PARAMETER_LOC: u64 = 14;
+const ABBREV_ARRAY_TYPE: u64 = 15;
+const ABBREV_SUBRANGE_TYPE: u64 = 16;
+const ABBREV_ENUMERATION_TYPE: u64 = 17;
+const ABBREV_ENUMERATOR: u64 = 18;
+
 fn build_debug_abbrev() -> Vec<u8> {
     let mut buf = Vec::with_capacity(64);
 
     // Abbrev 1: DW_TAG_compile_unit, has children.
-    write_uleb128(&mut buf, 1);
+    write_uleb128(&mut buf, ABBREV_COMPILE_UNIT);
     write_uleb128(&mut buf, DW_TAG_COMPILE_UNIT as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_PRODUCER, DW_FORM_STRP);
@@ -1186,7 +1209,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // variable). `DW_AT_frame_base` carries the location
     // expression that resolves `DW_OP_fbreg` references against
     // c5's frame pointer ($x29).
-    write_uleb128(&mut buf, 2);
+    write_uleb128(&mut buf, ABBREV_SUBPROGRAM);
     write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1204,7 +1227,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 3: DW_TAG_base_type. Shared by every scalar base type
     // DIE (one per distinct c5 tag) plus the placeholder void* DIE
     // that pointer / struct variables fall back to in phase 1A.
-    write_uleb128(&mut buf, 3);
+    write_uleb128(&mut buf, ABBREV_BASE_TYPE);
     write_uleb128(&mut buf, DW_TAG_BASE_TYPE as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1217,7 +1240,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // DWARF expression -- for c5 locals it's
     // `DW_OP_fbreg <sleb128 byte-offset>`, with the frame base
     // resolved via the subprogram's DW_AT_frame_base.
-    write_uleb128(&mut buf, 4);
+    write_uleb128(&mut buf, ABBREV_VARIABLE);
     write_uleb128(&mut buf, DW_TAG_VARIABLE as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1231,7 +1254,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 5: DW_TAG_formal_parameter. Same shape as the local
     // variable abbrev; the tag itself is what tells lldb / gdb to
     // render the entry as a parameter rather than a local.
-    write_uleb128(&mut buf, 5);
+    write_uleb128(&mut buf, ABBREV_FORMAL_PARAMETER);
     write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1248,7 +1271,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // our supported targets; DW_AT_TYPE is a CU-relative ref4 to
     // the pointee (the depth-1 pointer DIE for chains, or the
     // base / struct DIE for the depth-1 entry).
-    write_uleb128(&mut buf, 6);
+    write_uleb128(&mut buf, ABBREV_POINTER_TYPE);
     write_uleb128(&mut buf, DW_TAG_POINTER_TYPE as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
@@ -1260,7 +1283,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // DW_TAG_member per c5 `StructField`). DW_AT_byte_size is
     // DATA4 since real-world aggregates exceed 256 bytes
     // routinely (multi-KB struct sizes are not unusual).
-    write_uleb128(&mut buf, 7);
+    write_uleb128(&mut buf, ABBREV_STRUCTURE_TYPE);
     write_uleb128(&mut buf, DW_TAG_STRUCTURE_TYPE as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1271,7 +1294,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 8: DW_TAG_union_type. Same shape as the structure
     // abbrev; the tag is what tells lldb / gdb to render `s.x`
     // and `s.y` as overlapping rather than sequential.
-    write_uleb128(&mut buf, 8);
+    write_uleb128(&mut buf, ABBREV_UNION_TYPE);
     write_uleb128(&mut buf, DW_TAG_UNION_TYPE as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1282,7 +1305,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 9: DW_TAG_member -- a regular (non-bitfield) struct
     // / union field. DW_AT_data_member_location is the byte offset
     // of the field from the start of its containing aggregate.
-    write_uleb128(&mut buf, 9);
+    write_uleb128(&mut buf, ABBREV_MEMBER);
     write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1297,7 +1320,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // this shape on DWARF 4 input; switching to DWARF 5's
     // `DW_AT_data_bit_offset` is a follow-up if a consumer ever
     // breaks.
-    write_uleb128(&mut buf, 10);
+    write_uleb128(&mut buf, ABBREV_BITFIELD_MEMBER);
     write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1315,7 +1338,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // frame), and is allowed children for the
     // formal_parameter / unspecified_parameters DIEs the emitter
     // appends.
-    write_uleb128(&mut buf, 11);
+    write_uleb128(&mut buf, ABBREV_PLT_SUBPROGRAM);
     write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1331,7 +1354,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // a synthetic `arg<N>` name (the c5 binding doesn't track
     // parameter names, but gdb's `info args` and `bt` skip
     // name-less entries entirely) plus the type, no location.
-    write_uleb128(&mut buf, 12);
+    write_uleb128(&mut buf, ABBREV_PLT_FORMAL_PARAMETER);
     write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1342,7 +1365,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 13: DW_TAG_unspecified_parameters -- the `...` of a
     // variadic prototype. No attributes; the tag itself signals
     // the ellipsis to gdb / lldb.
-    write_uleb128(&mut buf, 13);
+    write_uleb128(&mut buf, ABBREV_UNSPECIFIED_PARAMETERS);
     write_uleb128(&mut buf, DW_TAG_UNSPECIFIED_PARAMETERS as u64);
     buf.push(DW_CHILDREN_NO);
     write_uleb128(&mut buf, 0);
@@ -1356,7 +1379,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // ABI int_arg_reg slot) get this abbrev; later ones spill to
     // stack at locations we can't reconstruct from outside libc,
     // so they fall back to abbrev 12.
-    write_uleb128(&mut buf, 14);
+    write_uleb128(&mut buf, ABBREV_PLT_FORMAL_PARAMETER_LOC);
     write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
@@ -1370,7 +1393,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // carry a single DW_TAG_subrange_type child describing the
     // bound. Parameters decay to pointers per C99 6.7.5.3p7 and
     // use the pointer_type DIE instead.
-    write_uleb128(&mut buf, 15);
+    write_uleb128(&mut buf, ABBREV_ARRAY_TYPE);
     write_uleb128(&mut buf, DW_TAG_ARRAY_TYPE as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
@@ -1379,7 +1402,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 16: DW_TAG_subrange_type child of the array_type DIE.
     // DW_AT_upper_bound = element_count - 1 per DWARF 4 section
     // 5.13.
-    write_uleb128(&mut buf, 16);
+    write_uleb128(&mut buf, ABBREV_SUBRANGE_TYPE);
     write_uleb128(&mut buf, DW_TAG_SUBRANGE_TYPE as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_UPPER_BOUND, DW_FORM_UDATA);
@@ -1389,7 +1412,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 17: enumeration_type -- tagged C99 6.7.2.2 enums.
     // Children are DW_TAG_enumerator DIEs; enums collapse to
     // `int` in c5's type system so DW_AT_byte_size is 4.
-    write_uleb128(&mut buf, 17);
+    write_uleb128(&mut buf, ABBREV_ENUMERATION_TYPE);
     write_uleb128(&mut buf, DW_TAG_ENUMERATION_TYPE as u64);
     buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRING);
@@ -1401,7 +1424,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // enum constants can be negative. DW_FORM_string keeps the
     // names inline rather than threading the catalog's sealed
     // string table.
-    write_uleb128(&mut buf, 18);
+    write_uleb128(&mut buf, ABBREV_ENUMERATOR);
     write_uleb128(&mut buf, DW_TAG_ENUMERATOR as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRING);

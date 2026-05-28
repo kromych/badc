@@ -2674,6 +2674,30 @@ fn write_sleb128(buf: &mut Vec<u8>, mut value: i64) {
 mod tests {
     use super::*;
 
+    /// Byte-stability lock for the amalg `.debug_abbrev` table.
+    /// `build_debug_info` references each abbreviation by code and
+    /// supplies its attribute values in the order declared here, so
+    /// an accidental edit to a code, tag, or attribute silently
+    /// desyncs the two emitters. Any intentional change must update
+    /// this golden after re-checking the info emitter.
+    #[test]
+    fn build_debug_abbrev_is_byte_stable() {
+        let hex: alloc::string::String = build_debug_abbrev()
+            .iter()
+            .map(|b| alloc::format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            hex,
+            "011101250e130b030e1b0e1101120710170000022e01030e110112073f192719360b\
+             40180000032400030e0b0b3e0b0000043400030e491302183a0f3b0f000005050003\
+             0e491302183a0f3b0f0000060f000b0b49130000071301030e0b06000008170103\
+             0e0b060000090d00030e4913380600000a0d00030e491338060b0b0c0b0d0b00000b\
+             2e01030e110112073f19491300000c0500030e491300000d180000000e0500030e49\
+             13021800000f0101491300001021002f0f000011040103080b0b000012280003081c\
+             0d000000"
+        );
+    }
+
     #[test]
     fn uleb128_round_trips_small_and_large() {
         for v in [0u64, 1, 127, 128, 0xffff_ffff, 0xffff_ffff_ffff_ffff] {

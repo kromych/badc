@@ -1438,3 +1438,29 @@ pub(crate) fn source_path_or_default(p: &Program) -> String {
         p.source_path.clone()
     }
 }
+
+#[cfg(test)]
+mod abbrev_golden {
+    /// Byte-stability lock for the ET_REL `.debug_abbrev` table.
+    /// `build_debug_info` references each abbreviation by code and
+    /// supplies its attribute values in the order declared here, so
+    /// an accidental edit to a code, tag, or attribute silently
+    /// desyncs the two emitters. Any intentional change must update
+    /// this golden after re-checking the info emitter.
+    #[test]
+    fn build_debug_abbrev_is_byte_stable() {
+        let hex: alloc::string::String = super::build_debug_abbrev()
+            .iter()
+            .map(|b| alloc::format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            hex,
+            "0111012508130b03081b081101120710170000022e000308110112073f192719360b\
+             0000032e010308110112073f192719360b401800000405000308021849133a0f3b0f\
+             00000534000308021849133a0f3b0f000006240003080b0b3e0b0000070f000b0b49\
+             13000008130103080b0f000009170103080b0f00000a0d0003084913380f00000b0d\
+             00030849136b0f0d0f00000c180000000d0101491300000e21002f0f00000f040103\
+             080b0b000010280003081c0d000000"
+        );
+    }
+}

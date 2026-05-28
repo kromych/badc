@@ -749,18 +749,22 @@ fn main() {
     // LinkUnit path below (TODO: close those gaps, then this gate
     // goes away).
     //
-    // On macOS and Windows, only route through the synth path when
-    // there is at least one native `.o` / `.a` input the LinkUnit
-    // path cannot consume. Pure `.c` sources keep the LinkUnit +
-    // emit_native chain until the synthesizer covers shared
-    // libraries. Mach-O auto-codesigning now lives in
-    // `post_write_native`, so both paths sign on macOS hosts.
-    let take_native_link_path = match target {
-        Target::LinuxX64 | Target::LinuxAarch64 => true,
-        Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {
-            !objects.is_empty() || !archives.is_empty()
-        }
-    };
+    // Every target now enters the synth path for an executable
+    // build. A `_Thread_local`-bearing unit targeting Mach-O / PE is
+    // the one case that falls back to the LinkUnit + emit_native
+    // chain below: the synth path lays out ELF PT_TLS but not yet the
+    // Mach-O TLV descriptors / Win64 `_tls_index` those formats need
+    // (detected after the units compile, inside the branch). Mach-O
+    // auto-codesigning lives in `post_write_native`, so both paths
+    // sign on macOS hosts.
+    let take_native_link_path = matches!(
+        target,
+        Target::LinuxX64
+            | Target::LinuxAarch64
+            | Target::MacOSAarch64
+            | Target::WindowsX64
+            | Target::WindowsAarch64
+    );
     if mode == Mode::NativeExecutable && !compile_only && take_native_link_path {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =
@@ -929,49 +933,63 @@ fn main() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
         }
-        let mut merged = match badc::link_native_objects(&native_objs) {
-            Ok(m) => m,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {e}"));
-                std::process::exit(1);
-            }
-        };
-        let plt = match merged.machine {
-            badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
-            badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
-        };
-        let plt = match plt {
-            Ok(p) => p,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {e}"));
-                std::process::exit(1);
-            }
-        };
-        let entry_name = entry_override.as_deref().unwrap_or("main");
-        let write_result = badc::write_native_image_from_merged(&merged, &plt, entry_name, target);
-        let bytes = match write_result {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {e}"));
-                std::process::exit(1);
-            }
-        };
-        let default_path;
-        let out: &std::path::Path = match output_path.as_deref() {
-            Some(o) => o,
-            None => {
-                default_path = default_output_path(
-                    unit_source_paths.first().map(|s| s.as_str()).unwrap_or("a"),
-                    target,
-                    mode,
-                );
-                &default_path
-            }
-        };
-        write_output(out, &bytes, quiet);
-        set_executable(out);
-        post_write_native(out, target);
-        return;
+        // Mach-O TLV descriptors and Win64 `_tls_index` fixups are not
+        // threaded through the synth path yet, so a `_Thread_local`
+        // unit targeting those formats falls back to the LinkUnit +
+        // emit_native chain (which carries them). ELF lays out PT_TLS
+        // directly, so Linux stays on the native path regardless.
+        let tls_needs_linkunit = matches!(
+            target,
+            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64
+        ) && native_objs
+            .iter()
+            .any(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0);
+        if !tls_needs_linkunit {
+            let mut merged = match badc::link_native_objects(&native_objs) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let plt = match merged.machine {
+                badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
+                badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
+            };
+            let plt = match plt {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let entry_name = entry_override.as_deref().unwrap_or("main");
+            let write_result =
+                badc::write_native_image_from_merged(&merged, &plt, entry_name, target);
+            let bytes = match write_result {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let default_path;
+            let out: &std::path::Path = match output_path.as_deref() {
+                Some(o) => o,
+                None => {
+                    default_path = default_output_path(
+                        unit_source_paths.first().map(|s| s.as_str()).unwrap_or("a"),
+                        target,
+                        mode,
+                    );
+                    &default_path
+                }
+            };
+            write_output(out, &bytes, quiet);
+            set_executable(out);
+            post_write_native(out, target);
+            return;
+        }
     }
 
     if show_includes {

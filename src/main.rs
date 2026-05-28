@@ -644,16 +644,20 @@ fn main() {
     // image with the wrong container.
     // The native-link path runs on every target: ELF for Linux,
     // the MergedNative-to-Build synthesizer for Mach-O / PE. The
-    // synthesizer baseline excludes _Thread_local, shared
-    // libraries, variadic libc imports, and DWARF emit -- sources
-    // with those still need to take the LinkUnit path below.
+    // synthesizer carries DWARF (subprogram + variable + type DIEs
+    // ride the merged per-`.o` `.debug_info`; `.debug_frame`
+    // regenerates) and variadic libc imports. It does not yet
+    // carry `_Thread_local` storage (the ET_REL writer rejects it),
+    // shared-library output, or the `--jit` / `--interp` Program
+    // build -- sources / modes needing those take the LinkUnit
+    // path below (TODO: close those gaps, then this gate goes away).
     //
     // On macOS and Windows, only route through the synth path when
     // there is at least one native `.o` / `.a` input the LinkUnit
     // path cannot consume. Pure `.c` sources keep the LinkUnit +
-    // emit_native chain (DWARF, exports, TLS) until the
-    // synthesizer covers those. Mach-O auto-codesigning now lives
-    // in `post_write_native`, so both paths sign on macOS hosts.
+    // emit_native chain until the synthesizer covers TLS + shared
+    // libraries. Mach-O auto-codesigning now lives in
+    // `post_write_native`, so both paths sign on macOS hosts.
     let take_native_link_path = match target {
         Target::LinuxX64 | Target::LinuxAarch64 => true,
         Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64 => {

@@ -102,6 +102,14 @@ pub struct MergedNative {
     /// address. Empty on non-Windows links and Windows links without
     /// `_Thread_local` access.
     pub tls_index_fixups: Vec<usize>,
+    /// Mach-O TLV descriptor offsets, concatenated across units. The
+    /// Mach-O writer materialises one `__thread_vars` descriptor per
+    /// entry. Empty on non-macOS links.
+    pub macho_tlv_descriptors: Vec<u64>,
+    /// Mach-O TLV fixups, each `(adrp_offset, descriptor_index)` with
+    /// `adrp_offset` rebased into the merged `.text` and
+    /// `descriptor_index` into [`Self::macho_tlv_descriptors`].
+    pub macho_tlv_fixups: Vec<(usize, usize)>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -766,6 +774,20 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Mach-O TLV descriptors + fixups. Descriptors concatenate in unit
+    // order; each unit's fixups rebase `adrp_offset` by that unit's
+    // `.text` base and shift `descriptor_index` past the descriptors
+    // contributed by earlier units.
+    let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
+    let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
+    for (i, obj) in objs.iter().enumerate() {
+        let desc_base = macho_tlv_descriptors.len();
+        macho_tlv_descriptors.extend_from_slice(&obj.macho_tlv_descriptors);
+        for &(adrp, idx) in &obj.macho_tlv_fixups {
+            macho_tlv_fixups.push((text_bases[i] + adrp, desc_base + idx));
+        }
+    }
+
     // Merge DWARF sections + their relocs. Each unit's blob is
     // appended to the corresponding merged section; relocs have
     // their `r_offset` shifted by the per-unit base so the
@@ -880,6 +902,8 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         import_dylib_map,
         exports,
         tls_index_fixups,
+        macho_tlv_descriptors,
+        macho_tlv_fixups,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1752,6 +1776,8 @@ mod tests {
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
             tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1815,6 +1841,8 @@ mod tests {
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
             tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1853,6 +1881,8 @@ mod tests {
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
             tls_index_fixups: alloc::vec::Vec::new(),
+            macho_tlv_descriptors: alloc::vec::Vec::new(),
+            macho_tlv_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

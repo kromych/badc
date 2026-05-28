@@ -16,13 +16,13 @@
 //!     `is_variadic` / `fixed_args` / `param_types` across the ELF
 //!     ET_REL roundtrip. The C99-motivated fix is a per-binding
 //!     metadata note section. TODO.
-//!   * `_Thread_local` storage. A single TLS-bearing input is
-//!     threaded through [`MergedNative::tls_data`] /
-//!     `tls_init_size` to the writer's PT_TLS layout. Merging two
-//!     or more TLS objects still needs per-unit TPOFF relocations
-//!     (and the macOS TLV / Win64 `_tls_index` equivalents), so
-//!     the multi-object case is rejected in `link_native_objects`.
-//!     TODO.
+//!   * Multi-object `_Thread_local` storage. A single TLS-bearing
+//!     input is fully threaded: ELF PT_TLS via
+//!     [`MergedNative::tls_data`], the Win64 `_tls_index` fixups and
+//!     macOS TLV descriptors via the matching `.note.badc` records.
+//!     Merging two or more TLS objects still needs per-unit TPOFF /
+//!     descriptor-index relocations, so `link_native_objects` rejects
+//!     the multi-object case. TODO.
 //!   * DWARF debug info. The merged image has no AST / function
 //!     metadata to drive DWARF emit; debug sections are skipped,
 //!     matching `write_executable_elf64`'s policy. TODO.
@@ -180,8 +180,21 @@ fn synth_program_and_build(
             .iter()
             .map(|&instr_offset| crate::c5::codegen::TlsIndexFixup { instr_offset })
             .collect(),
-        macho_tlv_fixups: Vec::new(),
-        macho_tlv_descriptors: Vec::new(),
+        macho_tlv_fixups: merged
+            .macho_tlv_fixups
+            .iter()
+            .map(
+                |&(adrp_offset, descriptor_index)| crate::c5::codegen::MachoTlvFixup {
+                    adrp_offset,
+                    descriptor_index,
+                },
+            )
+            .collect(),
+        macho_tlv_descriptors: merged
+            .macho_tlv_descriptors
+            .iter()
+            .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor { offset_in_block })
+            .collect(),
         data_relocs,
         code_relocs,
         exports: exports.clone(),
@@ -672,6 +685,8 @@ mod tests {
             import_dylib_map: alloc::collections::BTreeMap::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],
+            macho_tlv_descriptors: alloc::vec![],
+            macho_tlv_fixups: alloc::vec![],
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

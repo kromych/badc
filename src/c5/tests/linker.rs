@@ -406,6 +406,49 @@ fn thread_local_storage_links_into_pt_tls_executable() {
 }
 
 #[test]
+fn macho_tlv_descriptors_round_trip_through_et_rel() {
+    // A macOS `_Thread_local` access lowers to a TLV-descriptor call
+    // whose descriptor offset + adrp fixup ride the ET_REL
+    // `.note.badc` NT_BADC_MACHO_TLV_DESC / NT_BADC_MACHO_TLV_FIXUP
+    // records. parse_native_elf recovers them and link_native_objects
+    // rebases the fixups into the merged `.text`, so the Mach-O writer
+    // materialises the `__thread_vars` descriptors without the
+    // LinkUnit fallback.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             _Thread_local int counter = 7;\n\
+             int main(void) {{ counter += 1; return counter; }}\n"
+        ),
+        Target::MacOSAarch64,
+        crate::c5::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.macho_tlv_descriptors.is_empty(),
+        "the macOS `_Thread_local` variable must surface a TLV descriptor via the note"
+    );
+    assert!(
+        !obj.macho_tlv_fixups.is_empty(),
+        "the macOS `_Thread_local` access must surface a TLV fixup via the note"
+    );
+    let nd = obj.macho_tlv_descriptors.len();
+    let nf = obj.macho_tlv_fixups.len();
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(merged.macho_tlv_descriptors.len(), nd);
+    assert_eq!(merged.macho_tlv_fixups.len(), nf);
+}
+
+#[test]
 fn win64_tls_index_fixups_round_trip_through_et_rel() {
     // A Windows `_Thread_local` access lowers to a `_tls_index` TEB
     // lookup whose fixup site rides the ET_REL `.note.badc`

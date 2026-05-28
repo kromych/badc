@@ -284,6 +284,14 @@ pub struct NativeObject {
     /// each with the `_tls_index` slot address. Empty on non-Windows
     /// objects and Windows objects without `_Thread_local` access.
     pub tls_index_fixups: Vec<usize>,
+    /// Mach-O TLV descriptor offsets (`NT_BADC_MACHO_TLV_DESC`), one
+    /// `offset_in_block` per `_Thread_local` variable. The Mach-O
+    /// writer materialises a `__thread_vars` descriptor for each.
+    pub macho_tlv_descriptors: Vec<u64>,
+    /// Mach-O TLV fixups (`NT_BADC_MACHO_TLV_FIXUP`), each
+    /// `(adrp_offset, descriptor_index)`: a `.text` byte offset and
+    /// the index into `macho_tlv_descriptors` it resolves to.
+    pub macho_tlv_fixups: Vec<(usize, usize)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -671,12 +679,18 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     //                                  names.
     //   type=4 NT_BADC_TLS_INDEX    -- u64 LE `.text` byte offsets of
     //                                  Win64 `_tls_index` fixup sites.
+    //   type=5 NT_BADC_MACHO_TLV_DESC  -- u64 LE TLV `offset_in_block`
+    //                                     values, one per variable.
+    //   type=6 NT_BADC_MACHO_TLV_FIXUP -- (u64 adrp_offset, u64
+    //                                     descriptor_index) pairs.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
     let mut import_dylib_map: Vec<(String, u32)> = Vec::new();
     let mut exports: Vec<String> = Vec::new();
     let mut tls_index_fixups: Vec<usize> = Vec::new();
+    let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
+    let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -741,6 +755,25 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             tc += 8;
                         }
                     }
+                    5 => {
+                        let mut tc = cur;
+                        while tc + 8 <= desc_end {
+                            let off = u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap());
+                            macho_tlv_descriptors.push(off);
+                            tc += 8;
+                        }
+                    }
+                    6 => {
+                        let mut tc = cur;
+                        while tc + 16 <= desc_end {
+                            let adrp =
+                                u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap()) as usize;
+                            let idx = u64::from_le_bytes(body[tc + 8..tc + 16].try_into().unwrap())
+                                as usize;
+                            macho_tlv_fixups.push((adrp, idx));
+                            tc += 16;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -799,6 +832,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         import_dylib_map,
         exports,
         tls_index_fixups,
+        macho_tlv_descriptors,
+        macho_tlv_fixups,
         debug_info,
         debug_abbrev,
         debug_line,

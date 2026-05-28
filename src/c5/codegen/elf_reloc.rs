@@ -78,6 +78,16 @@ const NT_BADC_EXPORTS: u32 = 3;
 // image links through the native path rather than the LinkUnit
 // fallback. Empty (and the record omitted) for other targets.
 const NT_BADC_TLS_INDEX: u32 = 4;
+// Mach-O TLV descriptors. desc is a sequence of u64 LE
+// `offset_in_block` values, one per `_Thread_local` variable -- the
+// byte offset of the variable inside the per-thread block. The Mach-O
+// writer materialises a `__thread_vars` descriptor for each.
+const NT_BADC_MACHO_TLV_DESC: u32 = 5;
+// Mach-O TLV fixups. desc is a sequence of (u64 adrp_offset, u64
+// descriptor_index) pairs: the `.text` offset of the adrp opening the
+// descriptor-address materialisation and the index into the
+// NT_BADC_MACHO_TLV_DESC list it resolves to.
+const NT_BADC_MACHO_TLV_FIXUP: u32 = 6;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -1045,7 +1055,13 @@ pub(super) fn write_relocatable(
     //                           under the right loader entry.
     // Standard ELF tooling ignores unknown note types; the badc
     // reader picks the entries up by name + type.
-    let note_bytes = build_badc_note(&build.imports, &program.exports, &build.tls_index_fixups);
+    let note_bytes = build_badc_note(
+        &build.imports,
+        &program.exports,
+        &build.tls_index_fixups,
+        &build.macho_tlv_descriptors,
+        &build.macho_tlv_fixups,
+    );
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
     out.extend_from_slice(&note_bytes);
@@ -1232,6 +1248,8 @@ fn build_badc_note(
     imports: &super::ResolvedImports,
     exports: &[ExportedFunction],
     tls_index_fixups: &[super::TlsIndexFixup],
+    macho_tlv_descriptors: &[super::MachoTlvDescriptor],
+    macho_tlv_fixups: &[super::MachoTlvFixup],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -1302,6 +1320,38 @@ fn build_badc_note(
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&tls_desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 5: Mach-O TLV descriptor offsets.
+    if !macho_tlv_descriptors.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for d in macho_tlv_descriptors {
+            desc.extend_from_slice(&d.offset_in_block.to_le_bytes());
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 6: Mach-O TLV fixups -- (adrp_offset, descriptor_index)
+    // pairs.
+    if !macho_tlv_fixups.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for f in macho_tlv_fixups {
+            desc.extend_from_slice(&(f.adrp_offset as u64).to_le_bytes());
+            desc.extend_from_slice(&(f.descriptor_index as u64).to_le_bytes());
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_MACHO_TLV_FIXUP.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
         pad_to_4(&mut out);
     }
     out

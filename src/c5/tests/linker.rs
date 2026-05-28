@@ -365,7 +365,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         "initialised TLS image must survive the merge"
     );
     let plt = emit_x86_64_plt(&mut merged).expect("plt");
-    let exe = write_native_image_from_merged(&merged, &plt, "main", Target::LinuxX64)
+    let exe = write_native_image_from_merged(&merged, &plt, "main", None, Target::LinuxX64)
         .expect("write executable");
     // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
     // e_phnum @ 0x38 (u16). Scan the program header table for a

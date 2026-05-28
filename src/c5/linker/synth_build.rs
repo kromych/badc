@@ -54,9 +54,10 @@ pub fn write_native_image_from_merged(
     merged: &MergedNative,
     plt: &[PltTrampoline],
     entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
     target: Target,
 ) -> Result<Vec<u8>, C5Error> {
-    let (program, build) = synth_program_and_build(merged, plt, entry_name, target)?;
+    let (program, build) = synth_program_and_build(merged, plt, entry_name, subsystem, target)?;
     write_native_image(&program, &build, target)
 }
 
@@ -64,6 +65,7 @@ fn synth_program_and_build(
     merged: &MergedNative,
     plt: &[PltTrampoline],
     entry_name: &str,
+    subsystem: Option<crate::c5::preprocessor::Subsystem>,
     target: Target,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
@@ -96,7 +98,7 @@ fn synth_program_and_build(
         structs: Vec::new(),
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
-        subsystem: None,
+        subsystem,
         finished_functions: Vec::new(),
         symbols: Vec::new(),
         synthetic_ssa_funcs: Vec::new(),

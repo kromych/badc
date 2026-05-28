@@ -779,7 +779,7 @@ fn main() {
         // LinkUnit pass already validated each source; redoing the
         // compile pulls SsaWalker output through the native
         // emitter without writing intermediate `.o` files to disk.
-        let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>) {
+        let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>, Option<badc::Subsystem>) {
             let src_bytes = if src_path == "-" {
                 read_stdin_source()
             } else {
@@ -806,8 +806,9 @@ fn main() {
                 }
             };
             let entry = program.entry_name.clone();
+            let subsystem = program.subsystem;
             match badc::emit_native_with_options(&program, target, reloc_opts) {
-                Ok(b) => (b, entry),
+                Ok(b) => (b, entry, subsystem),
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
@@ -847,10 +848,20 @@ fn main() {
         // multi-TU pragmas; the first-wins convention matches
         // how the LinkUnit pipeline resolved it.
         let mut entry_override: Option<String> = None;
+        // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
+        // Like the entry pragma it is per-TU; the first TU that names
+        // one wins. Captured here from the compiled `Program` because
+        // the ET_REL round-trip the native path takes does not carry
+        // it (the source-level pragma rides the in-memory `Program`,
+        // not a section), then threaded to the PE writer.
+        let mut subsystem_override: Option<badc::Subsystem> = None;
         for src_path in &sources {
-            let (bytes, entry) = compile_one(src_path);
+            let (bytes, entry, subsystem) = compile_one(src_path);
             if entry_override.is_none() {
                 entry_override = entry;
+            }
+            if subsystem_override.is_none() {
+                subsystem_override = subsystem;
             }
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
@@ -964,8 +975,13 @@ fn main() {
                 }
             };
             let entry_name = entry_override.as_deref().unwrap_or("main");
-            let write_result =
-                badc::write_native_image_from_merged(&merged, &plt, entry_name, target);
+            let write_result = badc::write_native_image_from_merged(
+                &merged,
+                &plt,
+                entry_name,
+                subsystem_override,
+                target,
+            );
             let bytes = match write_result {
                 Ok(b) => b,
                 Err(e) => {

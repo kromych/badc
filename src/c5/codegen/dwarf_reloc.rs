@@ -273,193 +273,233 @@ pub(crate) fn emit(
 
 // ---- .debug_abbrev ----
 
+/// One `.debug_abbrev` declaration: the abbreviation code, its DWARF
+/// tag, whether the DIE has children, and the ordered (attribute,
+/// form) pairs. `build_debug_abbrev` emits the table from this list
+/// and `build_debug_info` writes each DIE's attribute values in the
+/// same order under the same code, so the abbrev and the values
+/// cannot drift.
+struct AbbrevDecl {
+    code: u64,
+    tag: u8,
+    has_children: bool,
+    attrs: &'static [(u8, u8)],
+}
+
+const ABBREV_DECLS: &[AbbrevDecl] = &[
+    // compile_unit with subprogram children.
+    AbbrevDecl {
+        code: ABBREV_CU,
+        tag: DW_TAG_COMPILE_UNIT,
+        has_children: true,
+        attrs: &[
+            (DW_AT_PRODUCER, DW_FORM_STRING),
+            (DW_AT_LANGUAGE, DW_FORM_DATA1),
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_COMP_DIR, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET),
+        ],
+    },
+    // subprogram leaf -- name + extent only, for a function with no
+    // variables. DW_AT_external (DW_FORM_flag_present) marks it
+    // cross-CU-visible. DW_AT_prototyped is always set: c5 rejects
+    // K&R identifier-list declarators per C99 6.7.6.3p14.
+    // DW_AT_calling_convention pins DW_CC_normal -- SysV / Win64 /
+    // AAPCS64 are the C standard convention per DWARF 4 3.3.1.1.
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_LEAF,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+        ],
+    },
+    // subprogram with variable / parameter children. DW_AT_frame_base
+    // resolves the fbreg offsets in the children's DW_AT_location.
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM_WITH_CHILDREN,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
+    // formal_parameter -- name + fbreg location + DW_AT_type ref4 to
+    // a type DIE earlier in the CU. DW_AT_decl_line gives the source
+    // line of the declaration.
+    AbbrevDecl {
+        code: ABBREV_FORMAL_PARAMETER,
+        tag: DW_TAG_FORMAL_PARAMETER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    // variable -- formal_parameter's shape under DW_TAG_variable so
+    // debuggers distinguish locals from arguments.
+    AbbrevDecl {
+        code: ABBREV_VARIABLE,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    // base_type -- name + byte_size + DWARF encoding (DW_ATE_*) for
+    // every C99 scalar.
+    AbbrevDecl {
+        code: ABBREV_BASE_TYPE,
+        tag: DW_TAG_BASE_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
+            (DW_AT_ENCODING, DW_FORM_DATA1),
+        ],
+    },
+    // pointer_type -- 8-byte pointer wrapping a referenced type DIE.
+    // C99 6.2.5p20 leaves pointer size implementation-defined; c5
+    // uses 8 bytes everywhere.
+    AbbrevDecl {
+        code: ABBREV_POINTER_TYPE,
+        tag: DW_TAG_POINTER_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // structure_type -- name + byte_size; carries DW_TAG_member
+    // children terminated by a null DIE.
+    AbbrevDecl {
+        code: ABBREV_STRUCTURE_TYPE,
+        tag: DW_TAG_STRUCTURE_TYPE,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_BYTE_SIZE, DW_FORM_UDATA),
+        ],
+    },
+    // union_type -- structure_type's payload with members at offset 0.
+    AbbrevDecl {
+        code: ABBREV_UNION_TYPE,
+        tag: DW_TAG_UNION_TYPE,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_BYTE_SIZE, DW_FORM_UDATA),
+        ],
+    },
+    // structure / union member -- name + type ref4 + byte offset from
+    // the start of the aggregate.
+    AbbrevDecl {
+        code: ABBREV_MEMBER,
+        tag: DW_TAG_MEMBER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA),
+        ],
+    },
+    // bitfield member -- name + type ref4 + DWARF 4
+    // DW_AT_data_bit_offset (absolute bit offset from the aggregate
+    // start) + DW_AT_bit_size (bit width).
+    AbbrevDecl {
+        code: ABBREV_BITFIELD_MEMBER,
+        tag: DW_TAG_MEMBER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA),
+            (DW_AT_BIT_SIZE, DW_FORM_UDATA),
+        ],
+    },
+    // unspecified_parameters -- the `...` of a variadic prototype
+    // (DWARF 4 3.4.2). The tag alone signals trailing varargs.
+    AbbrevDecl {
+        code: ABBREV_UNSPECIFIED_PARAMETERS,
+        tag: DW_TAG_UNSPECIFIED_PARAMETERS,
+        has_children: false,
+        attrs: &[],
+    },
+    // array_type -- DW_AT_type refs the element type DIE; the
+    // DW_TAG_subrange_type child carries the bound.
+    AbbrevDecl {
+        code: ABBREV_ARRAY_TYPE,
+        tag: DW_TAG_ARRAY_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // subrange_type -- DWARF 4 5.13: one array dimension.
+    // DW_AT_upper_bound is the last in-bounds index (count - 1).
+    AbbrevDecl {
+        code: ABBREV_SUBRANGE_TYPE,
+        tag: DW_TAG_SUBRANGE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_UPPER_BOUND, DW_FORM_UDATA)],
+    },
+    // enumeration_type -- a tagged enum (C99 6.7.2.2). Children are
+    // DW_TAG_enumerator DIEs; the enum is `int` in c5 so byte_size 4.
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
+        ],
+    },
+    // enumerator -- one (name, value) pair. DW_AT_const_value is
+    // signed since C99 enum constants can be negative.
+    AbbrevDecl {
+        code: ABBREV_ENUMERATOR,
+        tag: DW_TAG_ENUMERATOR,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_CONST_VALUE, DW_FORM_SDATA),
+        ],
+    },
+];
+
 fn build_debug_abbrev() -> Vec<u8> {
     let mut out = Vec::new();
-    // Abbrev 1: compile_unit with subprogram children.
-    write_uleb128(&mut out, ABBREV_CU);
-    out.push(DW_TAG_COMPILE_UNIT);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_PRODUCER, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LANGUAGE, DW_FORM_DATA1);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_COMP_DIR, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
-    push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    push_attr(&mut out, DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET);
-    out.push(0);
-    out.push(0);
-    // Abbrev 2: subprogram leaf -- name + extent only. Used when
-    // the function has no variables. DW_AT_external is
-    // DW_FORM_flag_present (zero-byte payload) and matches the
-    // amalg dwarf.rs shape so debuggers treat user-defined
-    // functions as cross-CU-visible. DW_AT_prototyped is always
-    // set: c5 rejects K&R-style identifier-list declarators per
-    // C99 6.7.6.3p14, so every emitted subprogram is prototyped.
-    // DW_AT_calling_convention pins the ABI to DW_CC_normal --
-    // SysV / Win64 / AAPCS64 all fall under the C standard
-    // convention per DWARF 4 section 3.3.1.1.
-    write_uleb128(&mut out, ABBREV_SUBPROGRAM_LEAF);
-    out.push(DW_TAG_SUBPROGRAM);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
-    push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
-    push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
-    push_attr(&mut out, DW_AT_CALLING_CONVENTION, DW_FORM_DATA1);
-    out.push(0);
-    out.push(0);
-    // Abbrev 3: subprogram with variable / parameter children.
-    // Adds DW_AT_frame_base so the debugger can resolve fbreg
-    // offsets in the children's DW_AT_location attrs.
-    write_uleb128(&mut out, ABBREV_SUBPROGRAM_WITH_CHILDREN);
-    out.push(DW_TAG_SUBPROGRAM);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LOW_PC, DW_FORM_ADDR);
-    push_attr(&mut out, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    push_attr(&mut out, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
-    push_attr(&mut out, DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT);
-    push_attr(&mut out, DW_AT_CALLING_CONVENTION, DW_FORM_DATA1);
-    push_attr(&mut out, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
-    out.push(0);
-    out.push(0);
-    // Abbrev 4: formal_parameter -- name + fbreg location +
-    // DW_AT_type cross-DIE reference to a type DIE earlier in
-    // the same CU. DW_AT_decl_line surfaces the declaration's
-    // source line so debuggers can locate the parameter spelling.
-    write_uleb128(&mut out, ABBREV_FORMAL_PARAMETER);
-    out.push(DW_TAG_FORMAL_PARAMETER);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    push_attr(&mut out, DW_AT_DECL_FILE, DW_FORM_UDATA);
-    push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 5: variable -- same shape as formal_parameter but
-    // with the DW_TAG_variable tag so debuggers distinguish args
-    // from locals.
-    write_uleb128(&mut out, ABBREV_VARIABLE);
-    out.push(DW_TAG_VARIABLE);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_LOCATION, DW_FORM_EXPRLOC);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    push_attr(&mut out, DW_AT_DECL_FILE, DW_FORM_UDATA);
-    push_attr(&mut out, DW_AT_DECL_LINE, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 6: base_type -- name + byte_size + DWARF encoding
-    // (DW_ATE_*). Used for every C99 scalar (char / short / int
-    // / long / long long / float / double, signed and unsigned
-    // variants).
-    write_uleb128(&mut out, ABBREV_BASE_TYPE);
-    out.push(DW_TAG_BASE_TYPE);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    push_attr(&mut out, DW_AT_ENCODING, DW_FORM_DATA1);
-    out.push(0);
-    out.push(0);
-    // Abbrev 7: pointer_type -- 8-byte pointer wrapping a
-    // referenced type DIE. C99 6.2.5p20: pointer size is
-    // implementation-defined; c5 picks 8 bytes everywhere.
-    write_uleb128(&mut out, ABBREV_POINTER_TYPE);
-    out.push(DW_TAG_POINTER_TYPE);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    out.push(0);
-    out.push(0);
-    // Abbrev 8: structure_type -- name + byte_size; carries
-    // DW_TAG_member children terminated by a null DIE.
-    write_uleb128(&mut out, ABBREV_STRUCTURE_TYPE);
-    out.push(DW_TAG_STRUCTURE_TYPE);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 9: union_type -- same payload as structure_type but
-    // members all live at offset 0.
-    write_uleb128(&mut out, ABBREV_UNION_TYPE);
-    out.push(DW_TAG_UNION_TYPE);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 10: structure / union member -- name + type ref4
-    // + byte offset from the start of the aggregate.
-    write_uleb128(&mut out, ABBREV_MEMBER);
-    out.push(DW_TAG_MEMBER);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    push_attr(&mut out, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 11: bitfield member -- name + type ref4 +
-    // DWARF 4 DW_AT_data_bit_offset (absolute bit offset from
-    // the start of the aggregate) + DW_AT_bit_size (bit width).
-    write_uleb128(&mut out, ABBREV_BITFIELD_MEMBER);
-    out.push(DW_TAG_MEMBER);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    push_attr(&mut out, DW_AT_DATA_BIT_OFFSET, DW_FORM_UDATA);
-    push_attr(&mut out, DW_AT_BIT_SIZE, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 12: unspecified_parameters -- the `...` of a
-    // variadic prototype (DWARF 4 section 3.4.2). No attributes;
-    // the tag itself signals trailing varargs to the debugger.
-    write_uleb128(&mut out, ABBREV_UNSPECIFIED_PARAMETERS);
-    out.push(DW_TAG_UNSPECIFIED_PARAMETERS);
-    out.push(DW_CHILDREN_NO);
-    out.push(0);
-    out.push(0);
-    // Abbrev 13: array_type -- a true local array (e.g.
-    // `int xs[N]`). DW_AT_type refs the element type DIE; the
-    // DW_TAG_subrange_type child carries the bound.
-    write_uleb128(&mut out, ABBREV_ARRAY_TYPE);
-    out.push(DW_TAG_ARRAY_TYPE);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_TYPE, DW_FORM_REF4);
-    out.push(0);
-    out.push(0);
-    // Abbrev 14: subrange_type -- DWARF 4 5.13: a subrange entry
-    // describes one dimension of an array. DW_AT_upper_bound is
-    // the last in-bounds index (count - 1).
-    write_uleb128(&mut out, ABBREV_SUBRANGE_TYPE);
-    out.push(DW_TAG_SUBRANGE_TYPE);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_UPPER_BOUND, DW_FORM_UDATA);
-    out.push(0);
-    out.push(0);
-    // Abbrev 15: enumeration_type -- a tagged enum (C99 6.7.2.2).
-    // Children are DW_TAG_enumerator DIEs; the enum collapses to
-    // `int` in c5's type system so DW_AT_byte_size is 4.
-    write_uleb128(&mut out, ABBREV_ENUMERATION_TYPE);
-    out.push(DW_TAG_ENUMERATION_TYPE);
-    out.push(DW_CHILDREN_YES);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    out.push(0);
-    out.push(0);
-    // Abbrev 16: enumerator -- one (name, value) pair under an
-    // enumeration_type DIE. DW_AT_const_value is signed since
-    // enum constants can be negative in C99.
-    write_uleb128(&mut out, ABBREV_ENUMERATOR);
-    out.push(DW_TAG_ENUMERATOR);
-    out.push(DW_CHILDREN_NO);
-    push_attr(&mut out, DW_AT_NAME, DW_FORM_STRING);
-    push_attr(&mut out, DW_AT_CONST_VALUE, DW_FORM_SDATA);
-    out.push(0);
-    out.push(0);
-    // End of abbrev table.
+    for d in ABBREV_DECLS {
+        write_uleb128(&mut out, d.code);
+        out.push(d.tag);
+        out.push(if d.has_children {
+            DW_CHILDREN_YES
+        } else {
+            DW_CHILDREN_NO
+        });
+        for (name, form) in d.attrs {
+            push_attr(&mut out, *name, *form);
+        }
+        // End of this declaration's attribute list.
+        out.push(0);
+        out.push(0);
+    }
+    // End of the abbrev table.
     out.push(0);
     out
 }

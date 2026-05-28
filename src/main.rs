@@ -489,11 +489,10 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Stdin is consumed exactly once. Both the LinkUnit pass below
-    // and the native-link `compile_one` closure further down call
-    // `read_stdin_source()`; cache the bytes in an Option so the
-    // second call sees the same source instead of reading an empty
-    // stream off the drained pipe.
+    // Stdin is consumed exactly once. The `--dump-pp`, JIT / interp,
+    // and native-link paths can each call `read_stdin_source()`;
+    // cache the bytes in an Option so a second call sees the same
+    // source instead of reading an empty stream off the drained pipe.
     let stdin_cache: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let read_stdin_source = || -> String {
         if let Some(s) = stdin_cache.borrow().as_ref() {
@@ -604,37 +603,24 @@ fn main() {
         }
     }
 
-    // Compile sources to LinkUnits.
-    let mut units: Vec<badc::LinkUnit> = Vec::with_capacity(sources.len() + objects.len());
-    let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
-    let mut accumulated_include_trace: Vec<String> = Vec::new();
-    let multi_tu = sources.len() > 1;
-    for src_path in &sources {
-        let (label, contents) = if src_path == "-" {
-            ("-".to_string(), read_stdin_source())
-        } else {
-            let mut file = match std::fs::File::open(src_path) {
-                Ok(f) => f,
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: error: cannot open `{src_path}`: {e}"));
-                    std::process::exit(1);
+    // `--dump-pp` / `-E` preprocesses each source to stdout and
+    // exits: no link, no codegen, no output file. A multi-source
+    // dump prefixes each unit with a `--- <label> ---` marker on
+    // stderr so the preprocessed bytes on stdout stay parseable.
+    if mode == Mode::DumpPp {
+        let multi_tu = sources.len() > 1;
+        for src_path in &sources {
+            let (label, contents) = if src_path == "-" {
+                ("-".to_string(), read_stdin_source())
+            } else {
+                match std::fs::read_to_string(src_path) {
+                    Ok(s) => (src_path.clone(), s),
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                        std::process::exit(1);
+                    }
                 }
             };
-            let mut s = String::new();
-            if let Err(e) = Read::read_to_string(&mut file, &mut s) {
-                eprint_diagnostic(format!("badc: error: error reading `{src_path}`: {e}"));
-                std::process::exit(1);
-            }
-            (src_path.clone(), s)
-        };
-        // Multi-TU progress: one line per source on stderr so a long
-        // batch makes its current position visible. Single-source
-        // compiles stay silent so `badc file.c` does not gain extra
-        // chatter.
-        if multi_tu && mode != Mode::DumpPp && !quiet {
-            eprint_diagnostic(format!("info: compiling {label}"));
-        }
-        if mode == Mode::DumpPp {
             let opts = badc::CompileOptions::default()
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
@@ -643,9 +629,6 @@ fn main() {
                 .with_source_label(label.clone());
             match Compiler::preprocess(contents, target, opts) {
                 Ok(s) => {
-                    // File separator on stderr so a multi-source
-                    // dump remains parseable while the actual
-                    // preprocessed bytes stay clean on stdout.
                     if multi_tu {
                         eprintln!("--- {label} ---");
                     }
@@ -656,115 +639,28 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-            continue;
         }
-        let mut compiler = Compiler::with_options(
-            contents,
-            target,
-            badc::CompileOptions::default()
-                .with_defines(defines.clone())
-                .with_undefines(undefines.clone())
-                .with_include_paths(include_paths.clone())
-                .with_force_includes(force_includes.clone())
-                .with_source_label(label.clone())
-                .with_show_includes(show_includes)
-                .with_warn_dead_store(warn_dead_store),
-        );
-        if show_includes {
-            accumulated_include_trace.extend(compiler.take_include_trace());
-        }
-        let mut unit = match compiler.compile_to_link_unit() {
-            Ok(u) => u,
-            Err(e) => {
-                eprint_diagnostic(e);
-                std::process::exit(1);
-            }
-        };
-        unit.source_path = label.clone();
-        unit_source_paths.push(label);
-        units.push(unit);
-    }
-
-    // Embedded runtime sources -- compiled to LinkUnits and
-    // appended to `units` so cross-target builds (Mac Mach-O,
-    // Windows PE, plus the `link_units` path on Linux when
-    // applicable) pick up `__c5_exit`, `environ`, and anything
-    // else `lib/*.c` provides. The Linux native ELF path injects
-    // the same registry through a parallel loop in the
-    // native-link block below; both paths see the same runtime
-    // image.
-    if mode != Mode::DumpPp {
-        for (name, body) in badc::embedded_runtime() {
-            let copts = badc::CompileOptions::default().with_source_label((*name).to_string());
-            let runtime_compiler = Compiler::with_options(body.to_string(), target, copts);
-            let mut unit = match runtime_compiler.compile_to_link_unit() {
-                Ok(u) => u,
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: <runtime/{name}>: {e}"));
-                    std::process::exit(1);
-                }
-            };
-            unit.source_path = format!("<runtime/{name}>");
-            units.push(unit);
-        }
-    }
-
-    // --dump-pp is a per-source dump; nothing downstream of the
-    // per-source loop applies (no link, no codegen, no output
-    // file). Return now so the rest of the driver doesn't trip on
-    // the empty unit list.
-    if mode == Mode::DumpPp {
         return;
     }
 
-    // Mode::NativeExecutable consumes the whole input set
-    // through the native pipeline:
+    // The native-link path produces every executable and shared
+    // library on every target: ELF for Linux, the MergedNative-to-
+    // Build synthesizer for Mach-O / PE.
     //   .c sources -> Compiler::compile() -> ET_REL bytes
     //                                     -> parse_native_elf
     //   .o inputs  -> parse_native_elf
     //   .a inputs  -> read_archive -> per-member parse_native_elf
     // All collected NativeObjects feed link_native_objects, the
-    // per-arch PLT pass, and write_executable_elf64. Other modes
-    // (Jit / Interp / SharedLibrary) continue through the
-    // LinkUnit path further down, as does `-c`, which writes per-
-    // source ET_REL blobs without ever running the link merger.
-    // Mac and Windows binary emit (`Target::MacOSAarch64`, the
-    // `WindowsX64` / `WindowsAarch64` PE pair) still goes
-    // through the LinkUnit + `emit_native_with_options` path:
-    // `write_executable_elf64` produces Linux ELF unconditionally,
-    // so routing those targets through it would write a Linux
-    // image with the wrong container.
-    // The native-link path runs on every target: ELF for Linux,
-    // the MergedNative-to-Build synthesizer for Mach-O / PE. The
-    // synthesizer carries DWARF (subprogram + variable + type DIEs
-    // ride the merged per-`.o` `.debug_info`; `.debug_frame`
-    // regenerates), variadic libc imports, and a single unit's
-    // `_Thread_local` storage. It does not yet carry multi-unit
-    // TLS, shared-library output, or the `--jit` / `--interp`
-    // Program build -- sources / modes needing those take the
-    // LinkUnit path below (TODO: close those gaps, then this gate
-    // goes away).
-    //
-    // Every target now enters the synth path for an executable
-    // build. A `_Thread_local`-bearing unit targeting Mach-O / PE is
-    // the one case that falls back to the LinkUnit + emit_native
-    // chain below: the synth path lays out ELF PT_TLS but not yet the
-    // Mach-O TLV descriptors / Win64 `_tls_index` those formats need
-    // (detected after the units compile, inside the branch). Mach-O
-    // auto-codesigning lives in `post_write_native`, so both paths
-    // sign on macOS hosts.
-    let take_native_link_path = matches!(
-        target,
-        Target::LinuxX64
-            | Target::LinuxAarch64
-            | Target::MacOSAarch64
-            | Target::WindowsX64
-            | Target::WindowsAarch64
-    );
-    if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary)
-        && !compile_only
-        && take_native_link_path
-    {
+    // per-arch PLT pass, and write_native_image_from_merged. The
+    // image carries DWARF (subprogram + variable + type DIEs ride
+    // the merged per-`.o` `.debug_info`; `.debug_frame` regenerates),
+    // variadic libc imports, `#pragma` exports, and `_Thread_local`
+    // storage in each format's native shape: ELF PT_TLS, the PE TLS
+    // directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O
+    // auto-codesigning lives in `post_write_native`. Only `--jit` /
+    // `--interp` (handled above) and `-c` / `--ar` (below) stay out
+    // of this path.
+    if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary) && !compile_only {
         use badc::{Compiler, OutputKind};
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
@@ -777,11 +673,20 @@ fn main() {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
-        // `.c` -> in-memory native ELF64 ET_REL. The earlier
-        // LinkUnit pass already validated each source; redoing the
-        // compile pulls SsaWalker output through the native
-        // emitter without writing intermediate `.o` files to disk.
+        // Per-source progress and diagnostics match the JIT / interp
+        // paths: a multi-source build prints `info: compiling <path>`
+        // per unit, the resolved `#include` trace under `-H`, and the
+        // compiler's warnings (parser type-mismatch, AST validator,
+        // dead-store) to stderr.
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = sources.len() > 1;
+        // `.c` -> in-memory native ELF64 ET_REL: the source compiles
+        // straight to ET_REL bytes that `parse_native_elf` reads back,
+        // so no intermediate `.o` is written to disk.
         let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>, Option<badc::Subsystem>) {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
             let src_bytes = if src_path == "-" {
                 read_stdin_source()
             } else {
@@ -799,14 +704,25 @@ fn main() {
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
                 .with_no_entry_point(true);
-            let program = match Compiler::with_options(src_bytes, target, copts).compile() {
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
                 Ok(p) => p,
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
             let entry = program.entry_name.clone();
             let subsystem = program.subsystem;
             match badc::emit_native_with_options(&program, target, reloc_opts) {
@@ -847,8 +763,7 @@ fn main() {
         // surfaces a non-default entry wins. C99 leaves the
         // hosted-environment entry-point name to implementations
         // (5.1.2.2.1), so the standard doesn't pick between
-        // multi-TU pragmas; the first-wins convention matches
-        // how the LinkUnit pipeline resolved it.
+        // multi-TU pragmas.
         let mut entry_override: Option<String> = None;
         // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
         // Like the entry pragma it is per-TU; the first TU that names
@@ -949,7 +864,7 @@ fn main() {
         // Every supported target lays out `_Thread_local` storage
         // through the native path: ELF PT_TLS, the PE TLS directory +
         // `_tls_index` note, and the Mach-O TLV descriptors + fixups
-        // note. No TLS case falls back to the LinkUnit chain.
+        // note.
         let mut merged = match badc::link_native_objects(&native_objs) {
             Ok(m) => m,
             Err(e) => {
@@ -994,7 +909,7 @@ fn main() {
             Some(o) => o,
             None => {
                 default_path = default_output_path(
-                    unit_source_paths.first().map(|s| s.as_str()).unwrap_or("a"),
+                    sources.first().map(|s| s.as_str()).unwrap_or("a"),
                     target,
                     mode,
                 );
@@ -1007,27 +922,10 @@ fn main() {
         return;
     }
 
-    if show_includes {
-        for line in &accumulated_include_trace {
-            eprintln!("{line}");
-        }
-    }
-
-    // `-c` / `--compile-only`: write each compiled source's
-    // LinkUnit to disk as a `.o` and exit. Archives / `-l`
-    // inputs aren't meaningful here -- the caller is asking
-    // for the per-source object emit, not a link.
-    //
-    // Each unit carries its own warnings (parser type-mismatch,
-    // AST validator, dead-store); print them to stderr so they
-    // surface in the per-TU build the way they would on the
-    // JIT / native-emit paths.
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    for unit in &units {
-        for w in &unit.warnings {
-            eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-        }
-    }
+    // `-c` / `--compile-only`: compile each `.c` source to a native
+    // ELF64 ET_REL object on disk and exit. Archive / `-l` inputs
+    // aren't meaningful here -- the caller is asking for the per-
+    // source object emit, not a link.
     if compile_only {
         if !archives.is_empty() || !lib_names.is_empty() {
             eprintln!(
@@ -1036,19 +934,13 @@ fn main() {
             );
             std::process::exit(1);
         }
-        if units.is_empty() {
+        if sources.is_empty() {
             eprint_diagnostic("badc: error: -c requires at least one source input");
             std::process::exit(1);
         }
-        // Source-derived units come first in `units`; objects
-        // would only appear if the user mixed them in, which is
-        // already an error path above.
         let source_count = sources.len();
-        // `-c` always emits native ELF64 ET_REL. Re-compile each
-        // source to a standalone `Program` (the `-c` flow above
-        // produced `LinkUnit`s, which the codegen does not
-        // consume) and lower through `emit_native_with_options`
-        // with `OutputKind::Relocatable`.
+        // Relocatable `-c` builds do not require `main`; the linker
+        // picks the entry once it merges every TU.
         use badc::{Compiler, OutputKind};
         let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
         if optimize_flag {
@@ -1058,7 +950,12 @@ fn main() {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = source_count > 1;
         let compile_one = |src_path: &str| -> Vec<u8> {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
             let src_bytes = match std::fs::read_to_string(src_path) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1066,24 +963,31 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            // Relocatable `-c` builds do not require `main`;
-            // the linker picks the entry once it merges every
-            // TU. Reuses the standard compile path otherwise
-            // (preprocessor, walker, etc.).
             let copts = badc::CompileOptions::default()
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
                 .with_no_entry_point(true);
-            let program = match Compiler::with_options(src_bytes, target, copts).compile() {
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
                 Ok(p) => p,
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
             match badc::emit_native_with_options(&program, target, reloc_opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1147,7 +1051,12 @@ fn main() {
             reloc_opts = reloc_opts.with_dump_ssa();
         }
         reloc_opts.output_kind = OutputKind::Relocatable;
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = sources.len() > 1;
         let compile_one = |src_path: &str| -> Vec<u8> {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
             let src_bytes = match std::fs::read_to_string(src_path) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1161,14 +1070,25 @@ fn main() {
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
                 .with_no_entry_point(true);
-            let program = match Compiler::with_options(src_bytes, target, copts).compile() {
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
                 Ok(p) => p,
                 Err(e) => {
                     eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
             match badc::emit_native_with_options(&program, target, reloc_opts) {
                 Ok(b) => b,
                 Err(e) => {
@@ -1375,8 +1295,7 @@ fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
     }
 }
 
-/// Post-write hooks shared by the LinkUnit + emit_native AOT path
-/// and the MergedNative synthesizer path: codesign Mach-O on macOS
+/// Post-write hooks for the native image: codesign Mach-O on macOS
 /// hosts so dyld accepts the binary, and surface a per-target
 /// reminder when the produced image's target doesn't match the
 /// running host.

@@ -230,19 +230,11 @@ pub(super) fn write_relocatable(
     // merged TLS layout (the baked per-unit tpoff is otherwise
     // wrong post-merge). macOS uses TLV descriptors + Win64 uses
     // `_tls_index`; the per-format writers already consume
-    // `Build.tls_data`, so the remaining work is the ET_REL
-    // sections, the link-time merge into `MergedNative.tls_data`,
-    // and `synth_build` threading.
-    if !program.tls_data.is_empty() || program.tls_init_size > 0 {
-        return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
-            "ELF ET_REL writer: `_Thread_local` storage isn't carried \
-             through the relocatable object yet -- the resulting `.o` \
-             would link into a binary whose TLS accesses fault or \
-             read stale memory. Drop the `-c` step and pass the \
-             source(s) directly to `badc -o app` to take the \
-             in-memory compile + link path, which handles TLS.",
-        )));
-    }
+    // `Build.tls_data`, so the remaining work is the link-time
+    // PT_TLS layout in `link.rs` + `image.rs` and `synth_build`
+    // threading. The `.tdata` / `.tbss` sections are emitted below
+    // (object.rs parses them back); `link.rs` guards the not-yet-
+    // wired native TLS executable layout so no broken binary ships.
     let source_path = program.source_path.as_str();
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text
@@ -259,7 +251,11 @@ pub(super) fn write_relocatable(
     //  12 = .debug_abbrev
     //  13 = .debug_line
     //  14 = .rela.debug_line
-    // Plus the null section at index 0.
+    //  15 = .tdata   (present only when the unit has TLS storage)
+    //  16 = .tbss    (present only when the unit has TLS storage)
+    // Plus the null section at index 0. The TLS sections are
+    // appended last so adding them leaves every other section
+    // index -- and the hardcoded symtab indices below -- stable.
     const SHIDX_TEXT: u16 = 1;
     const SHIDX_DATA: u16 = 3;
     const SHIDX_BSS: u16 = 4;
@@ -273,7 +269,13 @@ pub(super) fn write_relocatable(
     const SHIDX_DEBUG_ABBREV: u16 = 12;
     const SHIDX_DEBUG_LINE: u16 = 13;
     const SHIDX_RELA_DEBUG_LINE: u16 = 14;
-    const NUM_SECTIONS: usize = 15;
+    // TLS sections are emitted only when the unit carries
+    // `_Thread_local` storage; `has_tls` gates both the section
+    // headers and the `.shstrtab` name entries.
+    let has_tls = !program.tls_data.is_empty();
+    const SHIDX_TDATA: u16 = 15;
+    const SHIDX_TBSS: u16 = 16;
+    let num_sections: usize = if has_tls { 17 } else { 15 };
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -777,7 +779,7 @@ pub(super) fn write_relocatable(
 
     // Section name table. Index map below mirrors the SHIDX_*
     // constants above (one entry per non-null section).
-    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&[
+    let mut shstrtab_names: Vec<&str> = alloc::vec![
         ".text",
         ".rela.text",
         ".data",
@@ -792,7 +794,15 @@ pub(super) fn write_relocatable(
         ".debug_abbrev",
         ".debug_line",
         ".rela.debug_line",
-    ]);
+    ];
+    // `.tdata` / `.tbss` names land at offsets [14] / [15] when the
+    // unit carries TLS; gated so a TLS-free object's name table is
+    // byte-identical to before.
+    if has_tls {
+        shstrtab_names.push(".tdata");
+        shstrtab_names.push(".tbss");
+    }
+    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&shstrtab_names);
 
     // Generate the DWARF triple for this TU. Address slots end
     // up as placeholders paired with `DwarfReloc` records that
@@ -832,7 +842,7 @@ pub(super) fn write_relocatable(
     // running tail of the output, rounded to its alignment.
     let mut out: Vec<u8> = alloc::vec![0u8; ELF64_EHDR_SIZE];
 
-    let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(NUM_SECTIONS);
+    let mut sh: Vec<Elf64Shdr> = Vec::with_capacity(num_sections);
     sh.push(Elf64Shdr::default()); // SHN_UNDEF
 
     // .text
@@ -1118,13 +1128,49 @@ pub(super) fn write_relocatable(
         sh_entsize: ELF64_RELA_SIZE as u64,
         ..Default::default()
     });
+    // TLS sections (only when the unit carries `_Thread_local`
+    // storage). `.tdata` holds the initialised slice
+    // `tls_data[..tls_init_size]`; `.tbss` is the zero-fill
+    // remainder. Both carry SHF_TLS (0x400) so the linker groups
+    // them into the PT_TLS segment. object.rs already detects the
+    // section families by name + flag and concatenates the bytes
+    // into `NativeObject::tls_data` / `tbss_size`.
+    if has_tls {
+        const SHF_TLS: u64 = 0x400;
+        let tls_init_size = program.tls_init_size.min(program.tls_data.len());
+        let tdata_off = round_up(out.len() as u64, 16);
+        out.resize(tdata_off as usize, 0);
+        out.extend_from_slice(&program.tls_data[..tls_init_size]);
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[14],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE | SHF_TLS,
+            sh_offset: tdata_off,
+            sh_size: tls_init_size as u64,
+            sh_addralign: 16,
+            ..Default::default()
+        });
+        // .tbss (no file bytes). Size is the zero-fill remainder.
+        sh.push(Elf64Shdr {
+            sh_name: shstrtab_offs[15],
+            sh_type: SHT_NOBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE | SHF_TLS,
+            sh_offset: out.len() as u64,
+            sh_size: (program.tls_data.len() - tls_init_size) as u64,
+            sh_addralign: 16,
+            ..Default::default()
+        });
+    } else {
+        let _ = (SHIDX_TDATA, SHIDX_TBSS);
+    }
+
     let _ = SHIDX_DEBUG_INFO;
     let _ = SHIDX_RELA_DEBUG_INFO;
     let _ = SHIDX_DEBUG_ABBREV;
     let _ = SHIDX_DEBUG_LINE;
     let _ = SHIDX_RELA_DEBUG_LINE;
 
-    debug_assert_eq!(sh.len(), NUM_SECTIONS);
+    debug_assert_eq!(sh.len(), num_sections);
 
     // Section header table at the tail. Rounded to 8 so the
     // headers' u64 fields read cleanly.
@@ -1153,7 +1199,7 @@ pub(super) fn write_relocatable(
         e_phentsize: 0,
         e_phnum: 0,
         e_shentsize: ELF64_SHDR_SIZE as u16,
-        e_shnum: NUM_SECTIONS as u16,
+        e_shnum: num_sections as u16,
         e_shstrndx: SHIDX_SHSTRTAB,
     };
     let mut hdr_bytes: Vec<u8> = Vec::with_capacity(ELF64_EHDR_SIZE);

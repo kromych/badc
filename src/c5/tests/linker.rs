@@ -280,6 +280,52 @@ fn unreferenced_static_function_is_dropped_from_object() {
 }
 
 #[test]
+fn thread_local_storage_round_trips_through_et_rel() {
+    // `_Thread_local` storage now rides the native ET_REL object:
+    // elf_reloc emits `.tdata` (initialised slice) + `.tbss`
+    // (zero-fill remainder), and `parse_native_elf` concatenates
+    // them back into `tls_data` / `tls_bss_size`. Verifies the
+    // bytes survive the write -> parse round-trip; the link-time
+    // PT_TLS layout is guarded separately until it lands.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         _Thread_local int counter = 7;\n\
+         int main(void) {{ counter += 1; return counter; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    assert!(
+        !program.tls_data.is_empty(),
+        "source declares `_Thread_local`, so tls_data must be non-empty"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(6).any(|w| w == b".tdata"),
+        "ET_REL must carry a `.tdata` section header name"
+    );
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let total = obj.tls_data.len() + obj.tls_bss_size;
+    assert_eq!(
+        total,
+        program.tls_data.len(),
+        "round-tripped TLS size (tdata + tbss) must match the source's tls_data",
+    );
+    // `counter = 7` is a 4-byte initialised int; its little-endian
+    // image leads the `.tdata` bytes.
+    assert!(
+        obj.tls_data.starts_with(&7i32.to_le_bytes()),
+        "initialised TLS byte image must round-trip; got {:?}",
+        obj.tls_data,
+    );
+}
+
+#[test]
 fn unresolved_external_function_errors_cleanly() {
     // TU references `foo` but no unit defines it.
     let only = compile_unit_bare(

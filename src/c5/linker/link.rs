@@ -219,6 +219,27 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // `_Thread_local` storage: elf_reloc emits `.tdata` / `.tbss`
+    // and object.rs parses them into `tls_data` / `tbss_size`, but
+    // the merged-image PT_TLS layout (and the macOS / Win64
+    // equivalents) isn't wired here yet, so the `Inst::TlsAddr`
+    // local-exec tpoff baked into `.text` would index a TLS block
+    // that never gets laid out. Refuse rather than ship a binary
+    // whose per-thread loads fault or read stale memory (TODO).
+    if let Some((i, obj)) = objs
+        .iter()
+        .enumerate()
+        .find(|(_, o)| !o.tls_data.is_empty() || o.tls_bss_size > 0)
+    {
+        let _ = obj;
+        return Err(link_err(&format!(
+            "link_native_objects: object {i} carries `_Thread_local` \
+             storage -- the native-link PT_TLS layout isn't wired yet. \
+             Build the source(s) directly to the final binary (the \
+             in-memory compile + link path handles TLS).",
+        )));
+    }
+
     // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
     // `.bss` base in the merged image. 16-byte alignment for
     // `.text` (matches the writer's section header) and 8-byte

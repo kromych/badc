@@ -1,9 +1,8 @@
-use std::io::{IsTerminal, Read, Write};
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
 use badc::{
-    Compiler, NativeOptions, PredefinedKind, Target, Vm, emit_native_with_options,
-    jit_run_with_options, predefined_symbols,
+    Compiler, NativeOptions, PredefinedKind, Target, Vm, jit_run_with_options, predefined_symbols,
 };
 
 const USAGE: &str = "\
@@ -426,12 +425,10 @@ fn main() {
     let mut sources: Vec<String> = Vec::new();
     let mut objects: Vec<String> = Vec::new();
     let mut archives: Vec<String> = Vec::new();
-    let mut stdin_was_input = false;
     let mut prog_args_start: usize = args.len();
     for (i, a) in args.iter().enumerate().skip(1) {
         if a == "-" {
             sources.push(a.clone());
-            stdin_was_input = true;
             continue;
         }
         let ext = std::path::Path::new(a)
@@ -486,7 +483,6 @@ fn main() {
         && !std::io::stdin().is_terminal()
     {
         sources.push("-".to_string());
-        stdin_was_input = true;
     }
     if sources.is_empty() && objects.is_empty() {
         eprint_diagnostic("badc: error: no files");
@@ -777,6 +773,9 @@ fn main() {
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
         reloc_opts.output_kind = OutputKind::Relocatable;
         // `.c` -> in-memory native ELF64 ET_REL. The earlier
         // LinkUnit pass already validated each source; redoing the
@@ -1055,6 +1054,9 @@ fn main() {
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
         reloc_opts.output_kind = OutputKind::Relocatable;
         let compile_one = |src_path: &str| -> Vec<u8> {
             let src_bytes = match std::fs::read_to_string(src_path) {
@@ -1141,6 +1143,9 @@ fn main() {
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
         reloc_opts.output_kind = OutputKind::Relocatable;
         let compile_one = |src_path: &str| -> Vec<u8> {
             let src_bytes = match std::fs::read_to_string(src_path) {
@@ -1221,110 +1226,11 @@ fn main() {
         return;
     }
 
-    // This path links source-derived `LinkUnit`s only. Object and
-    // archive inputs travel through the native-link path above;
-    // reaching here with any of them means a mode that path does not
-    // cover (a `_Thread_local` Mach-O / PE build that fell back to
-    // the in-memory linker), where they are not supported.
-    if !objects.is_empty() || !archives.is_empty() {
-        eprint_diagnostic(
-            "badc: error: object / archive inputs are linked through the native path; \
-             they cannot be combined with this build mode",
-        );
-        std::process::exit(1);
-    }
-
-    // Drive the link step. `program` ends up the same shape
-    // a single-TU `Compiler::compile()` would have produced.
-    let path = unit_source_paths
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "-".to_string());
-    let mut program = match badc::link_units(units) {
-        Ok(p) => p,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    let _ = stdin_was_input;
-    if program.source_path.is_empty() {
-        program.source_path = path.clone();
-    }
-
-    // `-O` is currently a no-op on the codegen side. The flag
-    // remains accepted so build scripts that pass `-O` keep
-    // working; the per-arch peephole + register allocator is
-    // always on regardless.
-    let _ = optimize_flag;
-
-    // Type-mismatch / arity / signature-redecl warnings (if any) --
-    // print once, before the program runs. They never fail the
-    // compile, but they go to stderr so a `2>/dev/null` user can
-    // suppress. Each warning arrives in gcc / clang shape
-    // (`<file>:<line>: warning: <message>`); when stderr is a TTY
-    // we color the severity word so they pop out of build logs.
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    for w in &program.warnings {
-        eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-    }
-
-    // `--optimize` / `-O` enables the native peephole + register
-    // allocator pass.
-    let mut native_opts = if optimize_flag {
-        NativeOptions::new().with_optimize()
-    } else {
-        NativeOptions::new()
-    };
-    native_opts = native_opts.with_debug_info(emit_debug_info);
-    if dump_ssa {
-        native_opts = native_opts.with_dump_ssa();
-    }
-    if mode == Mode::SharedLibrary {
-        native_opts = native_opts.with_shared_library();
-    }
-
-    match mode {
-        Mode::Jit => unreachable!("handled above"),
-        Mode::Interp => unreachable!("handled above"),
-        Mode::NativeExecutable | Mode::SharedLibrary => {
-            // Default: lower to a native binary, write it, mark
-            // it executable, and (on macOS hosts emitting Mach-O)
-            // ad-hoc codesign so dyld accepts it.
-            //
-            // Piped output: if the user passed `-o -` or didn't
-            // specify -o and stdout is a pipe (the process is in
-            // the middle of a shell pipeline like
-            // `... | badc | run-on-target`), write the bytes
-            // straight to stdout instead of disk. The
-            // mark-executable + codesign + per-target nag messages
-            // are skipped -- the caller knows what they're doing.
-            //
-            // Compile-time warnings (type mismatch, AST validator,
-            // dead-store analysis) go to stderr here too -- the
-            // JIT path above already prints them; the AOT path
-            // missed them before this hook.
-            let stderr_is_tty = std::io::stderr().is_terminal();
-            for w in &program.warnings {
-                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-            }
-            let pipe_to_stdout = match output_path.as_deref() {
-                Some(p) => p == std::path::Path::new("-"),
-                None => !std::io::stdout().is_terminal(),
-            };
-            if pipe_to_stdout {
-                emit_native_binary_to_stdout(&program, target, native_opts);
-            } else {
-                let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
-                emit_native_binary(&program, &out, target, native_opts, mode, quiet);
-            }
-        }
-        Mode::ListSymbols => unreachable!("handled above"),
-        Mode::DumpHeaders => unreachable!("handled above"),
-        Mode::DumpPp => unreachable!("handled above"),
-        Mode::BuildArchive => unreachable!("handled above"),
-        Mode::DumpNativeLink => unreachable!("handled above"),
-    }
+    // Every CLI mode is dispatched and returns above: --jit / --interp,
+    // --list-symbols / --dump-headers / --dump-native-link, --dump-pp,
+    // the native-link path (executable / shared library), `-c`, and
+    // `--ar`. Reaching here means a mode was added without a handler.
+    unreachable!("every CLI mode is handled and returns above");
 }
 
 /// Print `msg` to stderr through `colorize_diagnostic`, deciding
@@ -1450,28 +1356,6 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// out to `codesign --sign -` so the loader will accept it. ELF
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
-/// Lower the program to a native binary and write it to stdout
-/// rather than a file on disk. Used by pipe-mode (the caller
-/// redirected stdout, or asked for `-o -`). No mark-executable
-/// / codesign / per-target reminder -- the downstream of the
-/// pipe gets to handle those.
-fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options: NativeOptions) {
-    let bytes = match emit_native_with_options(program, target, options) {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    if let Err(e) = std::io::stdout().write_all(&bytes) {
-        eprint_diagnostic(format!(
-            "badc: error: failed to write binary to stdout: {e}"
-        ));
-        std::process::exit(1);
-    }
-    let _ = std::io::stdout().flush();
-}
-
 /// Write `bytes` to `out`, exit on failure, log
 /// `info: wrote file <path>` on success unless `quiet` is set.
 /// Used by every output path -- object emit, archive emit, JIT
@@ -1489,28 +1373,6 @@ fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
     if !quiet {
         eprint_diagnostic(format!("info: wrote file {}", out.display()));
     }
-}
-
-fn emit_native_binary(
-    program: &badc::Program,
-    out: &std::path::Path,
-    target: Target,
-    options: NativeOptions,
-    mode: Mode,
-    quiet: bool,
-) {
-    let bytes = match emit_native_with_options(program, target, options) {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    write_output(out, &bytes, quiet);
-    if mode == Mode::NativeExecutable {
-        set_executable(out);
-    }
-    post_write_native(out, target);
 }
 
 /// Post-write hooks shared by the LinkUnit + emit_native AOT path

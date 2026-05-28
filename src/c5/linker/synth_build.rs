@@ -23,12 +23,13 @@
 //!     (and the macOS TLV / Win64 `_tls_index` equivalents), so
 //!     the multi-object case is rejected in `link_native_objects`.
 //!     TODO.
-//!   * Shared-library output. Only `OutputKind::Executable` is
-//!     handled; exports + dylib-output dispatch stays on the
-//!     pre-codegen `LinkUnit` path. TODO.
 //!   * DWARF debug info. The merged image has no AST / function
 //!     metadata to drive DWARF emit; debug sections are skipped,
 //!     matching `write_executable_elf64`'s policy. TODO.
+//!
+//! Shared-library output is handled: the caller passes
+//! [`OutputKind::SharedLibrary`] and the `#pragma export` names ride
+//! the ET_REL `NT_BADC_EXPORTS` note into [`MergedNative::exports`].
 
 #![cfg(feature = "std")]
 

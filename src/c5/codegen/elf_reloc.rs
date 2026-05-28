@@ -215,10 +215,24 @@ pub(super) fn write_relocatable(
     // silently miscompiles (per-thread loads hit a zero descriptor
     // and either fault or read stale memory). Refuse the emit with
     // a clear pointer to the in-memory compile + link path that
-    // handles TLS. Removing this check should land alongside
-    // wiring `.tdata` / `.tbss` + the macOS TLV descriptor / Win64
-    // `_tls_index` note sections through ET_REL + link_native_objects
-    // + the per-format writers (TODO).
+    // handles TLS.
+    //
+    // TODO: carry TLS through ET_REL. `Inst::TlsAddr` lowering on
+    // Linux uses the local-exec model: `emit_tls_addr` bakes
+    // `tpoff = tls_total_size - offset` straight into the `sub`
+    // immediate, so a single-TU object whose `tls_total_size`
+    // already matches the final image needs only `.tdata` / `.tbss`
+    // section bytes (object.rs already parses them) plus a merge
+    // that keeps the single TLS block's layout. A multi-object link
+    // where more than one unit contributes `_Thread_local` storage
+    // additionally needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
+    // relocations emitted here and resolved in link.rs against the
+    // merged TLS layout (the baked per-unit tpoff is otherwise
+    // wrong post-merge). macOS uses TLV descriptors + Win64 uses
+    // `_tls_index`; the per-format writers already consume
+    // `Build.tls_data`, so the remaining work is the ET_REL
+    // sections, the link-time merge into `MergedNative.tls_data`,
+    // and `synth_build` threading.
     if !program.tls_data.is_empty() || program.tls_init_size > 0 {
         return Err(C5Error::Compile(crate::c5::error::fmt_link_err(
             "ELF ET_REL writer: `_Thread_local` storage isn't carried \

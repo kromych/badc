@@ -514,9 +514,8 @@ fn main() {
     // additional units -- so `badc --jit c4.c hello.c` runs c4 with
     // argv `["c4.c", "hello.c"]`, the self-hosting form c4 expects.
     // Object / archive inputs cannot be linked here and are rejected.
-    // The unit compiles straight to a `Program` -- no LinkUnit, and no
-    // DWARF, which neither the JIT loader nor the SSA interpreter
-    // consumes.
+    // The unit compiles straight to a `Program`, with no DWARF, which
+    // neither the JIT loader nor the SSA interpreter consumes.
     if mode == Mode::Jit || mode == Mode::Interp {
         if !objects.is_empty() || !archives.is_empty() {
             eprint_diagnostic(format!(

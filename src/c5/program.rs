@@ -249,14 +249,12 @@ pub struct Program {
     /// CRT entry). The codegen reads these directly through
     /// `produce_ssa_funcs`.
     pub(crate) synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
-    /// User-function `FunctionSsa` entries produced by the
-    /// walker in `compile_to_link_unit`, concatenated and
-    /// rebased to merged PCs by the linker. Carries the body
-    /// for every parser-declared function. The codegen reads
-    /// these directly through `produce_ssa_funcs` for the
-    /// `.o`-reload path; the in-memory compile+link path
-    /// re-walks the AST snapshots. Empty only for `Program`
-    /// shapes built outside the parser pipeline.
+    /// User-function `FunctionSsa` entries produced by the AST
+    /// walker; the native linker concatenates and rebases them to
+    /// merged PCs. Carries the body for every parser-declared
+    /// function. The codegen reads these directly through
+    /// `produce_ssa_funcs`. Empty only for `Program` shapes built
+    /// outside the parser pipeline.
     pub(crate) user_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// Cross-TU user-function imports surfaced by the parser
     /// for the `-c` (`OutputKind::Relocatable`) path. Each

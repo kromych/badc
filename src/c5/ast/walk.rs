@@ -262,13 +262,11 @@ impl<'a> Walker<'a> {
     ///   in `FunctionSsa::extern_imm_data_refs`; the linker
     ///   patches the slot against the merged symbol table.
     ///
-    /// The `extern` reclassification in
-    /// `compile_to_link_unit` clears the parser-tentative slot
-    /// on the live `Symbol`, so a symbol with
-    /// `is_extern_decl && !defined_here` reaches this path
-    /// with `val == 0` pre-link and the merge-resolved offset
-    /// post-link. The AST `Expr::Ident` snapshot in
-    /// `fallback_val` still carries the parser-tentative
+    /// A symbol with `is_extern_decl && !defined_here` takes the
+    /// `GloAddr::Extern` arm and resolves through
+    /// `extern_imm_data_refs` against the merged symbol table, so
+    /// its parser-tentative `val` is never consulted. The AST
+    /// `Expr::Ident` snapshot in `fallback_val` still carries that
     /// offset and is only used when nothing in the live entry
     /// updates it.
     fn live_glo_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {

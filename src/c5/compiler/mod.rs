@@ -25,8 +25,6 @@ mod expr;
 mod function;
 mod global_init;
 mod initializer;
-#[cfg(feature = "linker")]
-mod link_unit;
 mod locals;
 mod run_compile;
 mod sizeof_expr;
@@ -1274,9 +1272,8 @@ impl Compiler {
             // `Program` so DWARF emitters that consume the path
             // (DW_AT_name on the CU DIE, line-program file 0)
             // don't surface empty fields when the caller forgets
-            // to set it explicitly. The LinkUnit + emit_native
-            // paths still overwrite the field downstream when
-            // they have a more specific value.
+            // to set it explicitly. Downstream emitters overwrite
+            // the field when they have a more specific value.
             source_path: self.source_label.clone(),
             variables: self.variables,
             // Struct registry, exposed so the DWARF emitter can

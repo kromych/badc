@@ -1117,13 +1117,12 @@ impl Compiler {
                         // `Compiler::compile()` path stays
                         // permissive (writing through `a` in
                         // `extern int a; a = 1;` works without a
-                        // link partner). At link-unit assembly
-                        // time, [`Compiler::compile_to_link_unit`]
-                        // re-classifies an `extern`-marked Glo
-                        // with no initializer as an undefined
-                        // external symbol, dropping the local
-                        // storage so the defining TU's bytes are
-                        // the ones in play.
+                        // link partner). In a multi-TU build the
+                        // walker emits a `GloAddr::Extern` reference
+                        // for an `extern`-marked Glo with no
+                        // initializer, so the defining TU's bytes
+                        // are the ones in play and this local
+                        // storage is only the single-TU fallback.
                         let _ = was_extern_only_decl;
                         // Tentative-merge: reuse the storage that was
                         // already allocated for the prior declaration.

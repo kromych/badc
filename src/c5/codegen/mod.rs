@@ -1292,10 +1292,10 @@ pub enum OutputKind {
     /// Relocatable native object (`.o` on ELF / Mach-O, `.obj` on
     /// PE). Each function emits with cross-TU references left
     /// as relocation entries against the unit's symbol table.
-    /// Consumed by a system linker (`ld`, `lld`, `link.exe`) or
-    /// by `link_units`' native path. Locks the target at compile
-    /// time -- a relocatable produced for one target can't be
-    /// linked into a binary for a different one.
+    /// Consumed by a system linker (`ld`, `lld`, `link.exe`) or by
+    /// this compiler's `link_native_objects`. Locks the target at
+    /// compile time -- a relocatable produced for one target can't
+    /// be linked into a binary for a different one.
     Relocatable,
 }
 

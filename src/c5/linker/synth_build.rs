@@ -614,14 +614,10 @@ fn synth_pc_to_native(
 
 /// Surface user-defined Text-section symbols as ExportedFunction
 /// entries so the per-format writer emits them into the static
-/// symbol table (`nm` / `lldb image lookup`). This is the .o link
-/// path's equivalent of the LinkUnit AOT path's func_names; per-
-/// function source-position metadata (DWARF .debug_line, variable
-/// records) isn't recovered yet -- a follow-up. The synthesizer
+/// symbol table (`nm` / `lldb image lookup`). The synthesizer
 /// includes every Text-section merged symbol regardless of whether
 /// the program asked for `#pragma export`, so the resulting
-/// executable carries the same names the AOT path would dump under
-/// `nm -a`.
+/// executable carries every function name under `nm -a`.
 fn synth_exports(merged: &MergedNative) -> Vec<ExportedFunction> {
     // Promote the source-declared `#pragma export` names (unioned by
     // the linker into `merged.exports`) to export-table records,

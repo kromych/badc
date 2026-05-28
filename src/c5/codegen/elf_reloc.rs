@@ -75,8 +75,8 @@ const NT_BADC_EXPORTS: u32 = 3;
 // into `.text`, one per `Inst::TlsAddr` lowering on Windows. The PE
 // writer patches each site with the address of the `_tls_index` DWORD
 // it places in the TLS directory; carried so a `_Thread_local` Windows
-// image links through the native path rather than the LinkUnit
-// fallback. Empty (and the record omitted) for other targets.
+// image links through the native path. Empty (and the record omitted)
+// for other targets.
 const NT_BADC_TLS_INDEX: u32 = 4;
 // Mach-O TLV descriptors. desc is a sequence of u64 LE
 // `offset_in_block` values, one per `_Thread_local` variable -- the

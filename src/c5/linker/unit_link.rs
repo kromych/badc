@@ -565,8 +565,22 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         struct_remap_per_unit.push(remap);
     }
 
+    // Merge enum definitions across units. Dedupe by tag name so a
+    // header-declared enum appearing in multiple `.c` files emits a
+    // single CU-level DIE per name. Anonymous (empty-tag) entries
+    // pass through; the DWARF emitter skips them.
+    let mut merged_enums: Vec<crate::c5::compiler::EnumDef> = Vec::new();
+    for unit in &units {
+        for e in &unit.enums {
+            if !e.name.is_empty() && merged_enums.iter().any(|m| m.name == e.name) {
+                continue;
+            }
+            merged_enums.push(e.clone());
+        }
+    }
+
     Ok(Program {
-        enums: Vec::new(),
+        enums: merged_enums,
         data: merged_data,
         entry_pc,
         warnings: merged_warnings,

@@ -1242,6 +1242,60 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
 }
 
+/// Amalg dwarf.rs counterpart of the multi-TU enum DIE test.
+/// Single-source compile must also emit DW_TAG_enumeration_type
+/// for tagged enums; the amalg path keeps the names inline via
+/// DW_FORM_string to avoid extending the sealed catalog string
+/// table.
+#[test]
+fn amalg_compile_emits_enumeration_type_for_tagged_enum() {
+    let dir = tempdir("amalg-enum-die");
+    let src = write_source(
+        &dir,
+        "f.c",
+        "enum Mode { Off, On = 7 };\n\
+         int main(void) { return On; }\n",
+    );
+    let out = dir.join("f");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile",
+    );
+    let mut dd = Command::new("dwarfdump");
+    dd.arg("--debug-info").arg(&out);
+    let out_text = match dd.output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            let alt = Command::new("llvm-dwarfdump")
+                .arg("--debug-info")
+                .arg(&out)
+                .output();
+            match alt {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => return,
+            }
+        }
+    };
+    assert!(
+        out_text.contains("DW_TAG_enumeration_type"),
+        "expected DW_TAG_enumeration_type for `enum Mode` in amalg compile:\n{out_text}",
+    );
+    assert!(
+        out_text.contains("\"Mode\""),
+        "expected DW_AT_name `Mode`:\n{out_text}",
+    );
+    for cname in ["\"Off\"", "\"On\""] {
+        assert!(
+            out_text.contains(cname),
+            "expected enumerator {cname}:\n{out_text}",
+        );
+    }
+}
+
 /// Tagged enums emit DW_TAG_enumeration_type with one
 /// DW_TAG_enumerator per constant. C99 6.7.2.2 enums collapse to
 /// `int` in c5's type system, so the DIE is standalone (no

@@ -63,6 +63,7 @@ pub struct LinkUnit {
     // ---- Preprocessor / parser metadata (merged at link) ----
     pub dylibs: Vec<DylibSpec>,
     pub structs: Vec<StructDef>,
+    pub enums: Vec<crate::c5::compiler::EnumDef>,
     pub exports: Vec<ExportedFunction>,
     pub dllmain_pc: Option<usize>,
     pub entry_name: Option<String>,

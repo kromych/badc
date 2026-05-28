@@ -473,6 +473,7 @@ impl Compiler {
             code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             structs: self.structs,
+            enums: self.enums,
             exports: resolved_exports,
             dllmain_pc,
             entry_name,

@@ -73,6 +73,8 @@ const DW_TAG_MEMBER: u8 = 0x0d;
 const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
 const DW_TAG_ARRAY_TYPE: u8 = 0x01;
 const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
+const DW_TAG_ENUMERATION_TYPE: u8 = 0x04;
+const DW_TAG_ENUMERATOR: u8 = 0x28;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -107,6 +109,7 @@ const DW_AT_PROTOTYPED: u32 = 0x27;
 const DW_AT_UPPER_BOUND: u32 = 0x2f;
 const DW_AT_CALLING_CONVENTION: u32 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
+const DW_AT_CONST_VALUE: u32 = 0x1c;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -121,11 +124,13 @@ const DW_FORM_DATA1: u32 = 0x0b;
 const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
+const DW_FORM_STRING: u32 = 0x08;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
 const DW_FORM_EXPRLOC: u32 = 0x18;
 const DW_FORM_UDATA: u32 = 0x0f;
+const DW_FORM_SDATA: u32 = 0x0d;
 
 // `DW_OP_*` opcodes used in location / frame-base expressions.
 const DW_OP_FBREG: u8 = 0x91;
@@ -406,6 +411,7 @@ pub(crate) fn emit(
         &plt_subs,
         target,
         &program.structs,
+        &program.enums,
     );
     let debug_frame = build_debug_frame(
         target,
@@ -1380,6 +1386,29 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
+    // Abbrev 17: enumeration_type -- tagged C99 6.7.2.2 enums.
+    // Children are DW_TAG_enumerator DIEs; enums collapse to
+    // `int` in c5's type system so DW_AT_byte_size is 4.
+    write_uleb128(&mut buf, 17);
+    write_uleb128(&mut buf, DW_TAG_ENUMERATION_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRING);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+    // Abbrev 18: enumerator -- one (name, value) pair child of an
+    // enumeration_type DIE. DW_AT_const_value is signed since C99
+    // enum constants can be negative. DW_FORM_string keeps the
+    // names inline rather than threading the catalog's sealed
+    // string table.
+    write_uleb128(&mut buf, 18);
+    write_uleb128(&mut buf, DW_TAG_ENUMERATOR as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRING);
+    write_attr(&mut buf, DW_AT_CONST_VALUE, DW_FORM_SDATA);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
     // End of abbreviation table.
     write_uleb128(&mut buf, 0);
     buf
@@ -1452,6 +1481,7 @@ fn build_debug_info(
     plt_subs: &[PltSub],
     target: Target,
     structs: &[StructDef],
+    enums: &[super::super::compiler::EnumDef],
 ) -> Vec<u8> {
     // Build the body first so we know its size before prepending
     // the unit header. CU-relative `DW_FORM_ref4` offsets are
@@ -1572,6 +1602,28 @@ fn build_debug_info(
         write_uleb128(&mut body, 16);
         write_uleb128(&mut body, (count as u64).saturating_sub(1));
         // Children-list terminator for the array_type DIE.
+        body.push(0);
+    }
+
+    // DW_TAG_enumeration_type DIEs for every tagged enum the
+    // parser captured. Standalone -- no variable references them
+    // because c5 collapses enums to `int`. Strings ride inline
+    // via DW_FORM_string so the emitter doesn't have to extend
+    // the sealed catalog string table at this point.
+    for ed in enums {
+        if ed.name.is_empty() || ed.constants.is_empty() {
+            continue;
+        }
+        write_uleb128(&mut body, 17);
+        body.extend_from_slice(ed.name.as_bytes());
+        body.push(0);
+        body.push(4);
+        for (cname, cval) in &ed.constants {
+            write_uleb128(&mut body, 18);
+            body.extend_from_slice(cname.as_bytes());
+            body.push(0);
+            write_sleb128(&mut body, *cval);
+        }
         body.push(0);
     }
 

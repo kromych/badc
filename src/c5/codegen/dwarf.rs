@@ -3101,3 +3101,56 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod info_golden {
+    use super::*;
+
+    /// Byte-stability lock for the amalg `.debug_info` CU. Drives
+    /// build_debug_info with a single leaf subprogram and pins the
+    /// emitted bytes: the DIE-leading abbreviation codes and the
+    /// per-attribute value order are hand-matched to the abbrev
+    /// table, so this catches an info-side change that drifts from
+    /// build_debug_abbrev. Any intentional change updates this golden
+    /// after re-checking both emitters.
+    #[test]
+    fn build_debug_info_leaf_subprogram_is_byte_stable() {
+        let mut strs = StrTable::new();
+        let producer_off = strs.intern("badc test");
+        let comp_dir_off = strs.intern("");
+        let cu_name_off = strs.intern("t.c");
+        let name_off = strs.intern("main");
+        let subs = alloc::vec![Subprog {
+            name_off,
+            low_pc: 0x1000,
+            high_pc: 0x1010,
+            prologue_size: 4,
+            variables: alloc::vec![],
+        }];
+        let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
+        let structs: alloc::vec::Vec<StructDef> = alloc::vec![];
+        let enums: alloc::vec::Vec<crate::c5::compiler::EnumDef> = alloc::vec![];
+        let catalog = TypeCatalog::collect(&subs, &plt_subs, &mut strs, Target::LinuxX64, &structs);
+        let info = build_debug_info(
+            cu_name_off,
+            comp_dir_off,
+            producer_off,
+            0,
+            0x1000,
+            0x10,
+            &catalog,
+            &subs,
+            &plt_subs,
+            Target::LinuxX64,
+            &structs,
+            &enums,
+        );
+        let hex: alloc::string::String = info.iter().map(|b| alloc::format!("{b:02x}")).collect();
+        assert_eq!(
+            hex,
+            "440000000400000000000801010000000c0c0000000b0000000010000000000000\
+             10000000000000000000000002100000000010000000000000100000000000000001\
+             028d000000"
+        );
+    }
+}

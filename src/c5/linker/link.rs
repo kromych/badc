@@ -131,6 +131,15 @@ pub struct MergedNative {
     /// `DW_CFA_advance_loc <prologue_size>` ahead of the
     /// post-prologue CFA rule.
     pub prologue_ends: BTreeMap<String, u64>,
+    /// Per-thread TLS image for the merged executable. The first
+    /// [`Self::tls_init_size`] bytes are the initialised `.tdata`
+    /// template; the remainder is `.tbss` zero-fill. The per-format
+    /// writers consume this as `Build::tls_data` / `tls_init_size`
+    /// to lay out PT_TLS (ELF), the TLV section (Mach-O), or the
+    /// `.tls` directory (PE). Empty when no input object carries
+    /// `_Thread_local` storage.
+    pub tls_data: Vec<u8>,
+    pub tls_init_size: usize,
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
@@ -219,26 +228,38 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
-    // `_Thread_local` storage: elf_reloc emits `.tdata` / `.tbss`
-    // and object.rs parses them into `tls_data` / `tbss_size`, but
-    // the merged-image PT_TLS layout (and the macOS / Win64
-    // equivalents) isn't wired here yet, so the `Inst::TlsAddr`
-    // local-exec tpoff baked into `.text` would index a TLS block
-    // that never gets laid out. Refuse rather than ship a binary
-    // whose per-thread loads fault or read stale memory (TODO).
-    if let Some((i, obj)) = objs
+    // `_Thread_local` storage. A single TLS-bearing object carries
+    // its layout through verbatim: `Inst::TlsAddr` on the local-exec
+    // model bakes `tpoff = tls_total_size - offset` straight into
+    // `.text`, and the relinked PT_TLS block keeps the same size, so
+    // the baked offset stays valid (ELF gABI variant-2 TLS). Two or
+    // more TLS objects would each have baked an offset against their
+    // own block; merging the blocks shifts those offsets, so the
+    // multi-object case needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
+    // relocations to re-derive each offset against the merged block.
+    // That isn't wired yet, so reject more than one TLS contributor.
+    let tls_objs: Vec<&NativeObject> = objs
         .iter()
-        .enumerate()
-        .find(|(_, o)| !o.tls_data.is_empty() || o.tls_bss_size > 0)
-    {
-        let _ = obj;
-        return Err(link_err(&format!(
-            "link_native_objects: object {i} carries `_Thread_local` \
-             storage -- the native-link PT_TLS layout isn't wired yet. \
-             Build the source(s) directly to the final binary (the \
-             in-memory compile + link path handles TLS).",
-        )));
+        .filter(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0)
+        .collect();
+    if tls_objs.len() > 1 {
+        return Err(link_err(
+            "link_native_objects: more than one input object carries \
+             `_Thread_local` storage -- merging multiple TLS blocks needs \
+             per-unit TPOFF relocations against the merged layout, which \
+             aren't wired yet (TODO). Combine the `_Thread_local` \
+             definitions into a single translation unit for now.",
+        ));
     }
+    let (tls_data, tls_init_size) = match tls_objs.first() {
+        Some(o) => {
+            let init = o.tls_data.len();
+            let mut buf = o.tls_data.clone();
+            buf.resize(init + o.tls_bss_size, 0);
+            (buf, init)
+        }
+        None => (Vec::new(), 0),
+    };
 
     // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
     // `.bss` base in the merged image. 16-byte alignment for
@@ -838,6 +859,8 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_info_text_relocs,
         debug_line_text_relocs,
         prologue_ends,
+        tls_data,
+        tls_init_size,
     })
 }
 

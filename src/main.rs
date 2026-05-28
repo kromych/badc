@@ -646,16 +646,17 @@ fn main() {
     // the MergedNative-to-Build synthesizer for Mach-O / PE. The
     // synthesizer carries DWARF (subprogram + variable + type DIEs
     // ride the merged per-`.o` `.debug_info`; `.debug_frame`
-    // regenerates) and variadic libc imports. It does not yet
-    // carry `_Thread_local` storage (the ET_REL writer rejects it),
-    // shared-library output, or the `--jit` / `--interp` Program
-    // build -- sources / modes needing those take the LinkUnit
-    // path below (TODO: close those gaps, then this gate goes away).
+    // regenerates), variadic libc imports, and a single unit's
+    // `_Thread_local` storage. It does not yet carry multi-unit
+    // TLS, shared-library output, or the `--jit` / `--interp`
+    // Program build -- sources / modes needing those take the
+    // LinkUnit path below (TODO: close those gaps, then this gate
+    // goes away).
     //
     // On macOS and Windows, only route through the synth path when
     // there is at least one native `.o` / `.a` input the LinkUnit
     // path cannot consume. Pure `.c` sources keep the LinkUnit +
-    // emit_native chain until the synthesizer covers TLS + shared
+    // emit_native chain until the synthesizer covers shared
     // libraries. Mach-O auto-codesigning now lives in
     // `post_write_native`, so both paths sign on macOS hosts.
     let take_native_link_path = match target {
@@ -830,27 +831,6 @@ fn main() {
         }
         if native_objs.is_empty() {
             eprint_diagnostic("badc: error: no inputs");
-            std::process::exit(1);
-        }
-        // The synth path's MergedNative carrier doesn't yet thread
-        // TLS storage / TLV descriptors / Win64 _tls_index fixups
-        // through to the per-format writers (TODO). Without that,
-        // an executable produced from a TLS-bearing .o silently
-        // SIGBUSes the first time the program reads a
-        // `_Thread_local`. Refuse up front with a clear pointer
-        // to the in-memory compile + link path that handles TLS.
-        let tls_input = native_objs
-            .iter()
-            .find(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0);
-        if let Some(_obj) = tls_input {
-            eprint_diagnostic(
-                "badc: error: native `.o` inputs carrying `_Thread_local` storage \
-                 cannot be linked through the native-link path yet -- the \
-                 MergedNative carrier doesn't thread TLS descriptors / index \
-                 fixups through to the per-format writers (TODO). Drop the \
-                 `-c` step and pass the source(s) directly to `badc -o app` \
-                 to take the in-memory compile + link path, which handles TLS.",
-            );
             std::process::exit(1);
         }
         let mut merged = match badc::link_native_objects(&native_objs) {

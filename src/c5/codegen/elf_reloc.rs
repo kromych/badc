@@ -209,32 +209,22 @@ pub(super) fn write_relocatable(
     machine: Machine,
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
-    // The ET_REL writer doesn't emit `.tdata` / `.tbss` yet, so a
-    // `_Thread_local`-bearing source would otherwise round-trip a
-    // `.o` whose TLS storage is missing -- the resulting link
-    // silently miscompiles (per-thread loads hit a zero descriptor
-    // and either fault or read stale memory). Refuse the emit with
-    // a clear pointer to the in-memory compile + link path that
-    // handles TLS.
-    //
-    // TODO: carry TLS through ET_REL. `Inst::TlsAddr` lowering on
-    // Linux uses the local-exec model: `emit_tls_addr` bakes
+    // `_Thread_local` storage round-trips through ET_REL for a
+    // single TLS-bearing unit. `Inst::TlsAddr` lowering on Linux
+    // uses the local-exec model: `emit_tls_addr` bakes
     // `tpoff = tls_total_size - offset` straight into the `sub`
-    // immediate, so a single-TU object whose `tls_total_size`
-    // already matches the final image needs only `.tdata` / `.tbss`
-    // section bytes (object.rs already parses them) plus a merge
-    // that keeps the single TLS block's layout. A multi-object link
-    // where more than one unit contributes `_Thread_local` storage
-    // additionally needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
+    // immediate, so the object needs only its `.tdata` / `.tbss`
+    // section bytes (emitted below; object.rs parses them back into
+    // `NativeObject::tls_data` / `tls_bss_size`). `link.rs` carries
+    // a single unit's TLS block forward unchanged and `synth_build`
+    // threads it to the writer's PT_TLS layout, so the baked offset
+    // stays valid. A multi-object link where more than one unit
+    // contributes `_Thread_local` storage shifts each unit's block
+    // and so needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
     // relocations emitted here and resolved in link.rs against the
-    // merged TLS layout (the baked per-unit tpoff is otherwise
-    // wrong post-merge). macOS uses TLV descriptors + Win64 uses
-    // `_tls_index`; the per-format writers already consume
-    // `Build.tls_data`, so the remaining work is the link-time
-    // PT_TLS layout in `link.rs` + `image.rs` and `synth_build`
-    // threading. The `.tdata` / `.tbss` sections are emitted below
-    // (object.rs parses them back); `link.rs` guards the not-yet-
-    // wired native TLS executable layout so no broken binary ships.
+    // merged layout; that case is rejected in `link_native_objects`
+    // (macOS TLV descriptors + Win64 `_tls_index` are the format
+    // equivalents). TODO.
     let source_path = program.source_path.as_str();
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text

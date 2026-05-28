@@ -1047,6 +1047,8 @@ mod tests {
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: alloc::collections::BTreeMap::new(),
+            tls_data: alloc::vec![],
+            tls_init_size: 0,
         }
     }
 

@@ -326,6 +326,79 @@ fn thread_local_storage_round_trips_through_et_rel() {
 }
 
 #[test]
+fn thread_local_storage_links_into_pt_tls_executable() {
+    // A single `_Thread_local`-bearing object links through the
+    // native path into an executable with a PT_TLS segment. The
+    // local-exec tpoff baked into `.text` stays valid because the
+    // merged TLS block keeps the source's size: `link_native_objects`
+    // carries the single unit's `tls_data` / `tls_init_size` forward
+    // and `write_native_image_from_merged` lays out PT_TLS from them.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         _Thread_local int counter = 7;\n\
+         int main(void) {{ counter += 1; return counter; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_init_size, program.tls_init_size,
+        "merged tls_init_size must match the source's"
+    );
+    assert_eq!(
+        merged.tls_data.len(),
+        program.tls_data.len(),
+        "merged tls_data length must match the source's total TLS size"
+    );
+    assert!(
+        merged.tls_data.starts_with(&7i32.to_le_bytes()),
+        "initialised TLS image must survive the merge"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(&merged, &plt, "main", Target::LinuxX64)
+        .expect("write executable");
+    // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
+    // e_phnum @ 0x38 (u16). Scan the program header table for a
+    // PT_TLS (p_type == 7) whose p_filesz covers the 4-byte int.
+    let phoff = u64::from_le_bytes(exe[0x20..0x28].try_into().unwrap()) as usize;
+    let phentsize = u16::from_le_bytes(exe[0x36..0x38].try_into().unwrap()) as usize;
+    let phnum = u16::from_le_bytes(exe[0x38..0x3a].try_into().unwrap()) as usize;
+    const PT_TLS: u32 = 7;
+    let pt_tls = (0..phnum).find_map(|i| {
+        let base = phoff + i * phentsize;
+        let p_type = u32::from_le_bytes(exe[base..base + 4].try_into().unwrap());
+        if p_type == PT_TLS {
+            // p_filesz @ +0x20, p_memsz @ +0x28 within the phdr.
+            let p_filesz = u64::from_le_bytes(exe[base + 0x20..base + 0x28].try_into().unwrap());
+            let p_memsz = u64::from_le_bytes(exe[base + 0x28..base + 0x30].try_into().unwrap());
+            Some((p_filesz, p_memsz))
+        } else {
+            None
+        }
+    });
+    let (p_filesz, p_memsz) = pt_tls.expect("executable must carry a PT_TLS segment");
+    assert_eq!(
+        p_filesz, program.tls_init_size as u64,
+        "PT_TLS p_filesz must equal the initialised TLS image size"
+    );
+    assert_eq!(
+        p_memsz,
+        program.tls_data.len() as u64,
+        "PT_TLS p_memsz must cover the full per-thread TLS block"
+    );
+}
+
+#[test]
 fn unresolved_external_function_errors_cleanly() {
     // TU references `foo` but no unit defines it.
     let only = compile_unit_bare(

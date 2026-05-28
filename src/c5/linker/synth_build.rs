@@ -16,10 +16,13 @@
 //!     `is_variadic` / `fixed_args` / `param_types` across the ELF
 //!     ET_REL roundtrip. The C99-motivated fix is a per-binding
 //!     metadata note section. TODO.
-//!   * `_Thread_local` storage. macOS arm64 TLV descriptors and
-//!     Win64 `_tls_index` fixups don't survive the merge yet.
-//!     Sources with TLS reach the synthesizer with `tls_data`
-//!     empty; the writer skips TLS layout. TODO.
+//!   * `_Thread_local` storage. A single TLS-bearing input is
+//!     threaded through [`MergedNative::tls_data`] /
+//!     `tls_init_size` to the writer's PT_TLS layout. Merging two
+//!     or more TLS objects still needs per-unit TPOFF relocations
+//!     (and the macOS TLV / Win64 `_tls_index` equivalents), so
+//!     the multi-object case is rejected in `link_native_objects`.
+//!     TODO.
 //!   * Shared-library output. Only `OutputKind::Executable` is
 //!     handled; exports + dylib-output dispatch stays on the
 //!     pre-codegen `LinkUnit` path. TODO.
@@ -80,8 +83,8 @@ fn synth_program_and_build(
         data: Vec::new(),
         entry_pc: 0,
         warnings: Vec::new(),
-        tls_data: Vec::new(),
-        tls_init_size: 0,
+        tls_data: merged.tls_data.clone(),
+        tls_init_size: merged.tls_init_size,
         data_relocs: data_relocs.clone(),
         code_relocs: code_relocs.clone(),
         exports: exports.clone(),
@@ -157,8 +160,8 @@ fn synth_program_and_build(
         ssa_line_rows: Vec::new(),
         imports,
         abi: target.abi(),
-        tls_data: Vec::new(),
-        tls_init_size: 0,
+        tls_data: merged.tls_data.clone(),
+        tls_init_size: merged.tls_init_size,
         tls_index_fixups: Vec::new(),
         macho_tlv_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
@@ -659,6 +662,8 @@ mod tests {
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: alloc::collections::BTreeMap::new(),
+            tls_data: alloc::vec![],
+            tls_init_size: 0,
         }
     }
 

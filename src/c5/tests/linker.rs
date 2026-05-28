@@ -406,6 +406,46 @@ fn thread_local_storage_links_into_pt_tls_executable() {
 }
 
 #[test]
+fn win64_tls_index_fixups_round_trip_through_et_rel() {
+    // A Windows `_Thread_local` access lowers to a `_tls_index` TEB
+    // lookup whose fixup site rides the ET_REL `.note.badc`
+    // NT_BADC_TLS_INDEX record. parse_native_elf recovers the byte
+    // offsets and link_native_objects rebases them into the merged
+    // `.text`, so the PE writer can patch each site without the
+    // LinkUnit fallback.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             _Thread_local int counter = 7;\n\
+             int main(void) {{ counter += 1; return counter; }}\n"
+        ),
+        Target::WindowsAarch64,
+        crate::c5::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.tls_index_fixups.is_empty(),
+        "the Windows `_Thread_local` access must surface a tls_index fixup via the note"
+    );
+    let n = obj.tls_index_fixups.len();
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_index_fixups.len(),
+        n,
+        "the linker must carry every tls_index fixup into the merged image"
+    );
+}
+
+#[test]
 fn pragma_export_round_trips_into_shared_library() {
     // `#pragma export(<name>)` rides the ET_REL `.note.badc`
     // NT_BADC_EXPORTS record: `parse_native_elf` recovers the name,

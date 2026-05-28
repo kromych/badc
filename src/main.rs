@@ -947,17 +947,16 @@ fn main() {
             eprint_diagnostic("badc: error: no inputs");
             std::process::exit(1);
         }
-        // Mach-O TLV descriptors and Win64 `_tls_index` fixups are not
-        // threaded through the synth path yet, so a `_Thread_local`
-        // unit targeting those formats falls back to the LinkUnit +
-        // emit_native chain (which carries them). ELF lays out PT_TLS
-        // directly, so Linux stays on the native path regardless.
-        let tls_needs_linkunit = matches!(
-            target,
-            Target::MacOSAarch64 | Target::WindowsX64 | Target::WindowsAarch64
-        ) && native_objs
-            .iter()
-            .any(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0);
+        // Mach-O TLV descriptors are not threaded through the synth
+        // path yet, so a `_Thread_local` unit targeting Mach-O falls
+        // back to the LinkUnit + emit_native chain (which carries
+        // them). Linux ELF lays out PT_TLS directly and Windows PE
+        // carries the `_tls_index` fixups through the ET_REL note, so
+        // both stay on the native path.
+        let tls_needs_linkunit = matches!(target, Target::MacOSAarch64)
+            && native_objs
+                .iter()
+                .any(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0);
         if !tls_needs_linkunit {
             let mut merged = match badc::link_native_objects(&native_objs) {
                 Ok(m) => m,

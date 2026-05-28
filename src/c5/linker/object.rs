@@ -279,6 +279,11 @@ pub struct NativeObject {
     /// table when emitting a shared library; the linker takes the
     /// union across units.
     pub exports: Vec<String>,
+    /// Win64 `_tls_index` fixup offsets (`NT_BADC_TLS_INDEX`), each a
+    /// byte offset into this object's `.text`. The PE writer patches
+    /// each with the `_tls_index` slot address. Empty on non-Windows
+    /// objects and Windows objects without `_Thread_local` access.
+    pub tls_index_fixups: Vec<usize>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -664,11 +669,14 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     //                                  name)+.
     //   type=3 NT_BADC_EXPORTS      -- NUL-separated `#pragma export`
     //                                  names.
+    //   type=4 NT_BADC_TLS_INDEX    -- u64 LE `.text` byte offsets of
+    //                                  Win64 `_tls_index` fixup sites.
     // Records under namesz != "badc\0" are skipped silently so
     // future vendor extensions can coexist.
     let mut dylibs: Vec<String> = Vec::new();
     let mut import_dylib_map: Vec<(String, u32)> = Vec::new();
     let mut exports: Vec<String> = Vec::new();
+    let mut tls_index_fixups: Vec<usize> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -722,6 +730,15 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                                 continue;
                             }
                             exports.push(String::from_utf8_lossy(chunk).into_owned());
+                        }
+                    }
+                    4 => {
+                        let mut tc = cur;
+                        while tc + 8 <= desc_end {
+                            let off =
+                                u64::from_le_bytes(body[tc..tc + 8].try_into().unwrap()) as usize;
+                            tls_index_fixups.push(off);
+                            tc += 8;
                         }
                     }
                     _ => {}
@@ -781,6 +798,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         dylibs,
         import_dylib_map,
         exports,
+        tls_index_fixups,
         debug_info,
         debug_abbrev,
         debug_line,

@@ -175,7 +175,11 @@ fn synth_program_and_build(
         abi: target.abi(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
-        tls_index_fixups: Vec::new(),
+        tls_index_fixups: merged
+            .tls_index_fixups
+            .iter()
+            .map(|&instr_offset| crate::c5::codegen::TlsIndexFixup { instr_offset })
+            .collect(),
         macho_tlv_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
         data_relocs,
@@ -667,6 +671,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             exports: alloc::vec![],
+            tls_index_fixups: alloc::vec![],
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

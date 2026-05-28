@@ -71,6 +71,13 @@ const NT_BADC_BINDING_MAP: u32 = 2;
 // the intended export set through the native path rather than every
 // `.text`-defined symbol.
 const NT_BADC_EXPORTS: u32 = 3;
+// Win64 `_tls_index` fixups. desc is a sequence of u64 LE byte offsets
+// into `.text`, one per `Inst::TlsAddr` lowering on Windows. The PE
+// writer patches each site with the address of the `_tls_index` DWORD
+// it places in the TLS directory; carried so a `_Thread_local` Windows
+// image links through the native path rather than the LinkUnit
+// fallback. Empty (and the record omitted) for other targets.
+const NT_BADC_TLS_INDEX: u32 = 4;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -1038,7 +1045,7 @@ pub(super) fn write_relocatable(
     //                           under the right loader entry.
     // Standard ELF tooling ignores unknown note types; the badc
     // reader picks the entries up by name + type.
-    let note_bytes = build_badc_note(&build.imports, &program.exports);
+    let note_bytes = build_badc_note(&build.imports, &program.exports, &build.tls_index_fixups);
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
     out.extend_from_slice(&note_bytes);
@@ -1221,7 +1228,11 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
 /// the 4-byte ELF gABI boundary. The binding-map and exports
 /// records are omitted when empty so a TU with neither still
 /// round-trips through the older single-record shape.
-fn build_badc_note(imports: &super::ResolvedImports, exports: &[ExportedFunction]) -> Vec<u8> {
+fn build_badc_note(
+    imports: &super::ResolvedImports,
+    exports: &[ExportedFunction],
+    tls_index_fixups: &[super::TlsIndexFixup],
+) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
 
@@ -1274,6 +1285,23 @@ fn build_badc_note(imports: &super::ResolvedImports, exports: &[ExportedFunction
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&ex_desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 4: Win64 `_tls_index` fixup offsets. Omitted when the
+    // TU has no `_Thread_local` access (every non-Windows target,
+    // and Windows TUs without TLS).
+    if !tls_index_fixups.is_empty() {
+        let mut tls_desc: Vec<u8> = Vec::new();
+        for f in tls_index_fixups {
+            tls_desc.extend_from_slice(&(f.instr_offset as u64).to_le_bytes());
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(tls_desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_TLS_INDEX.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&tls_desc);
         pad_to_4(&mut out);
     }
     out

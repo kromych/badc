@@ -97,6 +97,11 @@ pub struct MergedNative {
     /// writer promotes each to the export table when emitting a
     /// shared library (resolving the name through [`Self::defined`]).
     pub exports: Vec<String>,
+    /// Win64 `_tls_index` fixup offsets, rebased into the merged
+    /// `.text`. The PE writer patches each with the `_tls_index` slot
+    /// address. Empty on non-Windows links and Windows links without
+    /// `_Thread_local` access.
+    pub tls_index_fixups: Vec<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -750,6 +755,17 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Win64 `_tls_index` fixup sites, rebased from each unit's local
+    // `.text` offset to the merged `.text` offset. The PE writer
+    // patches each with the address of the `_tls_index` slot it lays
+    // out in the TLS directory.
+    let mut tls_index_fixups: Vec<usize> = Vec::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for &off in &obj.tls_index_fixups {
+            tls_index_fixups.push(text_bases[i] + off);
+        }
+    }
+
     // Merge DWARF sections + their relocs. Each unit's blob is
     // appended to the corresponding merged section; relocs have
     // their `r_offset` shifted by the per-unit base so the
@@ -863,6 +879,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         dylibs,
         import_dylib_map,
         exports,
+        tls_index_fixups,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1734,6 +1751,7 @@ mod tests {
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1796,6 +1814,7 @@ mod tests {
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1833,6 +1852,7 @@ mod tests {
             dylibs: alloc::vec::Vec::new(),
             import_dylib_map: alloc::vec::Vec::new(),
             exports: alloc::vec::Vec::new(),
+            tls_index_fixups: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

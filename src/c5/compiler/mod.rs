@@ -952,10 +952,16 @@ impl Compiler {
         for name in &opts.undefines {
             pp.undef(name);
         }
+        #[cfg(feature = "std")]
+        let pp_start = std::time::Instant::now();
         let (preprocessed, deferred_error) = match pp.process(&source) {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_TIME_PASSES").is_ok() {
+            eprintln!("pass: preprocess -- {}us", pp_start.elapsed().as_micros());
+        }
         // Debug knob: when BADC_DUMP_PP is set, write the post-
         // preprocessor source to /tmp/badc-pp.c so a developer
         // chasing a parser failure can inspect the exact token
@@ -1164,7 +1170,16 @@ impl Compiler {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
+        #[cfg(feature = "std")]
+        let parse_start = std::time::Instant::now();
         self.run_compile()?;
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_TIME_PASSES").is_ok() {
+            eprintln!(
+                "pass: run_compile (parse + AST build) -- {}us",
+                parse_start.elapsed().as_micros()
+            );
+        }
         // Trampolines must land before the code-reloc resolve
         // pass: every static-init function-pointer site that
         // names a libc symbol references its trampoline by

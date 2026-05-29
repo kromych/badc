@@ -214,7 +214,8 @@ impl RegBanks {
 pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
-    let hints: Vec<Option<u8>> = vec![None; n_insts];
+    let mut hints: Vec<Option<u8>> = vec![None; n_insts];
+    populate_abi_hints(func, target, &mut hints);
     if n_insts == 0 {
         return Allocation {
             places,
@@ -667,6 +668,111 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { .. } => ResultKind::Int,
         AllocaInit(_) => ResultKind::None,
+    }
+}
+
+/// Populate coalescing hints for ABI-fixed registers so the linear
+/// scan lands call arguments directly in their ABI register, captures
+/// a call result in the return register, and keeps a Return-value in
+/// the return register. The pick-reg path honours each hint only when
+/// the register is free and live-across-call-compatible, so a missed
+/// hint falls back to the default policy.
+fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    // Per-target integer / FP argument registers in call order, plus
+    // the return registers. `combined_slot` is the Win64 convention
+    // where the slot index advances on every argument and selects
+    // either the int or the FP register at that slot.
+    let (int_args, fp_args, ret_int, ret_fp, combined_slot): (
+        &[u8],
+        &[u8],
+        u8,
+        u8,
+        bool,
+    ) = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => (
+            &[0, 1, 2, 3, 4, 5, 6, 7],
+            &[0, 1, 2, 3, 4, 5, 6, 7],
+            0,
+            0,
+            false,
+        ),
+        Target::LinuxX64 => (
+            // SysV: rdi(7), rsi(6), rdx(2), rcx(1), r8(8), r9(9).
+            &[7, 6, 2, 1, 8, 9],
+            &[0, 1, 2, 3, 4, 5, 6, 7],
+            0,
+            0,
+            false,
+        ),
+        Target::WindowsX64 => (
+            // Win64: rcx(1), rdx(2), r8(8), r9(9).
+            &[1, 2, 8, 9],
+            &[0, 1, 2, 3],
+            0,
+            0,
+            true,
+        ),
+    };
+
+    fn try_set(hints: &mut [Option<u8>], id: ValueId, reg: u8) {
+        let slot = id as usize;
+        if slot < hints.len() && hints[slot].is_none() {
+            hints[slot] = Some(reg);
+        }
+    }
+
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let args: &[ValueId] = match inst {
+            Inst::Call { args, .. } => args,
+            Inst::CallExt { args, .. } => args,
+            Inst::CallIndirect { args, .. } => args,
+            _ => continue,
+        };
+        if combined_slot {
+            for (i, &arg) in args.iter().enumerate() {
+                let r = match result_kind(&func.insts[arg as usize]) {
+                    ResultKind::Int if i < int_args.len() => int_args[i],
+                    ResultKind::Fp if i < fp_args.len() => fp_args[i],
+                    _ => continue,
+                };
+                try_set(hints, arg, r);
+            }
+        } else {
+            let mut next_int = 0usize;
+            let mut next_fp = 0usize;
+            for &arg in args {
+                match result_kind(&func.insts[arg as usize]) {
+                    ResultKind::Int => {
+                        if next_int < int_args.len() {
+                            try_set(hints, arg, int_args[next_int]);
+                            next_int += 1;
+                        }
+                    }
+                    ResultKind::Fp => {
+                        if next_fp < fp_args.len() {
+                            try_set(hints, arg, fp_args[next_fp]);
+                            next_fp += 1;
+                        }
+                    }
+                    ResultKind::None => {}
+                }
+            }
+        }
+        match result_kind(inst) {
+            ResultKind::Int => try_set(hints, idx as ValueId, ret_int),
+            ResultKind::Fp => try_set(hints, idx as ValueId, ret_fp),
+            ResultKind::None => {}
+        }
+    }
+
+    for block in &func.blocks {
+        if let Terminator::Return(v) = block.terminator {
+            match result_kind(&func.insts[v as usize]) {
+                ResultKind::Int => try_set(hints, v, ret_int),
+                ResultKind::Fp => try_set(hints, v, ret_fp),
+                ResultKind::None => {}
+            }
+        }
     }
 }
 

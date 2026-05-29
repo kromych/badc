@@ -128,6 +128,15 @@ pub(super) struct Allocation {
     /// the terminator emits `b.cond` (aarch64) or `j.cond`
     /// (x86_64) directly off the flags set by `cmp`.
     pub branch_fused: Vec<bool>,
+    /// Per-value coalescing hint: the physical register the
+    /// allocator should prefer when one is set and free at the
+    /// pick site. The pick-reg path honours the hint only when it
+    /// satisfies the live-across-call constraint; unsatisfied
+    /// hints are ignored, so a hint never compromises correctness.
+    /// `None` for any value with no preference. Populated by the
+    /// coalescing pre-passes (copy / phi congruence / call-arg /
+    /// return) layered on in subsequent iterations.
+    pub hints: Vec<Option<u8>>,
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -201,6 +210,7 @@ impl RegBanks {
 pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
+    let hints: Vec<Option<u8>> = vec![None; n_insts];
     if n_insts == 0 {
         return Allocation {
             places,
@@ -211,6 +221,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            hints,
         };
     }
 
@@ -267,14 +278,25 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             ResultKind::None => unreachable!(),
         };
 
-        // First try to grab a callee-saved reg when the value
-        // crosses a call; otherwise any free reg works.
-        let chosen = if must_be_callee {
-            // Filter `free` for not-caller-saved.
-            free.iter().copied().find(|r| !banks_caller.contains(r))
-        } else {
-            free.last().copied()
+        // Prefer a coalescing hint when one is set, free, and
+        // satisfies the live-across-call constraint. An unsatisfied
+        // hint falls through to the default policy, so a hint never
+        // compromises correctness. Hints are empty until a later
+        // pass populates them (copy / phi congruence / call-arg /
+        // return); until then the path below is unchanged.
+        let hint_choice = match hints[idx] {
+            Some(r) if free.contains(&r) && (!must_be_callee || !banks_caller.contains(&r)) => {
+                Some(r)
+            }
+            _ => None,
         };
+        let chosen = hint_choice.or_else(|| {
+            if must_be_callee {
+                free.iter().copied().find(|r| !banks_caller.contains(r))
+            } else {
+                free.last().copied()
+            }
+        });
         if let Some(r) = chosen {
             // Remove from free pool.
             if let Some(pos) = free.iter().position(|x| *x == r) {
@@ -453,6 +475,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         sxtw_source,
         sxtw_k,
         branch_fused,
+        hints,
     }
 }
 

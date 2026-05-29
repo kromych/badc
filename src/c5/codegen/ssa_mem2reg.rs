@@ -4,17 +4,14 @@
 //! address is never taken is accessed only through `LoadLocal` /
 //! `StoreLocal` against a fixed frame slot; its value can live in a
 //! register across the whole function instead of being spilled to
-//! and reloaded from the frame. Promotion rewrites those loads and
-//! stores into direct value references, inserting phi joins where
-//! control flow merges two distinct definitions.
+//! and reloaded from the frame.
 //!
-//! This module currently provides the analysis prerequisites for the
-//! transform: which slots may be promoted, and the control-flow
-//! predecessor map phi placement needs.
-
-// The phi-placement and rename passes that consume these analyses
-// land in a follow-up; keep the building blocks compiling until then.
-#![allow(dead_code)]
+//! A dominator-tree rename finds the definition reaching each load. A
+//! load whose slot has a single reaching definition is rewritten to
+//! that value (full-width slots), or to a mask / sign-extension of it
+//! (narrow slots), and the matching stores are dropped. TODO a slot
+//! whose definition reaches a control-flow merge from more than one
+//! block needs a join phi and stays in the frame for now.
 
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -466,7 +463,8 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     let mut narrow_load: alloc::collections::BTreeMap<i64, LoadKind> =
         alloc::collections::BTreeMap::new();
     let slots: BTreeSet<i64> = promotable
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|s| !phi_blocks.contains_key(s))
         .filter(|s| slot_stores_only_int(func, *s))
         .filter(|s| {
@@ -480,6 +478,21 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             false
         })
         .collect();
+    // A slot that needs a join phi (its definition reaches a merge
+    // from more than one block) is not promoted by the redirect; count
+    // these to size the remaining opportunity.
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_MEM2REG_STATS").is_ok() {
+        let phi_gated = promotable
+            .iter()
+            .filter(|s| phi_blocks.contains_key(s))
+            .count();
+        eprintln!(
+            "mem2reg-stats: promotable={} phi_gated={phi_gated} promoted={}",
+            promotable.len(),
+            slots.len()
+        );
+    }
     if slots.is_empty() {
         return;
     }

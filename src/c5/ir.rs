@@ -204,7 +204,7 @@ pub(crate) enum StoreKind {
 /// Integer / FP binary opcode. The planner's choice between
 /// signed / unsigned forms is preserved (Div vs Divu, Shr vs
 /// Shru).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum BinOp {
     Or,
     Xor,
@@ -241,7 +241,7 @@ pub(crate) enum BinOp {
     Fge,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FpCastKind {
     /// Truncating f64 to i64.
     FpToInt,

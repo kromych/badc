@@ -61,7 +61,7 @@ struct LocalCacheEntry {
 /// single-instruction addressing mode; CSE'ing the LocalAddr
 /// breaks that adjacency and falls into the "op outside the
 /// implemented subset" branch.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum PureKey {
     Imm(i64),
     ImmData(i64),
@@ -84,12 +84,6 @@ enum PureKey {
     },
 }
 
-#[derive(Clone, Copy)]
-struct PureCacheEntry {
-    key: PureKey,
-    value: ValueId,
-}
-
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
 /// returns its [`ValueId`]; terminators close the current block.
 pub(crate) struct SsaBuilder {
@@ -106,9 +100,11 @@ pub(crate) struct SsaBuilder {
     /// invalidate when their slot is `store_local`-overwritten.
     local_cache: Vec<LocalCacheEntry>,
     /// Per-block CSE cache for pure values (`Inst::Imm`,
-    /// `Inst::ImmData`, `Inst::ImmCode`). Linear scan; resets on
-    /// `switch_to`.
-    pure_cache: Vec<PureCacheEntry>,
+    /// `Inst::ImmData`, `Inst::ImmCode`, the SSA binops, ...). Keyed
+    /// by the value's identity so a repeat lands in O(1); resets on
+    /// `switch_to`. Every insert is guarded by a prior `lookup_pure`,
+    /// so each key maps to exactly one ValueId.
+    pure_cache: hashbrown::HashMap<PureKey, ValueId>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
     /// as `usize`. Set on [`Self::new_block`] and re-anchored by
     /// [`Self::switch_to`] -- the latter is what guarantees the
@@ -161,7 +157,7 @@ impl SsaBuilder {
             func,
             current: None,
             local_cache: Vec::new(),
-            pure_cache: Vec::new(),
+            pure_cache: hashbrown::HashMap::new(),
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
@@ -235,12 +231,7 @@ impl SsaBuilder {
     /// Scan the in-block pure-value cache for a previously-built
     /// entry with the same key; return its ValueId on a hit.
     fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
-        for entry in &self.pure_cache {
-            if entry.key == key {
-                return Some(entry.value);
-            }
-        }
-        None
+        self.pure_cache.get(&key).copied()
     }
 
     fn push(&mut self, inst: Inst) -> ValueId {
@@ -270,10 +261,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Imm(v));
-        self.pure_cache.push(PureCacheEntry {
-            key: PureKey::Imm(v),
-            value: id,
-        });
+        self.pure_cache.insert(PureKey::Imm(v), id);
         id
     }
 
@@ -286,10 +274,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmData(off));
-        self.pure_cache.push(PureCacheEntry {
-            key: PureKey::ImmData(off),
-            value: id,
-        });
+        self.pure_cache.insert(PureKey::ImmData(off), id);
         id
     }
 
@@ -310,10 +295,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmCode(target_pc));
-        self.pure_cache.push(PureCacheEntry {
-            key: PureKey::ImmCode(target_pc),
-            value: id,
-        });
+        self.pure_cache.insert(PureKey::ImmCode(target_pc), id);
         id
     }
 
@@ -357,10 +339,7 @@ impl SsaBuilder {
         }
         self.local_cache.clear();
         let id = self.push(Inst::TlsAddr(off));
-        self.pure_cache.push(PureCacheEntry {
-            key: PureKey::TlsAddr(off),
-            value: id,
-        });
+        self.pure_cache.insert(PureKey::TlsAddr(off), id);
         id
     }
 
@@ -436,7 +415,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Binop { op, lhs, rhs });
-        self.pure_cache.push(PureCacheEntry { key, value: id });
+        self.pure_cache.insert(key, id);
         id
     }
 
@@ -483,7 +462,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::BinopI { op, lhs, rhs_imm });
-        self.pure_cache.push(PureCacheEntry { key, value: id });
+        self.pure_cache.insert(key, id);
         id
     }
 
@@ -495,7 +474,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Fneg(v));
-        self.pure_cache.push(PureCacheEntry { key, value: id });
+        self.pure_cache.insert(key, id);
         id
     }
 
@@ -507,7 +486,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::FpCast { kind, value });
-        self.pure_cache.push(PureCacheEntry { key, value: id });
+        self.pure_cache.insert(key, id);
         id
     }
 

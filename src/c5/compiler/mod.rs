@@ -795,6 +795,13 @@ pub struct Compiler {
     /// matching subprogram, which lets lldb's `frame variable` and
     /// `watchpoint set variable foo` work for c5-emitted code.
     variables: Vec<crate::c5::program::VariableInfo>,
+    /// Block-scoped locals captured at each block exit, before the
+    /// shadow-symbol restore unwinds their binding and removes them
+    /// from the symbol table the function-close collection walks.
+    /// Drained into `variables` at function close with the function's
+    /// entry PC. The entries flatten into function scope; precise
+    /// `DW_TAG_lexical_block` ranges are not emitted yet (TODO).
+    pending_block_locals: Vec<crate::c5::program::VariableInfo>,
     /// Name of the C function whose body is currently being
     /// emitted. Set on function-entry emit and cleared on the
     /// closing return.
@@ -1051,6 +1058,7 @@ impl Compiler {
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
+            pending_block_locals: Vec::new(),
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),

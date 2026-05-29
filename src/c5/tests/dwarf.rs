@@ -718,3 +718,24 @@ fn promoted_local_has_empty_location() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+/// C99 6.2.1 block scope: a local declared inside a nested `{ ... }`
+/// block needs its own DW_TAG_variable so a debugger can inspect it.
+/// The symbol-table restore at block exit unbinds such locals before
+/// the function-close collection runs, so they are captured at block
+/// exit and merged into the function's variable list.
+#[test]
+fn block_scoped_local_emitted() {
+    let src = "int main(void){ int outer = 1;\
+               for (int k = 0; k < 3; k++) { int inner = outer + k; outer += inner; }\
+               return outer; }";
+    let path = build_signed_mach_o(src, "block_scoped_local");
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    assert!(
+        out.contains("(\"inner\")"),
+        "block-scoped local `inner` should have a DW_TAG_variable:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}

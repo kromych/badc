@@ -876,6 +876,17 @@ impl Compiler {
                             });
                         }
                     }
+                    // Merge block-scoped locals captured during body
+                    // parsing. The symbol walk above misses them: their
+                    // bindings were restored at block exit. Every
+                    // pending entry belongs to this function, since C
+                    // has no nested function definitions.
+                    for mut bl in
+                        core::mem::take(&mut self.pending_block_locals)
+                    {
+                        bl.function_bc_pc = ent_pc as u64;
+                        self.variables.push(bl);
+                    }
                     // Collect unused-parameter and unused-local
                     // diagnostics for the function's top-level
                     // bindings. Inner-block locals were already

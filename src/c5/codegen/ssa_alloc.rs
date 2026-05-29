@@ -573,7 +573,7 @@ fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::AllocaInit(_)
-        | Inst::ParamRef(_)
+        | Inst::ParamRef { .. }
         | Inst::TailExt(_)
         | Inst::LoadLocal { .. } => {}
         Inst::Load { addr, .. } => f(*addr),
@@ -638,7 +638,9 @@ pub(super) fn produces_fp_result(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) | ParamRef(_) => ResultKind::Int,
+        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) | ParamRef { .. } => {
+            ResultKind::Int
+        }
         Load { kind, .. } | LoadLocal { kind, .. } => match kind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -734,7 +736,7 @@ fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8
     // the classical permutation hazard the call-arg marshal
     // pass also avoids.
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef(i) = inst
+        if let Inst::ParamRef { idx: i, .. } = inst
             && let Some(&r) = int_args.get(*i as usize)
         {
             try_set(hints, idx as ValueId, r);
@@ -818,7 +820,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::AllocaInit(_)
-            | Inst::ParamRef(_)
+            | Inst::ParamRef { .. }
             | Inst::TailExt(_) => {}
             Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
             Inst::Store { addr, value, .. } => {

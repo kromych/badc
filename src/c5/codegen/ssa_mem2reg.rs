@@ -256,7 +256,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         | Inst::LoadLocal { .. }
         | Inst::TailExt(_)
         | Inst::AllocaInit(_)
-        | Inst::ParamRef(_) => {}
+        | Inst::ParamRef { .. } => {}
         Inst::Load { addr, .. } => f(addr),
         Inst::Store { addr, value, .. } => {
             f(addr);
@@ -612,6 +612,25 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             if let Some(&kind) = narrow_load.get(&slot)
                 && let Some(v) = redirect[load_id as usize]
             {
+                // The reaching value is already canonically
+                // sign-extended for its own kind when it is an
+                // `Inst::ParamRef { kind: pkind, .. }` whose
+                // `pkind` matches this narrow load's kind. Skip
+                // the redundant `Inst::Extend` wrapper and leave
+                // the redirect in place so consumers point
+                // directly at the ParamRef value. The same applies
+                // when the reaching value is itself an
+                // `Inst::Extend` of the matching kind.
+                let already_extended = matches!(
+                    func.insts.get(v as usize),
+                    Some(Inst::ParamRef { kind: pkind, .. }) if *pkind == kind
+                ) || matches!(
+                    func.insts.get(v as usize),
+                    Some(Inst::Extend { kind: pkind, .. }) if *pkind == kind
+                );
+                if already_extended {
+                    continue;
+                }
                 func.insts[load_id as usize] = narrow_load_replacement(kind, v);
                 redirect[load_id as usize] = None;
             }

@@ -198,18 +198,33 @@ pub(crate) fn walk_function(
             // prologue's full-width spill.
             use crate::c5::token::Ty;
             let is_pointer = pty & (1i64 << 30) != 0;
-            let store_kind = if is_pointer {
-                super::super::ir::StoreKind::I64
+            let (store_kind, load_kind) = if is_pointer {
+                (
+                    super::super::ir::StoreKind::I64,
+                    super::super::ir::LoadKind::I64,
+                )
             } else {
                 match stripped {
-                    s if s == Ty::Char as i64 => super::super::ir::StoreKind::I8,
-                    s if s == Ty::Short as i64 => super::super::ir::StoreKind::I16,
-                    s if s == Ty::Int as i64 => super::super::ir::StoreKind::I32,
-                    _ => super::super::ir::StoreKind::I64,
+                    s if s == Ty::Char as i64 => (
+                        super::super::ir::StoreKind::I8,
+                        super::super::ir::LoadKind::I8,
+                    ),
+                    s if s == Ty::Short as i64 => (
+                        super::super::ir::StoreKind::I16,
+                        super::super::ir::LoadKind::I16,
+                    ),
+                    s if s == Ty::Int as i64 => (
+                        super::super::ir::StoreKind::I32,
+                        super::super::ir::LoadKind::I32,
+                    ),
+                    _ => (
+                        super::super::ir::StoreKind::I64,
+                        super::super::ir::LoadKind::I64,
+                    ),
                 }
             };
             let arg_slot = (i as i64) + arg_slot_base;
-            let pr = b.param_ref(i as u32);
+            let pr = b.param_ref(i as u32, load_kind);
             b.store_local(arg_slot, pr, store_kind);
         }
     }

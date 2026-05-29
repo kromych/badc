@@ -149,7 +149,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_value_list(args),
         ),
         AllocaInit(slot) => format!("AllocaInit({slot})"),
-        ParamRef(i) => format!("ParamRef({i})"),
+        ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
     }
 }
 

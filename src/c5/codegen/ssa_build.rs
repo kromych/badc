@@ -320,12 +320,15 @@ impl SsaBuilder {
 
     /// `Inst::ParamRef`. The value is the i-th declared parameter
     /// as it sits in the host-ABI argument register at function
-    /// entry. Walker emits one per non-relocated integer parameter
-    /// and pairs it with a `StoreLocal` to the c5 cdecl arg slot
-    /// so mem2reg can fold per-use `LoadLocal` reads onto a single
-    /// SSA value.
-    pub(crate) fn param_ref(&mut self, idx: u32) -> ValueId {
-        self.push(Inst::ParamRef(idx))
+    /// entry, sign-extended from its declared width to 64 bits.
+    /// Walker emits one per non-relocated integer parameter and
+    /// pairs it with a `StoreLocal` to the c5 cdecl arg slot so
+    /// mem2reg can fold per-use `LoadLocal` reads onto a single
+    /// SSA value. `kind` records the parameter's natural load
+    /// width so mem2reg's narrow-load rewrite skips the redundant
+    /// `Inst::Extend` when the LoadLocal kind matches.
+    pub(crate) fn param_ref(&mut self, idx: u32, kind: LoadKind) -> ValueId {
+        self.push(Inst::ParamRef { idx, kind })
     }
 
     /// `Inst::LocalAddr`. The address of a local escapes; any

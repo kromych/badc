@@ -781,22 +781,37 @@ fn emit_inst(
             emit(code, enc_str_imm(Reg(16), Reg(16), 0));
             true
         }
-        Inst::ParamRef(idx) => {
+        Inst::ParamRef { idx, kind } => {
             // Materialise the i-th AAPCS64 argument register into
-            // the allocator's chosen `Place`. The prologue does
-            // not modify x0..x7, so the arg value is still in
-            // its incoming register at this IR position. When the
-            // allocator places `ParamRef` in the same arg
-            // register, `emit_mov_reg` elides the copy.
+            // the allocator's chosen `Place`, sign-extending the
+            // low `kind` bytes per C99 6.3.1.3 so the value held
+            // in the register is canonically 64-bit-sign-extended.
+            // The prologue does not modify x0..x7, so the arg
+            // value is still in its incoming register at this IR
+            // position. Narrow-load promotion downstream can then
+            // collapse `Inst::Extend(ParamRef, kind)` to a plain
+            // copy when the kinds match.
             let Some(&arg_reg) = abi.int_arg_regs.get(*idx as usize) else {
                 bail_msg("ParamRef: idx out of range for int_arg_regs");
                 return false;
             };
+            // The encoding to write `dst <- sign-extend(arg_reg)`.
+            // For full-width kinds (I64), it is a plain mov.
+            let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
+                let rn = Reg(arg_reg);
+                match kind {
+                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(rd, rn)),
+                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(rd, rn)),
+                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(rd, rn)),
+                    _ => emit_mov_reg(code, rd, rn),
+                }
+            };
             match dst {
-                Place::IntReg(r) => emit_mov_reg(code, Reg(r), Reg(arg_reg)),
+                Place::IntReg(r) => sign_extend(code, Reg(r)),
                 Place::Spill(slot) => {
+                    sign_extend(code, scratch.primary);
                     let sp_off = spill_off(frame, slot);
-                    emit(code, enc_str_imm(Reg(arg_reg), Reg(31), sp_off));
+                    emit(code, enc_str_imm(scratch.primary, Reg(31), sp_off));
                 }
                 _ => {
                     bail_msg("ParamRef: dst not int reg / spill");

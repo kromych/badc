@@ -881,7 +881,7 @@ fn run_inst<H: Host>(
             // arena get the "not implemented" path below.
             return Ok(());
         }
-        Inst::ParamRef(idx) => {
+        Inst::ParamRef { idx, .. } => {
             // The i-th declared parameter sits at c5 cdecl slot
             // i+2 (run_func wrote each `args[i]` to
             // `stack_base + (locals + i) * 8`). Read the 8-byte

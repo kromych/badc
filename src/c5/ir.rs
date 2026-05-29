@@ -122,6 +122,13 @@ pub(crate) enum Inst {
     },
     /// Unary floating-point negation.
     Fneg(ValueId),
+    /// Sign-extend the low bytes of `value` to 64 bits, as a load of
+    /// `kind` would after reading them from memory (C99 6.3.1.3). The
+    /// width comes from `kind`, which is one of the signed narrow load
+    /// kinds (`I8`, `I16`, `I32`). Produced when promotion lifts a
+    /// signed narrow local slot whose frame round-trip performed the
+    /// sign extension.
+    Extend { value: ValueId, kind: LoadKind },
     /// Floating-point <-> integer cast.
     FpCast { kind: FpCastKind, value: ValueId },
     /// Direct call to a c5 user function at ent_pc `target_pc`.

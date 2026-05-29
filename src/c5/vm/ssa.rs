@@ -798,6 +798,16 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = neg;
             return Ok(());
         }
+        Inst::Extend { value, kind } => {
+            let raw = frame.regs[*value as usize];
+            frame.regs[v as usize] = match kind {
+                LoadKind::I8 => raw as i8 as i64,
+                LoadKind::I16 => raw as i16 as i64,
+                LoadKind::I32 => raw as i32 as i64,
+                _ => raw,
+            };
+            return Ok(());
+        }
         Inst::FpCast { kind, value } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = match kind {

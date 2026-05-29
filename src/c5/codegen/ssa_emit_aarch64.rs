@@ -913,6 +913,9 @@ fn emit_inst(
             }
             true
         }
+        Inst::Extend { value, kind } => {
+            emit_extend(code, dst, *value, *kind, alloc, frame, scratch)
+        }
         Inst::FpCast { kind, value } => {
             use super::super::ir::FpCastKind;
             let src_place = alloc
@@ -2068,6 +2071,47 @@ fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Fram
         let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(src, Reg(31), sp_off));
     }
+}
+
+/// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
+/// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
+fn emit_extend(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    kind: LoadKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rn = match materialize_int(code, src_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rd = match int_or_spill_scratch(dst, scratch) {
+        Some(r) => r,
+        None => {
+            bail_msg("Extend: dst not int reg / spill");
+            return false;
+        }
+    };
+    let enc = match kind {
+        LoadKind::I8 => super::aarch64::enc_sxtb(rd, rn),
+        LoadKind::I16 => super::aarch64::enc_sxth(rd, rn),
+        LoadKind::I32 => super::aarch64::enc_sxtw(rd, rn),
+        _ => {
+            bail_msg("Extend: unsupported kind");
+            return false;
+        }
+    };
+    emit(code, enc);
+    spill_local_addr_to_dst(code, dst, rd, frame);
+    true
 }
 
 fn emit_load(

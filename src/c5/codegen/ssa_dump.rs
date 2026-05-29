@@ -120,6 +120,9 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_binop(*op),
         ),
         Fneg(v) => format!("Fneg(v{v})"),
+        Extend { value, kind } => {
+            format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
+        }
         FpCast { kind, value } => {
             format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
         }

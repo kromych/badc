@@ -921,6 +921,7 @@ fn emit_inst(
             emit_intrinsic(code, *kind, args, dst, alloc, frame, *current_alloca_top)
         }
         Inst::Fneg(value) => emit_fneg(code, dst, *value, alloc, frame),
+        Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
             code,
@@ -1470,6 +1471,48 @@ fn emit_store(
         Place::Spill(_) => spill_dst_to_slot(code, dst, rs, frame),
         _ => {}
     }
+    true
+}
+
+/// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
+/// GPR value to 64 bits via `MOVSX` / `MOVSXD`.
+fn emit_extend(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    kind: LoadKind,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rd = match int_or_spill_dst(dst) {
+        Some(r) => r,
+        None => {
+            bail_msg("Extend: dst not int reg / spill");
+            return false;
+        }
+    };
+    let rn = match materialize_int(code, src_place, rd, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Extend: value not int reg / spill");
+            return false;
+        }
+    };
+    match kind {
+        LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, rn),
+        LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, rn),
+        LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, rn),
+        _ => {
+            bail_msg("Extend: unsupported kind");
+            return false;
+        }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 

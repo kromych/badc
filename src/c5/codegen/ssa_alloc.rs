@@ -567,11 +567,15 @@ fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(*lhs),
         Inst::Fneg(v) => f(*v),
+        Inst::Extend { value, .. } => f(*value),
         Inst::FpCast { value, .. } => f(*value),
-        Inst::Call { args, .. }
-        | Inst::CallIndirect { args, .. }
-        | Inst::CallExt { args, .. }
-        | Inst::Intrinsic { args, .. } => {
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            for &a in args {
+                f(a);
+            }
+        }
+        Inst::CallIndirect { target, args } => {
+            f(*target);
             for &a in args {
                 f(a);
             }
@@ -626,6 +630,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         Fneg(_) => ResultKind::Fp,
+        Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt => ResultKind::Int,
             FpCastKind::IntToFp => ResultKind::Fp,
@@ -686,6 +691,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
             Inst::BinopI { lhs, .. } => bump(*lhs, pc, &mut last_use),
             Inst::Fneg(v) => bump(*v, pc, &mut last_use),
+            Inst::Extend { value, .. } => bump(*value, pc, &mut last_use),
             Inst::FpCast { value, .. } => bump(*value, pc, &mut last_use),
             Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
                 for &a in args {
@@ -720,59 +726,6 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     }
     extend_last_use_across_blocks(func, &mut last_use);
     last_use
-}
-
-/// Visit every SSA value an instruction reads.
-fn for_each_use(inst: &Inst, mut f: impl FnMut(ValueId)) {
-    match inst {
-        Inst::Imm(_)
-        | Inst::ImmData(_)
-        | Inst::ImmCode(_)
-        | Inst::LocalAddr(_)
-        | Inst::TlsAddr(_)
-        | Inst::AllocaInit(_)
-        | Inst::TailExt(_)
-        | Inst::LoadLocal { .. } => {}
-        Inst::Load { addr, .. } => f(*addr),
-        Inst::Store { addr, value, .. } => {
-            f(*addr);
-            f(*value);
-        }
-        Inst::StoreLocal { value, .. } => f(*value),
-        Inst::LoadIndexed { base, index, .. } => {
-            f(*base);
-            f(*index);
-        }
-        Inst::StoreIndexed {
-            base, index, value, ..
-        } => {
-            f(*base);
-            f(*index);
-            f(*value);
-        }
-        Inst::Binop { lhs, rhs, .. } => {
-            f(*lhs);
-            f(*rhs);
-        }
-        Inst::BinopI { lhs, .. } => f(*lhs),
-        Inst::Fneg(v) => f(*v),
-        Inst::FpCast { value, .. } => f(*value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::CallIndirect { target, args } => {
-            f(*target);
-            for &a in args {
-                f(a);
-            }
-        }
-        Inst::Mcpy { dst, src, .. } => {
-            f(*dst);
-            f(*src);
-        }
-    }
 }
 
 /// Extend each value's last-use index to cover every block where it
@@ -810,7 +763,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
             }
         };
         for idx in start..end {
-            for_each_use(&func.insts[idx as usize], &mut mark);
+            for_each_operand(&func.insts[idx as usize], &mut mark);
         }
         if blk.exit_acc != NO_VALUE {
             mark(blk.exit_acc);

@@ -280,6 +280,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(lhs),
         Inst::Fneg(v) => f(v),
+        Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
             for a in args {
@@ -326,15 +327,15 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     true
 }
 
-/// For a slot read only through one unsigned narrow `LoadKind` and
-/// written only at the matching width, the mask that turns the stored
-/// value into what a load reads back. A narrowing store keeps the low
-/// `w` bytes; an unsigned load zero-extends them (C99 6.3.1.3), which
-/// `value & mask` reproduces regardless of the stored register's high
-/// bits. Signed loads need a sign-extension the redirect cannot
-/// express as one operand, so they stay in memory; a mixed or
-/// full-width access returns `None`.
-fn slot_unsigned_narrow_mask(func: &FunctionSsa, slot: i64) -> Option<i64> {
+/// For a slot read only through one narrow `LoadKind` and written
+/// only at the matching width, that load kind. A narrowing store
+/// keeps the low `w` bytes; the load re-extends them per signedness
+/// (C99 6.3.1.3). Each load is then replaced by an extension of the
+/// reaching value -- a mask for an unsigned kind, an `Inst::Extend`
+/// for a signed one -- which reproduces the frame round-trip
+/// regardless of the stored register's high bits. A mixed-width,
+/// `F32`, or full-width access returns `None`.
+fn slot_narrow_load_kind(func: &FunctionSsa, slot: i64) -> Option<LoadKind> {
     let mut load_kind: Option<LoadKind> = None;
     let mut store_kind: Option<StoreKind> = None;
     for inst in &func.insts {
@@ -352,11 +353,53 @@ fn slot_unsigned_narrow_mask(func: &FunctionSsa, slot: i64) -> Option<i64> {
             _ => {}
         }
     }
-    match (load_kind?, store_kind?) {
-        (LoadKind::U8, StoreKind::I8) => Some(0xff),
-        (LoadKind::U16, StoreKind::I16) => Some(0xffff),
-        (LoadKind::U32, StoreKind::I32) => Some(0xffff_ffff),
-        _ => None,
+    let lk = load_kind?;
+    let (lw, sw) = (load_byte_width(lk)?, store_byte_width(store_kind?)?);
+    if lw == sw && lw < 8 { Some(lk) } else { None }
+}
+
+fn load_byte_width(kind: LoadKind) -> Option<u8> {
+    match kind {
+        LoadKind::I8 | LoadKind::U8 => Some(1),
+        LoadKind::I16 | LoadKind::U16 => Some(2),
+        LoadKind::I32 | LoadKind::U32 => Some(4),
+        LoadKind::I64 => Some(8),
+        LoadKind::F32 => None,
+    }
+}
+
+fn store_byte_width(kind: StoreKind) -> Option<u8> {
+    match kind {
+        StoreKind::I8 => Some(1),
+        StoreKind::I16 => Some(2),
+        StoreKind::I32 => Some(4),
+        StoreKind::I64 => Some(8),
+        StoreKind::F32 => None,
+    }
+}
+
+/// The replacement instruction for a promoted narrow load: a mask of
+/// the reaching value for an unsigned kind, a sign-extension for a
+/// signed one.
+fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
+    match kind {
+        LoadKind::U8 => Inst::BinopI {
+            op: BinOp::And,
+            lhs: value,
+            rhs_imm: 0xff,
+        },
+        LoadKind::U16 => Inst::BinopI {
+            op: BinOp::And,
+            lhs: value,
+            rhs_imm: 0xffff,
+        },
+        LoadKind::U32 => Inst::BinopI {
+            op: BinOp::And,
+            lhs: value,
+            rhs_imm: 0xffff_ffff,
+        },
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
+        LoadKind::I64 | LoadKind::F32 => unreachable!("not a narrow load kind"),
     }
 }
 
@@ -417,10 +460,10 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df);
-    // Slots read at one unsigned narrow width promote by masking the
-    // reaching value at each load; full-width I64 slots redirect the
-    // load to the value directly.
-    let mut narrow_mask: alloc::collections::BTreeMap<i64, i64> =
+    // Slots read at one narrow width promote by extending the reaching
+    // value at each load; full-width I64 slots redirect the load to
+    // the value directly.
+    let mut narrow_load: alloc::collections::BTreeMap<i64, LoadKind> =
         alloc::collections::BTreeMap::new();
     let slots: BTreeSet<i64> = promotable
         .into_iter()
@@ -430,8 +473,8 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             if slot_is_full_width(func, *s) {
                 return true;
             }
-            if let Some(mask) = slot_unsigned_narrow_mask(func, *s) {
-                narrow_mask.insert(*s, mask);
+            if let Some(kind) = slot_narrow_load_kind(func, *s) {
+                narrow_load.insert(*s, kind);
                 return true;
             }
             false
@@ -538,22 +581,19 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         return;
     }
 
-    // Unsigned narrow loads keep their own id but become a mask of the
-    // reaching value, so their consumers read the zero-extended low
-    // bytes the frame round-trip produced. The store value keeps its
-    // full width for the assignment expression. The mask operand is
-    // left unresolved here; the operand rewrite below threads it
-    // through the redirect chain.
-    if !narrow_mask.is_empty() {
+    // Narrow loads keep their own id but become an extension of the
+    // reaching value, so their consumers read the same low bytes the
+    // frame round-trip produced (masked for an unsigned kind,
+    // sign-extended for a signed one). The store value keeps its full
+    // width for the assignment expression. The value operand is left
+    // unresolved here; the operand rewrite below threads it through
+    // the redirect chain.
+    if !narrow_load.is_empty() {
         for (&load_id, &slot) in &load_slot {
-            if let Some(&mask) = narrow_mask.get(&slot)
+            if let Some(&kind) = narrow_load.get(&slot)
                 && let Some(v) = redirect[load_id as usize]
             {
-                func.insts[load_id as usize] = Inst::BinopI {
-                    op: BinOp::And,
-                    lhs: v,
-                    rhs_imm: mask,
-                };
+                func.insts[load_id as usize] = narrow_load_replacement(kind, v);
                 redirect[load_id as usize] = None;
             }
         }
@@ -794,9 +834,10 @@ mod tests {
     }
 
     #[test]
-    fn run_leaves_signed_narrow_slot_in_memory() {
-        // A signed char (I8) load needs a sign-extension the redirect
-        // cannot express as one operand, so the slot stays in memory.
+    fn run_sign_extends_signed_narrow_load() {
+        // A signed char (I8) slot promotes: the load becomes an
+        // `Extend` of the reaching value, reproducing the sign
+        // extension a frame load performs. The store is neutralized.
         let insts = alloc::vec![
             Inst::Imm(300),
             Inst::StoreLocal {
@@ -817,8 +858,18 @@ mod tests {
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
-        assert!(matches!(f.insts[1], Inst::StoreLocal { .. }));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(
+            matches!(
+                f.insts[2],
+                Inst::Extend {
+                    value: 0,
+                    kind: LoadKind::I8,
+                }
+            ),
+            "load should become Extend, got {:?}",
+            f.insts[2]
+        );
+        assert!(matches!(f.insts[1], Inst::Imm(0)), "store neutralized");
     }
 
     #[test]

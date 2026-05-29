@@ -20,7 +20,7 @@ use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+    BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
 };
 
 /// Frame slots eligible for register promotion: those accessed only
@@ -326,6 +326,40 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     true
 }
 
+/// For a slot read only through one unsigned narrow `LoadKind` and
+/// written only at the matching width, the mask that turns the stored
+/// value into what a load reads back. A narrowing store keeps the low
+/// `w` bytes; an unsigned load zero-extends them (C99 6.3.1.3), which
+/// `value & mask` reproduces regardless of the stored register's high
+/// bits. Signed loads need a sign-extension the redirect cannot
+/// express as one operand, so they stay in memory; a mixed or
+/// full-width access returns `None`.
+fn slot_unsigned_narrow_mask(func: &FunctionSsa, slot: i64) -> Option<i64> {
+    let mut load_kind: Option<LoadKind> = None;
+    let mut store_kind: Option<StoreKind> = None;
+    for inst in &func.insts {
+        match inst {
+            Inst::LoadLocal { off, kind } if *off == slot => match load_kind {
+                None => load_kind = Some(*kind),
+                Some(k) if k == *kind => {}
+                Some(_) => return None,
+            },
+            Inst::StoreLocal { off, kind, .. } if *off == slot => match store_kind {
+                None => store_kind = Some(*kind),
+                Some(k) if k == *kind => {}
+                Some(_) => return None,
+            },
+            _ => {}
+        }
+    }
+    match (load_kind?, store_kind?) {
+        (LoadKind::U8, StoreKind::I8) => Some(0xff),
+        (LoadKind::U16, StoreKind::I16) => Some(0xffff),
+        (LoadKind::U32, StoreKind::I32) => Some(0xffff_ffff),
+        _ => None,
+    }
+}
+
 /// A slot whose value lives in the integer register file at every
 /// definition. An `I64` slot load is integer-classed, so its
 /// consumers read an integer register; promoting a slot whose store
@@ -355,6 +389,12 @@ fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
 /// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
 /// semantics treat as the stored value -- is redirected to that value.
 pub(crate) fn run(func: &mut FunctionSsa) {
+    // Opt out of promotion for A/B measurement against the unpromoted
+    // frame-slot codegen.
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_NO_MEM2REG").is_ok() {
+        return;
+    }
     // Conservative aliasing guard. A taken local address reaches more
     // than the slot it names -- the address of a struct or array local
     // covers every field / element slot, which the per-slot LocalAddr
@@ -377,11 +417,25 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df);
+    // Slots read at one unsigned narrow width promote by masking the
+    // reaching value at each load; full-width I64 slots redirect the
+    // load to the value directly.
+    let mut narrow_mask: alloc::collections::BTreeMap<i64, i64> =
+        alloc::collections::BTreeMap::new();
     let slots: BTreeSet<i64> = promotable
         .into_iter()
         .filter(|s| !phi_blocks.contains_key(s))
-        .filter(|s| slot_is_full_width(func, *s))
         .filter(|s| slot_stores_only_int(func, *s))
+        .filter(|s| {
+            if slot_is_full_width(func, *s) {
+                return true;
+            }
+            if let Some(mask) = slot_unsigned_narrow_mask(func, *s) {
+                narrow_mask.insert(*s, mask);
+                return true;
+            }
+            false
+        })
         .collect();
     if slots.is_empty() {
         return;
@@ -482,6 +536,27 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     }
     if redirect.iter().all(|r| r.is_none()) {
         return;
+    }
+
+    // Unsigned narrow loads keep their own id but become a mask of the
+    // reaching value, so their consumers read the zero-extended low
+    // bytes the frame round-trip produced. The store value keeps its
+    // full width for the assignment expression. The mask operand is
+    // left unresolved here; the operand rewrite below threads it
+    // through the redirect chain.
+    if !narrow_mask.is_empty() {
+        for (&load_id, &slot) in &load_slot {
+            if let Some(&mask) = narrow_mask.get(&slot)
+                && let Some(v) = redirect[load_id as usize]
+            {
+                func.insts[load_id as usize] = Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: v,
+                    rhs_imm: mask,
+                };
+                redirect[load_id as usize] = None;
+            }
+        }
     }
 
     // Resolve a value through the redirect chain to a stable id.
@@ -719,9 +794,38 @@ mod tests {
     }
 
     #[test]
-    fn run_leaves_sub_width_slot_in_memory() {
-        // A char (I8) slot carries truncation/extension semantics, so
-        // it stays in memory under the current full-width restriction.
+    fn run_leaves_signed_narrow_slot_in_memory() {
+        // A signed char (I8) load needs a sign-extension the redirect
+        // cannot express as one operand, so the slot stays in memory.
+        let insts = alloc::vec![
+            Inst::Imm(300),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I8,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I8,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..3,
+            terminator: Terminator::Return(2),
+            exit_acc: 2,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(matches!(f.insts[1], Inst::StoreLocal { .. }));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+    }
+
+    #[test]
+    fn run_masks_unsigned_narrow_load() {
+        // An unsigned char (U8) slot promotes: the load becomes a mask
+        // of the reaching store value, reproducing the zero-extension
+        // a frame load would perform. The store is neutralized.
         let insts = alloc::vec![
             Inst::Imm(300),
             Inst::StoreLocal {
@@ -742,8 +846,19 @@ mod tests {
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
-        assert!(matches!(f.insts[1], Inst::StoreLocal { .. }));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(
+            matches!(
+                f.insts[2],
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs_imm: 0xff,
+                }
+            ),
+            "load should become `value & 0xff`, got {:?}",
+            f.insts[2]
+        );
+        assert!(matches!(f.insts[1], Inst::Imm(0)), "store neutralized");
     }
 
     #[test]

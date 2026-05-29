@@ -72,6 +72,11 @@ pub(super) struct Frame {
     /// Byte distance from fp down to the start of the
     /// allocator-managed spill region.
     pub alloc_spill_base: u32,
+    /// Whether this function clobbers x19. x19 is callee-saved per
+    /// AAPCS64 and is the scratch the writer's patch_adrp_add forces
+    /// for address materialisation, so it is saved and restored only
+    /// when the function actually uses it (see [`function_clobbers_x19`]).
+    pub uses_x19: bool,
 }
 
 impl Frame {
@@ -80,21 +85,39 @@ impl Frame {
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
-        // Dedicated slot for x19. The writer's patch_adrp_add
-        // unconditionally rewrites the SSA emit's ImmData /
-        // ImmCode placeholders to target x19, so any function
-        // that materialises a data / code address overwrites x19
-        // even when the SSA allocator doesn't list it in
-        // gpr_used. x19 is callee-saved per AAPCS64, so the
-        // prologue saves it and the epilogue restores it.
+        // Reserve the x19 slot unconditionally so the offsets of the
+        // allocator-saved regs, spills, and locals do not depend on
+        // whether x19 is live; the prologue / epilogue skip the
+        // actual store / load when the function never clobbers x19.
         let x19_save_bytes = 16u32;
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
+            uses_x19: function_clobbers_x19(func),
         }
     }
+}
+
+/// x19 is overwritten only by the lowerings that route through it:
+/// the ImmData / ImmCode address-materialisation placeholders the
+/// writer rewrites to x19, the indirect-call environment setup, the
+/// setjmp / longjmp intrinsics, TLS address loads, and external call
+/// thunks. A function touching none of these leaves x19 untouched, so
+/// its prologue need not save the caller's value.
+fn function_clobbers_x19(func: &FunctionSsa) -> bool {
+    func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::ImmData(_)
+                | Inst::ImmCode(_)
+                | Inst::TlsAddr(_)
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::Intrinsic { .. }
+        )
+    })
 }
 
 fn bail_msg(reason: &str) {
@@ -626,13 +649,14 @@ fn emit_prologue(
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_str_imm(Reg(r), Reg(31), off));
     }
-    // Save x19 just past the allocator-saved gprs. The writer's
-    // patch_adrp_add rewrites every ImmData / ImmCode pair to
-    // target x19 regardless of which scratch the placeholder
-    // used, so any function emitting either op clobbers x19.
-    let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
-    let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-    emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
+    // Save x19 just past the allocator-saved gprs, but only when the
+    // function clobbers it. The slot is reserved either way so the
+    // surrounding offsets stay fixed.
+    if frame.uses_x19 {
+        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
+        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
+        emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
+    }
 }
 
 /// Byte offset (positive) from fp to the start of the saved-reg
@@ -3112,11 +3136,14 @@ fn emit_return(
         let off = (i as u32) * 8;
         emit(code, enc_ldr_d_imm(r, Reg(31), off));
     }
-    // Restore x19 from the dedicated slot above the allocator
-    // saves; mirror of the prologue's save.
-    let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
-    let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
-    emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
+    // Restore x19 from the dedicated slot above the allocator saves;
+    // mirror of the prologue's save, emitted only when the function
+    // clobbers x19.
+    if frame.uses_x19 {
+        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
+        let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
+        emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
+    }
     // Tear down the frame.
     if frame.frame_bytes > 0 {
         emit_add_sp_imm(code, frame.frame_bytes);

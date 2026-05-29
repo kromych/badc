@@ -97,6 +97,19 @@ fn dwarfdump_debug_info(path: &Path) -> Option<String> {
 /// confirm a multi-TU link produced one file-table entry per
 /// translation-unit `.c` file and that the line program references
 /// each one. `None` when dwarfdump is missing on PATH.
+/// Disassemble a single function by name via lldb. Returns its
+/// instruction listing, or `None` when lldb is missing or the symbol
+/// is absent. Used to inspect prologue / epilogue shape.
+fn lldb_disasm(path: &Path, func: &str) -> Option<String> {
+    let out = Command::new("lldb")
+        .args(["-b", "-o", &alloc::format!("disassemble --name {func}"), "-o", "quit"])
+        .arg(path)
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    if text.contains("<+0>") { Some(text) } else { None }
+}
+
 fn dwarfdump_debug_line(path: &Path) -> Option<String> {
     let out = Command::new("dwarfdump")
         .arg("--debug-line")
@@ -736,6 +749,35 @@ fn block_scoped_local_emitted() {
     assert!(
         out.contains("(\"inner\")"),
         "block-scoped local `inner` should have a DW_TAG_variable:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// x19 is callee-saved (AAPCS64) and the scratch the writer forces
+/// for address materialisation. A function that materialises no
+/// address and makes no indirect / external call never clobbers x19,
+/// so its prologue must not spill it; a function that touches a
+/// global materialises the address through x19 and must save it.
+#[test]
+fn leaf_function_omits_x19_save() {
+    let src = "int g_sink;\n\
+               int leaf(int a, int b, int c){ return a * b + c; }\n\
+               int uses(int a){ g_sink = a; return g_sink; }\n\
+               int main(void){ return leaf(1, 2, 3) + uses(4); }";
+    let path = build_signed_mach_o(src, "leaf_callee_probe");
+    let Some(leaf) = lldb_disasm(&path, "leaf") else {
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    assert!(
+        !leaf.contains("x19"),
+        "address-free leaf must not save/restore x19:\n{leaf}"
+    );
+    let uses = lldb_disasm(&path, "uses")
+        .unwrap_or_else(|| panic!("lldb could not disassemble `uses`"));
+    assert!(
+        uses.contains("x19"),
+        "global-touching function must save/restore x19:\n{uses}"
     );
     let _ = std::fs::remove_file(&path);
 }

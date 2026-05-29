@@ -1393,19 +1393,19 @@ pub(super) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
+    // TODO mem2reg promotion under -O is staged out of the pipeline.
+    // The register allocator derives a value's live range from the
+    // span of instruction indices between its definition and last use.
+    // A promoted slot extends that range across calls and basic-block
+    // boundaries the index model does not track precisely, so a
+    // promoted value can be assigned a caller-saved register that a
+    // call clobbers (observed as miscompiled lua / sqlite at -O).
+    // Re-enable once the allocator models liveness over the
+    // control-flow graph.
+    let ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
-    // -O: promote address-free local slots to SSA values before
-    // register allocation, dropping their frame load / store traffic.
-    if native.optimize {
-        super::ssa_emit_common::time_pass("ssa_mem2reg::run (x86_64)", || {
-            for f in &mut ssa_funcs {
-                super::ssa_mem2reg::run(f);
-            }
-        });
-    }
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds

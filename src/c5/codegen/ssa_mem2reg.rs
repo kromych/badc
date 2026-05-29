@@ -194,6 +194,46 @@ pub(crate) fn dominance_frontiers(func: &FunctionSsa, idom: &[BlockId]) -> Vec<B
     df
 }
 
+/// Blocks where each promotable slot needs a phi: the iterated
+/// dominance frontier of the slot's definition blocks (every block
+/// holding a `StoreLocal` to it). Standard worklist closure -- a
+/// freshly placed phi is itself a definition, so its block re-enters
+/// the frontier walk.
+pub(crate) fn phi_placement(
+    func: &FunctionSsa,
+    promotable: &BTreeSet<i64>,
+    df: &[BTreeSet<BlockId>],
+) -> alloc::collections::BTreeMap<i64, BTreeSet<BlockId>> {
+    use alloc::collections::BTreeMap;
+    // Definition blocks per slot.
+    let mut def_blocks: BTreeMap<i64, BTreeSet<BlockId>> = BTreeMap::new();
+    for (b, block) in func.blocks.iter().enumerate() {
+        for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
+            if let Inst::StoreLocal { off, .. } = inst
+                && promotable.contains(off)
+            {
+                def_blocks.entry(*off).or_default().insert(b as BlockId);
+            }
+        }
+    }
+    let mut result: BTreeMap<i64, BTreeSet<BlockId>> = BTreeMap::new();
+    for (slot, defs) in &def_blocks {
+        let mut worklist: Vec<BlockId> = defs.iter().copied().collect();
+        let mut phis: BTreeSet<BlockId> = BTreeSet::new();
+        while let Some(b) = worklist.pop() {
+            for &frontier in &df[b as usize] {
+                if phis.insert(frontier) {
+                    worklist.push(frontier);
+                }
+            }
+        }
+        if !phis.is_empty() {
+            result.insert(*slot, phis);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::ir::{Block, Inst, LoadKind, NO_VALUE, StoreKind, Terminator};
@@ -306,6 +346,68 @@ mod tests {
         // dominance frontier.
         assert!(df[2].contains(&1), "back edge -> header in body DF");
         assert!(df[1].contains(&1), "loop header is in its own DF");
+    }
+
+    #[test]
+    fn phi_placement_at_diamond_join() {
+        // Slot -1 assigned in both arms of a diamond; the join (3)
+        // needs a phi.
+        let insts = alloc::vec![
+            Inst::Imm(0), // block 0 cond
+            Inst::Imm(1), // block 1
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+            },
+            Inst::Imm(2), // block 2
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            }, // block 3
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: NO_VALUE,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Jmp(3),
+                exit_acc: NO_VALUE,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            },
+        ];
+        let f = func_with(insts, blocks);
+        let promotable = promotable_slots(&f);
+        assert!(promotable.contains(&-1));
+        let idom = dominators(&f);
+        let df = dominance_frontiers(&f, &idom);
+        let phis = phi_placement(&f, &promotable, &df);
+        assert_eq!(phis.get(&-1), Some(&BTreeSet::from([3])));
     }
 
     #[test]

@@ -55,9 +55,10 @@ use super::aarch64::{
     enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_fmul_d,
     enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
     enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
+    enc_lslv, enc_lsrv, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
     enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, emit_mov_reg,
+    load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -808,9 +809,7 @@ fn emit_inst(
                 adrp_offset,
                 data_offset: *offset as u64,
             });
-            if rd.0 != 19 {
-                emit(code, enc_mov_reg(rd, Reg(19)));
-            }
+            emit_mov_reg(code, rd, Reg(19));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -826,9 +825,7 @@ fn emit_inst(
             emit(code, enc_adrp(Reg(19), 0));
             emit(code, enc_add_imm(Reg(19), Reg(19), 0));
             pending_func_fixups.push((adrp_offset, *target_ent_pc));
-            if rd.0 != 19 {
-                emit(code, enc_mov_reg(rd, Reg(19)));
-            }
+            emit_mov_reg(code, rd, Reg(19));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -1076,7 +1073,7 @@ fn emit_tls_addr(
             emit(code, enc_ldr_imm(Reg(16), Reg(0), 0));
             emit(code, enc_blr(Reg(16)));
             if rd.0 != 0 {
-                emit(code, enc_mov_reg(rd, Reg(0)));
+                emit_mov_reg(code, rd, Reg(0));
             }
             true
         }
@@ -1277,7 +1274,7 @@ fn emit_intrinsic(
             };
             // The helper reads env from x19; route it there.
             if env_r.0 != 19 {
-                emit(code, enc_mov_reg(Reg(19), env_r));
+                emit_mov_reg(code, Reg(19), env_r);
             }
             emit_setjmp_aarch64(code);
             // After the helper, x19 holds 0 on the initial pass and
@@ -1290,7 +1287,7 @@ fn emit_intrinsic(
                 return false;
             };
             if rd.0 != 19 {
-                emit(code, enc_mov_reg(rd, Reg(19)));
+                emit_mov_reg(code, rd, Reg(19));
             }
             spill_local_addr_to_dst(code, dst, rd, frame);
             true
@@ -1323,7 +1320,7 @@ fn emit_intrinsic(
                 }
             };
             if env_r.0 != 16 {
-                emit(code, enc_mov_reg(Reg(16), env_r));
+                emit_mov_reg(code, Reg(16), env_r);
             }
             // Stash val in x17 (the secondary scratch in this
             // module) before the upcoming restores clobber x19.
@@ -1335,7 +1332,7 @@ fn emit_intrinsic(
                 }
             };
             if val_r.0 != 17 {
-                emit(code, enc_mov_reg(Reg(17), val_r));
+                emit_mov_reg(code, Reg(17), val_r);
             }
             // Restore x19-x28 + x29 from [x16 + offset].
             for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
@@ -1434,7 +1431,7 @@ fn emit_call_ext(
                         None => return false,
                     };
                     if src.0 != r {
-                        emit(code, enc_mov_reg(Reg(r), src));
+                        emit_mov_reg(code, Reg(r), src);
                     }
                 }
             }
@@ -1546,7 +1543,7 @@ fn emit_call_ext(
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
-            emit(code, enc_mov_reg(rd, Reg(0)));
+            emit_mov_reg(code, rd, Reg(0));
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
@@ -1657,7 +1654,7 @@ fn emit_call(
         }
         if let Some(rd) = int_reg(dst) {
             if rd.0 != 0 {
-                emit(code, enc_mov_reg(rd, Reg(0)));
+                emit_mov_reg(code, rd, Reg(0));
             }
         } else if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -1702,7 +1699,7 @@ fn emit_call(
                     None => return false,
                 };
                 if src.0 != r {
-                    emit(code, enc_mov_reg(Reg(r), src));
+                    emit_mov_reg(code, Reg(r), src);
                 }
             }
             super::ArgPlacement::FpReg(r) => {
@@ -1776,7 +1773,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
     match dst {
         Place::IntReg(r) => {
             if r != 0 {
-                emit(code, enc_mov_reg(Reg(r), Reg(0)));
+                emit_mov_reg(code, Reg(r), Reg(0));
             }
         }
         Place::FpReg(r) => {
@@ -1831,7 +1828,7 @@ fn emit_call_indirect(
         None => return false,
     };
     if target_r.0 != 9 {
-        emit(code, enc_mov_reg(Reg(9), target_r));
+        emit_mov_reg(code, Reg(9), target_r);
     }
     // Indirect calls keep the c5-stack push shape regardless of
     // whether the callee is variadic. Variadic c5 callees read
@@ -1913,7 +1910,7 @@ fn emit_call_indirect(
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
-            emit(code, enc_mov_reg(rd, Reg(0)));
+            emit_mov_reg(code, rd, Reg(0));
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
@@ -1997,7 +1994,7 @@ fn emit_mcpy(
     // memcpy returns dst -- propagate into the Inst's `dst_place`.
     if let Some(rd) = int_reg(dst_place) {
         if rd.0 != dst_r.0 {
-            emit(code, enc_mov_reg(rd, dst_r));
+            emit_mov_reg(code, rd, dst_r);
         }
     } else if let Place::Spill(slot) = dst_place {
         let sp_off = spill_off(frame, slot);
@@ -2361,7 +2358,7 @@ fn emit_store_local(
         Place::IntReg(r) => {
             let rd = Reg(r);
             if rd.0 != rv.0 {
-                emit(code, super::aarch64::enc_mov_reg(rd, rv));
+                emit_mov_reg(code, rd, rv);
             }
         }
         Place::Spill(slot) => {
@@ -2550,7 +2547,7 @@ fn emit_store_indexed(
         Place::IntReg(r) => {
             let rd = Reg(r);
             if rd.0 != rv.0 {
-                emit(code, super::aarch64::enc_mov_reg(rd, rv));
+                emit_mov_reg(code, rd, rv);
             }
         }
         Place::Spill(slot) => {
@@ -2647,7 +2644,7 @@ fn emit_store(
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != rs.0 {
-            emit(code, enc_mov_reg(rd, rs));
+            emit_mov_reg(code, rd, rs);
         }
     } else if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
@@ -3119,7 +3116,7 @@ fn emit_return(
         } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
             && src.0 != 0
         {
-            emit(code, enc_mov_reg(Reg(0), src));
+            emit_mov_reg(code, Reg(0), src);
         }
     }
     // Restore saved callee-saved GPRs + FP regs (mirror of

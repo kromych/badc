@@ -989,7 +989,7 @@ fn compute_calls_after_def(
         // Binary search for any call PC strictly between (def, end].
         let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
         if let Some(&first) = call_pcs.get(lo)
-            && first <= end
+            && first < end
         {
             out[idx] = true;
         }
@@ -1005,7 +1005,7 @@ fn expire(
 ) {
     let mut i = 0;
     while i < active.len() {
-        if active[i].1 < current_pc {
+        if active[i].1 <= current_pc {
             let (_id, _end, reg) = active.remove(i);
             free.push(reg);
         } else {

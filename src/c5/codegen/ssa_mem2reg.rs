@@ -36,7 +36,11 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
                 touched.insert(*off);
             }
-            Inst::LocalAddr(off) => {
+            // A taken address escapes the slot's value to memory; an
+            // alloca-top slot backs frame-resident arena bookkeeping
+            // the per-arch emit reads directly. Neither may be lifted
+            // into a register.
+            Inst::LocalAddr(off) | Inst::AllocaInit(off) => {
                 address_taken.insert(*off);
             }
             _ => {}
@@ -321,6 +325,20 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
 /// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
 /// semantics treat as the stored value -- is redirected to that value.
 pub(crate) fn run(func: &mut FunctionSsa) {
+    // Conservative aliasing guard. A taken local address reaches more
+    // than the slot it names -- the address of a struct or array local
+    // covers every field / element slot, which the per-slot LocalAddr
+    // check below does not see without frame-extent tracking. An
+    // alloca arena is likewise frame-resident. Skip the whole function
+    // when either appears; with no taken addresses, every local slot
+    // is unaliased and safe to promote.
+    if func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::LocalAddr(_) | Inst::AllocaInit(_)))
+    {
+        return;
+    }
     let promotable = promotable_slots(func);
     if promotable.is_empty() {
         return;
@@ -335,6 +353,13 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         .collect();
     if slots.is_empty() {
         return;
+    }
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DUMP_MEM2REG").is_ok() {
+        eprintln!(
+            "mem2reg: fn {} ent_pc={} promoting slots {:?}",
+            func.name, func.ent_pc, slots
+        );
     }
 
     // Dominator-tree children, from idom.

@@ -1393,10 +1393,19 @@ pub(super) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
+    let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
+    // -O: promote address-free local slots to SSA values before
+    // register allocation, dropping their frame load / store traffic.
+    if native.optimize {
+        super::ssa_emit_common::time_pass("ssa_mem2reg::run (x86_64)", || {
+            for f in &mut ssa_funcs {
+                super::ssa_mem2reg::run(f);
+            }
+        });
+    }
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds

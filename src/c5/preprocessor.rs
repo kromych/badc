@@ -678,7 +678,12 @@ impl Preprocessor {
                         }
                     }
                     Directive::Ifdef(name) => {
-                        let taken = active && self.macros.contains_key(name);
+                        // C99 6.10.1: `#ifdef` is true when the name is
+                        // defined as any macro -- object-like or
+                        // function-like.
+                        let taken = active
+                            && (self.macros.contains_key(name)
+                                || self.fn_macros.contains_key(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -688,7 +693,9 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::Ifndef(name) => {
-                        let taken = active && !self.macros.contains_key(name);
+                        let taken = active
+                            && !(self.macros.contains_key(name)
+                                || self.fn_macros.contains_key(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -3645,6 +3652,24 @@ mod tests {
         let out = process(src);
         assert!(out.contains("int a;"));
         assert!(!out.contains("int b;"));
+    }
+
+    #[test]
+    fn ifdef_sees_function_like_macro() {
+        // C99 6.10.1: `#ifdef` / `#ifndef` test definedness for any
+        // macro, including function-like ones (kept in a separate
+        // table from object-like macros).
+        let src = "#define F(x) ((x)+1)\n#ifdef F\nint a;\n#else\nint b;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int a;"), "#ifdef should see fn-like macro F");
+        assert!(!out.contains("int b;"));
+        let src2 = "#define F(x) ((x)+1)\n#ifndef F\nint a;\n#else\nint b;\n#endif\n";
+        let out2 = process(src2);
+        assert!(
+            out2.contains("int b;"),
+            "#ifndef of a defined fn-like macro takes #else"
+        );
+        assert!(!out2.contains("int a;"));
     }
 
     #[test]

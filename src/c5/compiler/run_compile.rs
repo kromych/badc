@@ -549,20 +549,24 @@ impl Compiler {
                         }
                     }
 
-                    if self.lex.tk == ';' {
-                        // Forward declaration / prototype --
-                        // `int foo(int a, ...);`. Restore the param
-                        // symbols' outer class (parse_function_params
-                        // marked them as `Loc`) so subsequent
-                        // declarations of the same names don't trip
-                        // the duplicate-global check.
+                    if self.lex.tk == ';' || self.lex.tk == ',' {
+                        // Function prototype, not a definition. C99 6.7
+                        // permits several declarators in one declaration,
+                        // so a prototype can be followed by `,` and more
+                        // declarators (further prototypes or objects),
+                        // e.g. `int f(int a), g(int a), a;`. Restore the
+                        // param symbols' outer class (parse_function_params
+                        // marked them as `Loc`) so subsequent declarations
+                        // of the same names don't trip the
+                        // duplicate-global check.
                         for sym in self.symbols.iter_mut() {
                             if sym.class == Token::Loc as i64 {
                                 Self::restore_shadowed_symbol(sym);
                             }
                         }
-                        // Outer loop sees `;` and exits; `self.next()`
-                        // after the loop consumes it.
+                        // On `,` consume it and let the outer loop parse
+                        // the next declarator; on `;` the outer loop exits
+                        // and `self.next()` after it consumes the `;`.
                         if self.lex.tk == ',' {
                             self.next()?;
                         }

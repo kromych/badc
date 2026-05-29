@@ -344,6 +344,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("double_int_initializer.c", 0),
     ("tentative_definitions.c", 0),
     ("hex_constant_unsigned_type.c", 0),
+    ("multi_declarator_prototypes.c", 0),
     ("local_array_partial_init_zero.c", 0),
     ("ssa_call_result_spill.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),

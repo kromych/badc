@@ -360,11 +360,21 @@ impl Compiler {
                     && !self.symbols[id_idx].has_initializer
                     && (!self.symbols[id_idx].is_extern_decl || self.symbols[id_idx].defined_here)
                     && self.lex.tk != '(';
+                // C99 6.9.2: a file-scope declaration with no initializer
+                // is a tentative definition. It is a redundant
+                // declaration of an existing object -- whether or not
+                // that object already carries an initializer -- and is
+                // not an error. A second initializer is still rejected
+                // because the prior symbol keeps `has_initializer`.
+                let new_is_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
+                    && self.lex.tk != Token::Assign
+                    && self.lex.tk != '(';
                 if self.symbols[id_idx].class != 0
                     && !was_sys
                     && !was_fwd_fun
                     && !was_tentative_glo
                     && !was_extern_redecl
+                    && !new_is_tentative_glo
                 {
                     return Err(self.compile_err("duplicate global definition"));
                 }
@@ -1142,7 +1152,18 @@ impl Compiler {
                         // the prior tentative and the new defining
                         // declaration aren't merged here -- the prior
                         // allocation would be too small or too large.
-                        let var_offset = if was_tentative_glo {
+                        // Reuse the prior storage on a tentative merge,
+                        // and also when a redundant tentative declaration
+                        // (no initializer) follows an already-defined
+                        // global -- C99 6.9.2 makes the later `T x;` a
+                        // redeclaration of the same object, so allocating
+                        // fresh zeroed storage would discard its value.
+                        // The two-initializer case already errored at the
+                        // duplicate-definition check above.
+                        let reuse_prior_storage = was_tentative_glo
+                            || (self.symbols[id_idx].defined_here
+                                && self.lex.tk != Token::Assign);
+                        let var_offset = if reuse_prior_storage {
                             self.symbols[id_idx].val
                         } else if thread_local {
                             let off = self.tls_data.len() as i64;

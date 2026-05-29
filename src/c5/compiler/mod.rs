@@ -622,6 +622,14 @@ pub struct Compiler {
 
     /// Defined struct types, indexed by struct id.
     pub(super) structs: Vec<StructDef>,
+    /// Per-scope struct/union tag bindings (C99 6.2.1: tags have
+    /// block scope). Each entry is a Vec of `(tag_name, struct_id)`
+    /// declared in that scope. The first entry is the file scope; an
+    /// inner block pushes an empty scope on entry and pops it on
+    /// exit, so a `struct T` in a nested block shadows an outer one
+    /// without colliding. `self.structs` keeps the StructDef storage
+    /// reachable by id even after a scope pops.
+    pub(super) tag_scopes: Vec<Vec<(String, usize)>>,
     /// Captured enum definitions. Populated by `parse_enum_body`
     /// when the parser sees `enum Tag { ... }`; the (tag, constants)
     /// pairs feed the DWARF emitter's enum DIEs.
@@ -1038,6 +1046,7 @@ impl Compiler {
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
+            tag_scopes: alloc::vec![alloc::vec::Vec::new()],
             enums: Vec::new(),
             warnings: pp_warnings,
             include_trace: pp_include_trace,

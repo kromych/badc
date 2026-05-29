@@ -57,10 +57,26 @@ impl Compiler {
         }
     }
 
-    /// Linear lookup of a struct by its tag name. Returns the id used in
-    /// `struct_ty_for(id)` and as an index into `self.structs`.
+    /// Look up a tag in scope, searching from the innermost block
+    /// outward (C99 6.2.1: tags have block scope). An inner `struct T`
+    /// shadows an outer one declared at a wider scope.
     pub(super) fn find_struct_id(&self, name: &str) -> Option<usize> {
-        self.structs.iter().position(|s| s.name == name)
+        for scope in self.tag_scopes.iter().rev() {
+            if let Some((_, id)) = scope.iter().rev().find(|(n, _)| n == name) {
+                return Some(*id);
+            }
+        }
+        None
+    }
+
+    /// Look up a tag only in the current (innermost) scope. The body
+    /// of a struct definition uses this to decide whether the tag is
+    /// a redefinition (same scope) or a fresh declaration shadowing
+    /// an outer one.
+    pub(super) fn find_struct_id_in_current_scope(&self, name: &str) -> Option<usize> {
+        self.tag_scopes
+            .last()
+            .and_then(|scope| scope.iter().rev().find(|(n, _)| n == name).map(|(_, id)| *id))
     }
 
     /// Find an existing struct tag by name or register a fresh
@@ -80,7 +96,11 @@ impl Compiler {
             fields: Vec::new(),
             is_union: false,
         });
-        self.structs.len() - 1
+        let id = self.structs.len() - 1;
+        if let Some(scope) = self.tag_scopes.last_mut() {
+            scope.push((name.to_string(), id));
+        }
+        id
     }
 
     /// True when the current lexer position starts a type. The free

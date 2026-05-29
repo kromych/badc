@@ -48,9 +48,10 @@ impl Compiler {
     ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
-        // mid-definition. If the tag already exists with a populated
-        // body, this is a duplicate definition and we error.
-        let struct_id = match self.find_struct_id(name) {
+        // mid-definition. C99 6.2.1: only a tag in the SAME scope
+        // makes this a redefinition; a tag of the same name in an
+        // outer scope is shadowed by a fresh declaration here.
+        let struct_id = match self.find_struct_id_in_current_scope(name) {
             Some(id) if self.structs[id].fields.is_empty() => {
                 self.structs[id].is_union = is_union;
                 id
@@ -70,7 +71,11 @@ impl Compiler {
                     fields: Vec::new(),
                     is_union,
                 });
-                self.structs.len() - 1
+                let id = self.structs.len() - 1;
+                if let Some(scope) = self.tag_scopes.last_mut() {
+                    scope.push((name.to_string(), id));
+                }
+                id
             }
         };
 

@@ -435,6 +435,11 @@ impl Compiler {
     /// exit.
     fn parse_block_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
+        // C99 6.2.1: a block introduces a new scope for struct,
+        // union, and enum tags. Tag bindings declared in this block
+        // shadow same-named tags in any enclosing scope and go out of
+        // scope when the block exits.
+        self.tag_scopes.push(alloc::vec::Vec::new());
         let mut block_symbols = Vec::new();
 
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
@@ -550,6 +555,10 @@ impl Compiler {
             self.symbols[idx].type_ = ty;
             self.symbols[idx].val = val;
         }
+        // Pop this block's tag bindings; the StructDef storage in
+        // `self.structs` stays reachable by id for any reference the
+        // outer scope already holds.
+        self.tag_scopes.pop();
         Ok(())
     }
 

@@ -232,7 +232,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 
     let banks = RegBanks::for_target(target);
     let last_use = compute_last_use(func);
-    let calls_after_def = compute_calls_after_def(func, &last_use);
+    let calls_after_def = compute_calls_after_def(func, &last_use, target);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -957,14 +957,28 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
 /// strictly between its def PC and last-use PC. Such a value
 /// must be in a callee-saved register (or spilled), since a
 /// caller-saved reg would be clobbered by the intervening call.
-fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32]) -> Vec<bool> {
+///
+/// `Inst::TlsAddr` is treated as a call on targets whose TLS
+/// lowering issues an indirect call: Mach-O/AArch64 reads a TLV
+/// descriptor and invokes its bootstrap routine through `blr x16`,
+/// which clobbers the AAPCS64 caller-saved registers. Linux's
+/// variant-1 (TPIDR_EL0 + add) and Windows' (gs/x18 + 0x58 table
+/// walk) reach the per-thread storage without leaving the
+/// instruction stream, so they stay outside the call set.
+fn compute_calls_after_def(
+    func: &FunctionSsa,
+    last_use: &[u32],
+    target: Target,
+) -> Vec<bool> {
+    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
     let n = func.insts.len();
     let mut call_pcs: Vec<u32> = Vec::new();
     for (idx, inst) in func.insts.iter().enumerate() {
-        if matches!(
+        let is_call = matches!(
             inst,
             Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) {
+        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+        if is_call {
             call_pcs.push(idx as u32);
         }
     }
@@ -1066,5 +1080,67 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Mach-O / AArch64 reaches a thread-local through a TLV
+    /// descriptor whose bootstrap routine is invoked via `blr x16`
+    /// inside `emit_tls_addr`. The bootstrap clobbers every
+    /// AAPCS64 caller-saved register, so any SSA value live across
+    /// an `Inst::TlsAddr` must be flagged must-be-callee on that
+    /// target. Linux's `mrs TPIDR_EL0` and Windows' `[x18, 0x58]`
+    /// lookup don't leave the instruction stream, so the flag
+    /// stays off.
+    #[test]
+    fn compute_calls_after_def_flags_tls_addr_on_macos_aarch64() {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::ir::StoreKind;
+
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_imm = b.imm(42);
+        let v_tls = b.tls_addr(0);
+        b.store(v_tls, v_imm, StoreKind::I32);
+        b.return_(v_imm);
+        let func = b.finish();
+
+        let v_imm_idx = v_imm as usize;
+        let v_tls_idx = v_tls as usize;
+        assert!(v_imm_idx < v_tls_idx, "v_imm must be defined before v_tls");
+
+        let last_use = compute_last_use(&func);
+        assert!(
+            last_use[v_imm_idx] > v_tls_idx as u32,
+            "v_imm's last use ({}) must cross the TlsAddr at pc {v_tls_idx}",
+            last_use[v_imm_idx],
+        );
+
+        let on_macos = compute_calls_after_def(&func, &last_use, Target::MacOSAarch64);
+        assert!(
+            on_macos[v_imm_idx],
+            "TlsAddr's hidden blr should flag a value live across it on MacOSAarch64",
+        );
+
+        let on_linux = compute_calls_after_def(&func, &last_use, Target::LinuxAarch64);
+        assert!(
+            !on_linux[v_imm_idx],
+            "Linux AArch64 TLS reads mrs TPIDR_EL0 -- no call, no flag",
+        );
+
+        let on_win = compute_calls_after_def(&func, &last_use, Target::WindowsAarch64);
+        assert!(
+            !on_win[v_imm_idx],
+            "Windows AArch64 TLS walks the TEB -- no call, no flag",
+        );
+
+        let on_linux_x64 = compute_calls_after_def(&func, &last_use, Target::LinuxX64);
+        assert!(
+            !on_linux_x64[v_imm_idx],
+            "Linux x86_64 TLS reads fs:[0] -- no call, no flag",
+        );
+
+        let on_win_x64 = compute_calls_after_def(&func, &last_use, Target::WindowsX64);
+        assert!(
+            !on_win_x64[v_imm_idx],
+            "Windows x86_64 TLS walks the TEB -- no call, no flag",
+        );
     }
 }

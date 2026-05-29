@@ -1411,85 +1411,8 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                // Microsoft AArch64 variadics route every variadic
-                // arg through the integer arg-reg sequence
-                // regardless of the source type. An FP-typed
-                // variadic arg sits in a d-reg; the call planner
-                // routes it to an IntReg by setting
-                // `variadic_int_only`, so the lowering has to
-                // fmov the d-reg bit pattern into the target
-                // GPR rather than fall through `materialize_int`'s
-                // FpReg -> None bail.
-                if let Place::FpReg(dn) = arg_place {
-                    emit(code, enc_fmov_d_to_x(Reg(r), dn));
-                } else {
-                    let src = match materialize_int_shifted(
-                        code,
-                        arg_place,
-                        scratch.primary,
-                        frame,
-                        plan.scratch_bytes,
-                    ) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    if src.0 != r {
-                        emit_mov_reg(code, Reg(r), src);
-                    }
-                }
-            }
-            super::ArgPlacement::FpReg(r) => {
-                // Materialise directly into the target d-reg so
-                // earlier FP args (already in d0..d_{r-1}) aren't
-                // overwritten by the scratch reload of a later
-                // spilled / IntReg-encoded arg.
-                let src =
-                    match materialize_fp_shifted(code, arg_place, r, frame, plan.scratch_bytes) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                if src != r {
-                    emit(code, enc_fmov_d_to_x(scratch.primary, src));
-                    emit(code, enc_fmov_x_to_d(r, scratch.primary));
-                }
-            }
-            super::ArgPlacement::Stack(off) => {
-                if let Place::FpReg(_) = arg_place {
-                    let dn = match materialize_fp_shifted(
-                        code,
-                        arg_place,
-                        0u8,
-                        frame,
-                        plan.scratch_bytes,
-                    ) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    emit(code, enc_str_d_imm(dn, Reg(31), off));
-                } else {
-                    let src = match materialize_int_shifted(
-                        code,
-                        arg_place,
-                        scratch.primary,
-                        frame,
-                        plan.scratch_bytes,
-                    ) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    emit(code, enc_str_imm(src, Reg(31), off));
-                }
-            }
-        }
+    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        return false;
     }
     plt_call_fixups.push(PltCallFixup {
         instr_offset: code.len(),
@@ -1691,70 +1614,8 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let src = match materialize_int_shifted(
-                    code,
-                    arg_place,
-                    scratch.primary,
-                    frame,
-                    plan.scratch_bytes,
-                ) {
-                    Some(r) => r,
-                    None => return false,
-                };
-                if src.0 != r {
-                    emit_mov_reg(code, Reg(r), src);
-                }
-            }
-            super::ArgPlacement::FpReg(r) => {
-                let src =
-                    match materialize_fp_shifted(code, arg_place, 0u8, frame, plan.scratch_bytes) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                if src != r {
-                    // d-reg copy via x: c5 has no fmov.d direct
-                    // and the bit pattern is full 64-bit.
-                    emit(code, enc_fmov_d_to_x(scratch.primary, src));
-                    emit(code, enc_fmov_x_to_d(r, scratch.primary));
-                }
-            }
-            super::ArgPlacement::Stack(off) => {
-                if let Place::FpReg(_) = arg_place {
-                    let dn = match materialize_fp_shifted(
-                        code,
-                        arg_place,
-                        0u8,
-                        frame,
-                        plan.scratch_bytes,
-                    ) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    emit(code, enc_str_d_imm(dn, Reg(31), off));
-                } else {
-                    let src = match materialize_int_shifted(
-                        code,
-                        arg_place,
-                        scratch.primary,
-                        frame,
-                        plan.scratch_bytes,
-                    ) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    emit(code, enc_str_imm(src, Reg(31), off));
-                }
-            }
-        }
+    if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+        return false;
     }
     // Branch placeholder + fixup. The pool path's apply_fixups
     // resolves `target_ent_pc` -> `pc_to_native` once
@@ -3097,6 +2958,161 @@ fn materialize_fp_shifted(
 /// physical register).
 fn fp_reg(place: Place) -> Option<u8> {
     place.fp_reg_u8()
+}
+
+/// Resolve a set of register-to-register copies `(src, tgt)` so
+/// that no copy writes to a register still needed as the source
+/// of another pending copy. Processed leaf-first (target not in
+/// any source) until the worklist drains; cycles are broken by
+/// routing one source through `scratch`. The caller must pass a
+/// `scratch` that lives outside the allocator's bank so it cannot
+/// collide with any pending source or target.
+fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
+    moves.retain(|(s, t)| s != t);
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
+            if !tgt_still_a_source {
+                emit_mov_reg(code, Reg(t), Reg(s));
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            // Worklist contains only cycle members. Save one source
+            // into the scratch and redirect every move that read
+            // from it; the redirected `(scratch, ...)` move now
+            // breaks the cycle.
+            let saved = moves[0].0;
+            emit_mov_reg(code, scratch, Reg(saved));
+            for m in moves.iter_mut() {
+                if m.0 == saved {
+                    m.0 = scratch.0;
+                }
+            }
+        }
+    }
+}
+
+/// Place every call argument into its AAPCS64 target slot in an
+/// order that survives source / target overlaps. With the qbe-shape
+/// caller-saved bank, an argument's value can sit in another
+/// argument's target arg register; a naive sequential
+/// `mov tgt_i, src_i` would clobber a still-needed source. The
+/// permutation-safe order is:
+///
+///   * Stack slots first -- their sources are read into a scratch
+///     and stored to the host-stack overflow region, preserving
+///     any source register that a later pass touches.
+///   * Integer reg-to-reg moves next, scheduled through
+///     [`schedule_int_reg_moves`] so cycles drop to a single
+///     scratch-mediated copy.
+///   * Spill / Imm / FpReg sources for `IntReg` placements then
+///     materialise directly into the target arg register
+///     (`materialize_int_shifted` writes its load into the dst).
+///   * FP arg-register moves last. d-reg cycles are extremely
+///     rare in real code; today this still emits sequentially
+///     via the encoder scratch and relies on the allocator not
+///     producing a d-reg permutation.
+fn marshal_args(
+    code: &mut Vec<u8>,
+    plan: &super::CallPlan,
+    args: &[u32],
+    alloc: &Allocation,
+    scratch: &ScratchPool,
+    frame: Frame,
+) -> bool {
+    let arg_place = |i: usize| -> Place {
+        alloc
+            .places
+            .get(args[i] as usize)
+            .copied()
+            .unwrap_or(Place::None)
+    };
+
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::Stack(off) = placement {
+            let ap = arg_place(i);
+            if let Place::FpReg(_) = ap {
+                let dn = match materialize_fp_shifted(code, ap, 0u8, frame, plan.scratch_bytes) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                emit(code, enc_str_d_imm(dn, Reg(31), off));
+            } else {
+                let src =
+                    match materialize_int_shifted(code, ap, scratch.primary, frame, plan.scratch_bytes) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                emit(code, enc_str_imm(src, Reg(31), off));
+            }
+        }
+    }
+
+    // FP args before int args: an FP value can sit in an integer
+    // register as a raw bit pattern (`Inst::Imm` with the f64 bit
+    // pattern, allocator places it in an IntReg). The int marshal
+    // below may overwrite arg-target integer registers, including
+    // the source register of such a value, so the FP fmov must
+    // snapshot it into the destination d-reg first.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::FpReg(r) = placement {
+            let ap = arg_place(i);
+            // Pass the target d-reg as the materialise scratch so
+            // Spill / IntReg sources land directly in the target
+            // and earlier FP args already sitting in d0..d_{r-1}
+            // are not overwritten by a generic d-scratch reload.
+            let src = match materialize_fp_shifted(code, ap, r, frame, plan.scratch_bytes) {
+                Some(rr) => rr,
+                None => return false,
+            };
+            if src != r {
+                emit(code, enc_fmov_d_to_x(scratch.primary, src));
+                emit(code, enc_fmov_x_to_d(r, scratch.primary));
+            }
+        }
+    }
+
+    let mut int_moves: Vec<(u8, u8)> = Vec::new();
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::IntReg(r) = placement
+            && let Place::IntReg(s) = arg_place(i)
+            && s != r
+        {
+            int_moves.push((s, r));
+        }
+    }
+    schedule_int_reg_moves(code, &mut int_moves, scratch.primary);
+
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::IntReg(r) = placement {
+            let ap = arg_place(i);
+            match ap {
+                Place::IntReg(_) => {}
+                Place::FpReg(dn) => {
+                    emit(code, enc_fmov_d_to_x(Reg(r), dn));
+                }
+                Place::Spill(_) | Place::None => {
+                    let src =
+                        match materialize_int_shifted(code, ap, Reg(r), frame, plan.scratch_bytes) {
+                            Some(rr) => rr,
+                            None => return false,
+                        };
+                    if src.0 != r {
+                        emit_mov_reg(code, Reg(r), src);
+                    }
+                }
+            }
+        }
+    }
+
+    true
 }
 
 /// Emit the function epilogue + `ret` for a Return terminator.

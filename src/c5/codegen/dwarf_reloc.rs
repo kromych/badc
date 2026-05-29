@@ -913,12 +913,24 @@ fn build_debug_info(
                 push_string(&mut body, &v.name);
                 // DW_AT_location: exprloc carrying DW_OP_fbreg
                 // <SLEB128 offset>. Length prefix is the byte
-                // count of the expression.
-                let mut expr: Vec<u8> = Vec::with_capacity(8);
-                expr.push(DW_OP_FBREG);
-                write_sleb128(&mut expr, fp_byte_offset);
-                write_uleb128(&mut body, expr.len() as u64);
-                body.extend_from_slice(&expr);
+                // count of the expression. A slot mem2reg promoted to
+                // a register no longer holds the value, so emit an
+                // empty location (zero-length exprloc) -- the debugger
+                // reports the variable optimized out instead of
+                // reading stale frame memory.
+                let promoted = build
+                    .promoted_local_slots
+                    .get(&ent_pc)
+                    .is_some_and(|slots| slots.contains(&v.fp_slot));
+                if promoted {
+                    write_uleb128(&mut body, 0);
+                } else {
+                    let mut expr: Vec<u8> = Vec::with_capacity(8);
+                    expr.push(DW_OP_FBREG);
+                    write_sleb128(&mut expr, fp_byte_offset);
+                    write_uleb128(&mut body, expr.len() as u64);
+                    body.extend_from_slice(&expr);
+                }
                 // DW_AT_type: DW_FORM_ref4 -- CU-relative byte
                 // offset of the matching type DIE emitted above.
                 body.extend_from_slice(&type_off.to_le_bytes());

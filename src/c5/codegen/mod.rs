@@ -1029,6 +1029,12 @@ pub(crate) struct Build {
     /// in `pc_to_native`, which a neighbouring function's PC can
     /// alias when both are small.
     pub func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
+    /// Frame slots mem2reg promoted to registers, keyed by the
+    /// function's `ent_pc`. The debug-info emitter drops the frame
+    /// location for a local on one of these slots, since the slot no
+    /// longer holds the value (a stale `DW_OP_fbreg` would make the
+    /// debugger read uninitialised frame memory).
+    pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`

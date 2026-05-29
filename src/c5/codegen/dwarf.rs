@@ -487,6 +487,10 @@ struct SubprogVar {
     type_tag: i64,
     /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
     fp_byte_offset: i64,
+    /// True when mem2reg promoted this slot to a register; the frame
+    /// slot no longer holds the value, so the DIE gets an empty
+    /// location rather than a stale `DW_OP_fbreg`.
+    promoted: bool,
     /// Source line of the declaration; surfaces as
     /// `DW_AT_decl_line` on the DIE. Zero when unknown.
     decl_line: u32,
@@ -719,6 +723,10 @@ fn collect_subprograms(
                 } else {
                     v.fp_slot * 8
                 },
+                promoted: build
+                    .promoted_local_slots
+                    .get(&ent_pc)
+                    .is_some_and(|slots| slots.contains(&v.fp_slot)),
                 decl_line: v.decl_line,
                 array_size: v.array_size,
                 decl_file: v.decl_file,
@@ -1703,11 +1711,18 @@ fn build_debug_info(
             };
             body.extend_from_slice(&type_off.to_le_bytes());
             // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
-            let mut loc: Vec<u8> = Vec::with_capacity(8);
-            loc.push(DW_OP_FBREG);
-            write_sleb128(&mut loc, v.fp_byte_offset);
-            write_uleb128(&mut body, loc.len() as u64);
-            body.extend_from_slice(&loc);
+            // A slot mem2reg promoted to a register no longer holds
+            // the value; emit an empty location so the debugger reports
+            // it optimized out rather than reading stale frame memory.
+            if v.promoted {
+                write_uleb128(&mut body, 0);
+            } else {
+                let mut loc: Vec<u8> = Vec::with_capacity(8);
+                loc.push(DW_OP_FBREG);
+                write_sleb128(&mut loc, v.fp_byte_offset);
+                write_uleb128(&mut body, loc.len() as u64);
+                body.extend_from_slice(&loc);
+            }
             // DW_AT_decl_file (ULEB128) -- c5's `source_files` is
             // 0-indexed with the primary TU at 0; the DWARF
             // file_names table is 1-indexed with the primary file

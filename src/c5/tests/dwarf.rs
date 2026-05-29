@@ -24,6 +24,10 @@ use crate::{CompileOptions, Compiler, Target};
 /// responsible for cleanup (best-effort `remove_file` at the
 /// bottom of each test).
 fn build_signed_mach_o(src: &str, stem: &str) -> PathBuf {
+    build_signed_mach_o_opt(src, stem, false)
+}
+
+fn build_signed_mach_o_opt(src: &str, stem: &str, optimize: bool) -> PathBuf {
     let mut program = Compiler::new(super::with_prelude(src))
         .compile()
         .unwrap_or_else(|e| panic!("compile failed for {stem}: {e}"));
@@ -31,12 +35,12 @@ fn build_signed_mach_o(src: &str, stem: &str) -> PathBuf {
     // rather than `<unknown>`; lldb prefers a non-empty CU name
     // when listing types.
     program.source_path = format!("{stem}.c");
-    let bytes = crate::emit_native_with_options(
-        &program,
-        Target::MacOSAarch64,
-        crate::NativeOptions::new().with_debug_info(true),
-    )
-    .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
+    let mut options = crate::NativeOptions::new().with_debug_info(true);
+    if optimize {
+        options = options.with_optimize();
+    }
+    let bytes = crate::emit_native_with_options(&program, Target::MacOSAarch64, options)
+        .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
 
     let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
     {
@@ -678,6 +682,39 @@ fn debug_line_has_per_statement_rows() {
         distinct.len() >= 5,
         "expected at least 5 distinct line-program rows (one per statement), got {}:\n{out}",
         distinct.len(),
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A local mem2reg promotes to a register under -O has its frame
+/// stores removed, so the DWARF location for it must be empty rather
+/// than a stale DW_OP_fbreg pointing at uninitialised frame memory.
+/// Locals that stay in the frame keep their fbreg location.
+#[test]
+fn promoted_local_has_empty_location() {
+    let src = "long f(long n){ long base = n + 100; long acc = 0; long i = 0;\
+               while (i < 3) { acc = acc + base; i = i + 1; } return acc; }\
+               int main(void){ return (int)f(5); }";
+    let path = build_signed_mach_o_opt(src, "promoted_local_loc", true);
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    // `base` is single-def and read across the loop -> promoted; its
+    // location is empty. `acc` and `i` are loop-carried (a join phi),
+    // so they stay in the frame with a real fbreg location.
+    let base_at = out
+        .find("(\"base\")")
+        .unwrap_or_else(|| panic!("no `base` variable in:\n{out}"));
+    let after_base = &out[base_at..];
+    let base_loc_end = after_base.find("DW_TAG").unwrap_or(after_base.len());
+    assert!(
+        after_base[..base_loc_end].contains("DW_AT_location\t(<empty>)"),
+        "promoted local `base` should have an empty location, got:\n{}",
+        &after_base[..base_loc_end]
+    );
+    assert!(
+        out.contains("(\"acc\")") && out.contains("DW_OP_fbreg"),
+        "non-promoted locals should keep an fbreg location:\n{out}"
     );
     let _ = std::fs::remove_file(&path);
 }

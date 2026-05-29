@@ -2200,6 +2200,7 @@ mod tests {
             func_ent_pcs: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
+            promoted_local_slots: alloc::collections::BTreeMap::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),

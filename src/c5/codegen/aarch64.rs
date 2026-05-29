@@ -1212,10 +1212,17 @@ pub(super) fn lower(
         })?;
     // -O: promote address-free local slots to SSA values before
     // register allocation, dropping their frame load / store traffic.
+    // Record the promoted slots per function so the debug-info emitter
+    // can drop their now-stale frame location.
+    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
+        alloc::collections::BTreeMap::new();
     if native.optimize {
         super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
             for f in &mut ssa_funcs {
-                super::ssa_mem2reg::run(f);
+                let promoted = super::ssa_mem2reg::run(f);
+                if !promoted.is_empty() {
+                    promoted_local_slots.insert(f.ent_pc, promoted);
+                }
             }
         });
     }
@@ -1481,6 +1488,7 @@ pub(super) fn lower(
         func_ent_pcs,
         func_names,
         func_prologue_native,
+        promoted_local_slots,
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,

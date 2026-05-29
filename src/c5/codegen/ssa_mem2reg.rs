@@ -430,12 +430,15 @@ fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
 /// consumers and the emit drops it as dead-pure), and a promoted
 /// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
 /// semantics treat as the stored value -- is redirected to that value.
-pub(crate) fn run(func: &mut FunctionSsa) {
+/// Promote eligible slots and return the offsets actually promoted
+/// (their frame loads and stores removed), so the debug-info emitter
+/// can drop the now-stale frame location for those locals.
+pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen.
     #[cfg(feature = "std")]
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
-        return;
+        return Vec::new();
     }
     // A function with a non-zero alloca top grows its frame at
     // runtime and reaches it through a computed pointer, so no slot is
@@ -450,11 +453,11 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         Inst::AllocaInit(s) => *s != 0,
         _ => false,
     }) {
-        return;
+        return Vec::new();
     }
     let promotable = promotable_slots(func);
     if promotable.is_empty() {
-        return;
+        return Vec::new();
     }
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
@@ -496,7 +499,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         );
     }
     if slots.is_empty() {
-        return;
+        return Vec::new();
     }
     #[cfg(feature = "std")]
     if std::env::var("BADC_DUMP_MEM2REG").is_ok() {
@@ -593,7 +596,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         store_ids.retain(|id| !failed.contains(&store_slot[id]));
     }
     if redirect.iter().all(|r| r.is_none()) {
-        return;
+        return Vec::new();
     }
 
     // Narrow loads keep their own id but become an extension of the
@@ -660,6 +663,15 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     // Promoted loads now have no consumers; the emit's dead-pure check
     // drops them. Leaving the LoadLocal in place keeps every later id
     // stable.
+    //
+    // The promoted slots no longer hold a live value; report them so
+    // the debug-info emitter drops their frame location.
+    store_ids
+        .iter()
+        .filter_map(|id| store_slot.get(id).copied())
+        .collect::<BTreeSet<i64>>()
+        .into_iter()
+        .collect()
 }
 
 #[cfg(test)]

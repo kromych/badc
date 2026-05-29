@@ -126,18 +126,20 @@ fn integer_boundary_c99_final_boss() {
     assert_eq!(exit, 0, "C99 integer boundary regression");
 }
 
-// ---- Linux ELF TLS interaction ----
+// ---- thread-local reads under the in-process JIT ----
 //
-// The bug is Linux-ELF specific. macOS arm64's JIT doesn't
-// support TLS at all (Mach-O __thread_data + dyld
-// __tlv_bootstrap is future work) and would SIGSEGV the test
-// runner on a `_Thread_local` access. Gate this test to Linux
-// so it actually exercises the failure mode.
+// The JIT runs `main` in-process and does not install a thread
+// pointer for the c5 program, so `_Thread_local` reads land in
+// the host runtime's TLS region (`fs` / `tpidr_el0`) and return
+// stale values. Native ELF output is correct. Gated to Linux
+// because macOS arm64's JIT has no TLS support at all (Mach-O
+// __thread_data + dyld __tlv_bootstrap is separate work) and
+// would fault the test runner on a `_Thread_local` access.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "TODO: Linux ELF TLS layout shifts when static-local state lands nearby"]
-fn linux_elf_tls_layout_with_static_locals() {
-    let exit = jit_fixture_exit("deferred_tls_with_static_locals.c");
+#[ignore = "TODO: in-process JIT installs no c5 thread pointer, so _Thread_local reads hit the host runtime's TLS"]
+fn jit_thread_local_read() {
+    let exit = jit_fixture_exit("deferred_jit_thread_local.c");
     assert_eq!(
         exit, 0,
         "fixture should exit 0 once the layout bug is fixed"

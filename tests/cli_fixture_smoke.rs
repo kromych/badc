@@ -47,7 +47,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "thread_local_basic.c",
     "thread_local_initializer.c",
     "thread_local_per_thread.c",
-    "deferred_tls_with_static_locals.c",
+    "deferred_jit_thread_local.c",
 ];
 
 #[test]

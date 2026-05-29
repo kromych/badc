@@ -1120,8 +1120,8 @@ fn emit_store_local(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
-    if !matches!(kind, StoreKind::I64) {
-        bail_msg("StoreLocal: only I64 supported");
+    if matches!(kind, StoreKind::F32) {
+        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
         return false;
     }
     let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
@@ -1153,7 +1153,17 @@ fn emit_store_local(
             }
         }
     };
-    emit_mov_mem_r(code, Reg::RBP, disp, rv);
+    // Store the low `kind`-width bytes; the accumulator below keeps
+    // the full source value, matching the c5 rule that an
+    // assignment expression yields the stored value before any
+    // re-narrowing on read-back (C99 6.5.16p3).
+    match kind {
+        StoreKind::I64 => emit_mov_mem_r(code, Reg::RBP, disp, rv),
+        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, Reg::RBP, disp, rv),
+        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, Reg::RBP, disp, rv),
+        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, Reg::RBP, disp, rv),
+        StoreKind::F32 => unreachable!(),
+    }
     // Mirror the store value into the destination Place.
     if let Some(rd) = int_or_spill_dst(dst) {
         if rd.0 != rv.0 {

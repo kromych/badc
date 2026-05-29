@@ -2240,8 +2240,8 @@ fn emit_store_local(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if !matches!(kind, StoreKind::I64) {
-        bail_msg("StoreLocal: only I64 supported");
+    if matches!(kind, StoreKind::F32) {
+        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
         return false;
     }
     let value_place = alloc
@@ -2269,11 +2269,22 @@ fn emit_store_local(
     let bytes = c5_slot_to_fp_offset(off);
     if let Ok(disp) = i32::try_from(bytes) {
         if (-256..256).contains(&disp) {
-            emit(code, super::aarch64::enc_stur(rv, Reg(29), disp));
-        } else if !emit_store_local_large_disp(code, off, rv, scratch, frame) {
+            // Store the low `kind`-width bytes; the accumulator below
+            // keeps the full source value, matching the c5 rule that
+            // an assignment expression yields the stored value before
+            // any re-narrowing on read-back (C99 6.5.16p3).
+            let enc = match kind {
+                StoreKind::I64 => super::aarch64::enc_stur(rv, Reg(29), disp),
+                StoreKind::I32 => super::aarch64::enc_stur32(rv, Reg(29), disp),
+                StoreKind::I16 => super::aarch64::enc_sturh(rv, Reg(29), disp),
+                StoreKind::I8 => super::aarch64::enc_sturb(rv, Reg(29), disp),
+                StoreKind::F32 => unreachable!(),
+            };
+            emit(code, enc);
+        } else if !emit_store_local_large_disp(code, off, rv, kind, scratch, frame) {
             return false;
         }
-    } else if !emit_store_local_large_disp(code, off, rv, scratch, frame) {
+    } else if !emit_store_local_large_disp(code, off, rv, kind, scratch, frame) {
         return false;
     }
     // c5 store ops leave the stored value in the accumulator;
@@ -2301,13 +2312,21 @@ fn emit_store_local_large_disp(
     code: &mut Vec<u8>,
     off: i64,
     rv: Reg,
+    kind: StoreKind,
     scratch: &ScratchPool,
     frame: Frame,
 ) -> bool {
     if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
         return false;
     }
-    emit(code, super::aarch64::enc_str_imm(rv, scratch.secondary, 0));
+    let enc = match kind {
+        StoreKind::I64 => super::aarch64::enc_str_imm(rv, scratch.secondary, 0),
+        StoreKind::I32 => super::aarch64::enc_str32_imm(rv, scratch.secondary, 0),
+        StoreKind::I16 => super::aarch64::enc_strh_imm(rv, scratch.secondary, 0),
+        StoreKind::I8 => super::aarch64::enc_strb_imm(rv, scratch.secondary, 0),
+        StoreKind::F32 => unreachable!(),
+    };
+    emit(code, enc);
     true
 }
 

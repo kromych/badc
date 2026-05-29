@@ -921,16 +921,15 @@ impl<'a> Walker<'a> {
                             return Ok(());
                         }
                         let kind = store_kind_for(ty, self.target);
-                        // Only the I64 width fuses into a single
-                        // `StoreLocal`; narrower widths route
-                        // through `LocalAddr` + `Store` because
-                        // the per-arch emit's `StoreLocal` only
-                        // handles 8-byte stores.
-                        if matches!(kind, super::super::ir::StoreKind::I64) {
-                            b.store_local(slot, v, kind);
-                        } else {
+                        // Integer widths fuse into a single
+                        // `StoreLocal`; `F32` routes through
+                        // `LocalAddr` + `Store` because the per-arch
+                        // `StoreLocal` keeps the value in a GPR.
+                        if matches!(kind, super::super::ir::StoreKind::F32) {
                             let addr = b.local_addr(slot);
                             b.store(addr, v, kind);
+                        } else {
+                            b.store_local(slot, v, kind);
                         }
                         Ok(())
                     }
@@ -1194,14 +1193,14 @@ impl<'a> Walker<'a> {
                     b.mcpy(dst, src, size);
                     return Ok(dst);
                 }
-                // Local-target shortcut: a Token::Loc-class
-                // Ident lvalue lowers to a single `StoreLocal`
-                // instead of `LocalAddr` + `Store`, but only for
-                // the I64 width. The per-arch emit's `StoreLocal`
-                // only handles 8-byte stores, so narrower widths
-                // stay on the `LocalAddr` + `Store` path.
+                // Local-target shortcut: a Token::Loc-class Ident
+                // lvalue lowers to a single `StoreLocal` instead of
+                // `LocalAddr` + `Store`. `F32` keeps the value in an
+                // FP register, which the per-arch `StoreLocal` does
+                // not store, so it stays on the `LocalAddr` + `Store`
+                // path.
                 let kind = store_kind_for(*ty, self.target);
-                if matches!(kind, StoreKind::I64)
+                if !matches!(kind, StoreKind::F32)
                     && let Expr::Ident {
                         class,
                         val,
@@ -2358,7 +2357,8 @@ mod tests {
         assert_eq!(loads, alloc::vec![(-1, LoadKind::I32)]);
     }
 
-    /// Assignment lowers as: address-of-lhs + value-of-rhs + Store.
+    /// A scalar local assignment lowers to a single fused
+    /// `StoreLocal` of the value's natural width.
     #[test]
     fn local_int_assign_emits_store() {
         let mut syms = empty_symbols();
@@ -2422,11 +2422,11 @@ mod tests {
             .insts
             .iter()
             .filter_map(|i| match i {
-                Inst::Store { kind, .. } => Some(*kind),
+                Inst::StoreLocal { off, kind, .. } => Some((*off, *kind)),
                 _ => None,
             })
             .collect();
-        assert_eq!(store_kinds, alloc::vec![StoreKind::I32]);
+        assert_eq!(store_kinds, alloc::vec![(-1, StoreKind::I32)]);
         // The Return's value should reach the same Imm 42 the
         // assignment used (C99 6.5.16p3 says the assignment
         // expression's value is the value stored).

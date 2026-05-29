@@ -370,21 +370,6 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     }) {
         return;
     }
-    // The register allocator keys a value's live interval on the span
-    // between its definition and last-use instruction index. That is a
-    // sound proxy for the execution-order live range only when the
-    // blocks are stored in increasing instruction order. A goto can
-    // place a block's instructions out of that order, so an extended
-    // promoted live range could span a call the index-based check does
-    // not see, leaving the value in a caller-saved register across it.
-    // Restrict promotion to functions whose blocks are in order.
-    let mut prev_start = 0u32;
-    for blk in &func.blocks {
-        if blk.inst_range.start < prev_start {
-            return;
-        }
-        prev_start = blk.inst_range.start;
-    }
     let promotable = promotable_slots(func);
     if promotable.is_empty() {
         return;

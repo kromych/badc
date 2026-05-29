@@ -610,6 +610,16 @@ fn emit_prologue(
     // Host-arg-reg spill for non-variadic functions: spill each
     // declared int param into a 16-byte c5 cdecl slot above fp,
     // restripe any host-stack overflow into 16-byte slots.
+    //
+    // A parameter that has an `Inst::ParamRef { idx, .. }` seed
+    // in the function body and whose c5 cdecl slot address is
+    // never taken does not need the explicit store: ParamRef's
+    // own emit places the value in the allocator's chosen Place,
+    // mem2reg redirects every LoadLocal at the slot, and nothing
+    // reads the slot at runtime. The slot is still allocated
+    // (via `sub sp, sp, #16`) so the surrounding LocalAddr
+    // offsets stay stable, and consecutive skipped slots
+    // coalesce into a single sp adjustment.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 {
         let n_reg = entry_spill.min(abi.int_arg_regs.len());
@@ -624,8 +634,46 @@ fn emit_prologue(
                 emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
             }
         }
+        // Build the set of parameter indices seeded by ParamRef
+        // in the function body and the set of c5 slot offsets
+        // whose address is taken anywhere. The arg-slot base is
+        // 2 for ordinary callees and 3 when the function returns
+        // a struct (slot 2 is the hidden out-pointer); the
+        // walker's ParamRef synthesis already excludes
+        // struct-returning callees, so reading `2` here is
+        // correct for any callee with a ParamRef seed.
+        let mut seeded_params: alloc::collections::BTreeSet<u32> =
+            alloc::collections::BTreeSet::new();
+        let mut addr_taken_slots: alloc::collections::BTreeSet<i64> =
+            alloc::collections::BTreeSet::new();
+        for inst in &func.insts {
+            match inst {
+                Inst::ParamRef { idx, .. } => {
+                    seeded_params.insert(*idx);
+                }
+                Inst::LocalAddr(off) if *off >= 2 => {
+                    addr_taken_slots.insert(*off);
+                }
+                _ => {}
+            }
+        }
+        let mut pending_sub: u32 = 0;
         for i in (0..n_reg).rev() {
-            emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg(31), -16));
+            let slot = (i as i64) + 2;
+            let skip = seeded_params.contains(&(i as u32))
+                && !addr_taken_slots.contains(&slot);
+            if skip {
+                pending_sub += 16;
+            } else {
+                if pending_sub > 0 {
+                    emit_sub_sp_imm(code, pending_sub);
+                    pending_sub = 0;
+                }
+                emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg(31), -16));
+            }
+        }
+        if pending_sub > 0 {
+            emit_sub_sp_imm(code, pending_sub);
         }
     }
     // Standard frame: stp fp/lr; mov fp, sp; sub sp, sp, frame_bytes.

@@ -1156,9 +1156,21 @@ fn emit_intrinsic(
                 Some(r) => r,
                 None => return false,
             };
-            emit(code, enc_ldr_imm(rd, ap_r, 0));
-            emit(code, enc_add_imm(scratch.secondary, rd, 16));
-            emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+            // rd and ap_r can be the same register when the
+            // allocator picks ap-value's freed slot for the
+            // VaArg result. Route the load through a scratch
+            // register so the cursor address survives the
+            // writeback.
+            if rd.0 == ap_r.0 {
+                emit(code, enc_ldr_imm(scratch.secondary, ap_r, 0));
+                emit(code, enc_add_imm(scratch.primary, scratch.secondary, 16));
+                emit(code, enc_str_imm(scratch.primary, ap_r, 0));
+                emit_mov_reg(code, rd, scratch.secondary);
+            } else {
+                emit(code, enc_ldr_imm(rd, ap_r, 0));
+                emit(code, enc_add_imm(scratch.secondary, rd, 16));
+                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+            }
             true
         }
         I::VaEnd => {

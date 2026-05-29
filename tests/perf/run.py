@@ -86,7 +86,14 @@ def probe_compilers() -> list[Compiler]:
         # tcc's macho build needs the macOS SDK include path; the Linux
         # build is happy with the bundled `-B` directory holding
         # tccdefs.h.
-        tcc_cmd = [str(tcc), f"-B{tcc.parent}", f"-I{tcc.parent}/include"]
+        # -B finds tccdefs.h; -L puts the build dir on the library path
+        # so tcc resolves its own libtcc1.a there.
+        tcc_cmd = [
+            str(tcc),
+            f"-B{tcc.parent}",
+            f"-I{tcc.parent}/include",
+            f"-L{tcc.parent}",
+        ]
         if sys.platform == "darwin":
             sdk = subprocess.run(
                 ["xcrun", "--show-sdk-path"],

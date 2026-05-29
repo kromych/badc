@@ -12,7 +12,26 @@ mkdir -p "$build_dir"
 
 case "$(uname -s)" in
   Linux)
-    target_define=""
+    # tcc's default crt prefix is /usr/lib, but Debian / Ubuntu keep
+    # crt1.o / crti.o / crtn.o and libc.so in the multiarch directory.
+    # Detect it from the host cc so the produced binaries link and run.
+    crtdir="$(dirname "$("${CC:-cc}" -print-file-name=crt1.o)")"
+    # Debian / Ubuntu put glibc's `bits/*.h` under the multiarch
+    # include dir, which is not on tcc's default search path.
+    multiarch="$("${CC:-cc}" -print-multiarch 2>/dev/null || true)"
+    sysinc="/usr/local/include:/usr/include"
+    if [ -n "$multiarch" ]; then
+      sysinc="$sysinc:/usr/include/$multiarch"
+    fi
+    case "$(uname -m)" in
+      x86_64|amd64) interp="/lib64/ld-linux-x86-64.so.2" ;;
+      arm64|aarch64) interp="/lib/ld-linux-aarch64.so.1" ;;
+      *) interp="/lib64/ld-linux-x86-64.so.2" ;;
+    esac
+    target_define="#define CONFIG_TCC_CRTPREFIX \"$crtdir\"
+#define CONFIG_TCC_LIBPATHS \"$crtdir:/usr/lib:/lib\"
+#define CONFIG_TCC_SYSINCLUDEPATHS \"$sysinc\"
+#define CONFIG_TCC_ELFINTERP \"$interp\""
     ;;
   Darwin)
     target_define="#define TCC_TARGET_MACHO 1"
@@ -69,12 +88,19 @@ cc="${CC:-clang}"
   -o "$build_dir/tcc" "$tcc_src/tcc.c" -lpthread -lm -ldl
 
 # Provide the include set tcc expects at runtime alongside the
-# binary, so `run.py` can pass `-B$build_dir` and find tccdefs.h
-# / libtcc1.a (the runtime helper static library tcc bundles for
-# things like __va_list_intrin).
+# binary, so `run.py` can pass `-B$build_dir` and find tccdefs.h.
 mkdir -p "$build_dir/include"
 cp -R "$tcc_src/include/." "$build_dir/include/" 2>/dev/null || true
 cp "$tcc_src/include/tccdefs.h" "$build_dir/" 2>/dev/null || true
-cp "$tcc_src/libtcc1.a" "$build_dir/" 2>/dev/null || true
+
+# libtcc1.a holds tcc's runtime helpers (soft-float, alloca, va_list).
+# The vendored archive is built for badc's own tcc and the cc-built
+# tcc here rejects its objects; tcc still requires the file to exist at
+# link time. On 64-bit hosts the fixtures reference none of those
+# helpers, so an empty archive satisfies the link. run.py passes
+# `-L$build_dir` so tcc finds it on the library path.
+: > "$build_dir/empty.c"
+"$cc" -c "$build_dir/empty.c" -o "$build_dir/empty.o"
+ar rcs "$build_dir/libtcc1.a" "$build_dir/empty.o"
 
 echo "built: $build_dir/tcc"

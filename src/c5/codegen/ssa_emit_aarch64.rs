@@ -3000,11 +3000,14 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 }
 
 /// Place every call argument into its AAPCS64 target slot in an
-/// order that survives source / target overlaps. With the qbe-shape
-/// caller-saved bank, an argument's value can sit in another
-/// argument's target arg register; a naive sequential
-/// `mov tgt_i, src_i` would clobber a still-needed source. The
-/// permutation-safe order is:
+/// order that survives source / target overlaps. With the
+/// allocator's caller-saved bank covering x0..x15, an argument's
+/// value can sit in another argument's target arg register; a
+/// naive sequential `mov tgt_i, src_i` would clobber a still-
+/// needed source. Resolution uses the classical parallel-copy
+/// algorithm: drain leaves (target not a source of any other
+/// pending move) first; break the residual cycles with one
+/// scratch-mediated copy. The permutation-safe order is:
 ///
 ///   * Stack slots first -- their sources are read into a scratch
 ///     and stored to the host-stack overflow region, preserving

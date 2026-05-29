@@ -329,10 +329,15 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 
 /// Place every argument into its System V / Win64 target slot in
 /// an order that survives source / target overlaps. With the
-/// qbe-shape caller-saved bank, an argument's value can sit in
-/// another argument's target arg register; a naive sequential
-/// per-arg `mov target_i, src_i` would clobber a still-needed
-/// source. Pass ordering mirrors the AArch64 emit:
+/// allocator's caller-saved bank covering the arg registers
+/// (rdi rsi rdx rcx r8 r9 / rcx rdx r8 r9), an argument's value
+/// can sit in another argument's target arg register; a naive
+/// sequential per-arg `mov target_i, src_i` would clobber a
+/// still-needed source. Resolution uses the classical
+/// parallel-copy algorithm: drain leaves (target not a source of
+/// any other pending move) first; break the residual cycles with
+/// one scratch-mediated copy. Pass ordering mirrors the AArch64
+/// emit:
 ///
 ///   * Stack slots first -- their sources are read into
 ///     `SCRATCH_R10` and stored to the host-stack overflow

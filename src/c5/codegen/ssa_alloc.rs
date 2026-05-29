@@ -168,17 +168,20 @@ impl RegBanks {
     pub fn for_target(target: Target) -> Self {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Self {
-                // Flat caller-saved pool matching qbe's arm64_rsave:
-                // x0..x7 are the AAPCS64 arg / return regs, x8 is the
-                // indirect-return slot, x9..x15 are general scratch.
-                // Adding them lets the coalescing hint pass land a
-                // call-argument value directly in its target arg
-                // register so the `mov x0..x7, xN` setup disappears.
-                // x16 / x17 are the encoder scratch (large-immediate
-                // and adrp / add fixups), x18 is the Windows platform
-                // reg, x19 is the writer's address-materialisation
-                // scratch (see [[function_clobbers_x19]]); all stay
-                // reserved. x28 joins the callee-saved bank.
+                // AAPCS64 caller-saved (volatile) registers: x0..x7
+                // are the arg / return regs, x8 is the indirect-return
+                // slot, x9..x15 are general scratch. A single flat
+                // caller-saved pool lets the coalescing-hint pass
+                // place a call-argument value directly in its target
+                // arg register so the `mov x0..x7, xN` setup
+                // disappears. x16 / x17 are the encoder scratch
+                // (large-immediate and adrp / add fixups), x18 is the
+                // Windows platform register, x19 is the writer's
+                // address-materialisation scratch (see
+                // [[function_clobbers_x19]]); all stay reserved.
+                // AAPCS64 callee-saved (non-volatile) GPRs are
+                // x19..x28; x19 is the writer's scratch so the bank
+                // starts at x20 and runs through x28.
                 callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27, 28],
                 caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],

@@ -19,7 +19,9 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, Terminator};
+use super::super::ir::{
+    BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 
 /// Frame slots eligible for register promotion: those accessed only
 /// via `LoadLocal` / `StoreLocal` and never via `LocalAddr`. A slot
@@ -234,6 +236,245 @@ pub(crate) fn phi_placement(
     result
 }
 
+/// Apply `f` to every value-id operand of an instruction. Exhaustive
+/// over `Inst`: a missed operand would leave a stale reference to a
+/// promoted load after the rewrite below.
+fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
+    match inst {
+        Inst::Imm(_)
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::LoadLocal { .. }
+        | Inst::TailExt(_)
+        | Inst::AllocaInit(_) => {}
+        Inst::Load { addr, .. } => f(addr),
+        Inst::Store { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
+        Inst::StoreLocal { value, .. } => f(value),
+        Inst::LoadIndexed { base, index, .. } => {
+            f(base);
+            f(index);
+        }
+        Inst::StoreIndexed {
+            base, index, value, ..
+        } => {
+            f(base);
+            f(index);
+            f(value);
+        }
+        Inst::Binop { lhs, rhs, .. } => {
+            f(lhs);
+            f(rhs);
+        }
+        Inst::BinopI { lhs, .. } => f(lhs),
+        Inst::Fneg(v) => f(v),
+        Inst::FpCast { value, .. } => f(value),
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            for a in args {
+                f(a);
+            }
+        }
+        Inst::CallIndirect { target, args } => {
+            f(target);
+            for a in args {
+                f(a);
+            }
+        }
+        Inst::Mcpy { dst, src, .. } => {
+            f(dst);
+            f(src);
+        }
+    }
+}
+
+/// True when every `LoadLocal` / `StoreLocal` against `slot` uses the
+/// full 8-byte width. Sub-width slots carry truncation / extension
+/// semantics that promoting to a plain value reference would drop, so
+/// they stay in memory until the rename models the width.
+fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
+    for inst in &func.insts {
+        match inst {
+            Inst::LoadLocal { off, kind } if *off == slot && *kind != LoadKind::I64 => {
+                return false;
+            }
+            Inst::StoreLocal { off, kind, .. } if *off == slot && *kind != StoreKind::I64 => {
+                return false;
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Promote address-free, full-width local slots that need no phi to
+/// direct value references, dropping their frame loads and stores.
+/// Slots that merge two definitions (non-empty phi placement) stay in
+/// memory until phi insertion lands.
+///
+/// The rewrite keeps every `ValueId` stable: a promoted `LoadLocal`
+/// has its uses redirected to the reaching definition (it then has no
+/// consumers and the emit drops it as dead-pure), and a promoted
+/// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
+/// semantics treat as the stored value -- is redirected to that value.
+pub(crate) fn run(func: &mut FunctionSsa) {
+    let promotable = promotable_slots(func);
+    if promotable.is_empty() {
+        return;
+    }
+    let idom = dominators(func);
+    let df = dominance_frontiers(func, &idom);
+    let phi_blocks = phi_placement(func, &promotable, &df);
+    let slots: BTreeSet<i64> = promotable
+        .into_iter()
+        .filter(|s| !phi_blocks.contains_key(s))
+        .filter(|s| slot_is_full_width(func, *s))
+        .collect();
+    if slots.is_empty() {
+        return;
+    }
+
+    // Dominator-tree children, from idom.
+    let n = func.blocks.len();
+    let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
+    for (b, &id) in idom.iter().enumerate() {
+        if id != NO_BLOCK && id as usize != b {
+            children[id as usize].push(b as BlockId);
+        }
+    }
+
+    // Reaching-definition rename over the dom tree. `redirect[id]`
+    // maps a promoted load / store id to the value that replaces it.
+    // A slot whose load is reached by no definition (read before
+    // write) is recorded in `failed` and left entirely in memory.
+    let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
+    let mut store_ids: Vec<u32> = Vec::new();
+    let mut failed: BTreeSet<i64> = BTreeSet::new();
+    let mut load_slot: alloc::collections::BTreeMap<u32, i64> = alloc::collections::BTreeMap::new();
+    let mut store_slot: alloc::collections::BTreeMap<u32, i64> =
+        alloc::collections::BTreeMap::new();
+
+    enum Frame {
+        Visit(BlockId),
+        Restore(Vec<(i64, Option<ValueId>)>),
+    }
+    let mut current: alloc::collections::BTreeMap<i64, ValueId> =
+        alloc::collections::BTreeMap::new();
+    let mut stack: Vec<Frame> = alloc::vec![Frame::Visit(0)];
+    while let Some(frame) = stack.pop() {
+        match frame {
+            Frame::Restore(saved) => {
+                for (slot, old) in saved {
+                    match old {
+                        Some(v) => {
+                            current.insert(slot, v);
+                        }
+                        None => {
+                            current.remove(&slot);
+                        }
+                    }
+                }
+            }
+            Frame::Visit(b) => {
+                let range = func.blocks[b as usize].inst_range.clone();
+                let mut saved: Vec<(i64, Option<ValueId>)> = Vec::new();
+                for id in range.start..range.end {
+                    match &func.insts[id as usize] {
+                        Inst::StoreLocal { off, value, .. } if slots.contains(off) => {
+                            saved.push((*off, current.get(off).copied()));
+                            current.insert(*off, *value);
+                            redirect[id as usize] = Some(*value);
+                            store_ids.push(id);
+                            store_slot.insert(id, *off);
+                        }
+                        Inst::LoadLocal { off, .. } if slots.contains(off) => {
+                            match current.get(off).copied() {
+                                Some(r) => {
+                                    redirect[id as usize] = Some(r);
+                                    load_slot.insert(id, *off);
+                                }
+                                None => {
+                                    failed.insert(*off);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                stack.push(Frame::Restore(saved));
+                for &c in children[b as usize].iter().rev() {
+                    stack.push(Frame::Visit(c));
+                }
+            }
+        }
+    }
+
+    // Drop every record for a slot that could not be fully promoted
+    // (a load reached by no definition): leave its loads and stores in
+    // memory untouched.
+    if !failed.is_empty() {
+        for (id, slot) in load_slot.iter().chain(store_slot.iter()) {
+            if failed.contains(slot) {
+                redirect[*id as usize] = None;
+            }
+        }
+        store_ids.retain(|id| !failed.contains(&store_slot[id]));
+    }
+    if redirect.iter().all(|r| r.is_none()) {
+        return;
+    }
+
+    // Resolve a value through the redirect chain to a stable id.
+    fn resolve(redirect: &[Option<ValueId>], mut v: ValueId) -> ValueId {
+        let mut guard = 0;
+        while v != NO_VALUE {
+            match redirect[v as usize] {
+                Some(t) if t != v => {
+                    v = t;
+                    guard += 1;
+                    if guard > redirect.len() {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        v
+    }
+
+    // Rewrite every operand, terminator value, and block accumulator.
+    for inst in func.insts.iter_mut() {
+        for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE {
+            block.exit_acc = resolve(&redirect, block.exit_acc);
+        }
+        match &mut block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                *cond = resolve(&redirect, *cond);
+            }
+            Terminator::Return(v) => {
+                if *v != NO_VALUE {
+                    *v = resolve(&redirect, *v);
+                }
+            }
+            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+        }
+    }
+    // Neutralize promoted stores: their id has been redirected to the
+    // stored value, and their memory write is no longer wanted.
+    for &id in &store_ids {
+        func.insts[id as usize] = Inst::Imm(0);
+    }
+    // Promoted loads now have no consumers; the emit's dead-pure check
+    // drops them. Leaving the LoadLocal in place keeps every later id
+    // stable.
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::super::ir::{Block, Inst, LoadKind, NO_VALUE, StoreKind, Terminator};
@@ -346,6 +587,106 @@ mod tests {
         // dominance frontier.
         assert!(df[2].contains(&1), "back edge -> header in body DF");
         assert!(df[1].contains(&1), "loop header is in its own DF");
+    }
+
+    #[test]
+    fn run_promotes_dominating_store_to_cross_block_load() {
+        // Block 0: x = 5 (slot -1), jmp 1. Block 1: return x.
+        // The store dominates the load with no merge, so x promotes:
+        // the store becomes Imm(0) (neutralized) and the return reads
+        // the stored value directly.
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..3,
+                terminator: Terminator::Return(2),
+                exit_acc: 2,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        // The store is neutralized to a dead Imm.
+        assert!(matches!(f.insts[1], Inst::Imm(0)));
+        // The return now reads the stored value (id 0), not the load.
+        assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
+        assert_eq!(f.blocks[1].exit_acc, 0);
+    }
+
+    #[test]
+    fn run_leaves_address_taken_slot_in_memory() {
+        // Slot -1 has its address taken; run must not touch its load.
+        let insts = alloc::vec![
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+            },
+            Inst::LocalAddr(-1),
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..4,
+            terminator: Terminator::Return(3),
+            exit_acc: 3,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(
+            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            "address-taken slot's store must remain"
+        );
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+    }
+
+    #[test]
+    fn run_leaves_sub_width_slot_in_memory() {
+        // A char (I8) slot carries truncation/extension semantics, so
+        // it stays in memory under the current full-width restriction.
+        let insts = alloc::vec![
+            Inst::Imm(300),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I8,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::U8,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..3,
+            terminator: Terminator::Return(2),
+            exit_acc: 2,
+        }];
+        let mut f = func_with(insts, blocks);
+        run(&mut f);
+        assert!(matches!(f.insts[1], Inst::StoreLocal { .. }));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
     }
 
     #[test]

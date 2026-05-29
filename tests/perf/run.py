@@ -132,6 +132,19 @@ def probe_compilers() -> list[Compiler]:
         tcc = Path(tcc_env)
     else:
         tcc = PERF_DIR / "build" / f"tcc{EXE}"
+        # Bootstrap the vendored tinycc on first run so the perf
+        # table reports a single-pass non-optimising baseline
+        # without the caller having to remember to invoke
+        # `build_tcc.sh`. The build script is a no-op when its
+        # output already exists.
+        if not tcc.is_file():
+            build_script = PERF_DIR / "build_tcc.sh"
+            if build_script.is_file():
+                print(
+                    f"info: bootstrapping vendored tinycc via {build_script.name}",
+                    file=sys.stderr,
+                )
+                subprocess.run(["bash", str(build_script)], check=False)
     if tcc.is_file():
         # tcc's macho build needs the macOS SDK include path; the Linux
         # build is happy with the bundled `-B` directory holding

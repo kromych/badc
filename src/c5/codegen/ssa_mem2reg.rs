@@ -9,9 +9,11 @@
 //! A dominator-tree rename finds the definition reaching each load. A
 //! load whose slot has a single reaching definition is rewritten to
 //! that value (full-width slots), or to a mask / sign-extension of it
-//! (narrow slots), and the matching stores are dropped. TODO a slot
-//! whose definition reaches a control-flow merge from more than one
-//! block needs a join phi and stays in the frame for now.
+//! (narrow slots), and the matching stores are dropped. A slot whose
+//! value merges from more than one block keeps its loads and stores:
+//! the rewrite removes them only for a single reaching definition,
+//! and keeping such a slot register-resident across the merge trades
+//! a frame access for a register move without removing instructions.
 
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;

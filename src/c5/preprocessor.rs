@@ -1016,7 +1016,7 @@ impl Preprocessor {
     /// `__FILE__` and `__LINE__`, which can't live in the static
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
-        self.substitute_with_blocklist(line, filename, line_no, &[])
+        self.substitute_with_blocklist(line, filename, line_no, &Blocklist::Nil)
     }
 
     /// Scan `text` for identifiers that name a macro currently
@@ -1079,7 +1079,7 @@ impl Preprocessor {
         line: &str,
         filename: &str,
         line_no: usize,
-        blocklist: &[&str],
+        blocklist: &Blocklist,
     ) -> String {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
@@ -1119,7 +1119,7 @@ impl Preprocessor {
                 }
                 // C99 "blue paint": don't re-expand a name that's
                 // already being expanded on the current chain.
-                if blocklist.contains(&ident) {
+                if blocklist.contains(ident) {
                     out.push_str(ident);
                     continue;
                 }
@@ -1168,16 +1168,20 @@ impl Preprocessor {
                         for arg_text in &expanded_args {
                             self.collect_macro_idents_into(arg_text, &mut blue_paint);
                         }
-                        let mut nested: Vec<&str> = blocklist.to_vec();
-                        nested.push(ident);
-                        for bp in &blue_paint {
-                            let s: &str = bp.as_str();
-                            if !nested.contains(&s) {
-                                nested.push(s);
+                        let recursed = if blue_paint.is_empty() {
+                            let frame = Blocklist::Cons(ident, blocklist);
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &frame)
+                        } else {
+                            let mut names: Vec<&str> = alloc::vec![ident];
+                            for bp in &blue_paint {
+                                let s = bp.as_str();
+                                if !names.contains(&s) && !blocklist.contains(s) {
+                                    names.push(s);
+                                }
                             }
-                        }
-                        let recursed =
-                            self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
+                            let frame = Blocklist::Many(&names, blocklist);
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &frame)
+                        };
                         // Token-stream rescan (C99 6.10.3.4): if the
                         // function-like macro's body reduces to a
                         // single identifier and the *source* token
@@ -1194,7 +1198,7 @@ impl Preprocessor {
                                 .bytes()
                                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
                             && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-                            && !blocklist.contains(&trimmed)
+                            && !blocklist.contains(trimmed)
                             && let Some(inner_def) = self.fn_macros.get(trimmed)
                         {
                             let mut k = next_src;
@@ -1223,8 +1227,7 @@ impl Preprocessor {
                                     })
                                     .collect();
                                 let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
-                                let mut deeper: Vec<&str> = blocklist.to_vec();
-                                deeper.push(trimmed);
+                                let deeper = Blocklist::Cons(trimmed, blocklist);
                                 let inner_recursed = self.substitute_with_blocklist(
                                     &inner_body,
                                     filename,
@@ -1250,8 +1253,7 @@ impl Preprocessor {
                 match self.expand(ident) {
                     None => out.push_str(ident),
                     Some(expanded) => {
-                        let mut nested: Vec<&str> = blocklist.to_vec();
-                        nested.push(ident);
+                        let nested = Blocklist::Cons(ident, blocklist);
                         // Token-stream rescan (C99 6.10.3.4): if the
                         // expansion is a single identifier and the
                         // *source* token immediately after the
@@ -1274,7 +1276,7 @@ impl Preprocessor {
                                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
                             && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
                             && let Some(macro_def) = self.fn_macros.get(trimmed)
-                            && !nested.contains(&trimmed)
+                            && !nested.contains(trimmed)
                         {
                             let mut j = i;
                             while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
@@ -1293,8 +1295,7 @@ impl Preprocessor {
                                     })
                                     .collect();
                                 let body_expanded = expand_fn_macro(macro_def, &expanded_args);
-                                let mut deeper: Vec<&str> = nested.clone();
-                                deeper.push(trimmed);
+                                let deeper = Blocklist::Cons(trimmed, &nested);
                                 let recursed = self.substitute_with_blocklist(
                                     &body_expanded,
                                     filename,
@@ -2202,6 +2203,42 @@ impl Preprocessor {
             real_symbol: real_symbol.to_string(),
         });
         Ok(())
+    }
+}
+
+/// Names currently being expanded, threaded through the recursive
+/// macro substitution to implement C99 6.10.3.4 "blue paint" (a
+/// macro does not re-expand while its own expansion is in flight).
+/// A stack-allocated chain: the common frame adds a single name and
+/// borrows its parent, so no heap allocation is needed; a frame that
+/// must add several names (a function-like macro's argument pre-
+/// expansion) borrows a slice instead.
+enum Blocklist<'a> {
+    Nil,
+    Cons(&'a str, &'a Blocklist<'a>),
+    Many(&'a [&'a str], &'a Blocklist<'a>),
+}
+
+impl Blocklist<'_> {
+    fn contains(&self, name: &str) -> bool {
+        let mut cur = self;
+        loop {
+            match cur {
+                Blocklist::Nil => return false,
+                Blocklist::Cons(n, parent) => {
+                    if *n == name {
+                        return true;
+                    }
+                    cur = parent;
+                }
+                Blocklist::Many(names, parent) => {
+                    if names.contains(&name) {
+                        return true;
+                    }
+                    cur = parent;
+                }
+            }
+        }
     }
 }
 

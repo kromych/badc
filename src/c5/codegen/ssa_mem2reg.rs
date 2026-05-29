@@ -36,11 +36,15 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
                 touched.insert(*off);
             }
-            // A taken address escapes the slot's value to memory; an
-            // alloca-top slot backs frame-resident arena bookkeeping
-            // the per-arch emit reads directly. Neither may be lifted
-            // into a register.
-            Inst::LocalAddr(off) | Inst::AllocaInit(off) => {
+            // A taken address escapes the slot's value to memory and
+            // cannot be lifted into a register.
+            Inst::LocalAddr(off) => {
+                address_taken.insert(*off);
+            }
+            // A non-zero alloca top names a frame-resident arena the
+            // per-arch emit reads directly; `AllocaInit(0)` is the
+            // unconditional no-alloca marker and aliases nothing.
+            Inst::AllocaInit(off) if *off != 0 => {
                 address_taken.insert(*off);
             }
             _ => {}
@@ -314,6 +318,24 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     true
 }
 
+/// A slot whose value lives in the integer register file at every
+/// definition. An `I64` slot load is integer-classed, so its
+/// consumers read an integer register; promoting a slot whose store
+/// value is FP-classed (a `double` produced by an FP op, stored via
+/// the `StoreLocal { kind: I64 }` bit-pattern path) would redirect
+/// those consumers to an FP register and cross the register files.
+fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
+    for inst in &func.insts {
+        if let Inst::StoreLocal { off, value, .. } = inst
+            && *off == slot
+            && super::ssa_alloc::produces_fp_result(&func.insts[*value as usize])
+        {
+            return false;
+        }
+    }
+    true
+}
+
 /// Promote address-free, full-width local slots that need no phi to
 /// direct value references, dropping their frame loads and stores.
 /// Slots that merge two definitions (non-empty phi placement) stay in
@@ -328,15 +350,16 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     // Conservative aliasing guard. A taken local address reaches more
     // than the slot it names -- the address of a struct or array local
     // covers every field / element slot, which the per-slot LocalAddr
-    // check below does not see without frame-extent tracking. An
-    // alloca arena is likewise frame-resident. Skip the whole function
-    // when either appears; with no taken addresses, every local slot
-    // is unaliased and safe to promote.
-    if func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::LocalAddr(_) | Inst::AllocaInit(_)))
-    {
+    // check below does not see without frame-extent tracking. A
+    // function with a non-zero alloca top grows its frame dynamically;
+    // `AllocaInit(0)` is the unconditional no-alloca marker and is
+    // ignored. Skip the whole function when a taken address or a real
+    // alloca arena appears; otherwise every local slot is unaliased.
+    if func.insts.iter().any(|i| match i {
+        Inst::LocalAddr(_) => true,
+        Inst::AllocaInit(s) => *s != 0,
+        _ => false,
+    }) {
         return;
     }
     let promotable = promotable_slots(func);
@@ -350,6 +373,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         .into_iter()
         .filter(|s| !phi_blocks.contains_key(s))
         .filter(|s| slot_is_full_width(func, *s))
+        .filter(|s| slot_stores_only_int(func, *s))
         .collect();
     if slots.is_empty() {
         return;

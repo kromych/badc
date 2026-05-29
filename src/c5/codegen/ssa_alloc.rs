@@ -591,6 +591,14 @@ enum ResultKind {
     None,
 }
 
+/// Whether an instruction's result lives in the FP register file.
+/// Used by `ssa_mem2reg` to keep a register-file-consistent rewrite:
+/// an `I64` slot load is integer-classed, so a slot may be promoted
+/// only when its stored values are integer-classed too.
+pub(super) fn produces_fp_result(inst: &Inst) -> bool {
+    matches!(result_kind(inst), ResultKind::Fp)
+}
+
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {

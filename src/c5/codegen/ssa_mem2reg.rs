@@ -303,6 +303,14 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
 /// full 8-byte width. Sub-width slots carry truncation / extension
 /// semantics that promoting to a plain value reference would drop, so
 /// they stay in memory until the rename models the width.
+/// Only full-width slots are promoted. A narrowing store leaves the
+/// frame slot holding the truncated value while the source register
+/// keeps its full width; the matching load re-extends from the slot
+/// (C99 6.5.16.1p2 conversion is realized by the StoreLocal /
+/// LoadLocal width pair, not by the stored register). Redirecting the
+/// load to the stored value would skip that truncate-then-extend, so
+/// sub-width slots stay in memory until the rewrite can materialize
+/// the extension at each use.
 fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
     for inst in &func.insts {
         match inst {

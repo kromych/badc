@@ -46,10 +46,12 @@ Multi-TU knobs:
                            library. Members are pulled in on demand.
 
 Compile knobs:
-  -O, --optimize           Enable the native peephole + register
-                           allocator pass.
-  --no-debug, -g0          Skip DWARF emission. Shrinks
-                           the output by ~10-30%.
+  -O, --optimize           Reserved for a future optimization pass;
+                           currently a no-op (the peephole folds and
+                           register allocator always run).
+  -g, --debug              Emit DWARF debug info. Off by default;
+                           adds ~10-30% to the output size.
+  -g0, --no-debug          Skip DWARF emission (the default).
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
@@ -167,7 +169,7 @@ fn main() {
     let mut trace = false;
     let mut optimize_flag = false;
     let mut dump_ssa = false;
-    let mut emit_debug_info = true;
+    let mut emit_debug_info = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -229,6 +231,7 @@ fn main() {
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
             "--dump-ssa" => dump_ssa = true,
+            "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),

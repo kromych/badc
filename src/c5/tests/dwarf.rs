@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{CompileOptions, Compiler, Target, emit_native};
+use crate::{CompileOptions, Compiler, Target};
 
 /// Compile the inline source with the standard prelude and write
 /// an ad-hoc-signed Mach-O into a unique temp file. The path is
@@ -31,8 +31,12 @@ fn build_signed_mach_o(src: &str, stem: &str) -> PathBuf {
     // rather than `<unknown>`; lldb prefers a non-empty CU name
     // when listing types.
     program.source_path = format!("{stem}.c");
-    let bytes = emit_native(&program, Target::MacOSAarch64)
-        .unwrap_or_else(|e| panic!("emit_native failed for {stem}: {e}"));
+    let bytes = crate::emit_native_with_options(
+        &program,
+        Target::MacOSAarch64,
+        crate::NativeOptions::new().with_debug_info(true),
+    )
+    .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
 
     let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
     {

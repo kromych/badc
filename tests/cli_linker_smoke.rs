@@ -802,6 +802,7 @@ fn debug_line_covers_each_function_entry_pc() {
     let out = dir.join("f");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(&src)
@@ -894,6 +895,7 @@ fn debug_line_flags_prologue_end_per_function() {
     let out = dir.join("f");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(&src)
@@ -943,6 +945,7 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -950,6 +953,7 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -958,6 +962,7 @@ fn multi_tu_link_preserves_per_unit_dwarf_cu() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1087,6 +1092,7 @@ fn multi_tu_link_emits_struct_dies() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1094,6 +1100,7 @@ fn multi_tu_link_emits_struct_dies() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1102,6 +1109,7 @@ fn multi_tu_link_emits_struct_dies() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1180,6 +1188,7 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1187,6 +1196,7 @@ fn multi_tu_link_emits_nested_struct_dies() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1195,6 +1205,7 @@ fn multi_tu_link_emits_nested_struct_dies() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1260,6 +1271,7 @@ fn amalg_compile_emits_enumeration_type_for_tagged_enum() {
     let out = dir.join("f");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(&src)
@@ -1319,6 +1331,7 @@ fn multi_tu_link_emits_enumeration_type_for_tagged_enum() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1326,6 +1339,7 @@ fn multi_tu_link_emits_enumeration_type_for_tagged_enum() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1334,6 +1348,7 @@ fn multi_tu_link_emits_enumeration_type_for_tagged_enum() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1392,6 +1407,7 @@ fn multi_tu_link_emits_decl_file_on_locals() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1399,6 +1415,7 @@ fn multi_tu_link_emits_decl_file_on_locals() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1407,6 +1424,7 @@ fn multi_tu_link_emits_decl_file_on_locals() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1450,6 +1468,7 @@ fn multi_tu_link_emits_calling_convention_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1457,6 +1476,7 @@ fn multi_tu_link_emits_calling_convention_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1465,6 +1485,7 @@ fn multi_tu_link_emits_calling_convention_on_subprograms() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1515,6 +1536,7 @@ fn amalg_compile_emits_array_type_for_struct_field_arrays() {
     let out = dir.join("f");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(&src)
@@ -1569,6 +1591,7 @@ fn multi_tu_link_emits_array_type_for_struct_field_arrays() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1576,6 +1599,7 @@ fn multi_tu_link_emits_array_type_for_struct_field_arrays() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1584,6 +1608,7 @@ fn multi_tu_link_emits_array_type_for_struct_field_arrays() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1633,6 +1658,7 @@ fn amalg_compile_emits_array_type_for_local_arrays() {
     let out = dir.join("f");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(&src)
@@ -1684,6 +1710,7 @@ fn multi_tu_link_emits_array_type_for_local_arrays() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1691,6 +1718,7 @@ fn multi_tu_link_emits_array_type_for_local_arrays() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1699,6 +1727,7 @@ fn multi_tu_link_emits_array_type_for_local_arrays() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1751,6 +1780,7 @@ fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1758,6 +1788,7 @@ fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1766,6 +1797,7 @@ fn multi_tu_link_emits_prototyped_flag_on_subprograms() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1814,6 +1846,7 @@ fn multi_tu_link_emits_decl_line_on_locals() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1821,6 +1854,7 @@ fn multi_tu_link_emits_decl_line_on_locals() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1829,6 +1863,7 @@ fn multi_tu_link_emits_decl_line_on_locals() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1873,6 +1908,7 @@ fn multi_tu_link_emits_external_flag_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1880,6 +1916,7 @@ fn multi_tu_link_emits_external_flag_on_subprograms() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1888,6 +1925,7 @@ fn multi_tu_link_emits_external_flag_on_subprograms() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1933,6 +1971,7 @@ fn multi_tu_link_emits_unspecified_parameters_for_variadic() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -1940,6 +1979,7 @@ fn multi_tu_link_emits_unspecified_parameters_for_variadic() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -1948,6 +1988,7 @@ fn multi_tu_link_emits_unspecified_parameters_for_variadic() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -1994,6 +2035,7 @@ fn multi_tu_link_populates_debug_frame() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("helper.c"))
             .current_dir(&dir),
@@ -2001,6 +2043,7 @@ fn multi_tu_link_populates_debug_frame() {
     );
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-c")
             .arg(dir.join("main.c"))
             .current_dir(&dir),
@@ -2009,6 +2052,7 @@ fn multi_tu_link_populates_debug_frame() {
     let out = dir.join("prog");
     run(
         Command::new(badc())
+            .arg("-g")
             .arg("-o")
             .arg(&out)
             .arg(dir.join("main.o"))
@@ -2096,6 +2140,54 @@ fn compile_only_writes_relocatable_elf() {
     assert_eq!(bytes[4], 2, "expected ELFCLASS64");
     // Little-endian.
     assert_eq!(bytes[5], 1, "expected ELFDATA2LSB");
+}
+
+/// DWARF is off by default and opt-in via `-g` / `--debug`, matching
+/// gcc / clang. A default build links a DWARF-free executable -- the
+/// shipped binary stays small -- while `-g` carries the `.debug_*`
+/// sections through. The `debug_abbrev` substring matches both the
+/// ELF `.debug_abbrev` and the Mach-O `__debug_abbrev` section names.
+#[test]
+fn debug_info_is_off_by_default_and_enabled_by_g() {
+    let dir = tempdir("dwarf-default-off");
+    let src = write_source(&dir, "f.c", "int main(void) { int x = 1; return x; }\n");
+
+    let plain = dir.join("plain");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&plain)
+            .arg(&src)
+            .current_dir(&dir),
+        "build without -g",
+    );
+    let plain_bytes = std::fs::read(&plain).expect("read plain");
+    assert!(
+        !plain_bytes.windows(12).any(|w| w == b"debug_abbrev"),
+        "a default build must link a DWARF-free executable",
+    );
+
+    let dbg = dir.join("dbg");
+    run(
+        Command::new(badc())
+            .arg("-g")
+            .arg("-o")
+            .arg(&dbg)
+            .arg(&src)
+            .current_dir(&dir),
+        "build with -g",
+    );
+    let dbg_bytes = std::fs::read(&dbg).expect("read dbg");
+    assert!(
+        dbg_bytes.windows(12).any(|w| w == b"debug_abbrev"),
+        "`-g` must carry DWARF (.debug_abbrev) into the executable",
+    );
+    assert!(
+        dbg_bytes.len() > plain_bytes.len(),
+        "the `-g` executable ({}) should be larger than the default ({})",
+        dbg_bytes.len(),
+        plain_bytes.len(),
+    );
 }
 
 /// `-c` must plumb `-D`, `-I`, and `-include` to the

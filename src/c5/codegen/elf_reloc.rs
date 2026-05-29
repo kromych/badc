@@ -822,8 +822,17 @@ pub(super) fn write_relocatable(
     // Generate the DWARF triple for this TU. Address slots end
     // up as placeholders paired with `DwarfReloc` records that
     // the loop below translates into ELF `.rela.debug_*`
-    // entries.
-    let dwarf = dwarf_reloc::emit(program, build, source_path, machine, target);
+    // entries. Without `-g` the DWARF build is skipped entirely:
+    // the `.debug_*` sections stay zero-length, so `link_native_-
+    // objects` sees no debug info and the final image carries
+    // none, and the type-catalog walk is avoided on a default
+    // build. TODO: drop the empty `.debug_*` section headers from
+    // the relocatable object as well.
+    let dwarf = if build.debug_info {
+        dwarf_reloc::emit(program, build, source_path, machine, target)
+    } else {
+        dwarf_reloc::DwarfRelocatable::default()
+    };
     let mut rela_debug_info_bytes: Vec<u8> =
         Vec::with_capacity(dwarf.info_relocs.len() * ELF64_RELA_SIZE);
     for r in &dwarf.info_relocs {

@@ -1253,14 +1253,14 @@ pub struct NativeOptions {
     /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
     /// + `.debug_str` + `.debug_frame`) into the output binary.
     ///
-    /// On by default, matching gcc / clang behaviour for an
-    /// implicit `-g` build. Turning it off via `--no-debug` /
-    /// `-g0` shrinks the artifact (~10-30% on a large
-    /// translation unit), trims compile time (the type-catalog
-    /// walk is non-trivial on big inputs), and -- because the
-    /// only varying input across runs that differ in source
-    /// path is the DWARF blob -- gives byte-identical
-    /// production binaries useful for golden-hash bisection.
+    /// Off by default, matching gcc / clang, which emit no debug
+    /// info without `-g`. Enabling it via `-g` / `--debug` adds
+    /// compile time (the type-catalog walk is non-trivial on big
+    /// inputs) and artifact size (~10-30% on a large translation
+    /// unit). The default keeps builds fast and binaries small;
+    /// because the DWARF blob is the only output that varies with
+    /// the source path, a no-DWARF build is also byte-identical
+    /// across runs, useful for golden-hash bisection.
     pub debug_info: bool,
     /// Print each SSA function's IR + allocator output to stderr
     /// before lowering. Same as `--dump-asm` for native code: a
@@ -1300,7 +1300,7 @@ pub enum OutputKind {
 }
 
 impl Default for NativeOptions {
-    /// Defaults: executable output, DWARF on, no relocatable kind.
+    /// Defaults: executable output, DWARF off, optimizations off.
     fn default() -> Self {
         Self::new()
     }
@@ -1312,7 +1312,7 @@ impl NativeOptions {
         Self {
             optimize: false,
             output_kind: OutputKind::Executable,
-            debug_info: true,
+            debug_info: false,
             dump_ssa: false,
         }
     }

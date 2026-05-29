@@ -87,6 +87,9 @@ pub(crate) struct DwarfReloc {
 
 /// Output of [`emit`]: the DWARF byte streams plus the relocs
 /// that describe every placeholder address slot inside them.
+/// The `Default` (all-empty) value is what a build without `-g`
+/// produces, so the relocatable object carries no debug info.
+#[derive(Default)]
 pub(crate) struct DwarfRelocatable {
     pub debug_info: Vec<u8>,
     pub debug_abbrev: Vec<u8>,

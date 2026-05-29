@@ -42,15 +42,14 @@ fn build_info_marker_appears_in_every_target() {
     }
 }
 
-/// `--no-debug` / `with_debug_info(false)` strips DWARF from
-/// the emitted image. The `debug_info` substring shows up in
-/// the section-name tables of every format the writer emits:
-/// ELF has `.debug_info` in `.shstrtab`, PE has `.debug_info`
+/// `-g` / `with_debug_info(true)` carries DWARF into the emitted
+/// image; the default (off) strips it. The `debug_info` substring
+/// shows up in the section-name tables of every format the writer
+/// emits: ELF has `.debug_info` in `.shstrtab`, PE has `.debug_info`
 /// in the COFF string table (the 8-char section-name field
 /// overflows to the strtab), Mach-O has `__debug_info` in its
 /// `Section64` table. Presence / absence is a single substring
-/// scan per target. Default options keep DWARF on; the toggle
-/// drops every byte of it.
+/// scan per target.
 #[test]
 fn with_debug_info_false_strips_dwarf_for_every_target() {
     use crate::{NativeOptions, Target, emit_native_with_options};
@@ -63,11 +62,12 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let on = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
+        let on =
+            emit_native_with_options(&program, target, NativeOptions::new().with_debug_info(true))
+                .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
         assert!(
             on.windows(needle.len()).any(|w| w == needle),
-            "{target:?}: expected `debug_info` section name in default (DWARF-on) image"
+            "{target:?}: expected `debug_info` section name in the DWARF-on (`-g`) image"
         );
         let off = emit_native_with_options(
             &program,

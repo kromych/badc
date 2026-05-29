@@ -43,6 +43,56 @@ EXE = ".exe" if WIN else ""
 RUNS_PER_FIXTURE = 3
 TIMING_LINE_RE = re.compile(r"in\s+(\d+(?:\.\d+)?)\s+ms")
 
+# The SQLite amalgamation only parses once the features pulling in
+# headers badc does not ship are switched off (load-extension, the
+# Apple AFP locking path, deprecated entry points). The same knobs are
+# harmless for clang and tcc, so every compiler gets them.
+SQLITE_DEFINES = [
+    "-DSQLITE_OMIT_LOAD_EXTENSION",
+    "-DSQLITE_THREADSAFE=0",
+    "-DSQLITE_DEFAULT_MEMSTATUS=0",
+    "-DSQLITE_DQS=0",
+    "-DSQLITE_OMIT_DEPRECATED",
+    "-DSQLITE_OMIT_PROGRESS_CALLBACK",
+    "-DSQLITE_OMIT_SHARED_CACHE",
+    "-DSQLITE_OMIT_AUTOINIT",
+    "-DSQLITE_WITHOUT_ZONEMALLOC=1",
+    "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+    "-DSQLITE_ENABLE_LOCKING_STYLE=0",
+    # sqlite reaches for MSVC's __umulh / _umul128 intrinsics and the
+    # SEH wrappers; disabling them selects the portable fallbacks. Both
+    # are inert for clang and tcc, which never take the MSVC paths.
+    "-DSQLITE_DISABLE_INTRINSIC",
+    "-DSQLITE_OMIT_SEH",
+]
+
+# Extra compile flags per fixture. The `-I` entries put each vendored
+# demo directory on the include search path: badc resolves quoted
+# includes against the search path rather than the including file's
+# directory, and the path is harmless for clang and tcc.
+FIXTURE_FLAGS: dict[str, list[str]] = {
+    "crypto.c": [f"-I{REPO_ROOT}/demos/tweetnacl"],
+    "sqlite.c": [f"-I{REPO_ROOT}/demos/sqlite3", *SQLITE_DEFINES],
+    "compress.c": [
+        f"-I{REPO_ROOT}/demos/miniz",
+        # Keep only the in-memory zlib-style codec; drop the ZIP archive,
+        # stdio, and wall-clock paths that reach for headers badc and tcc
+        # do not ship (sys/utime.h, struct utimbuf).
+        "-DMINIZ_NO_STDIO",
+        "-DMINIZ_NO_TIME",
+        "-DMINIZ_NO_ARCHIVE_APIS",
+    ],
+    "stb.c": [f"-I{REPO_ROOT}/demos/stb"],
+}
+
+# Flags applied only when the compiler is badc. badc does not ship the
+# macOS / BSD system headers the sqlite amalgamation pulls in, nor the
+# MSVC intrinsics; its bundled msvc_compat.h supplies the shims. clang
+# and tcc use the real system headers and must not see this include.
+BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
+    "sqlite.c": ["-include", "msvc_compat.h"],
+}
+
 
 @dataclass
 class Compiler:
@@ -103,7 +153,11 @@ def probe_compilers() -> list[Compiler]:
             )
             if sdk.returncode == 0 and sdk.stdout.strip():
                 tcc_cmd += [f"-I{sdk.stdout.strip()}/usr/include"]
-        found.append(Compiler("tcc", tcc_cmd))
+        # The FP fixtures call libm (fabs); on Linux libm is a separate
+        # archive that must be named at link time. macOS folds it into
+        # libSystem, which tcc links by default.
+        tcc_trailing = ("-lm",) if sys.platform == "linux" else ()
+        found.append(Compiler("tcc", tcc_cmd, trailing=tcc_trailing))
     else:
         print(f"info: tcc not at {tcc}; skipping tcc rows", file=sys.stderr)
 
@@ -131,10 +185,13 @@ def probe_compilers() -> list[Compiler]:
 
 
 def compile_one(c: Compiler, src: Path, out: Path) -> bool:
+    extra = list(FIXTURE_FLAGS.get(src.name, []))
+    if c.name.startswith("badc"):
+        extra += BADC_FIXTURE_FLAGS.get(src.name, [])
     if c.output_dash_o:
-        argv = [*c.cmd, "-o", str(out), str(src), *c.trailing]
+        argv = [*c.cmd, *extra, "-o", str(out), str(src), *c.trailing]
     else:
-        argv = [*c.cmd, f"/Fe:{out}", str(src), *c.trailing]
+        argv = [*c.cmd, *extra, f"/Fe:{out}", str(src), *c.trailing]
     r = subprocess.run(argv, capture_output=True, text=True)
     if r.returncode != 0:
         print(
@@ -219,7 +276,17 @@ def main() -> int:
         print("error: no compilers found", file=sys.stderr)
         return 1
 
-    fixtures = ["fib.c", "qsort.c"]
+    fixtures = [
+        "fib.c",
+        "qsort.c",
+        "crypto.c",
+        "compress.c",
+        "stb.c",
+        # TODO: badc miscompiles the SQLite amalgamation once a B-tree
+        # spans more than one page, so its rows fail the result check and
+        # drop out of the table; clang and tcc report normally.
+        "sqlite.c",
+    ]
     results: list[Result] = []
     any_fail = False
 

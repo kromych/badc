@@ -93,14 +93,27 @@ mkdir -p "$build_dir/include"
 cp -R "$tcc_src/include/." "$build_dir/include/" 2>/dev/null || true
 cp "$tcc_src/include/tccdefs.h" "$build_dir/" 2>/dev/null || true
 
-# libtcc1.a holds tcc's runtime helpers (soft-float, alloca, va_list).
-# The vendored archive is built for badc's own tcc and the cc-built
-# tcc here rejects its objects; tcc still requires the file to exist at
-# link time. On 64-bit hosts the fixtures reference none of those
-# helpers, so an empty archive satisfies the link. run.py passes
-# `-L$build_dir` so tcc finds it on the library path.
-: > "$build_dir/empty.c"
-"$cc" -c "$build_dir/empty.c" -o "$build_dir/empty.o"
-ar rcs "$build_dir/libtcc1.a" "$build_dir/empty.o"
+# libtcc1.a holds tcc's runtime helpers (soft-float conversions, alloca,
+# the va_arg shim). The vendored archive is built for badc's own tcc and
+# the cc-built tcc here rejects its objects, so rebuild it by compiling
+# the runtime sources with the tcc just produced. The set of sources is
+# architecture-specific (x86_64 uses va_list.c + alloca.S; arm64 uses
+# lib-arm64.c), so attempt each candidate and keep the objects that
+# compile for this host. run.py passes `-L$build_dir` so tcc finds the
+# archive on the library path.
+rt_dir="$build_dir/rt"
+rm -rf "$rt_dir"
+mkdir -p "$rt_dir"
+rt_objs=""
+for src in libtcc1.c va_list.c builtin.c stdatomic.c tcov.c \
+           alloca.S alloca-bt.S atomic.S lib-arm64.c; do
+  obj="$rt_dir/${src%.*}.o"
+  if "$build_dir/tcc" -B"$build_dir" -I"$build_dir" -I"$build_dir/include" \
+       -I"$tcc_src" -c "$tcc_src/lib/$src" -o "$obj" 2>/dev/null; then
+    rt_objs="$rt_objs $obj"
+  fi
+done
+# shellcheck disable=SC2086
+ar rcs "$build_dir/libtcc1.a" $rt_objs
 
 echo "built: $build_dir/tcc"

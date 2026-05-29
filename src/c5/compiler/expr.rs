@@ -110,9 +110,16 @@ impl Compiler {
     /// the magnitude bump further as needed.
     fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
-        let is_unsigned = self.lex.int_suffix_unsigned;
-        let int_size = self.size_of_type(Ty::Int as i64);
-        let long_size = self.size_of_type(Ty::Long as i64);
+        let mut is_unsigned = self.lex.int_suffix_unsigned;
+        // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
+        // an unsigned type at a rank when no signed type at that rank
+        // fits; a decimal constant with no `u` suffix never does.
+        let allow_unsigned_fallback = !self.lex.int_is_decimal;
+        let sizes = [
+            self.size_of_type(Ty::Int as i64),
+            self.size_of_type(Ty::Long as i64),
+            self.size_of_type(Ty::LongLong as i64),
+        ];
         let mag = (ival as i128).unsigned_abs();
         let fits = |size_bytes: usize, signed: bool| -> bool {
             let bits = (size_bytes as u32) * 8;
@@ -130,12 +137,25 @@ impl Compiler {
                 mag <= ((1u128 << bits) - 1u128)
             }
         };
-        let mut rank: u8 = suffix_long;
-        if rank < 1 && (!fits(int_size, !is_unsigned)) {
-            rank = 1;
-        }
-        if rank < 2 && (!fits(long_size, !is_unsigned)) {
-            rank = 2;
+        // Walk the rank list (int, long, long long) starting at the
+        // floor the `l`/`ll` suffix names. At each rank try the signed
+        // type, then the unsigned type when a `u` suffix or the
+        // non-decimal base allows it, before widening.
+        let mut rank: usize = (suffix_long as usize).min(2);
+        loop {
+            let size = sizes[rank];
+            if !is_unsigned && fits(size, true) {
+                break;
+            }
+            if (is_unsigned || allow_unsigned_fallback) && fits(size, false) {
+                is_unsigned = true;
+                break;
+            }
+            if rank >= 2 {
+                is_unsigned = is_unsigned || allow_unsigned_fallback;
+                break;
+            }
+            rank += 1;
         }
         let mut ty = match rank {
             2 => Ty::LongLong as i64,

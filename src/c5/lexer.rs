@@ -205,6 +205,11 @@ pub(crate) struct Lexer {
     /// true if any `u`/`U` appeared in the suffix.
     pub int_suffix_long: u8,
     pub int_suffix_unsigned: bool,
+    /// `true` when the most recent `Token::Num` was written in decimal.
+    /// C99 6.4.4.1 lets a hexadecimal, octal, or binary constant take
+    /// an unsigned type when no signed type at its rank fits, while a
+    /// decimal constant with no `u` suffix stays signed.
+    pub int_is_decimal: bool,
 
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
@@ -339,6 +344,7 @@ impl Lexer {
             curr_id_idx: 0,
             int_suffix_long: 0,
             int_suffix_unsigned: false,
+            int_is_decimal: true,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -683,6 +689,7 @@ impl Lexer {
         // explicitly before returning a `Token::Num`.
         self.int_suffix_long = 0;
         self.int_suffix_unsigned = false;
+        self.int_is_decimal = true;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;
@@ -779,6 +786,7 @@ impl Lexer {
                     }
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
+                    self.int_is_decimal = false;
                     return Ok(());
                 }
                 if val == 0
@@ -819,6 +827,7 @@ impl Lexer {
                     }
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
+                    self.int_is_decimal = false;
                     return Ok(());
                 }
                 if val == 0
@@ -871,6 +880,7 @@ impl Lexer {
                     self.tk = Tok(Token::Num as i64);
                     self.int_suffix_long = l_count.min(2);
                     self.int_suffix_unsigned = u_seen;
+                    self.int_is_decimal = false;
                     return Ok(());
                 }
 

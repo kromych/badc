@@ -168,36 +168,40 @@ impl RegBanks {
     pub fn for_target(target: Target) -> Self {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Self {
-                // x20..x27 are the callee-saved bank used for
-                // long-lived values. x9..x15 are caller-saved
-                // scratch for short-lived values. x16/x17 stay
-                // reserved as encoder scratch. x18 is reserved
-                // on Windows (TEB pointer) and unused on Linux /
-                // macOS; the allocator keeps off it everywhere.
-                // x19 is reserved as the accumulator/scratch by
-                // the SSA emit's data-imm / code-imm fixups; the
-                // allocator stays off it to avoid stepping on
-                // the in-place patch sites.
-                callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27],
-                caller_gprs: &[9, 10, 11, 12, 13, 14, 15],
+                // Flat caller-saved pool matching qbe's arm64_rsave:
+                // x0..x7 are the AAPCS64 arg / return regs, x8 is the
+                // indirect-return slot, x9..x15 are general scratch.
+                // Adding them lets the coalescing hint pass land a
+                // call-argument value directly in its target arg
+                // register so the `mov x0..x7, xN` setup disappears.
+                // x16 / x17 are the encoder scratch (large-immediate
+                // and adrp / add fixups), x18 is the Windows platform
+                // reg, x19 is the writer's address-materialisation
+                // scratch (see [[function_clobbers_x19]]); all stay
+                // reserved. x28 joins the callee-saved bank.
+                callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27, 28],
+                caller_gprs: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::LinuxX64 => Self {
-                // System V x86_64 callee-saved set: rbx, r12,
-                // r14, r15. r13 is reserved as the legacy
-                // accumulator; rbp / rsp obviously off-limits.
+                // System V x86_64. Callee-saved: rbx, r12, r14, r15.
+                // r13 stays reserved as the writer's scratch / legacy
+                // accumulator. Caller-saved opens up to the SysV arg
+                // regs (rdi, rsi, rdx, rcx, r8, r9) plus rax, r10,
+                // r11 so call-arg hints can land values directly.
                 callee_gprs: &[3, 12, 14, 15],
-                caller_gprs: &[0, 11],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 10, 11],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::WindowsX64 => Self {
-                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12,
-                // r14, r15. Caller-saved: rax, r10, r11, plus the
-                // arg regs (rcx/rdx/r8/r9).
+                // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r14,
+                // r15. Caller-saved opens up to the Win64 arg regs
+                // (rcx, rdx, r8, r9) plus rax, r10, r11. r13 stays
+                // reserved as scratch / legacy accumulator.
                 callee_gprs: &[3, 6, 7, 12, 14, 15],
-                caller_gprs: &[0, 11],
+                caller_gprs: &[0, 1, 2, 8, 9, 10, 11],
                 callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5],
             },

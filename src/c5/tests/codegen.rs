@@ -149,29 +149,39 @@ fn sxtw_fold_collapses_int_mul_sign_narrow() {
     let bytes_arm =
         emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
             .expect("emit_native MacOSAarch64");
-    // `SXTW X13, W13` = 0x93407dad. Encoded little-endian: ad 7d 40 93.
-    let sxtw_x13_x13 = [0xadu8, 0x7d, 0x40, 0x93];
+    // SXTW (SBFM with immr=0, imms=31) carries the fixed high bytes
+    // 0x40 0x93 regardless of the rd / rn register fields. Scan for
+    // that opcode signature so the assertion stays reg-agnostic.
+    let any_sxtw = bytes_arm.windows(4).any(|w| w[2] == 0x40 && w[3] == 0x93);
     assert!(
-        bytes_arm.windows(4).any(|w| w == sxtw_x13_x13),
-        "expected SXTW byte pattern in aarch64 image (the sign-narrow Shl/Shr pair did not fold)",
+        any_sxtw,
+        "expected an SXTW byte pattern in aarch64 image (the sign-narrow Shl/Shr pair did not fold)",
     );
-    // Pre-fold pattern: `movz x14, #32` (0e 04 80 d2) immediately
-    // before the lsl. If the fold misses, we expect this byte
-    // pattern; if it fires, it should be gone for this function.
-    let movz_x14_32 = [0x0eu8, 0x04, 0x80, 0xd2];
+    // Pre-fold: the lsl #32 / asr #32 pair was materialised through a
+    // `movz xN, #32` before the lsl. `#32` lives in bits 21..5 of the
+    // movz word, so the encoded value 32 produces high bytes 0x80 0xd2
+    // regardless of which N gets picked. Their absence confirms the
+    // fold removed the shift pair.
+    let any_movz_32 = bytes_arm
+        .windows(4)
+        .any(|w| w[2] == 0x80 && w[3] == 0xd2 && w[1] == 0x04);
     assert!(
-        !bytes_arm.windows(4).any(|w| w == movz_x14_32),
-        "expected the pre-fold `movz x14, #32` pattern to be absent post-fold",
+        !any_movz_32,
+        "expected the pre-fold `movz xN, #32` pattern to be absent post-fold",
     );
 
     let bytes_x64 = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
         .expect("emit_native LinuxX64");
-    // `movslq %r15d, %r15` = 4d 63 ff. The fold's x86_64 variant
-    // lands a 3-byte movsxd somewhere in `product`.
-    let movsxd_r15_r15d = [0x4du8, 0x63, 0xff];
+    // movsxd r, r: REX.W prefix (0x48..0x4f with W=1), opcode 0x63,
+    // ModR/M with mod=11 (register direct). Scan for that shape so
+    // the test does not depend on which register the allocator picks.
+    let any_movsxd_r_r = bytes_x64.windows(3).any(|w| {
+        let rex = w[0];
+        (rex & 0xf0) == 0x40 && (rex & 0x08) != 0 && w[1] == 0x63 && (w[2] & 0xc0) == 0xc0
+    });
     assert!(
-        bytes_x64.windows(3).any(|w| w == movsxd_r15_r15d),
-        "expected `movslq %r15d, %r15` byte pattern in x86_64 image",
+        any_movsxd_r_r,
+        "expected a `movslq` reg/reg byte pattern in x86_64 image",
     );
 }
 

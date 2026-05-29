@@ -2840,6 +2840,25 @@ fn emit_binop_imm(
         }
         return true;
     }
+    // Compare-with-12-bit-immediate: emit `cmp Xn, #imm12`
+    // (subs xzr, Xn, #imm12) and skip the imm-into-scratch load.
+    // The 12-bit unsigned-immediate form covers 0..4095; outside
+    // that range we fall through to the load-imm64 + cmp-reg path.
+    if compare_cond(op).is_some()
+        && let Some(imm) = imm12
+    {
+        emit(code, enc_subs_imm(Reg::SP, rn, imm));
+        if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+            return true;
+        }
+        let cond = compare_cond(op).unwrap();
+        emit(code, enc_cset(rd, cond));
+        if let Some(slot) = spill_to {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
     load_imm64(code, scratch.secondary, rhs_imm as u64);
     let rm = scratch.secondary;
     if compare_cond(op).is_some() {

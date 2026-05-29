@@ -2174,6 +2174,37 @@ fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
+    // Compare-with-i32-immediate peephole: emit `cmp rn, imm32`
+    // and skip the `mov rcx, imm64` materialisation. The shorter
+    // imm32 form covers the operand range typical for `BinopI`
+    // comparisons against small constants; outside that range we
+    // fall through to the rcx-scratch path below.
+    let is_signed_cmp =
+        matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge);
+    let is_unsigned_cmp = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
+    if (is_signed_cmp || is_unsigned_cmp) && imm_fits_i32 {
+        super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+        if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+            return true;
+        }
+        let cc = match op {
+            BinOp::Eq => Cc::E,
+            BinOp::Ne => Cc::Ne,
+            BinOp::Lt => Cc::L,
+            BinOp::Gt => Cc::G,
+            BinOp::Le => Cc::Le,
+            BinOp::Ge => Cc::Ge,
+            BinOp::Ult => Cc::B,
+            BinOp::Ugt => Cc::A,
+            BinOp::Ule => Cc::Be,
+            BinOp::Uge => Cc::Ae,
+            _ => unreachable!(),
+        };
+        emit_setcc_r8(code, cc, Reg::RCX);
+        emit_movzx_r_r8(code, rd, Reg::RCX);
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
     // Materialise the immediate into rcx as a scratch. rcx is
     // caller-saved on every x86_64 ABI we target, and the SSA
     // allocator excludes it from the pool, so this can't clobber

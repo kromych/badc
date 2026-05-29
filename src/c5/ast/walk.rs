@@ -159,6 +159,60 @@ pub(crate) fn walk_function(
             b.store(dst, val, super::super::ir::StoreKind::F32);
         }
     }
+    // Parameter-slot promotion seed: for each non-relocated,
+    // non-struct, non-float-narrowed parameter, emit a `ParamRef`
+    // + `StoreLocal` to the c5 cdecl arg slot. The store gives
+    // mem2reg a single reaching def for the slot so per-use
+    // `LoadLocal` reads in the body can be folded onto the
+    // `ParamRef` value, eliminating the per-use ldursw / mov rN
+    // reloads. Variadic functions skip this -- their args ride
+    // the c5 stack, not host arg regs, and the prologue does
+    // not spill into the host-arg-reg slots. Struct-returning
+    // callees skip this -- the hidden out-pointer shifts every
+    // declared param's incoming arg reg up by one, which
+    // `Inst::ParamRef(i)`'s direct `int_arg_regs[i]` index does
+    // not handle.
+    if !is_variadic && !returns_struct {
+        let int_arg_regs_count = target.abi().int_arg_regs.len();
+        for i in 0..param_tys.len().min(int_arg_regs_count) {
+            let pty = param_tys[i];
+            let local_slot = param_local_slots[i];
+            if local_slot < 0 {
+                continue;
+            }
+            let stripped = pty & !(1i64 << 30);
+            let is_struct_value = stripped >= STRUCT_BASE
+                && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
+            if is_struct_value {
+                continue;
+            }
+            let is_float = stripped == crate::c5::token::Ty::Float as i64;
+            if is_float {
+                continue;
+            }
+            // Pointer-typed parameters carry the pointer marker
+            // bit; the body reads them as full-width pointers
+            // (8 bytes), not as the base type's narrow width.
+            // Without this check `char *fmt` would store only one
+            // byte and the high bits would diverge from the
+            // prologue's full-width spill.
+            use crate::c5::token::Ty;
+            let is_pointer = pty & (1i64 << 30) != 0;
+            let store_kind = if is_pointer {
+                super::super::ir::StoreKind::I64
+            } else {
+                match stripped {
+                    s if s == Ty::Char as i64 => super::super::ir::StoreKind::I8,
+                    s if s == Ty::Short as i64 => super::super::ir::StoreKind::I16,
+                    s if s == Ty::Int as i64 => super::super::ir::StoreKind::I32,
+                    _ => super::super::ir::StoreKind::I64,
+                }
+            };
+            let arg_slot = (i as i64) + arg_slot_base;
+            let pr = b.param_ref(i as u32);
+            b.store_local(arg_slot, pr, store_kind);
+        }
+    }
     let mut ctx = Walker {
         ast,
         symbols,

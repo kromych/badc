@@ -909,12 +909,32 @@ fn emit_inst(
             emit_mov_mem_r(code, SCRATCH_R10, 0, SCRATCH_R10);
             true
         }
-        Inst::ParamRef(_) => {
-            // The prologue moved each parameter from its host-ABI
-            // incoming arg register (rdi rsi rdx rcx r8 r9 on
-            // System V; rcx rdx r8 r9 on Win64) into the
-            // allocator's chosen `Place`. No code at the IR
-            // position.
+        Inst::ParamRef(idx) => {
+            // Materialise the i-th host-ABI argument register into
+            // the allocator's chosen `Place`. The prologue does
+            // not modify the arg registers (rdi rsi rdx rcx r8 r9
+            // on System V; rcx rdx r8 r9 on Win64), so the arg
+            // value is still in its incoming register at this IR
+            // position. When the allocator places `ParamRef` in
+            // the same arg register, `emit_mov_rr` elides the
+            // copy.
+            let arg_reg = match abi.int_arg_regs.get(*idx as usize) {
+                Some(&r) => Reg(r),
+                None => {
+                    bail_msg("ParamRef: idx out of range for int_arg_regs");
+                    return false;
+                }
+            };
+            match dst {
+                Place::IntReg(r) => emit_mov_rr(code, Reg(r), arg_reg),
+                Place::Spill(_) => {
+                    spill_dst_to_slot(code, dst, arg_reg, frame);
+                }
+                _ => {
+                    bail_msg("ParamRef: dst not int reg / spill");
+                    return false;
+                }
+            }
             true
         }
         Inst::Imm(value) => {

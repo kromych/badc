@@ -318,6 +318,16 @@ impl SsaBuilder {
         self.push(Inst::AllocaInit(slot))
     }
 
+    /// `Inst::ParamRef`. The value is the i-th declared parameter
+    /// as it sits in the host-ABI argument register at function
+    /// entry. Walker emits one per non-relocated integer parameter
+    /// and pairs it with a `StoreLocal` to the c5 cdecl arg slot
+    /// so mem2reg can fold per-use `LoadLocal` reads onto a single
+    /// SSA value.
+    pub(crate) fn param_ref(&mut self, idx: u32) -> ValueId {
+        self.push(Inst::ParamRef(idx))
+    }
+
     /// `Inst::LocalAddr`. The address of a local escapes; any
     /// subsequent generic store could write through it, so drop
     /// every load-local CSE entry. The address materialization

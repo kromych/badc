@@ -725,6 +725,21 @@ fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8
         }
     }
 
+    // Parameter-slot promotion seeds `Inst::ParamRef(i)` at
+    // function entry; hint each one to its incoming arg register
+    // so the allocator places multiple parameters into their
+    // host-ABI registers directly. Without this hint, the emit's
+    // `mov tgt, x_arg_reg` for ParamRef(0) can clobber the
+    // incoming arg reg that ParamRef(1)'s emit then reads --
+    // the classical permutation hazard the call-arg marshal
+    // pass also avoids.
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if let Inst::ParamRef(i) = inst
+            && let Some(&r) = int_args.get(*i as usize)
+        {
+            try_set(hints, idx as ValueId, r);
+        }
+    }
     for (idx, inst) in func.insts.iter().enumerate() {
         let args: &[ValueId] = match inst {
             Inst::Call { args, .. } => args,

@@ -781,10 +781,28 @@ fn emit_inst(
             emit(code, enc_str_imm(Reg(16), Reg(16), 0));
             true
         }
-        Inst::ParamRef(_) => {
-            // The prologue moved each parameter from its AAPCS64
-            // incoming arg register (x0..x7) into the allocator's
-            // chosen `Place`. No code at the IR position.
+        Inst::ParamRef(idx) => {
+            // Materialise the i-th AAPCS64 argument register into
+            // the allocator's chosen `Place`. The prologue does
+            // not modify x0..x7, so the arg value is still in
+            // its incoming register at this IR position. When the
+            // allocator places `ParamRef` in the same arg
+            // register, `emit_mov_reg` elides the copy.
+            let Some(&arg_reg) = abi.int_arg_regs.get(*idx as usize) else {
+                bail_msg("ParamRef: idx out of range for int_arg_regs");
+                return false;
+            };
+            match dst {
+                Place::IntReg(r) => emit_mov_reg(code, Reg(r), Reg(arg_reg)),
+                Place::Spill(slot) => {
+                    let sp_off = spill_off(frame, slot);
+                    emit(code, enc_str_imm(Reg(arg_reg), Reg(31), sp_off));
+                }
+                _ => {
+                    bail_msg("ParamRef: dst not int reg / spill");
+                    return false;
+                }
+            }
             true
         }
         Inst::Imm(value) => {

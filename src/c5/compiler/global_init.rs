@@ -401,6 +401,16 @@ impl Compiler {
         // (enum / `#define`d constants), and the offsetof shape.
         let value = self.parse_const_expr_or()?;
 
+        // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
+        // floating object is converted to the floating value; storing
+        // the integer's bit pattern would leave a denormal. Mirror the
+        // float-literal path above, which stores the f64 bit pattern.
+        let value = if var_is_float {
+            (value as f64).to_bits() as i64
+        } else {
+            value
+        };
+
         let bytes = value.to_le_bytes();
         let segment = if is_thread_local {
             &mut self.tls_data

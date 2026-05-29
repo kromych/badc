@@ -316,6 +316,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("mem2reg_param_promoted.c", 0),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),

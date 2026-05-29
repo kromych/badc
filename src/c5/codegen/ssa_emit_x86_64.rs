@@ -292,53 +292,97 @@ fn materialize_int_shifted(
     }
 }
 
-/// Marshal one int argument into the placement chosen by the
-/// shared `plan_call_args`. Spilled arg values are loaded into
-/// the destination arg-reg directly, or via r10 for stack slots.
-/// `scratch_bytes` is the rsp adjustment the caller already made
-/// for the call's stack scratch frame; the helper threads it
-/// into the spill-slot offset so the load reaches the right slot
-/// despite the moved rsp.
-fn marshal_int_arg(
+/// Resolve a set of register-to-register copies `(src, tgt)` so
+/// no copy writes to a register still needed as the source of
+/// another pending copy. Mirrors the AArch64 emit's scheduler:
+/// drain leaves (target not a source of any other pending move)
+/// first, then break cycles by routing one source through
+/// `scratch`. The caller must pass a `scratch` whose register
+/// lives outside the allocator's bank.
+fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
+    moves.retain(|(s, t)| s != t);
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
+            if !tgt_still_a_source {
+                emit_mov_rr(code, Reg(t), Reg(s));
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            let saved = moves[0].0;
+            emit_mov_rr(code, scratch, Reg(saved));
+            for m in moves.iter_mut() {
+                if m.0 == saved {
+                    m.0 = scratch.0;
+                }
+            }
+        }
+    }
+}
+
+/// Place every argument into its System V / Win64 target slot in
+/// an order that survives source / target overlaps. With the
+/// qbe-shape caller-saved bank, an argument's value can sit in
+/// another argument's target arg register; a naive sequential
+/// per-arg `mov target_i, src_i` would clobber a still-needed
+/// source. Pass ordering mirrors the AArch64 emit:
+///
+///   * Stack slots first -- their sources are read into
+///     `SCRATCH_R10` and stored to the host-stack overflow
+///     region, preserving any source register a later pass
+///     touches.
+///   * FP arg-register placements next. A value held in an
+///     integer register as a raw f64 bit pattern (the constant-
+///     folder emits `Inst::Imm` for f64 literals) is moved into
+///     the target xmm before the int marshal can overwrite the
+///     source.
+///   * Integer reg-to-reg moves, scheduled through
+///     [`schedule_int_reg_moves`] so cycles drop to a single
+///     scratch-mediated copy.
+///   * Spill sources for `IntReg` placements then materialise
+///     directly into the target arg register
+///     (`materialize_int_shifted` writes its load into the dst).
+fn marshal_args(
     code: &mut Vec<u8>,
-    arg_place: Place,
-    placement: super::ArgPlacement,
+    plan: &super::CallPlan,
+    args: &[u32],
+    alloc: &Allocation,
     frame: Frame,
-    scratch_bytes: u32,
     site: &str,
 ) -> bool {
-    match placement {
-        super::ArgPlacement::IntReg(r) => {
-            let src = match materialize_int_shifted(code, arg_place, Reg(r), frame, scratch_bytes) {
+    let arg_place = |i: usize| -> Place {
+        alloc
+            .places
+            .get(args[i] as usize)
+            .copied()
+            .unwrap_or(Place::None)
+    };
+
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::Stack(off) = placement {
+            let ap = arg_place(i);
+            let src = match materialize_int_shifted(code, ap, SCRATCH_R10, frame, plan.scratch_bytes) {
                 Some(s) => s,
                 None => {
-                    bail_msg(&alloc::format!("{site}: int arg not in int reg / spill"));
+                    bail_msg(&alloc::format!("{site}: stack arg not in int reg / spill"));
                     return false;
                 }
             };
-            if src.0 != r {
-                emit_mov_rr(code, Reg(r), src);
-            }
-            true
-        }
-        super::ArgPlacement::Stack(off) => {
-            let src =
-                match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, scratch_bytes) {
-                    Some(s) => s,
-                    None => {
-                        bail_msg(&alloc::format!("{site}: stack arg not in int reg / spill"));
-                        return false;
-                    }
-                };
             emit_mov_mem_r(code, Reg::RSP, off as i32, src);
-            true
         }
-        super::ArgPlacement::FpReg(r) => {
-            // SysV / Win64 routes f64 args through xmm0..xmm7.
-            // Materialize the value into the destination xmm
-            // directly when possible; route a spill or an int-reg
-            // f64 bit pattern through the scratch first.
-            let src = match materialize_fp_shifted(code, arg_place, Reg(r), frame, scratch_bytes) {
+    }
+
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::FpReg(r) = placement {
+            let ap = arg_place(i);
+            let src = match materialize_fp_shifted(code, ap, Reg(r), frame, plan.scratch_bytes) {
                 Some(s) => s,
                 None => {
                     bail_msg(&alloc::format!(
@@ -350,9 +394,50 @@ fn marshal_int_arg(
             if src.0 != r {
                 emit_movapd_xmm_xmm(code, Reg(r), src);
             }
-            true
         }
     }
+
+    let mut int_moves: Vec<(u8, u8)> = Vec::new();
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::IntReg(r) = placement
+            && let Place::IntReg(s) = arg_place(i)
+            && s != r
+        {
+            int_moves.push((s, r));
+        }
+    }
+    schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
+
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::IntReg(r) = placement {
+            let ap = arg_place(i);
+            match ap {
+                Place::IntReg(_) => {}
+                Place::Spill(_) | Place::None => {
+                    let src = match materialize_int_shifted(code, ap, Reg(r), frame, plan.scratch_bytes) {
+                        Some(s) => s,
+                        None => {
+                            bail_msg(&alloc::format!(
+                                "{site}: int arg not in int reg / spill"
+                            ));
+                            return false;
+                        }
+                    };
+                    if src.0 != r {
+                        emit_mov_rr(code, Reg(r), src);
+                    }
+                }
+                Place::FpReg(_) => {
+                    bail_msg(&alloc::format!(
+                        "{site}: IntReg placement with FpReg source unsupported"
+                    ));
+                    return false;
+                }
+            }
+        }
+    }
+
+    true
 }
 
 /// Public entry point. Returns `true` when every block + inst +
@@ -2222,23 +2307,8 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        if !marshal_int_arg(
-            code,
-            arg_place,
-            placement,
-            frame,
-            plan.scratch_bytes,
-            "Call",
-        ) {
-            return false;
-        }
+    if !marshal_args(code, &plan, args, alloc, frame, "Call") {
+        return false;
     }
     // Record a fixup for the call's rel32 field. `emit_call_rel32`
     // emits opcode 0xE8 then 4 bytes of rel32; `target_ent_pc`
@@ -2309,23 +2379,8 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        if !marshal_int_arg(
-            code,
-            arg_place,
-            placement,
-            frame,
-            plan.scratch_bytes,
-            "CallExt",
-        ) {
-            return false;
-        }
+    if !marshal_args(code, &plan, args, alloc, frame, "CallExt") {
+        return false;
     }
     // System V AMD64 ABI 3.2.3: when the callee is variadic, `al`
     // must hold the number of XMM argument registers used (printf
@@ -2455,23 +2510,8 @@ fn emit_call_indirect(
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
-        let arg_place = alloc
-            .places
-            .get(arg_id as usize)
-            .copied()
-            .unwrap_or(Place::None);
-        if !marshal_int_arg(
-            code,
-            arg_place,
-            placement,
-            frame,
-            plan.scratch_bytes,
-            "CallIndirect",
-        ) {
-            return false;
-        }
+    if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
+        return false;
     }
     super::x86_64::emit_call_r(code, Reg::R11);
     if plan.scratch_bytes > 0 {

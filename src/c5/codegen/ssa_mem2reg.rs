@@ -438,16 +438,16 @@ pub(crate) fn run(func: &mut FunctionSsa) {
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return;
     }
-    // Conservative aliasing guard. A taken local address reaches more
-    // than the slot it names -- the address of a struct or array local
-    // covers every field / element slot, which the per-slot LocalAddr
-    // check below does not see without frame-extent tracking. A
-    // function with a non-zero alloca top grows its frame dynamically;
-    // `AllocaInit(0)` is the unconditional no-alloca marker and is
-    // ignored. Skip the whole function when a taken address or a real
-    // alloca arena appears; otherwise every local slot is unaliased.
+    // A function with a non-zero alloca top grows its frame at
+    // runtime and reaches it through a computed pointer, so no slot is
+    // promoted there; `AllocaInit(0)` is the unconditional no-alloca
+    // marker and is ignored. Taken addresses of individual locals are
+    // handled per slot in `promotable_slots`: `LoadLocal` /
+    // `StoreLocal` name only scalar locals (aggregate fields are
+    // reached through `LocalAddr(base)` plus an offset, never a
+    // load-local), so a candidate slot is aliased only when its own
+    // address is taken, which that pass already excludes.
     if func.insts.iter().any(|i| match i {
-        Inst::LocalAddr(_) => true,
         Inst::AllocaInit(s) => *s != 0,
         _ => false,
     }) {

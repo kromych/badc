@@ -2168,6 +2168,13 @@ fn emit_binop_imm(
             super::x86_64::emit_or_r_imm32(code, rd, rhs_imm as i32);
             true
         }
+        BinOp::Xor if imm_fits_i32 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_xor_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
         _ => false,
     };
     if used_peephole {

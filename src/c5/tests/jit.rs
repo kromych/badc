@@ -157,6 +157,7 @@ fn jit_fixture(name: &str) -> i32 {
 }
 
 const JIT_FIXTURES: &[(&str, i32)] = &[
+    ("mem2reg_cross_block.c", 42),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),

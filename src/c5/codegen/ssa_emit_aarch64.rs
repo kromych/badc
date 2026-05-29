@@ -781,6 +781,12 @@ fn emit_inst(
             emit(code, enc_str_imm(Reg(16), Reg(16), 0));
             true
         }
+        Inst::ParamRef(_) => {
+            // The prologue moved each parameter from its AAPCS64
+            // incoming arg register (x0..x7) into the allocator's
+            // chosen `Place`. No code at the IR position.
+            true
+        }
         Inst::Imm(value) => {
             let rd = match int_or_spill_scratch(dst, scratch) {
                 Some(r) => r,

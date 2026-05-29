@@ -255,7 +255,8 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
         | Inst::TailExt(_)
-        | Inst::AllocaInit(_) => {}
+        | Inst::AllocaInit(_)
+        | Inst::ParamRef(_) => {}
         Inst::Load { addr, .. } => f(addr),
         Inst::Store { addr, value, .. } => {
             f(addr);

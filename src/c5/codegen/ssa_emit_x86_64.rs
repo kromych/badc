@@ -909,6 +909,14 @@ fn emit_inst(
             emit_mov_mem_r(code, SCRATCH_R10, 0, SCRATCH_R10);
             true
         }
+        Inst::ParamRef(_) => {
+            // The prologue moved each parameter from its host-ABI
+            // incoming arg register (rdi rsi rdx rcx r8 r9 on
+            // System V; rcx rdx r8 r9 on Win64) into the
+            // allocator's chosen `Place`. No code at the IR
+            // position.
+            true
+        }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
                 bail_msg("Imm: dst not int reg / spill");

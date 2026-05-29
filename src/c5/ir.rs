@@ -172,6 +172,18 @@ pub(crate) enum Inst {
     /// the alloca-top FP-slot offset. Produces no SSA value;
     /// emitted purely for the side effect.
     AllocaInit(i64),
+    /// The i-th declared parameter's incoming value. Inserted
+    /// by `SsaBuilder::new` for non-variadic functions so that
+    /// mem2reg sees a reaching store to the parameter's c5
+    /// cdecl slot and can promote the LoadLocal sites. The
+    /// emit at the IR position is a no-op: the value already
+    /// lives in the host-ABI argument register at function
+    /// entry (x0..x7 on AAPCS64; rdi rsi rdx rcx r8 r9 on System
+    /// V x86_64; rcx rdx r8 r9 on Win64). The prologue moves the
+    /// incoming arg reg into the allocator's chosen `Place`, so
+    /// by the time control reaches the ParamRef position the
+    /// value is already where the allocator expects it.
+    ParamRef(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

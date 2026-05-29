@@ -573,6 +573,7 @@ fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::AllocaInit(_)
+        | Inst::ParamRef(_)
         | Inst::TailExt(_)
         | Inst::LoadLocal { .. } => {}
         Inst::Load { addr, .. } => f(*addr),
@@ -637,7 +638,7 @@ pub(super) fn produces_fp_result(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
+        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) | ParamRef(_) => ResultKind::Int,
         Load { kind, .. } | LoadLocal { kind, .. } => match kind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -802,6 +803,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::AllocaInit(_)
+            | Inst::ParamRef(_)
             | Inst::TailExt(_) => {}
             Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
             Inst::Store { addr, value, .. } => {

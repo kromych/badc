@@ -881,6 +881,21 @@ fn run_inst<H: Host>(
             // arena get the "not implemented" path below.
             return Ok(());
         }
+        Inst::ParamRef(idx) => {
+            // The i-th declared parameter sits at c5 cdecl slot
+            // i+2 (run_func wrote each `args[i]` to
+            // `stack_base + (locals + i) * 8`). Read the 8-byte
+            // value back so the SSA-VM sees the same i64 the
+            // call site passed.
+            let off = (*idx as i64) + 2;
+            let addr = frame.slot_addr(off).ok_or_else(|| {
+                C5Error::Runtime(format!(
+                    "vm_ssa: ParamRef({idx}): slot {off} out of range"
+                ))
+            })?;
+            frame.regs[v as usize] = load_from_memory(mem, addr, LoadKind::I64)?;
+            return Ok(());
+        }
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }

@@ -144,8 +144,8 @@ pub struct MergedNative {
     /// `.Lc5_prologue_end_<funcname>` STB_LOCAL STT_NOTYPE symbols
     /// (see `elf_reloc::PROLOGUE_END_PREFIX`), rebased by the
     /// per-unit text base. The synth path consults this to
-    /// populate `pc_to_native[ent_pc + POST_PROLOGUE_PC_OFFSET]`
-    /// so `dwarf::build_debug_frame` emits
+    /// populate `Build::func_prologue_native` so
+    /// `dwarf::build_debug_frame` emits
     /// `DW_CFA_advance_loc <prologue_size>` ahead of the
     /// post-prologue CFA rule.
     pub prologue_ends: BTreeMap<String, u64>,

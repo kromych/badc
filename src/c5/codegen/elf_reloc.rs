@@ -405,14 +405,11 @@ pub(super) fn write_relocatable(
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
         // Build the synthetic prologue_end entry for this
         // function before consuming `name`. The post-prologue
-        // native byte offset lives at `pc_to_native[ent_pc +
-        // POST_PROLOGUE_PC_OFFSET]`; skip when the SSA emit
-        // didn't record one (synthetic CRT trampolines without
-        // a standard prologue shape).
-        let post_pp_pc = ent_pc + super::POST_PROLOGUE_PC_OFFSET;
-        if let Some(&post_native) = build.pc_to_native.get(post_pp_pc)
-            && post_native != usize::MAX
-        {
+        // native byte offset is recorded in `func_prologue_native`
+        // keyed by `ent_pc`; skip when the SSA emit didn't record
+        // one (synthetic CRT trampolines without a standard
+        // prologue shape).
+        if let Some(&post_native) = build.func_prologue_native.get(&ent_pc) {
             prologue_end_entries.push((i, post_native));
             prologue_end_names.push(alloc::format!("{PROLOGUE_END_PREFIX}{name}"));
         }
@@ -1528,6 +1525,7 @@ mod tests {
             pc_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             func_names: Vec::new(),
+            func_prologue_native: alloc::collections::BTreeMap::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
             user_extern_data_refs: Vec::new(),

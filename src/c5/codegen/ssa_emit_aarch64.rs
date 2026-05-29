@@ -171,6 +171,7 @@ pub(super) fn emit_function(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     pc_to_native: &mut [usize],
+    prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
@@ -192,7 +193,7 @@ pub(super) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, pc_to_native, code.len());
+    super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -3112,6 +3113,8 @@ mod tests {
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+        let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
+            alloc::collections::BTreeMap::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3129,6 +3132,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut pc_to_native,
+            &mut prologue_native,
             &mut ssa_line_rows,
         );
         assert!(
@@ -3172,6 +3176,8 @@ mod tests {
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+        let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
+            alloc::collections::BTreeMap::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3189,6 +3195,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut pc_to_native,
+            &mut prologue_native,
             &mut ssa_line_rows,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -3225,6 +3232,8 @@ mod tests {
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
+        let mut prologue_native: alloc::collections::BTreeMap<usize, usize> =
+            alloc::collections::BTreeMap::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3242,6 +3251,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut pc_to_native,
+            &mut prologue_native,
             &mut ssa_line_rows,
         );
         assert!(

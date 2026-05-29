@@ -1173,6 +1173,8 @@ pub(super) fn lower(
     let mut code = Vec::new();
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_names: Vec<alloc::string::String> = Vec::new();
+    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
@@ -1298,6 +1300,7 @@ pub(super) fn lower(
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
             &mut pc_to_native,
+            &mut func_prologue_native,
             &mut ssa_line_rows,
         );
         if !ok {
@@ -1468,6 +1471,7 @@ pub(super) fn lower(
         pc_to_native,
         func_ent_pcs,
         func_names,
+        func_prologue_native,
         reloc_call_sites,
         user_extern_call_sites,
         user_extern_data_refs,

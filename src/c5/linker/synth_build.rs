@@ -132,12 +132,14 @@ fn synth_program_and_build(
     // For each function the writer also drops a synthetic
     // `.Lc5_prologue_end_<name>` STB_LOCAL anchor that the linker
     // surfaces via `MergedNative::prologue_ends`. The synth path
-    // populates the `ent_pc + POST_PROLOGUE_PC_OFFSET` slot from
-    // it so `dwarf::prologue_size_for` returns the true byte
-    // count and the FDE's `DW_CFA_advance_loc` lands at the
-    // post-prologue boundary.
+    // records it in `func_prologue_native` (keyed by `ent_pc`) so
+    // `dwarf::prologue_size_for` returns the true byte count and
+    // the FDE's `DW_CFA_advance_loc` lands at the post-prologue
+    // boundary.
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut func_names: Vec<String> = Vec::new();
+    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
     let mut pc_to_native = pc_to_native;
     for (name, sym) in &merged.defined {
         if !matches!(sym.section, NativeSymSection::Text) || name.is_empty() {
@@ -146,14 +148,12 @@ fn synth_program_and_build(
         let pc = sym.value as usize;
         func_ent_pcs.push(pc);
         func_names.push(name.clone());
-        let post_pp_pc = pc + crate::c5::codegen::POST_PROLOGUE_PC_OFFSET;
-        let needed = post_pp_pc + 1;
-        if pc_to_native.len() < needed {
-            pc_to_native.resize(needed, usize::MAX);
+        if pc_to_native.len() < pc + 1 {
+            pc_to_native.resize(pc + 1, usize::MAX);
         }
         pc_to_native[pc] = pc;
         if let Some(&post_native) = merged.prologue_ends.get(name) {
-            pc_to_native[post_pp_pc] = post_native as usize;
+            func_prologue_native.insert(pc, post_native as usize);
         }
     }
 
@@ -167,6 +167,7 @@ fn synth_program_and_build(
         pc_to_native,
         func_ent_pcs,
         func_names,
+        func_prologue_native,
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),

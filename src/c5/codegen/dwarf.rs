@@ -511,11 +511,11 @@ struct SubprogVar {
 /// anyway.
 fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     let body_start = build
-        .pc_to_native
-        .get(ent_pc + super::POST_PROLOGUE_PC_OFFSET)
+        .func_prologue_native
+        .get(&ent_pc)
         .copied()
         .unwrap_or(low_pc);
-    if body_start == usize::MAX || body_start <= low_pc {
+    if body_start <= low_pc {
         0
     } else {
         (body_start - low_pc) as u32

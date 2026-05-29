@@ -206,16 +206,6 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
-/// Distance from a function's `ent_pc` to the synthetic
-/// post-prologue PC slot in `pc_to_native`. The parser still
-/// strides PCs by 2 per source op (an opcode word plus an
-/// operand word from the legacy bytecode layout), so the
-/// post-prologue slot is the second entry after the function's
-/// entry. The DWARF CFI pass reads
-/// `pc_to_native[ent_pc + POST_PROLOGUE_PC_OFFSET]` to encode
-/// `DW_CFA_advance_loc <prologue bytes>`.
-pub(super) const POST_PROLOGUE_PC_OFFSET: usize = 2;
-
 /// Upper bound on ent_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `pc_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
@@ -224,16 +214,7 @@ pub(super) fn pc_extent_for_lowering(
     program: &Program,
     ssa_funcs: &[crate::c5::ir::FunctionSsa],
 ) -> usize {
-    // `record_post_prologue_pc` writes at `ent_pc +
-    // POST_PROLOGUE_PC_OFFSET` for every function, which can
-    // sit past `end_pc` when a function compiles down to fewer
-    // than POST_PROLOGUE_PC_OFFSET ops. Include the offset in
-    // the per-function bound so the post-prologue slot fits.
-    let from_ssa = ssa_funcs
-        .iter()
-        .map(|f| f.end_pc.max(f.ent_pc + POST_PROLOGUE_PC_OFFSET))
-        .max()
-        .unwrap_or(0);
+    let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
     // Cross-TU function-import placeholders sit past the
     // highest `end_pc`; the codegen's per-`Inst::Call` fixup
     // pass uses the same dense `pc_to_native` table to
@@ -1038,6 +1019,15 @@ pub(crate) struct Build {
     /// against this in-image local symbol rather than getting
     /// lost in the dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<usize>,
+    /// Post-prologue native byte offset of each function, keyed by
+    /// `ent_pc`. The SSA emit records `code.len()` right after the
+    /// prologue; the DWARF CFI pass turns the value into the FDE's
+    /// `DW_CFA_advance_loc` so the post-prologue CFA / saved-reg
+    /// rule installs at the right PC. Keyed by the function's own
+    /// `ent_pc` (unique per function) rather than a derived PC slot
+    /// in `pc_to_native`, which a neighbouring function's PC can
+    /// alias when both are small.
+    pub func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`

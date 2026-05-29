@@ -581,6 +581,52 @@ fn multi_tu_lldb_step_crosses_translation_unit_boundary() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[test]
+fn lldb_backtrace_has_no_duplicate_caller_frame() {
+    // A function's `.debug_frame` FDE must mark `DW_CFA_advance_loc`
+    // at the real post-prologue offset. When the post-prologue marker
+    // is stored per-`ent_pc` (not in a shared `pc_to_native` slot that
+    // a neighbouring small function's PC can alias), a tiny callee's
+    // FDE describes its body as established-frame. If it regresses to
+    // a too-late prologue-end, the unwinder reads the return address
+    // from the live link register inside the callee and synthesises a
+    // phantom duplicate of the caller frame.
+    let path = build_signed_mach_o_two_units(
+        r#"
+        int helper(void) {
+            int a = 1;
+            return a;
+        }
+        "#,
+        "tu_helper.c",
+        r#"
+        extern int helper(void);
+        int main(void) {
+            return helper();
+        }
+        "#,
+        "tu_main.c",
+        "no_dup_frame",
+    );
+    let Some(out) = lldb_batch(
+        &path,
+        &["breakpoint set --name helper", "run", "bt", "quit"],
+    ) else {
+        eprintln!("lldb not on PATH -- skipping duplicate-frame backtrace test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    let _ = std::fs::remove_file(&path);
+    // Each `bt` frame prints `<image>`<symbol> at <file>`. `main` is
+    // called once, so exactly one frame should resolve to it; the
+    // duplicate-frame bug printed two `\`main at` rows at the same PC.
+    let main_frames = out.matches("`main at").count();
+    assert_eq!(
+        main_frames, 1,
+        "expected exactly one `main` frame in the backtrace, got {main_frames}:\n{out}"
+    );
+}
+
 /// Per-statement granularity in the line program: a function with
 /// N straight-line statements must produce at least N distinct
 /// `(addr, line)` rows so a debugger can stop on each one. Before

@@ -380,6 +380,7 @@ pub(super) fn emit_function(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
     pc_to_native: &mut [usize],
+    prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let snapshot = code.len();
@@ -392,7 +393,7 @@ pub(super) fn emit_function(
     let abi = target.abi();
 
     emit_prologue(code, func, alloc, frame, abi);
-    super::ssa_emit_common::record_post_prologue_pc(func, pc_to_native, code.len());
+    super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();

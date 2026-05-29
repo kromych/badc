@@ -108,21 +108,19 @@ pub(super) fn record_inst_src(
     ssa_line_rows.push((code_len, line, file_idx));
 }
 
-/// Record the byte offset of the first post-prologue
-/// instruction. Stored in `pc_to_native` at the synthetic slot
-/// `ent_pc + POST_PROLOGUE_PC_OFFSET`. The DWARF CFI pass reads
-/// this slot to encode `DW_CFA_advance_loc <prologue bytes>` so
-/// the post-prologue CFA / saved-reg rule installs at the right
-/// PC.
+/// Record the byte offset of the first post-prologue instruction,
+/// keyed by the function's `ent_pc`. The DWARF CFI pass reads this
+/// to encode `DW_CFA_advance_loc <prologue bytes>` so the post-
+/// prologue CFA / saved-reg rule installs at the right PC. Keyed by
+/// `ent_pc` (unique per function) so a neighbouring function's PC
+/// can't alias the entry, which a derived `pc_to_native` slot
+/// allowed for adjacent small functions.
 pub(super) fn record_post_prologue_pc(
     func: &super::super::ir::FunctionSsa,
-    pc_to_native: &mut [usize],
+    prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     code_len: usize,
 ) {
-    let post_prologue_pc = func.ent_pc + super::POST_PROLOGUE_PC_OFFSET;
-    if post_prologue_pc < pc_to_native.len() {
-        pc_to_native[post_prologue_pc] = code_len;
-    }
+    prologue_native.insert(func.ent_pc, code_len);
 }
 
 /// True when an SSA inst can be skipped entirely because its

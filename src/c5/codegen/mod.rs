@@ -49,6 +49,7 @@ mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
+mod ssa_mem2reg;
 mod ssa_native;
 pub(crate) mod ssa_shadow;
 mod x86_64;

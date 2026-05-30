@@ -121,6 +121,32 @@ fn pick_caller_saved_scratch(rd: Reg, operand_regs: &[Reg]) -> Option<Reg> {
     None
 }
 
+/// Same as `pick_caller_saved_scratch`, but additionally avoids
+/// any register that carries an SSA value live across the current
+/// instruction. `pc` is the current instruction's index; a value
+/// `x` is live across `pc` when `x < pc < alloc.last_use[x]`. The
+/// chosen scratch is then disjoint from `rd`, the operand list,
+/// and every register the next instructions need to read.
+fn pick_caller_saved_scratch_live_aware(
+    rd: Reg,
+    operand_regs: &[Reg],
+    pc: u32,
+    alloc: &Allocation,
+) -> Option<Reg> {
+    let mut live: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(operand_regs.len() + 4);
+    live.extend_from_slice(operand_regs);
+    for (idx, place) in alloc.places.iter().enumerate() {
+        let last = alloc.last_use.get(idx).copied().unwrap_or(0);
+        let i = idx as u32;
+        if i < pc && pc < last {
+            if let Place::IntReg(r) = place {
+                live.push(Reg(*r));
+            }
+        }
+    }
+    pick_caller_saved_scratch(rd, &live)
+}
+
 /// Total bytes the prologue allocates between the return
 /// address and the saved rbp for c5 cdecl parameter slots plus
 /// host-stack overflow. Mirrors the prologue's branch structure
@@ -2630,7 +2656,7 @@ fn emit_binop_imm(
     // rd != rn) before the two-operand op. The scratch is
     // chosen per-instruction so it never collides with the
     // operand registers.
-    let Some(scratch) = pick_caller_saved_scratch(rd, &[rn]) else {
+    let Some(scratch) = pick_caller_saved_scratch_live_aware(rd, &[rn], v, alloc) else {
         bail_msg("BinopI imm64: no caller-saved scratch available");
         return false;
     };

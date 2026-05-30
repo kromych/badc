@@ -106,6 +106,13 @@ pub(super) struct Allocation {
     /// skip pure-with-no-uses insts (dead-code elimination). A value
     /// with zero uses and no side effects produces no machine code.
     pub use_counts: Vec<u32>,
+    /// Highest PC index that names each value as an operand. A
+    /// value defined at PC `i` is live throughout `[i, last_use[i]]`
+    /// and the emit pass queries this to compute the set of
+    /// registers carrying live SSA values at any given PC -- needed
+    /// when picking an intra-instruction scratch that must not
+    /// clobber a value the next instruction reads.
+    pub last_use: Vec<u32>,
     /// For `BinopI(Shr, X, K)` insts the allocator recognised as
     /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
     /// {32, 48, 56}), the original pre-narrow value (the Shl's
@@ -227,6 +234,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
             use_counts: Vec::new(),
+            last_use: Vec::new(),
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
@@ -481,6 +489,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         gpr_used: gpr_used_callee,
         fp_used: fp_used_callee,
         use_counts,
+        last_use,
         sxtw_source,
         sxtw_k,
         branch_fused,

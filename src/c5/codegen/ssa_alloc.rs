@@ -219,6 +219,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
     populate_abi_hints(func, target, &mut hints);
+    populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
         return Allocation {
             places,
@@ -802,6 +803,54 @@ fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8
                 ResultKind::Fp => try_set(hints, v, ret_fp),
                 ResultKind::None => {}
             }
+        }
+    }
+}
+
+/// Propagate a single register hint across each `Inst::Phi`'s
+/// result and every incoming source so the allocator prefers the
+/// same physical register for the whole group. When the placement
+/// succeeds, the per-arch predecessor-exit move from incoming to
+/// phi result drops to a self-move that `schedule_int_reg_moves`
+/// drops outright, eliminating the move.
+///
+/// The pass is a fixpoint loop: a phi whose incoming is itself a
+/// phi inherits through the chain. Each iteration picks the first
+/// existing hint within the group and assigns it to every still-
+/// unhinted member; iteration stops when no member changes.
+/// The allocator's hint policy is advisory; an unsuitable hint
+/// (register live elsewhere at the pick site) falls through to the
+/// default policy without compromising correctness.
+fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
+    loop {
+        let mut changed = false;
+        for (v, inst) in func.insts.iter().enumerate() {
+            let Inst::Phi { incoming, .. } = inst else {
+                continue;
+            };
+            let mut group_hint = hints[v];
+            if group_hint.is_none() {
+                for (_, src) in incoming {
+                    if let Some(r) = hints[*src as usize] {
+                        group_hint = Some(r);
+                        break;
+                    }
+                }
+            }
+            let Some(r) = group_hint else { continue };
+            if hints[v].is_none() {
+                hints[v] = Some(r);
+                changed = true;
+            }
+            for (_, src) in incoming {
+                if hints[*src as usize].is_none() {
+                    hints[*src as usize] = Some(r);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
         }
     }
 }

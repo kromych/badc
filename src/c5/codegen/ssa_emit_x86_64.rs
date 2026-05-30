@@ -2950,13 +2950,27 @@ fn emit_intrinsic(
                 }
             };
             // rd = *ap (old cursor) ; r10 = rd + 16 ; *ap = r10.
-            // Use SCRATCH_R10 (outside the SSA allocator's gpr pool)
-            // for the advance so the allocator picking rax / r11 /
-            // any pool reg as rd doesn't get its old-cursor value
-            // overwritten by the `lea` before the store.
-            emit_mov_r_mem(code, rd, ap, 0);
-            emit_lea_r_mem(code, SCRATCH_R10, rd, 16);
-            emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
+            // The allocator may have picked the same register for
+            // `rd` and `ap` (e.g. rd = rax, ap = rax when the
+            // LocalAddr feeding `&ap` and the VaArg dst landed in
+            // the same place). The `mov rd, [ap]` then clobbers
+            // the `ap` value and the subsequent `mov [ap], r10`
+            // writes through the just-loaded cursor instead of
+            // through ap itself. Hold `&ap` in SCRATCH_R10 across
+            // the load when the aliasing occurs (the store still
+            // uses the held copy, the advance uses a scratch we
+            // can compute inline).
+            if rd.0 == ap.0 {
+                emit_mov_rr(code, SCRATCH_R10, ap);
+                emit_mov_r_mem(code, rd, SCRATCH_R10, 0);
+                emit_lea_r_mem(code, rd, rd, 16);
+                emit_mov_mem_r(code, SCRATCH_R10, 0, rd);
+                emit_lea_r_mem(code, rd, rd, -16);
+            } else {
+                emit_mov_r_mem(code, rd, ap, 0);
+                emit_lea_r_mem(code, SCRATCH_R10, rd, 16);
+                emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
+            }
             true
         }
         I::VaEnd => {

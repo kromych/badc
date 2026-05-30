@@ -337,13 +337,23 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 ResultKind::None => unreachable!(),
             };
         } else {
-            // Spill the active interval with the furthest next
-            // use, reuse its register.
-            let victim_pos = active
-                .iter()
-                .enumerate()
-                .max_by_key(|(_, e)| e.1)
-                .map(|(i, _)| i);
+            // Spill the active interval with the furthest next use
+            // whose register satisfies the must-be-callee constraint
+            // for the incoming value. A live-across-call value placed
+            // in a caller-saved register would be clobbered the next
+            // call; restrict the victim search to callee-saved
+            // registers in that case. If no callee-saved victim
+            // exists, spill the new value to memory instead of
+            // parking it in a caller-saved register.
+            let pick_victim = |must_callee: bool| -> Option<usize> {
+                active
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| !must_callee || !banks_caller.contains(&e.2))
+                    .max_by_key(|(_, e)| e.1)
+                    .map(|(i, _)| i)
+            };
+            let victim_pos = pick_victim(must_be_callee);
             if let Some(pos) = victim_pos {
                 let (victim_id, _victim_end, victim_reg) = active.remove(pos);
                 let slot = spill_count;

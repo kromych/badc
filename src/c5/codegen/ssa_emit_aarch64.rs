@@ -78,10 +78,17 @@ pub(super) struct Frame {
     /// for address materialisation, so it is saved and restored only
     /// when the function actually uses it (see [`function_clobbers_x19`]).
     pub uses_x19: bool,
+    /// Total bytes the prologue allocates above the saved fp/lr
+    /// for c5 cdecl parameter slots and host-stack overflow. The
+    /// epilogue reads this directly so prologue and epilogue
+    /// agree on one byte count regardless of which branch the
+    /// prologue took (variadic, host-stack overflow,
+    /// ParamRef-elided, per-slot pending_sub flush).
+    pub param_spill_bytes: u32,
 }
 
 impl Frame {
-    pub fn for_function(func: &FunctionSsa, alloc: &Allocation) -> Self {
+    pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
         let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
@@ -93,12 +100,90 @@ impl Frame {
         let x19_save_bytes = 16u32;
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
+        let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
             uses_x19: function_clobbers_x19(func),
+            param_spill_bytes,
         }
     }
+}
+
+/// Total bytes the prologue allocates above the saved fp/lr for
+/// c5 cdecl parameter slots plus the host-stack overflow stripe.
+/// Mirrors the prologue's branch structure exactly:
+///
+/// * Variadic callees: the caller pushes 16-byte cells onto the
+///   c5 bytecode stack; the callee's prologue allocates nothing.
+/// * Non-variadic with `n_params <= int_arg_regs.len()`:
+///   `n_reg * 16`, unless every register-passed parameter is
+///   `ParamRef`-seeded with no address taken and no surviving
+///   `Load/StoreLocal` -- then the entire register-spilled
+///   stripe drops out and the count is 0.
+/// * Non-variadic with `n_params > int_arg_regs.len()`: full
+///   `n_params * 16` (the host-stack overflow restripe shifts
+///   the slot offsets for every register-passed slot, so the
+///   register stripe cannot be elided).
+/// * Struct-returning callees (slot 2 = hidden out-pointer):
+///   the walker excludes them from `ParamRef` synthesis, so
+///   `seeded` is empty, `can_elide` is false, and the full
+///   `n_params * 16` is returned.
+fn prologue_param_spill_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> u32 {
+    if func.is_variadic {
+        return 0;
+    }
+    let entry_spill = func.n_params;
+    if entry_spill == 0 {
+        return 0;
+    }
+    let n_reg = entry_spill.min(abi.int_arg_regs.len());
+    let n_stack = entry_spill - n_reg;
+
+    let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<i64> =
+        alloc::collections::BTreeSet::new();
+    let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        match inst {
+            Inst::ParamRef { idx: i, .. } => {
+                seeded.insert(*i);
+            }
+            Inst::LocalAddr(off) if *off >= 2 => {
+                addr_taken.insert(*off);
+            }
+            Inst::LoadLocal { off, .. } if *off >= 2 => {
+                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
+                if alive {
+                    needed.insert(*off);
+                }
+            }
+            Inst::StoreLocal { off, .. } if *off >= 2 => {
+                needed.insert(*off);
+            }
+            _ => {}
+        }
+    }
+
+    // Elision is safe only when the entire register-passed
+    // stripe is skippable. Host-stack overflow shifts slot
+    // offsets for every register-passed slot, so the register
+    // stripe cannot be elided when n_stack > 0; the overflow
+    // bytes themselves are always allocated.
+    let can_elide_reg = n_stack == 0
+        && (0..n_reg).all(|i| {
+            let slot = (i as i64) + 2;
+            seeded.contains(&(i as u32))
+                && !addr_taken.contains(&slot)
+                && !needed.contains(&slot)
+        });
+    let reg_bytes = if can_elide_reg { 0 } else { (n_reg as u32) * 16 };
+    let overflow_bytes = (n_stack as u32) * 16;
+    reg_bytes + overflow_bytes
 }
 
 /// x19 is overwritten only by the lowerings that route through it:
@@ -198,8 +283,8 @@ pub(super) fn emit_function(
     prologue_native: &mut alloc::collections::BTreeMap<usize, usize>,
     ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
-    let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
+    let frame = Frame::for_function(func, alloc, abi);
     let scratch = ScratchPool::new();
     let snapshot = code.len();
     // Snapshot every fixup vector at function entry so a partial
@@ -611,17 +696,18 @@ fn emit_prologue(
     // declared int param into a 16-byte c5 cdecl slot above fp,
     // restripe any host-stack overflow into 16-byte slots.
     //
-    // A parameter that has an `Inst::ParamRef { idx, .. }` seed
-    // in the function body and whose c5 cdecl slot address is
-    // never taken does not need the explicit store: ParamRef's
-    // own emit places the value in the allocator's chosen Place,
-    // mem2reg redirects every LoadLocal at the slot, and nothing
-    // reads the slot at runtime. The slot is still allocated
-    // (via `sub sp, sp, #16`) so the surrounding LocalAddr
-    // offsets stay stable, and consecutive skipped slots
-    // coalesce into a single sp adjustment.
+    // The total bytes this block allocates is computed once by
+    // `prologue_param_spill_bytes` and stored on `frame`; the
+    // epilogue reads it directly. Per-slot store-elision when
+    // `Inst::ParamRef` seeded the slot saves the explicit store
+    // but still allocates the 16-byte cell (replaced by a coalesced
+    // `sub sp`) so the surrounding `LocalAddr` offsets stay stable.
+    // When every register-passed parameter is ParamRef-seeded, has
+    // no address taken, and has no surviving slot access, the
+    // entire register stripe drops out (`frame.param_spill_bytes`
+    // already reflects 0) and no instructions are emitted here.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
-    if entry_spill > 0 {
+    if entry_spill > 0 && frame.param_spill_bytes > 0 {
         let n_reg = entry_spill.min(abi.int_arg_regs.len());
         let n_stack = entry_spill - n_reg;
         if n_stack > 0 {
@@ -634,25 +720,28 @@ fn emit_prologue(
                 emit(code, enc_str_imm(Reg(16), Reg(31), c5_off));
             }
         }
-        // Build the set of parameter indices seeded by ParamRef
-        // in the function body and the set of c5 slot offsets
-        // whose address is taken anywhere. The arg-slot base is
-        // 2 for ordinary callees and 3 when the function returns
-        // a struct (slot 2 is the hidden out-pointer); the
-        // walker's ParamRef synthesis already excludes
-        // struct-returning callees, so reading `2` here is
-        // correct for any callee with a ParamRef seed.
         let mut seeded_params: alloc::collections::BTreeSet<u32> =
             alloc::collections::BTreeSet::new();
         let mut addr_taken_slots: alloc::collections::BTreeSet<i64> =
             alloc::collections::BTreeSet::new();
-        for inst in &func.insts {
+        let mut needed_slots: alloc::collections::BTreeSet<i64> =
+            alloc::collections::BTreeSet::new();
+        for (idx, inst) in func.insts.iter().enumerate() {
             match inst {
-                Inst::ParamRef { idx, .. } => {
-                    seeded_params.insert(*idx);
+                Inst::ParamRef { idx: i, .. } => {
+                    seeded_params.insert(*i);
                 }
                 Inst::LocalAddr(off) if *off >= 2 => {
                     addr_taken_slots.insert(*off);
+                }
+                Inst::LoadLocal { off, .. } if *off >= 2 => {
+                    let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
+                    if alive {
+                        needed_slots.insert(*off);
+                    }
+                }
+                Inst::StoreLocal { off, .. } if *off >= 2 => {
+                    needed_slots.insert(*off);
                 }
                 _ => {}
             }
@@ -661,7 +750,8 @@ fn emit_prologue(
         for i in (0..n_reg).rev() {
             let slot = (i as i64) + 2;
             let skip = seeded_params.contains(&(i as u32))
-                && !addr_taken_slots.contains(&slot);
+                && !addr_taken_slots.contains(&slot)
+                && !needed_slots.contains(&slot);
             if skip {
                 pending_sub += 16;
             } else {
@@ -3283,12 +3373,16 @@ fn emit_return(
         emit_add_sp_imm(code, frame.frame_bytes);
     }
     emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
-    // Drop the host-arg-reg spill slots the prologue laid down
-    // before the fp/lr stp. Both register-spilled and host-stack-
-    // overflow params occupy 16 bytes apiece.
-    if !func.is_variadic && func.n_params > 0 {
-        let _ = abi;
-        emit_add_sp_imm(code, (16 * func.n_params) as u32);
+    // Drop whatever bytes the prologue allocated above the saved
+    // fp/lr for c5 cdecl parameter slots. The single source of
+    // truth is `prologue_param_spill_bytes`, recorded on
+    // `frame.param_spill_bytes`; both prologue and epilogue read
+    // from there so the two sides agree across every branch the
+    // prologue takes (variadic, host-stack overflow,
+    // ParamRef-elided, per-slot pending_sub flush).
+    let _ = (func, abi);
+    if frame.param_spill_bytes > 0 {
+        emit_add_sp_imm(code, frame.param_spill_bytes);
     }
     emit(code, enc_ret(Reg(30)));
 }

@@ -583,6 +583,35 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if promotable.is_empty() {
         return Vec::new();
     }
+    // Write-only address-free slots: every store is dead per C99
+    // 6.2.4p2 (the slot's value is never observed). Neutralise each
+    // such store to `Inst::Imm(0)`; the dead-pure check in the emit
+    // drops it, the frame slot remains allocated by the prologue but
+    // costs no per-call memory traffic.
+    let mut dead_slots: BTreeSet<i64> = BTreeSet::new();
+    for &slot in &promotable {
+        let mut has_load = false;
+        let mut has_store = false;
+        for inst in &func.insts {
+            match inst {
+                Inst::LoadLocal { off, .. } if *off == slot => has_load = true,
+                Inst::StoreLocal { off, .. } if *off == slot => has_store = true,
+                _ => {}
+            }
+        }
+        if has_store && !has_load {
+            dead_slots.insert(slot);
+        }
+    }
+    if !dead_slots.is_empty() {
+        for inst in func.insts.iter_mut() {
+            if let Inst::StoreLocal { off, .. } = inst
+                && dead_slots.contains(off)
+            {
+                *inst = Inst::Imm(0);
+            }
+        }
+    }
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df);
@@ -941,6 +970,51 @@ mod tests {
             !p.contains(&-2),
             "address-taken slot -2 must not be promotable"
         );
+    }
+
+    #[test]
+    fn run_neutralises_writes_to_write_only_slot() {
+        // Address-free slot -1 is stored twice (two distinct int
+        // values) and never loaded; both stores are dead per C99
+        // 6.2.4p2 and must be neutralised to `Inst::Imm(0)` so the
+        // dead-pure emit drops them.
+        let insts = alloc::vec![
+            Inst::Imm(1),
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I32,
+            },
+            Inst::Imm(2),
+            Inst::StoreLocal {
+                off: -1,
+                value: 2,
+                kind: StoreKind::I32,
+            },
+            Inst::Imm(99),
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..5,
+            terminator: Terminator::Return(4),
+            exit_acc: 4,
+        }];
+        let mut f = func_with(insts, blocks);
+        let _ = run(&mut f);
+        // Both StoreLocal positions now hold Imm(0).
+        match &f.insts[1] {
+            Inst::Imm(0) => {}
+            other => panic!("expected first StoreLocal to be neutralised, got {other:?}"),
+        }
+        match &f.insts[3] {
+            Inst::Imm(0) => {}
+            other => panic!("expected second StoreLocal to be neutralised, got {other:?}"),
+        }
+        // The Return's value still points at Imm(99).
+        match f.blocks[0].terminator {
+            Terminator::Return(v) => assert_eq!(v, 4),
+            ref other => panic!("terminator should still return v4, got {other:?}"),
+        }
     }
 
     #[test]

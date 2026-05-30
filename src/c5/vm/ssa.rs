@@ -889,9 +889,7 @@ fn run_inst<H: Host>(
             // call site passed.
             let off = (*idx as i64) + 2;
             let addr = frame.slot_addr(off).ok_or_else(|| {
-                C5Error::Runtime(format!(
-                    "vm_ssa: ParamRef({idx}): slot {off} out of range"
-                ))
+                C5Error::Runtime(format!("vm_ssa: ParamRef({idx}): slot {off} out of range"))
             })?;
             frame.regs[v as usize] = load_from_memory(mem, addr, LoadKind::I64)?;
             return Ok(());

@@ -15,6 +15,8 @@
 //! The downstream prologue / call-marshal switches use the
 //! classification once the per-arch emit consumes it.
 
+#![cfg_attr(not(feature = "std"), allow(dead_code))]
+
 use alloc::collections::BTreeSet;
 
 use super::super::ir::{FunctionSsa, Inst, ValueId};

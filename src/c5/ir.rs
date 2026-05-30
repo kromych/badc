@@ -186,10 +186,7 @@ pub(crate) enum Inst {
     /// sites that mem2reg inserts for the LoadLocal -> Extend
     /// rewrite then collapse to a plain copy when their kind
     /// matches the ParamRef's kind.
-    ParamRef {
-        idx: u32,
-        kind: LoadKind,
-    },
+    ParamRef { idx: u32, kind: LoadKind },
     /// SSA phi: at a join block where a promoted slot has more
     /// than one reaching definition, mem2reg synthesises one of
     /// these per slot to merge the predecessors' incoming

@@ -273,10 +273,7 @@ pub(crate) fn insert_phis(
     let n_blocks = func.blocks.len();
     let mut per_block: Vec<Vec<(i64, LoadKind)>> = alloc::vec![Vec::new(); n_blocks];
     for (slot, blocks) in phi_blocks {
-        let kind = phi_slot_kind
-            .get(slot)
-            .copied()
-            .unwrap_or(LoadKind::I64);
+        let kind = phi_slot_kind.get(slot).copied().unwrap_or(LoadKind::I64);
         for &b in blocks {
             per_block[b as usize].push((*slot, kind));
         }
@@ -293,11 +290,8 @@ pub(crate) fn insert_phis(
     let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; n_old];
     let mut phi_id_at: BTreeMap<(BlockId, i64), ValueId> = BTreeMap::new();
 
-    let old_ranges: Vec<core::ops::Range<u32>> = func
-        .blocks
-        .iter()
-        .map(|b| b.inst_range.clone())
-        .collect();
+    let old_ranges: Vec<core::ops::Range<u32>> =
+        func.blocks.iter().map(|b| b.inst_range.clone()).collect();
 
     for (b_idx, range) in old_ranges.iter().enumerate() {
         let new_start = new_insts.len() as u32;
@@ -777,13 +771,11 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 // move that materializes the merged value in the
                 // phi's place. Order matches the dom-tree walk; the
                 // BlockId tag makes lookup positional-independent.
-                let term = func.blocks[b as usize].terminator.clone();
+                let term = func.blocks[b as usize].terminator;
                 for succ in successors(&term) {
                     for (slot, phi_id) in &phis_at[succ as usize].clone() {
                         if let Some(&val) = current.get(slot) {
-                            if let Inst::Phi { incoming, .. } =
-                                &mut func.insts[*phi_id as usize]
-                            {
+                            if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
                                 incoming.push((b as BlockId, val));
                             }
                         } else {

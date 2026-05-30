@@ -49,16 +49,15 @@ use super::DataFixup;
 use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
-    Reg, emit, emit_add_sp_imm, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm, enc_add_reg,
-    enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br, enc_cbnz, enc_cbz,
-    enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d, enc_fcvt_d_s,
-    enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_fmul_d,
-    enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
-    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_lslv, enc_lsrv, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
+    Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
+    enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br,
+    enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d,
+    enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d,
+    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post,
+    enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm,
+    enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
     enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, emit_mov_reg,
-    load_imm64,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -148,11 +147,7 @@ impl Frame {
 ///   the walker excludes them from `ParamRef` synthesis, so
 ///   `seeded` is empty, `can_elide` is false, and the full
 ///   `n_params * 16` is returned.
-fn prologue_param_spill_bytes(
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    abi: super::Abi,
-) -> u32 {
+fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
     if func.is_variadic {
         return 0;
     }
@@ -164,8 +159,7 @@ fn prologue_param_spill_bytes(
     let n_stack = entry_spill - n_reg;
 
     let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
-    let mut addr_taken: alloc::collections::BTreeSet<i64> =
-        alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
@@ -196,11 +190,13 @@ fn prologue_param_spill_bytes(
     let can_elide_reg = n_stack == 0
         && (0..n_reg).all(|i| {
             let slot = (i as i64) + 2;
-            seeded.contains(&(i as u32))
-                && !addr_taken.contains(&slot)
-                && !needed.contains(&slot)
+            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot)
         });
-    let reg_bytes = if can_elide_reg { 0 } else { (n_reg as u32) * 16 };
+    let reg_bytes = if can_elide_reg {
+        0
+    } else {
+        (n_reg as u32) * 16
+    };
     let overflow_bytes = (n_stack as u32) * 16;
     reg_bytes + overflow_bytes
 }
@@ -3265,27 +3261,25 @@ fn emit_phi_predecessor_moves(
     frame: Frame,
 ) -> bool {
     use super::super::ir::Terminator;
-    let succs: Vec<super::super::ir::BlockId> =
-        match func.blocks[self_block as usize].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
-            Terminator::Bz {
-                target,
-                fall_through,
-                ..
-            }
-            | Terminator::Bnz {
-                target,
-                fall_through,
-                ..
-            } => alloc::vec![target, fall_through],
-            Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
-        };
+    let succs: Vec<super::super::ir::BlockId> = match func.blocks[self_block as usize].terminator {
+        Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
+        Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        } => alloc::vec![target, fall_through],
+        Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
+    };
     for succ in succs {
         let head = func.blocks[succ as usize].inst_range.start;
         let end = func.blocks[succ as usize].inst_range.end;
         let mut int_moves: Vec<(u8, u8)> = Vec::new();
-        let mut other_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> =
-            Vec::new();
+        let mut other_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
         for id in head..end {
             let inst = &func.insts[id as usize];
             let super::super::ir::Inst::Phi { incoming, .. } = inst else {
@@ -3388,11 +3382,16 @@ fn marshal_args(
                 };
                 emit(code, enc_str_d_imm(dn, Reg(31), off));
             } else {
-                let src =
-                    match materialize_int_shifted(code, ap, scratch.primary, frame, plan.scratch_bytes) {
-                        Some(r) => r,
-                        None => return false,
-                    };
+                let src = match materialize_int_shifted(
+                    code,
+                    ap,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
                 emit(code, enc_str_imm(src, Reg(31), off));
             }
         }
@@ -3442,11 +3441,16 @@ fn marshal_args(
                     emit(code, enc_fmov_d_to_x(Reg(r), dn));
                 }
                 Place::Spill(_) | Place::None => {
-                    let src =
-                        match materialize_int_shifted(code, ap, Reg(r), frame, plan.scratch_bytes) {
-                            Some(rr) => rr,
-                            None => return false,
-                        };
+                    let src = match materialize_int_shifted(
+                        code,
+                        ap,
+                        Reg(r),
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(rr) => rr,
+                        None => return false,
+                    };
                     if src.0 != r {
                         emit_mov_reg(code, Reg(r), src);
                     }

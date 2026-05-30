@@ -317,9 +317,7 @@ fn native_eligible_callee_skips_param_spill_in_prologue() {
     // some 4-byte-aligned offset; absence is the regression
     // marker.
     let stp_word: [u8; 4] = 0xa9_bf_7b_fd_u32.to_le_bytes();
-    let found = bytes
-        .windows(4)
-        .any(|w| w == stp_word);
+    let found = bytes.windows(4).any(|w| w == stp_word);
     assert!(
         found,
         "expected the Native-elided prologue's `stp x29, x30, [sp, -16]!` byte word \

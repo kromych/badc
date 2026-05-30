@@ -895,9 +895,7 @@ impl Compiler {
                     // bindings were restored at block exit. Every
                     // pending entry belongs to this function, since C
                     // has no nested function definitions.
-                    for mut bl in
-                        core::mem::take(&mut self.pending_block_locals)
-                    {
+                    for mut bl in core::mem::take(&mut self.pending_block_locals) {
                         bl.function_bc_pc = ent_pc as u64;
                         self.variables.push(bl);
                     }
@@ -1165,8 +1163,7 @@ impl Compiler {
                         // The two-initializer case already errored at the
                         // duplicate-definition check above.
                         let reuse_prior_storage = was_tentative_glo
-                            || (self.symbols[id_idx].defined_here
-                                && self.lex.tk != Token::Assign);
+                            || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
                         let var_offset = if reuse_prior_storage {
                             self.symbols[id_idx].val
                         } else if thread_local {

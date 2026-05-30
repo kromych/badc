@@ -698,37 +698,32 @@ fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8
     // the return registers. `combined_slot` is the Win64 convention
     // where the slot index advances on every argument and selects
     // either the int or the FP register at that slot.
-    let (int_args, fp_args, ret_int, ret_fp, combined_slot): (
-        &[u8],
-        &[u8],
-        u8,
-        u8,
-        bool,
-    ) = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => (
-            &[0, 1, 2, 3, 4, 5, 6, 7],
-            &[0, 1, 2, 3, 4, 5, 6, 7],
-            0,
-            0,
-            false,
-        ),
-        Target::LinuxX64 => (
-            // SysV: rdi(7), rsi(6), rdx(2), rcx(1), r8(8), r9(9).
-            &[7, 6, 2, 1, 8, 9],
-            &[0, 1, 2, 3, 4, 5, 6, 7],
-            0,
-            0,
-            false,
-        ),
-        Target::WindowsX64 => (
-            // Win64: rcx(1), rdx(2), r8(8), r9(9).
-            &[1, 2, 8, 9],
-            &[0, 1, 2, 3],
-            0,
-            0,
-            true,
-        ),
-    };
+    let (int_args, fp_args, ret_int, ret_fp, combined_slot): (&[u8], &[u8], u8, u8, bool) =
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => (
+                &[0, 1, 2, 3, 4, 5, 6, 7],
+                &[0, 1, 2, 3, 4, 5, 6, 7],
+                0,
+                0,
+                false,
+            ),
+            Target::LinuxX64 => (
+                // SysV: rdi(7), rsi(6), rdx(2), rcx(1), r8(8), r9(9).
+                &[7, 6, 2, 1, 8, 9],
+                &[0, 1, 2, 3, 4, 5, 6, 7],
+                0,
+                0,
+                false,
+            ),
+            Target::WindowsX64 => (
+                // Win64: rcx(1), rdx(2), r8(8), r9(9).
+                &[1, 2, 8, 9],
+                &[0, 1, 2, 3],
+                0,
+                0,
+                true,
+            ),
+        };
 
     fn try_set(hints: &mut [Option<u8>], id: ValueId, reg: u8) {
         let slot = id as usize;
@@ -1050,11 +1045,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
 /// variant-1 (TPIDR_EL0 + add) and Windows' (gs/x18 + 0x58 table
 /// walk) reach the per-thread storage without leaving the
 /// instruction stream, so they stay outside the call set.
-fn compute_calls_after_def(
-    func: &FunctionSsa,
-    last_use: &[u32],
-    target: Target,
-) -> Vec<bool> {
+fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target) -> Vec<bool> {
     let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
     let n = func.insts.len();
     let mut call_pcs: Vec<u32> = Vec::new();

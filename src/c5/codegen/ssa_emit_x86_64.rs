@@ -72,24 +72,12 @@ pub(super) struct Frame {
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        let declared_locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
-        // After mem2reg + dead-store elimination, every reference to
-        // user-local slots (negative `off`) may be gone. The
-        // surviving `func.insts` is the source of truth; when no
-        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
-        // negative slot the prologue need not allocate locals
-        // storage (C99 6.2.4p2). Param cells use non-negative
-        // `off` and are not affected.
-        let any_local_access = func.insts.iter().any(|i| match i {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
-            Inst::LocalAddr(off) => *off < 0,
-            _ => false,
-        });
-        let locals_bytes = if any_local_access {
-            declared_locals_bytes
-        } else {
-            0
-        };
+        // TODO: mirror the aarch64 `locals_bytes` elision for empty-
+        // frame functions once the Win64 fncall / fact regression
+        // is understood. SysV passes locally but Win64 ride a
+        // different prologue / shadow-space layout that needs to
+        // be debugged on a Windows host.
+        let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
@@ -119,11 +107,7 @@ impl Frame {
 /// * Struct-returning callees: the walker excludes them from
 ///   `ParamRef` synthesis, so `seeded` is empty, the elision
 ///   check fails, and `n_params * 16` is returned.
-fn prologue_param_spill_bytes(
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    abi: super::Abi,
-) -> u32 {
+fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
     if func.is_variadic {
         return 0;
     }
@@ -135,8 +119,7 @@ fn prologue_param_spill_bytes(
     let n_stack = entry_spill - n_reg;
 
     let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
-    let mut addr_taken: alloc::collections::BTreeSet<i64> =
-        alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
@@ -161,11 +144,13 @@ fn prologue_param_spill_bytes(
     let can_elide_reg = n_stack == 0
         && (0..n_reg).all(|i| {
             let slot = (i as i64) + 2;
-            seeded.contains(&(i as u32))
-                && !addr_taken.contains(&slot)
-                && !needed.contains(&slot)
+            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot)
         });
-    let reg_bytes = if can_elide_reg { 0 } else { (n_reg as u32) * 16 };
+    let reg_bytes = if can_elide_reg {
+        0
+    } else {
+        (n_reg as u32) * 16
+    };
     let overflow_bytes = (n_stack as u32) * 16;
     reg_bytes + overflow_bytes
 }
@@ -410,21 +395,20 @@ fn emit_phi_predecessor_moves(
     frame: Frame,
 ) -> bool {
     use super::super::ir::Terminator;
-    let succs: Vec<super::super::ir::BlockId> =
-        match func.blocks[self_block as usize].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
-            Terminator::Bz {
-                target,
-                fall_through,
-                ..
-            }
-            | Terminator::Bnz {
-                target,
-                fall_through,
-                ..
-            } => alloc::vec![target, fall_through],
-            Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
-        };
+    let succs: Vec<super::super::ir::BlockId> = match func.blocks[self_block as usize].terminator {
+        Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
+        Terminator::Bz {
+            target,
+            fall_through,
+            ..
+        }
+        | Terminator::Bnz {
+            target,
+            fall_through,
+            ..
+        } => alloc::vec![target, fall_through],
+        Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
+    };
     for succ in succs {
         let head = func.blocks[succ as usize].inst_range.start;
         let end = func.blocks[succ as usize].inst_range.end;
@@ -438,7 +422,11 @@ fn emit_phi_predecessor_moves(
             let Some((_, src_v)) = incoming.iter().find(|(b, _)| *b == self_block) else {
                 continue;
             };
-            let dst_place = alloc.places.get(id as usize).copied().unwrap_or(Place::None);
+            let dst_place = alloc
+                .places
+                .get(id as usize)
+                .copied()
+                .unwrap_or(Place::None);
             let src_place = alloc
                 .places
                 .get(*src_v as usize)
@@ -551,13 +539,14 @@ fn marshal_args(
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::Stack(off) = placement {
             let ap = arg_place(i);
-            let src = match materialize_int_shifted(code, ap, SCRATCH_R10, frame, plan.scratch_bytes) {
-                Some(s) => s,
-                None => {
-                    bail_msg(&alloc::format!("{site}: stack arg not in int reg / spill"));
-                    return false;
-                }
-            };
+            let src =
+                match materialize_int_shifted(code, ap, SCRATCH_R10, frame, plan.scratch_bytes) {
+                    Some(s) => s,
+                    None => {
+                        bail_msg(&alloc::format!("{site}: stack arg not in int reg / spill"));
+                        return false;
+                    }
+                };
             emit_mov_mem_r(code, Reg::RSP, off as i32, src);
         }
     }
@@ -597,12 +586,16 @@ fn marshal_args(
             match ap {
                 Place::IntReg(_) => {}
                 Place::Spill(_) | Place::None => {
-                    let src = match materialize_int_shifted(code, ap, Reg(r), frame, plan.scratch_bytes) {
+                    let src = match materialize_int_shifted(
+                        code,
+                        ap,
+                        Reg(r),
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
                         Some(s) => s,
                         None => {
-                            bail_msg(&alloc::format!(
-                                "{site}: int arg not in int reg / spill"
-                            ));
+                            bail_msg(&alloc::format!("{site}: int arg not in int reg / spill"));
                             return false;
                         }
                     };
@@ -2427,8 +2420,10 @@ fn emit_binop_imm(
     // imm32 form covers the operand range typical for `BinopI`
     // comparisons against small constants; outside that range we
     // fall through to the rcx-scratch path below.
-    let is_signed_cmp =
-        matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge);
+    let is_signed_cmp = matches!(
+        op,
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge
+    );
     let is_unsigned_cmp = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
     if (is_signed_cmp || is_unsigned_cmp) && imm_fits_i32 {
         super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);

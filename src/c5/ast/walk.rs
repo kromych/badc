@@ -181,8 +181,8 @@ pub(crate) fn walk_function(
                 continue;
             }
             let stripped = pty & !(1i64 << 30);
-            let is_struct_value = stripped >= STRUCT_BASE
-                && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
+            let is_struct_value =
+                stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
             if is_struct_value {
                 continue;
             }

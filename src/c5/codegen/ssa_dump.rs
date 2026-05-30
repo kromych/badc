@@ -158,7 +158,10 @@ fn fmt_inst(inst: &Inst) -> String {
                 }
                 parts.push_str(&format!("b{b}:v{v}"));
             }
-            format!("Phi {{ incoming=[{parts}], kind={} }}", fmt_load_kind(*kind))
+            format!(
+                "Phi {{ incoming=[{parts}], kind={} }}",
+                fmt_load_kind(*kind)
+            )
         }
     }
 }

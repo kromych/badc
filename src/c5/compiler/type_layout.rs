@@ -74,9 +74,13 @@ impl Compiler {
     /// a redefinition (same scope) or a fresh declaration shadowing
     /// an outer one.
     pub(super) fn find_struct_id_in_current_scope(&self, name: &str) -> Option<usize> {
-        self.tag_scopes
-            .last()
-            .and_then(|scope| scope.iter().rev().find(|(n, _)| n == name).map(|(_, id)| *id))
+        self.tag_scopes.last().and_then(|scope| {
+            scope
+                .iter()
+                .rev()
+                .find(|(n, _)| n == name)
+                .map(|(_, id)| *id)
+        })
     }
 
     /// Find an existing struct tag by name or register a fresh

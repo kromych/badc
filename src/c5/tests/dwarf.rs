@@ -102,12 +102,22 @@ fn dwarfdump_debug_info(path: &Path) -> Option<String> {
 /// is absent. Used to inspect prologue / epilogue shape.
 fn lldb_disasm(path: &Path, func: &str) -> Option<String> {
     let out = Command::new("lldb")
-        .args(["-b", "-o", &alloc::format!("disassemble --name {func}"), "-o", "quit"])
+        .args([
+            "-b",
+            "-o",
+            &alloc::format!("disassemble --name {func}"),
+            "-o",
+            "quit",
+        ])
         .arg(path)
         .output()
         .ok()?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    if text.contains("<+0>") { Some(text) } else { None }
+    if text.contains("<+0>") {
+        Some(text)
+    } else {
+        None
+    }
 }
 
 fn dwarfdump_debug_line(path: &Path) -> Option<String> {
@@ -773,8 +783,8 @@ fn leaf_function_omits_x19_save() {
         !leaf.contains("x19"),
         "address-free leaf must not save/restore x19:\n{leaf}"
     );
-    let uses = lldb_disasm(&path, "uses")
-        .unwrap_or_else(|| panic!("lldb could not disassemble `uses`"));
+    let uses =
+        lldb_disasm(&path, "uses").unwrap_or_else(|| panic!("lldb could not disassemble `uses`"));
     assert!(
         uses.contains("x19"),
         "global-touching function must save/restore x19:\n{uses}"

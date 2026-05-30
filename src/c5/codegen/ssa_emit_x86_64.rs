@@ -2436,14 +2436,11 @@ fn emit_binop(
                 // sequence below only touches registers (mov / mov /
                 // shl / mov), so the 8-byte misalignment between push
                 // and pop is irrelevant.
-                let scratch_holds_live =
-                    alloc.places.iter().enumerate().any(|(idx, p)| {
-                        let i = idx as u32;
-                        let last = alloc.last_use.get(idx).copied().unwrap_or(0);
-                        matches!(p, Place::IntReg(r) if *r == scratch.0)
-                            && i < v
-                            && v < last
-                    });
+                let scratch_holds_live = alloc.places.iter().enumerate().any(|(idx, p)| {
+                    let i = idx as u32;
+                    let last = alloc.last_use.get(idx).copied().unwrap_or(0);
+                    matches!(p, Place::IntReg(r) if *r == scratch.0) && i < v && v < last
+                });
                 if scratch_holds_live {
                     emit_push_r(code, scratch);
                 }

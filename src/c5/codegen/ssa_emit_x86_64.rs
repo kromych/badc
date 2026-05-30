@@ -138,10 +138,11 @@ fn pick_caller_saved_scratch_live_aware(
     for (idx, place) in alloc.places.iter().enumerate() {
         let last = alloc.last_use.get(idx).copied().unwrap_or(0);
         let i = idx as u32;
-        if i < pc && pc < last {
-            if let Place::IntReg(r) = place {
-                live.push(Reg(*r));
-            }
+        if i < pc
+            && pc < last
+            && let Place::IntReg(r) = place
+        {
+            live.push(Reg(*r));
         }
     }
     pick_caller_saved_scratch(rd, &live)

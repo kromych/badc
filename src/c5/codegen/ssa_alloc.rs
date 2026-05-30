@@ -1090,7 +1090,7 @@ fn expire(
 ) {
     let mut i = 0;
     while i < active.len() {
-        if active[i].1 <= current_pc {
+        if active[i].1 < current_pc {
             let (_id, _end, reg) = active.remove(i);
             free.push(reg);
         } else {

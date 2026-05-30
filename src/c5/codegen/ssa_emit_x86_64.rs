@@ -3088,8 +3088,7 @@ fn emit_intrinsic(
             // does not collide with `ap` or `last`; both are
             // intra-instruction so the call-site does not need to
             // preserve the register across the op.
-            let Some(scratch) = pick_caller_saved_scratch_live_aware(ap, &[last], v, alloc)
-            else {
+            let Some(scratch) = pick_caller_saved_scratch_live_aware(ap, &[last], v, alloc) else {
                 bail_msg("VaStart: no caller-saved scratch available");
                 return false;
             };
@@ -3132,8 +3131,7 @@ fn emit_intrinsic(
                 emit_mov_mem_r(code, scratch, 0, rd);
                 emit_lea_r_mem(code, rd, rd, -16);
             } else {
-                let Some(scratch) =
-                    pick_caller_saved_scratch_live_aware(rd, &[ap], v, alloc)
+                let Some(scratch) = pick_caller_saved_scratch_live_aware(rd, &[ap], v, alloc)
                 else {
                     bail_msg("VaArg: no caller-saved scratch available");
                     return false;
@@ -3171,8 +3169,7 @@ fn emit_intrinsic(
             // Pick a caller-saved scratch disjoint from dst_p
             // and src_p so the staging load does not clobber an
             // allocator-held value live across the intrinsic.
-            let Some(scratch) =
-                pick_caller_saved_scratch_live_aware(dst_p, &[src_p], v, alloc)
+            let Some(scratch) = pick_caller_saved_scratch_live_aware(dst_p, &[src_p], v, alloc)
             else {
                 bail_msg("VaCopy: no caller-saved scratch available");
                 return false;

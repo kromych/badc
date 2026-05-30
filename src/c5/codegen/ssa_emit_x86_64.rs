@@ -2172,6 +2172,19 @@ fn emit_binop(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
     );
+    let is_cmp = matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+    );
     if rhs_aliases_rd && commutative {
         match op {
             BinOp::Add => emit_add_rr(code, rd, rn),
@@ -2183,9 +2196,18 @@ fn emit_binop(
         }
         return true;
     }
-    let Some(rm) = (if rhs_aliases_rd {
+    // Comparison ops read both operands, set flags, then setcc+
+    // movzx writes the dst. The dst is not used as an input, so
+    // the staging `mov rd, rn` below is unnecessary; the rhs may
+    // even live in `rd` itself (rhs_aliases_rd), and `cmp rn, rm`
+    // still reads it before any write touches rd. Skip the stage
+    // and the scratch-mov for cmp ops.
+    let stage_rhs_to_scratch = rhs_aliases_rd && !is_cmp;
+    let Some(rm) = (if stage_rhs_to_scratch {
         emit_mov_rr(code, rhs_scratch, rd);
         Some(rhs_scratch)
+    } else if let Place::IntReg(r) = rhs_place {
+        Some(Reg(r))
     } else {
         materialize_int(code, rhs_place, rhs_scratch, frame)
     }) else {
@@ -2194,8 +2216,9 @@ fn emit_binop(
     };
     // x86_64's two-operand ops mutate the destination, so stage
     // the LHS into rd first (preserves SSA semantics where the
-    // result is `lhs OP rhs`).
-    if rd.0 != rn.0 {
+    // result is `lhs OP rhs`). Cmp ops skip this -- they read
+    // rn / rm directly and write dst via setcc+movzx.
+    if !is_cmp && rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
     match op {

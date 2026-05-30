@@ -88,7 +88,7 @@ pub(super) struct Frame {
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        let declared_locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
+        let declared_locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
         // After mem2reg + dead-store elimination, every reference to
         // user-local slots (negative `off`) may be gone. The
         // surviving `func.insts` is the source of truth; when no
@@ -107,9 +107,9 @@ impl Frame {
         } else {
             0
         };
-        let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
-        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
-        let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
+        let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
+        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+        let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
         // Reserve the x19 slot only when the function actually
         // clobbers x19; the prologue / epilogue's store / load
         // already gates on the same condition, so a function that
@@ -217,6 +217,34 @@ fn function_clobbers_x19(func: &FunctionSsa) -> bool {
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
+        )
+    })
+}
+
+/// A function that meets every condition to skip the standard
+/// stp fp/lr / mov fp,sp / ldp prologue triple: no callee it
+/// must save lr for, no frame to allocate, no param spill, no
+/// callee-saved GPR / FPR / x19 to spill. The walker's c5
+/// internal call (`Inst::Call`) leaves the link register at the
+/// caller's value when no callee is invoked; AAPCS64's leaf
+/// convention then lets the function ret directly off the
+/// caller-supplied lr without saving it.
+fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
+    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 || frame.uses_x19 {
+        return false;
+    }
+    if !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty() {
+        return false;
+    }
+    !func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::TailExt(_)
+                | Inst::Intrinsic { .. }
+                | Inst::TlsAddr(_)
         )
     })
 }
@@ -803,6 +831,14 @@ fn emit_prologue(
             emit_sub_sp_imm(code, pending_sub);
         }
     }
+    // Leaf-function elision: a function that makes no calls
+    // (lr stays preserved), allocates no frame, spills no params,
+    // saves no callee-regs, and never sets x19 has no work in the
+    // standard prologue. AAPCS64 lets it skip the stp / mov-fp
+    // pair entirely and ret directly off the caller's lr.
+    if is_full_leaf(func, frame, alloc) {
+        return;
+    }
     // Standard frame: stp fp/lr; mov fp, sp; sub sp, sp, frame_bytes.
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
@@ -820,7 +856,7 @@ fn emit_prologue(
         let off = (i as u32) * 8;
         emit(code, enc_str_d_imm(r, Reg(31), off));
     }
-    let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
+    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_str_imm(Reg(r), Reg(31), off));
@@ -829,7 +865,7 @@ fn emit_prologue(
     // function clobbers it. The slot is reserved either way so the
     // surrounding offsets stay fixed.
     if frame.uses_x19 {
-        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
+        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_str_imm(Reg(19), Reg(31), x19_save_off));
     }
@@ -838,8 +874,8 @@ fn emit_prologue(
 /// Byte offset (positive) from fp to the start of the saved-reg
 /// region. The region is the lowest portion of the frame.
 fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
-    let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
-    let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
+    let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
+    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
     // fp is at frame top; the saved-reg region sits at the
     // bottom. Distance from fp = frame_bytes - saved-region size.
     frame
@@ -3499,7 +3535,7 @@ fn emit_return(
     // 12-bit scaled immediate (range 0..32760 in multiples of
     // 8); the matching prologue uses `enc_str_imm` at the same
     // offsets.
-    let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
+    let saved_fpr_bytes = super::ssa_emit_common::slots16(alloc.fp_used.len() as u32);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
@@ -3512,9 +3548,18 @@ fn emit_return(
     // mirror of the prologue's save, emitted only when the function
     // clobbers x19.
     if frame.uses_x19 {
-        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
+        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
         emit(code, enc_ldr_imm(Reg(19), Reg(31), x19_save_off));
+    }
+    // Leaf-function elision: prologue emitted no save, so the
+    // epilogue emits no matching restore -- the function body is
+    // bracketed only by the return-value materialization and the
+    // ret. Keep the symmetry tight so any reader can pair the
+    // two halves at a glance.
+    if is_full_leaf(func, frame, alloc) {
+        emit(code, enc_ret(Reg(30)));
+        return;
     }
     // Tear down the frame.
     if frame.frame_bytes > 0 {

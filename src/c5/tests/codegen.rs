@@ -359,35 +359,33 @@ fn dead_local_only_function_skips_frame_sub_sp() {
         NativeOptions::new().with_optimize(),
     )
     .expect("emit_native");
-    // Foo's elided shape is exactly the four consecutive words:
-    //   stp x29, x30, [sp, #-0x10]!   -> 0xa9bf7bfd
-    //   mov x29, sp                   -> 0x910003fd
+    // Foo's fully-elided shape is exactly two consecutive words:
     //   movz x0, #1                   -> 0xd2800020
-    //   ldp x29, x30, [sp], #0x10     -> 0xa8c17bfd
-    // Then `ret`. The frame elision removed any `sub sp, sp, #N`
-    // between the fp setup and the return-value materialization;
-    // a regression would interleave a `sub sp` word and break the
-    // four-word adjacency below. Other functions in the binary
-    // (the c5 runtime shims, the start stub) can legitimately
-    // emit `sub sp` so a whole-binary `sub sp` scan would alias on
-    // them; this positive-pattern check stays specific to foo.
-    let stp = 0xa9bf7bfd_u32.to_le_bytes();
-    let mov_fp_sp = 0x910003fd_u32.to_le_bytes();
+    //   ret                           -> 0xd65f03c0
+    // The leaf-prologue elision plus the empty-frame elision means
+    // foo has no stp / mov fp,sp / sub sp / ldp / add sp / any
+    // saves. A regression that reinstates the stp prologue breaks
+    // the two-word adjacency. Other functions in the binary (the
+    // c5 runtime shims, the start stub) can legitimately emit
+    // `movz x0, #1` followed by something else; this positive
+    // pattern stays specific to foo because nothing else returns
+    // 1 with zero prologue.
     let movz_x0_1 = 0xd2800020_u32.to_le_bytes();
-    let ldp = 0xa8c17bfd_u32.to_le_bytes();
+    let ret_x30 = 0xd65f03c0_u32.to_le_bytes();
     let mut found = false;
-    for w in bytes.windows(16) {
-        if w[0..4] == stp && w[4..8] == mov_fp_sp && w[8..12] == movz_x0_1 && w[12..16] == ldp {
+    for w in bytes.windows(8) {
+        if w[0..4] == movz_x0_1 && w[4..8] == ret_x30 {
             found = true;
             break;
         }
     }
     assert!(
         found,
-        "expected foo's elided four-word frame shape \
-         (stp; mov fp,sp; movz x0,#1; ldp) consecutive in .text; the absence \
-         means a `sub sp` word (or other instruction) sits between the fp \
-         setup and the return-value materialization, so the frame elision \
-         regressed for this function"
+        "expected foo's leaf+frame-elided two-word shape \
+         (movz x0, #1; ret) consecutive in .text; the absence means \
+         either the frame elision regressed (some `sub sp` or `stp` \
+         word slipped in) or the leaf elision regressed (the standard \
+         prologue's stp x29, x30 came back). foo should compile to \
+         exactly two instructions under -O on AAPCS64"
     );
 }

@@ -72,14 +72,14 @@ pub(super) struct Frame {
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        // TODO: mirror the aarch64 `locals_bytes` elision for empty-
-        // frame functions once the Win64 fncall / fact regression
-        // is understood. SysV passes locally but Win64 ride a
-        // different prologue / shadow-space layout that needs to
-        // be debugged on a Windows host.
-        let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
-        let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
-        let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
+        // TODO: mirror the aarch64 `locals_bytes` elision once a
+        // separate test failure under the elision (currently
+        // `libc_vfprintf_with_c5_va_list` SIGSEGVs on SysV) is
+        // root-caused. The Binop rd/rhs aliasing fix that was
+        // bundled with the elision lands independently here.
+        let locals_bytes = super::ssa_emit_common::slots16(func.locals.max(0) as u32);
+        let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
+        let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
         let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         Self {
@@ -107,6 +107,32 @@ impl Frame {
 /// * Struct-returning callees: the walker excludes them from
 ///   `ParamRef` synthesis, so `seeded` is empty, the elision
 ///   check fails, and `n_params * 16` is returned.
+/// A function that meets every condition to skip the standard
+/// push rbp / mov rbp,rsp / pop rbp prologue triple: no callee
+/// it must reserve frame for, no param spill, no callee-saved
+/// GPR to spill. The caller-pushed return address sits at top of
+/// stack untouched, so the function can ret directly with no
+/// stack adjustment.
+fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
+    if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 {
+        return false;
+    }
+    if !alloc.gpr_used.is_empty() {
+        return false;
+    }
+    !func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Call { .. }
+                | Inst::CallIndirect { .. }
+                | Inst::CallExt { .. }
+                | Inst::TailExt(_)
+                | Inst::Intrinsic { .. }
+                | Inst::TlsAddr(_)
+        )
+    })
+}
+
 fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
     if func.is_variadic {
         return 0;
@@ -991,6 +1017,15 @@ fn emit_prologue(
         emit_push_r(code, Reg::R10);
     }
 
+    // Leaf-function elision: a function that makes no calls
+    // (the caller's return address stays at top of stack), has no
+    // frame to allocate, spills no params, and saves no callee
+    // regs has no work in the standard prologue. SysV / Win64 let
+    // it ret directly off the caller-pushed return address with
+    // rsp unchanged.
+    if is_full_leaf(func, frame, alloc) {
+        return;
+    }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
@@ -2119,7 +2154,41 @@ fn emit_binop(
     } else {
         SCRATCH_R10
     };
-    let Some(rm) = materialize_int(code, rhs_place, rhs_scratch, frame) else {
+    // x86_64's two-operand op `OP rd, rm` mutates rd. The standard
+    // sequence below stages LHS into rd then emits `OP rd, rm`.
+    // When rhs is an IntReg whose register is rd, materialize_int
+    // would return rd as `rm`; the subsequent `mov rd, rn` would
+    // then overwrite the rhs value, and the op would compute
+    // `lhs OP lhs` instead of `lhs OP rhs`.
+    //
+    // For commutative ops (Add, Mul, And, Or, Xor) the work to fix
+    // this is zero: rd already holds the value we want, so emit
+    // `OP rd, rn` directly -- rd <- rhs OP lhs == lhs OP rhs.
+    //
+    // For non-commutative ops (Sub, Lt, Gt, ...) we must stage
+    // rhs into the scratch before the `mov rd, rn` clobbers it.
+    let rhs_aliases_rd = matches!(rhs_place, Place::IntReg(r) if r == rd.0);
+    let commutative = matches!(
+        op,
+        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
+    );
+    if rhs_aliases_rd && commutative {
+        match op {
+            BinOp::Add => emit_add_rr(code, rd, rn),
+            BinOp::Mul => emit_imul_rr(code, rd, rn),
+            BinOp::And => emit_and_rr(code, rd, rn),
+            BinOp::Or => emit_or_rr(code, rd, rn),
+            BinOp::Xor => emit_xor_rr(code, rd, rn),
+            _ => unreachable!(),
+        }
+        return true;
+    }
+    let Some(rm) = (if rhs_aliases_rd {
+        emit_mov_rr(code, rhs_scratch, rd);
+        Some(rhs_scratch)
+    } else {
+        materialize_int(code, rhs_place, rhs_scratch, frame)
+    }) else {
         bail_msg("Binop: rhs not int reg / spill");
         return false;
     };
@@ -3186,6 +3255,13 @@ fn emit_return(
         // value still lives in xmm0 for FpReg-shaped callers and
         // for any host-ABI consumer that reads xmm0 directly.
         super::x86_64::emit_movq_r_xmm(code, Reg::RAX, Reg::XMM0);
+    }
+    // Leaf-function elision: prologue emitted no save, so the
+    // epilogue emits no matching restore. The function lowers to
+    // the return-value materialization, then `ret`.
+    if is_full_leaf(func, frame, alloc) {
+        emit_ret(code);
+        return;
     }
     if frame.frame_bytes > 0 {
         emit_add_rsp_imm32(code, frame.frame_bytes);

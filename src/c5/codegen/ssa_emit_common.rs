@@ -5,6 +5,26 @@
 //! (`ssa_emit_x86_64.rs`, `ssa_emit_aarch64.rs`) don't carry
 //! parallel copies.
 
+/// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
+/// AMD64, and Win64 all require the call-site stack pointer to
+/// hold 16-byte alignment after the prologue's frame allocation;
+/// every frame-region byte count routes through this helper so
+/// the alignment guarantee is one source of truth.
+#[inline(never)]
+pub(super) fn align16(n: u32) -> u32 {
+    (n + 15) & !15
+}
+
+/// Byte count for `n` 8-byte slots rounded to 16-byte alignment.
+/// The SSA model stores every per-slot value as a raw 8-byte bit
+/// pattern (the c5 cdecl convention), and every region in the
+/// frame must end on a 16-byte boundary -- hence the unified
+/// helper.
+#[inline(never)]
+pub(super) fn slots16(n_slots: u32) -> u32 {
+    align16(n_slots * 8)
+}
+
 /// Whether the `BADC_TIME_PASSES` environment variable is set.
 /// Gates the wall-clock timer instrumentation in the codegen
 /// pipeline so a default release build pays no per-pass

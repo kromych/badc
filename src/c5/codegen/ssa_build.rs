@@ -455,6 +455,20 @@ impl SsaBuilder {
     ///   requires no side effects from the elided `lhs`
     ///   evaluation, but `lhs` is already an SSA value at this
     ///   point so the evaluation is complete and its discardable.
+    /// * Chained-imm reassociation when `lhs` is itself a
+    ///   `BinopI` whose op is compatible:
+    ///     `(x + K1) + K2  ->  x + (K1+K2)`
+    ///     `(x + K1) - K2  ->  x + (K1-K2)`
+    ///     `(x - K1) + K2  ->  x + (K2-K1)`
+    ///     `(x - K1) - K2  ->  x - (K1+K2)`
+    ///     `(x & K1) & K2  ->  x & (K1&K2)`
+    ///     `(x | K1) | K2  ->  x | (K1|K2)`
+    ///     `(x ^ K1) ^ K2  ->  x ^ (K1^K2)`
+    ///   The folds use `wrapping_add` / `wrapping_sub` to mirror
+    ///   the SSA value model (a 64-bit bit pattern; per-type
+    ///   narrowing happens at materialisation). The original
+    ///   `lhs` BinopI may become dead and the existing DCE pass
+    ///   skips it.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
         let identity = match op {
             BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => rhs_imm == 0,
@@ -469,6 +483,26 @@ impl SsaBuilder {
         let zero_collapses = matches!(op, BinOp::Mul | BinOp::And) && rhs_imm == 0;
         if zero_collapses {
             return self.imm(0);
+        }
+        if let Some(&Inst::BinopI {
+            op: inner_op,
+            lhs: inner_lhs,
+            rhs_imm: inner_imm,
+        }) = self.func.insts.get(lhs as usize)
+        {
+            let folded: Option<(BinOp, i64)> = match (inner_op, op) {
+                (BinOp::Add, BinOp::Add) => Some((BinOp::Add, inner_imm.wrapping_add(rhs_imm))),
+                (BinOp::Add, BinOp::Sub) => Some((BinOp::Add, inner_imm.wrapping_sub(rhs_imm))),
+                (BinOp::Sub, BinOp::Add) => Some((BinOp::Add, rhs_imm.wrapping_sub(inner_imm))),
+                (BinOp::Sub, BinOp::Sub) => Some((BinOp::Sub, inner_imm.wrapping_add(rhs_imm))),
+                (BinOp::And, BinOp::And) => Some((BinOp::And, inner_imm & rhs_imm)),
+                (BinOp::Or, BinOp::Or) => Some((BinOp::Or, inner_imm | rhs_imm)),
+                (BinOp::Xor, BinOp::Xor) => Some((BinOp::Xor, inner_imm ^ rhs_imm)),
+                _ => None,
+            };
+            if let Some((folded_op, folded_imm)) = folded {
+                return self.binop_imm(folded_op, inner_lhs, folded_imm);
+            }
         }
         let key = PureKey::BinopI { op, lhs, rhs_imm };
         if let Some(cached) = self.lookup_pure(key) {

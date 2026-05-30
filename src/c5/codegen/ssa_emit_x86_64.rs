@@ -543,7 +543,17 @@ fn emit_phi_predecessor_moves(
             used.push(Reg(*s));
             used.push(Reg(*t));
         }
-        let Some(cycle_scratch) = pick_caller_saved_scratch(Reg(0xff), &used) else {
+        // The moves run at the predecessor's terminator PC. A scratch
+        // that holds an SSA value live across the terminator (i.e.
+        // live-out of this block) would be clobbered. The live-aware
+        // picker excludes any such register from the candidate set.
+        let terminator_pc = func.blocks[self_block as usize]
+            .inst_range
+            .end
+            .saturating_sub(1);
+        let Some(cycle_scratch) =
+            pick_caller_saved_scratch_live_aware(Reg(0xff), &used, terminator_pc, alloc)
+        else {
             bail_msg(
                 "phi predecessor-exit move: cycle-break exhausted the caller-saved candidate pool",
             );
@@ -558,7 +568,9 @@ fn emit_phi_predecessor_moves(
                     }
                 }
                 Place::Spill(slot) => {
-                    let Some(scratch) = pick_caller_saved_scratch(Reg(0xff), &[]) else {
+                    let Some(scratch) =
+                        pick_caller_saved_scratch_live_aware(Reg(0xff), &[], terminator_pc, alloc)
+                    else {
                         bail_msg("phi predecessor-exit Spill: no caller-saved scratch available");
                         return false;
                     };

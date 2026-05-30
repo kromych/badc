@@ -225,7 +225,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
-    let _ = target;
+    populate_return_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
         return Allocation {
@@ -702,37 +702,33 @@ fn result_kind(inst: &Inst) -> ResultKind {
 /// the return register. The pick-reg path honours each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
-fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
-    // Per-target integer / FP argument registers in call order, plus
-    // the return registers. `combined_slot` is the Win64 convention
-    // where the slot index advances on every argument and selects
-    // either the int or the FP register at that slot.
-    let (int_args, fp_args, ret_int, ret_fp, combined_slot): (&[u8], &[u8], u8, u8, bool) =
-        match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => (
-                &[0, 1, 2, 3, 4, 5, 6, 7],
-                &[0, 1, 2, 3, 4, 5, 6, 7],
-                0,
-                0,
-                false,
-            ),
-            Target::LinuxX64 => (
-                // SysV: rdi(7), rsi(6), rdx(2), rcx(1), r8(8), r9(9).
-                &[7, 6, 2, 1, 8, 9],
-                &[0, 1, 2, 3, 4, 5, 6, 7],
-                0,
-                0,
-                false,
-            ),
-            Target::WindowsX64 => (
-                // Win64: rcx(1), rdx(2), r8(8), r9(9).
-                &[1, 2, 8, 9],
-                &[0, 1, 2, 3],
-                0,
-                0,
-                true,
-            ),
-        };
+fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    // Hint the value feeding `Terminator::Return` to the ABI
+    // return register so a leaf function's exit move drops out.
+    // Scope restricted to leaf functions: the hint is unsafe
+    // when a call sits between the return value's def and the
+    // Return, because the allocator's must-be-callee filter
+    // checks the value's [def, last_use] interval, but the hint
+    // pre-commits the value to a caller-saved register before
+    // that interval ends -- under-reported back-edge live
+    // ranges then escape the must-be-callee guard. Leaf
+    // functions have no calls and so no clobber to worry about.
+    let has_call = func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+        )
+    });
+    if has_call {
+        return;
+    }
+    let (ret_int, ret_fp) = match target {
+        Target::MacOSAarch64
+        | Target::LinuxAarch64
+        | Target::WindowsAarch64
+        | Target::LinuxX64
+        | Target::WindowsX64 => (0u8, 0u8),
+    };
 
     fn try_set(hints: &mut [Option<u8>], id: ValueId, reg: u8) {
         let slot = id as usize;
@@ -741,67 +737,11 @@ fn populate_abi_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8
         }
     }
 
-    // Parameter-slot promotion seeds `Inst::ParamRef(i)` at
-    // function entry; hint each one to its incoming arg register
-    // so the allocator places multiple parameters into their
-    // host-ABI registers directly. Without this hint, the emit's
-    // `mov tgt, x_arg_reg` for ParamRef(0) can clobber the
-    // incoming arg reg that ParamRef(1)'s emit then reads --
-    // the classical permutation hazard the call-arg marshal
-    // pass also avoids.
-    for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&r) = int_args.get(*i as usize)
-        {
-            try_set(hints, idx as ValueId, r);
-        }
-    }
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let args: &[ValueId] = match inst {
-            Inst::Call { args, .. } => args,
-            Inst::CallExt { args, .. } => args,
-            Inst::CallIndirect { args, .. } => args,
-            _ => continue,
-        };
-        if combined_slot {
-            for (i, &arg) in args.iter().enumerate() {
-                let r = match result_kind(&func.insts[arg as usize]) {
-                    ResultKind::Int if i < int_args.len() => int_args[i],
-                    ResultKind::Fp if i < fp_args.len() => fp_args[i],
-                    _ => continue,
-                };
-                try_set(hints, arg, r);
-            }
-        } else {
-            let mut next_int = 0usize;
-            let mut next_fp = 0usize;
-            for &arg in args {
-                match result_kind(&func.insts[arg as usize]) {
-                    ResultKind::Int => {
-                        if next_int < int_args.len() {
-                            try_set(hints, arg, int_args[next_int]);
-                            next_int += 1;
-                        }
-                    }
-                    ResultKind::Fp => {
-                        if next_fp < fp_args.len() {
-                            try_set(hints, arg, fp_args[next_fp]);
-                            next_fp += 1;
-                        }
-                    }
-                    ResultKind::None => {}
-                }
-            }
-        }
-        match result_kind(inst) {
-            ResultKind::Int => try_set(hints, idx as ValueId, ret_int),
-            ResultKind::Fp => try_set(hints, idx as ValueId, ret_fp),
-            ResultKind::None => {}
-        }
-    }
-
     for block in &func.blocks {
-        if let Terminator::Return(v) = block.terminator {
+        if let Terminator::Return(v) = block.terminator
+            && v != NO_VALUE
+            && (v as usize) < func.insts.len()
+        {
             match result_kind(&func.insts[v as usize]) {
                 ResultKind::Int => try_set(hints, v, ret_int),
                 ResultKind::Fp => try_set(hints, v, ret_fp),

@@ -1915,7 +1915,19 @@ fn emit_store(
     // (the materialise helper only writes to it when addr_place
     // is a Spill; an IntReg place returns the underlying reg
     // directly). The value-Place picks a separate scratch below.
-    let Some(addr_scratch) = pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc) else {
+    // The picker's live check uses strict `pc < last_use` so a
+    // value whose last use is this Store (last_use == v) is not
+    // flagged live; passing its register through `operand_regs`
+    // forces the picker to skip it, otherwise the spill load
+    // would overwrite the value register and the store would
+    // write the address back into the lvalue (C99 6.5.16.1).
+    let mut addr_operands: alloc::vec::Vec<Reg> = alloc::vec::Vec::new();
+    if let Place::IntReg(r) = value_place {
+        addr_operands.push(Reg(r));
+    }
+    let Some(addr_scratch) =
+        pick_caller_saved_scratch_live_aware(Reg(0), &addr_operands, v, alloc)
+    else {
         bail_msg("Store: no caller-saved scratch for addr spill load");
         return false;
     };

@@ -327,3 +327,69 @@ fn native_eligible_callee_skips_param_spill_in_prologue() {
          regressed and every fully-Native callee paid the c5 cdecl spill"
     );
 }
+
+/// A function whose only user-local has every store killed by
+/// mem2reg's write-only-slot pass and uses no callee-saved
+/// registers should have its frame allocation skipped: no `sub sp`
+/// for the local, no x19 reservation, no `add sp` in the epilogue.
+/// Verified by inspecting the byte stream for the `sub sp, sp, #16`
+/// and `sub sp, sp, #32` words that the prior frame layout emitted
+/// for this shape.
+///
+/// Without this elision, `int foo(void) { int a = 1; a = 2; return
+/// 1; }` lowered with -O paid eight extra bytes of frame plus the
+/// matching `sub sp` / `add sp` pair on every call. With this
+/// commit the function lowers to `stp fp,lr; mov fp,sp; mov w0,1;
+/// ldp fp,lr; ret` -- five instructions, twenty bytes.
+#[test]
+fn dead_local_only_function_skips_frame_sub_sp() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let src = "
+        static int foo(void) {
+            int a = 1;
+            a = 2;
+            return 1;
+        }
+        int main(void) { return foo(); }
+    ";
+    let program = Compiler::new(crate::c5::tests::with_prelude(src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native");
+    // Foo's elided shape is exactly the four consecutive words:
+    //   stp x29, x30, [sp, #-0x10]!   -> 0xa9bf7bfd
+    //   mov x29, sp                   -> 0x910003fd
+    //   movz x0, #1                   -> 0xd2800020
+    //   ldp x29, x30, [sp], #0x10     -> 0xa8c17bfd
+    // Then `ret`. The frame elision removed any `sub sp, sp, #N`
+    // between the fp setup and the return-value materialization;
+    // a regression would interleave a `sub sp` word and break the
+    // four-word adjacency below. Other functions in the binary
+    // (the c5 runtime shims, the start stub) can legitimately
+    // emit `sub sp` so a whole-binary `sub sp` scan would alias on
+    // them; this positive-pattern check stays specific to foo.
+    let stp = 0xa9bf7bfd_u32.to_le_bytes();
+    let mov_fp_sp = 0x910003fd_u32.to_le_bytes();
+    let movz_x0_1 = 0xd2800020_u32.to_le_bytes();
+    let ldp = 0xa8c17bfd_u32.to_le_bytes();
+    let mut found = false;
+    for w in bytes.windows(16) {
+        if w[0..4] == stp && w[4..8] == mov_fp_sp && w[8..12] == movz_x0_1 && w[12..16] == ldp {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "expected foo's elided four-word frame shape \
+         (stp; mov fp,sp; movz x0,#1; ldp) consecutive in .text; the absence \
+         means a `sub sp` word (or other instruction) sits between the fp \
+         setup and the return-value materialization, so the frame elision \
+         regressed for this function"
+    );
+}

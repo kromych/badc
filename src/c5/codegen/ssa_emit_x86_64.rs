@@ -72,7 +72,24 @@ pub(super) struct Frame {
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
+        let declared_locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
+        // After mem2reg + dead-store elimination, every reference to
+        // user-local slots (negative `off`) may be gone. The
+        // surviving `func.insts` is the source of truth; when no
+        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
+        // negative slot the prologue need not allocate locals
+        // storage (C99 6.2.4p2). Param cells use non-negative
+        // `off` and are not affected.
+        let any_local_access = func.insts.iter().any(|i| match i {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+            Inst::LocalAddr(off) => *off < 0,
+            _ => false,
+        });
+        let locals_bytes = if any_local_access {
+            declared_locals_bytes
+        } else {
+            0
+        };
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;

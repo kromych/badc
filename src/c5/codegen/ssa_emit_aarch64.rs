@@ -89,22 +89,41 @@ pub(super) struct Frame {
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
-        let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
+        let declared_locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
+        // After mem2reg + dead-store elimination, every reference to
+        // user-local slots (negative `off`) may be gone. The
+        // surviving `func.insts` is the source of truth; when no
+        // `LoadLocal` / `StoreLocal` / `LocalAddr` references a
+        // negative slot the prologue need not allocate locals
+        // storage (C99 6.2.4p2: a never-observed object needs no
+        // storage). Param cells use non-negative `off` and are
+        // sized by `param_spill_bytes`, so they are not affected.
+        let any_local_access = func.insts.iter().any(|i| match i {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => *off < 0,
+            Inst::LocalAddr(off) => *off < 0,
+            _ => false,
+        });
+        let locals_bytes = if any_local_access {
+            declared_locals_bytes
+        } else {
+            0
+        };
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
-        // Reserve the x19 slot unconditionally so the offsets of the
-        // allocator-saved regs, spills, and locals do not depend on
-        // whether x19 is live; the prologue / epilogue skip the
-        // actual store / load when the function never clobbers x19.
-        let x19_save_bytes = 16u32;
+        // Reserve the x19 slot only when the function actually
+        // clobbers x19; the prologue / epilogue's store / load
+        // already gates on the same condition, so a function that
+        // leaves x19 alone needs no slot and can drop the 16 bytes.
+        let uses_x19 = function_clobbers_x19(func);
+        let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
         let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
-            uses_x19: function_clobbers_x19(func),
+            uses_x19,
             param_spill_bytes,
         }
     }

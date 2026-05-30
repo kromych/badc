@@ -96,18 +96,24 @@ fn while_loop_terminates() {
 /// in the frame slot. Under `BADC_PHI_PROMOTE=1` the slot promotes
 /// through an `Inst::Phi` at the head block; the per-arch emit
 /// places the predecessor-exit moves before each branch so the
-/// counter survives in a register. JIT-runs the result and checks
-/// the loop sum still equals 45 (0 + 1 + ... + 9).
+/// counter survives in a register.
 ///
-/// Locks the end-to-end (mem2reg + rename + per-arch emit) path
-/// under the phi-promote gate. Default-off behaviour stays covered
-/// by `while_loop_terminates`.
+/// Locks three things at once:
+/// 1. With the gate off, the SSA IR for `main` contains no
+///    `Inst::Phi` for the counter slot (the slot stays in memory).
+/// 2. With the gate on, the same source produces at least one
+///    `Inst::Phi` in `main`'s IR -- proving the rename actually
+///    inserted the merge rather than falling back to the
+///    in-memory slot.
+/// 3. The compiled-and-run program returns the expected sum
+///    (0 + 1 + ... + 9 = 45) under both modes -- proving the
+///    per-arch lowering of `Inst::Phi` plus the predecessor-exit
+///    moves still evaluates the loop correctly.
 #[test]
 #[cfg(feature = "std")]
 fn while_loop_promotes_counter_through_phi_under_phi_promote() {
-    unsafe {
-        std::env::set_var("BADC_PHI_PROMOTE", "1");
-    }
+    use crate::Target;
+    use crate::c5::codegen::ssa_shadow::produce_ssa_funcs;
     let src = r#"
         int main() {
             int i;
@@ -121,10 +127,44 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
             return s;
         }
     "#;
+    let count_phis_in_main = || -> usize {
+        let program = Compiler::new(super::with_prelude(src))
+            .compile()
+            .expect("compile failed");
+        let mut funcs = produce_ssa_funcs(&program, Target::host()).expect("produce_ssa_funcs");
+        for f in &mut funcs {
+            crate::c5::codegen::ssa_mem2reg::run(f);
+        }
+        let main = funcs
+            .iter()
+            .find(|f| f.name == "main")
+            .expect("main not found");
+        main.insts
+            .iter()
+            .filter(|i| matches!(i, crate::c5::ir::Inst::Phi { .. }))
+            .count()
+    };
+    let phis_off = count_phis_in_main();
+    unsafe {
+        std::env::set_var("BADC_PHI_PROMOTE", "1");
+    }
+    let phis_on = count_phis_in_main();
     let result = jit_exit_native_optimized(src, &["jit-phi-promote"]);
     unsafe {
         std::env::remove_var("BADC_PHI_PROMOTE");
     }
+    assert_eq!(
+        phis_off, 0,
+        "no Inst::Phi expected in main's IR with BADC_PHI_PROMOTE unset"
+    );
+    // The loop has two cross-block reassigned scalars (`i` and
+    // `s`); the IDF places exactly one phi per slot at the loop
+    // header, so the post-rename count is two.
+    assert_eq!(
+        phis_on, 2,
+        "BADC_PHI_PROMOTE=1 expected exactly 2 Inst::Phi in main \
+         (one each for `i` and `s` at the loop header); got {phis_on}",
+    );
     assert_eq!(result, 45);
 }
 

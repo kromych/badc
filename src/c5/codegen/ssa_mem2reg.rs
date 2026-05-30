@@ -1015,6 +1015,29 @@ mod tests {
             Terminator::Return(v) => assert_eq!(v, 4),
             ref other => panic!("terminator should still return v4, got {other:?}"),
         }
+        assert_eq!(
+            f.blocks[0].exit_acc, 4,
+            "exit_acc must still point at the return value"
+        );
+        // The Imm RHS of the first StoreLocal is still in the IR
+        // (the emit's is_dead_pure check drops it because the
+        // neutralised store no longer references it); confirm the
+        // Imm(99) used by Return is also still in place and
+        // unmodified.
+        match &f.insts[0] {
+            Inst::Imm(1) => {}
+            other => panic!("first store's RHS Imm(1) must remain, got {other:?}"),
+        }
+        match &f.insts[4] {
+            Inst::Imm(99) => {}
+            other => panic!("returned Imm(99) must remain, got {other:?}"),
+        }
+        // No StoreLocal targeting slot -1 survives.
+        for (i, inst) in f.insts.iter().enumerate() {
+            if let Inst::StoreLocal { off: -1, .. } = inst {
+                panic!("StoreLocal to slot -1 at id {i} should have been neutralised");
+            }
+        }
     }
 
     #[test]
@@ -1503,6 +1526,38 @@ mod tests {
             }
             other => panic!("expected Inst::Phi at block 3 head, got {other:?}"),
         }
+        // The block-1 / block-2 StoreLocals were redirected to the
+        // stored value and then neutralised to Imm(0); without this
+        // neutralisation each predecessor would still emit a store
+        // to the c5 frame slot. After insert_phis the StoreLocals
+        // sit at the same positions (no phi was prepended at blocks
+        // 1 / 2) so the original ids 2 and 4 are still where to look.
+        match &f.insts[2] {
+            Inst::Imm(0) => {}
+            other => panic!("block 1 StoreLocal should be neutralised to Imm(0), got {other:?}"),
+        }
+        match &f.insts[4] {
+            Inst::Imm(0) => {}
+            other => panic!("block 2 StoreLocal should be neutralised to Imm(0), got {other:?}"),
+        }
+        // The block-3 LoadLocal got its operand redirected to the
+        // phi value. The instruction itself stays in place as a
+        // dead-pure pure load that the emit's is_dead_pure check
+        // drops; what matters here is that the Return's value
+        // operand now points at the phi (id 5) rather than at the
+        // LoadLocal (id 6).
+        let phi_id_u32 = phi_id as u32;
+        match f.blocks[3].terminator {
+            Terminator::Return(v) => assert_eq!(
+                v, phi_id_u32,
+                "Return's operand should be redirected from the LoadLocal to the phi"
+            ),
+            ref other => panic!("expected Return at block 3, got {other:?}"),
+        }
+        assert_eq!(
+            f.blocks[3].exit_acc, phi_id_u32,
+            "exit_acc should follow the redirect to the phi"
+        );
     }
 
     #[test]

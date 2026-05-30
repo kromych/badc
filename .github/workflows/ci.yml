@@ -232,28 +232,41 @@ jobs:
           WORK="$RUNNER_TEMP/sqlite3-gdb"
           rm -rf "$WORK"; mkdir -p "$WORK"
           cd "$WORK"
-          echo "=== building shell_g via smoke.py's amalgamator + -g ==="
-          python3 - "$BADC" "$GITHUB_WORKSPACE" "$WORK/shell_g" <<'EOF'
-          import os, subprocess, sys
-          badc, workspace, out = sys.argv[1], sys.argv[2], sys.argv[3]
-          sys.path.insert(0, os.path.join(workspace, "demos", "sqlite3"))
-          import smoke as s
-          amalg = subprocess.run(
-              [sys.executable, os.path.join(workspace, "scripts", "amalgamate.py"),
-               "-o", "-",
-               os.path.join(workspace, "demos", "sqlite3", "sqlite3.c"),
-               os.path.join(workspace, "demos", "sqlite3", "shell.c")],
-              capture_output=True, check=True)
-          # No -g: the SSA emit ICEs for one of sqlite3's larger
-          # functions under -g (DWARF emission triggers a code
-          # path not yet implemented). Symbols + raw addresses
-          # still give a usable bt.
-          cmd = [badc, "-include", "msvc_compat.h", "-", "-o", out]
-          cmd += [f"-D{d}" for d in s.BUILD_DEFINES]
-          r = subprocess.run(cmd, input=amalg.stdout)
-          sys.exit(r.returncode)
+          echo "=== building shell via smoke.py with TMPDIR override ==="
+          # Run smoke.py with TMPDIR pointing at WORK and a wrapper
+          # that copies the built binary out of the auto-removed
+          # tempdir before smoke.py exits non-zero.
+          export TMPDIR="$WORK"
+          BADC="$BADC" python3 - "$WORK" <<'EOF'
+          import os, shutil, subprocess, sys, glob
+          work = sys.argv[1]
+          # Hook tempfile.TemporaryDirectory to mirror its contents
+          # into $WORK/saved before the cleanup fires.
+          import tempfile
+          _orig = tempfile.TemporaryDirectory
+          class _Keep(_orig):
+              def cleanup(self):
+                  dst = os.path.join(work, "saved")
+                  if os.path.isdir(self.name):
+                      shutil.copytree(self.name, dst, dirs_exist_ok=True)
+                  _orig.cleanup(self)
+          tempfile.TemporaryDirectory = _Keep
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"],
+                                          "demos", "sqlite3"))
+          import smoke
+          try:
+              smoke.main()
+          except SystemExit:
+              pass
+          # Whatever got built ends up in $WORK/saved.
+          for f in glob.glob(os.path.join(work, "saved", "*")):
+              print("saved:", f)
           EOF
-          ls -la shell_g
+          # Pick the noopt binary if it exists.
+          cp "$WORK"/saved/sqlite3shell "$WORK"/shell_g 2>/dev/null \
+            || cp "$WORK"/saved/sqlite3shell.opt "$WORK"/shell_g 2>/dev/null \
+            || echo "no shell saved"
+          ls -la "$WORK"/shell_g 2>&1 | head -1
           # First failing scenario from smoke.py:
           cat > in.sql <<'EOF'
           CREATE TABLE t(x INTEGER, y TEXT);

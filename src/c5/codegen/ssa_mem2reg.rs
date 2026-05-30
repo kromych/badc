@@ -335,6 +335,13 @@ fn slot_is_full_width(func: &FunctionSsa, slot: i64) -> bool {
 /// for a signed one -- which reproduces the frame round-trip
 /// regardless of the stored register's high bits. A mixed-width,
 /// `F32`, or full-width access returns `None`.
+///
+/// The store width may be wider than the narrow load: `narrow_load_replacement`
+/// emits the matching mask or sign-extension from the stored value's low bytes
+/// per C99 6.3.1.3 (signed types) and 6.3.1.1p2 (integer promotion / masking).
+/// A `LoadLocal { kind: U8 }` paired with `StoreLocal { kind: I64 }` reads the
+/// low byte of the 64-bit store via `BinopI(And, value, 0xff)` and is therefore
+/// promotable.
 fn slot_narrow_load_kind(func: &FunctionSsa, slot: i64) -> Option<LoadKind> {
     let mut load_kind: Option<LoadKind> = None;
     let mut store_kind: Option<StoreKind> = None;
@@ -354,8 +361,9 @@ fn slot_narrow_load_kind(func: &FunctionSsa, slot: i64) -> Option<LoadKind> {
         }
     }
     let lk = load_kind?;
-    let (lw, sw) = (load_byte_width(lk)?, store_byte_width(store_kind?)?);
-    if lw == sw && lw < 8 { Some(lk) } else { None }
+    let lw = load_byte_width(lk)?;
+    let sw = store_byte_width(store_kind?)?;
+    if lw < 8 && sw >= lw { Some(lk) } else { None }
 }
 
 fn load_byte_width(kind: LoadKind) -> Option<u8> {

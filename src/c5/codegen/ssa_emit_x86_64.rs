@@ -2461,12 +2461,20 @@ fn emit_binop_divmod(
     if div_src.0 != divisor_reg.0 {
         emit_mov_rr(code, divisor_reg, div_src);
     }
-    // Preserve rax: the allocator can park a live value there
-    // that has to be intact after this op. If rd is rax we don't
-    // need to preserve -- the result will land in rax anyway.
+    // Preserve rax / rdx: the allocator can park a live value in
+    // either register and the divmod must not destroy it. rax
+    // receives the dividend low half and the quotient; rdx
+    // receives the dividend high half (cqo / xor edx,edx) and the
+    // remainder. Skip the save when rd will overwrite the register
+    // anyway, since the value living there is dead the moment rd
+    // commits its result.
     let preserve_rax = rd.0 != Reg::RAX.0;
+    let preserve_rdx = rd.0 != Reg::RDX.0;
     if preserve_rax {
         emit_push_r(code, Reg::RAX);
+    }
+    if preserve_rdx {
+        emit_push_r(code, Reg::RDX);
     }
     // rax := dividend low half.
     if rn.0 != Reg::RAX.0 {
@@ -2481,10 +2489,13 @@ fn emit_binop_divmod(
         super::x86_64::emit_cqo(code);
         super::x86_64::emit_idiv_r(code, divisor_reg);
     }
-    // Capture result into rd before restoring rax.
+    // Capture result into rd before restoring rdx / rax.
     let result_src = if want_remainder { Reg::RDX } else { Reg::RAX };
     if rd.0 != result_src.0 {
         emit_mov_rr(code, rd, result_src);
+    }
+    if preserve_rdx {
+        emit_pop_r(code, Reg::RDX);
     }
     if preserve_rax {
         emit_pop_r(code, Reg::RAX);

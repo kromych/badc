@@ -1074,7 +1074,7 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         // Binary search for any call PC strictly between (def, end].
         let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
         if let Some(&first) = call_pcs.get(lo)
-            && first < end
+            && first <= end
         {
             out[idx] = true;
         }

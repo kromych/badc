@@ -472,7 +472,14 @@ fn emit_phi_predecessor_moves(
                 _ => other_moves.push((src_place, dst_place)),
             }
         }
-        schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
+        // r13 sits outside both `caller_gprs` and `callee_gprs`
+        // in `RegBanks::for_target`, so it can hold the
+        // cycle-break temporary without colliding with any phi
+        // source or destination register. SCRATCH_R10 (r10) is in
+        // the SSA allocator's caller_gprs pool and would risk
+        // clobbering a live value when r10 is one of the cycle's
+        // source / dest regs.
+        schedule_int_reg_moves(code, &mut int_moves, super::x86_64::Reg::R13);
         for (src_place, dst_place) in other_moves {
             match dst_place {
                 Place::IntReg(t) => {
@@ -481,10 +488,11 @@ fn emit_phi_predecessor_moves(
                     }
                 }
                 Place::Spill(slot) => {
-                    let src_r = match materialize_int(code, src_place, SCRATCH_R10, frame) {
-                        Some(r) => r,
-                        None => return false,
-                    };
+                    let src_r =
+                        match materialize_int(code, src_place, super::x86_64::Reg::R13, frame) {
+                            Some(r) => r,
+                            None => return false,
+                        };
                     let sp_off = spill_slot_sp_offset(frame, slot);
                     emit_mov_mem_r(code, Reg::RSP, sp_off, src_r);
                 }

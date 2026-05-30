@@ -2352,21 +2352,38 @@ fn emit_binop(
             emit_movzx_r_r8(code, rd, Reg::RCX);
         }
         BinOp::Shl | BinOp::Shr | BinOp::Shru => {
-            // x86 shifts read the count from cl. Stage rhs into
-            // rcx first; if rd is already rcx, swap to a different
-            // dest -- skipped for now.
+            // x86 shifts read the count from cl. When rd is rcx
+            // the in-place shift would need both the lhs and the
+            // count in rcx at once: stage the lhs into a scratch
+            // disjoint from rcx and rm, shift there, then move the
+            // result back to rd. The earlier `mov rd, rn` (line
+            // above) left rd holding the lhs.
             if rd.0 == Reg::RCX.0 {
-                bail_msg("Binop shift: dst aliases rcx");
-                return false;
-            }
-            if rm.0 != Reg::RCX.0 {
-                emit_mov_rr(code, Reg::RCX, rm);
-            }
-            match op {
-                BinOp::Shl => emit_shl_r_cl(code, rd),
-                BinOp::Shr => emit_sar_r_cl(code, rd),
-                BinOp::Shru => emit_shr_r_cl(code, rd),
-                _ => unreachable!(),
+                let Some(scratch) = pick_caller_saved_scratch(rd, &[rm]) else {
+                    bail_msg("Binop shift: no caller-saved scratch available");
+                    return false;
+                };
+                emit_mov_rr(code, scratch, rd);
+                if rm.0 != Reg::RCX.0 {
+                    emit_mov_rr(code, Reg::RCX, rm);
+                }
+                match op {
+                    BinOp::Shl => emit_shl_r_cl(code, scratch),
+                    BinOp::Shr => emit_sar_r_cl(code, scratch),
+                    BinOp::Shru => emit_shr_r_cl(code, scratch),
+                    _ => unreachable!(),
+                }
+                emit_mov_rr(code, rd, scratch);
+            } else {
+                if rm.0 != Reg::RCX.0 {
+                    emit_mov_rr(code, Reg::RCX, rm);
+                }
+                match op {
+                    BinOp::Shl => emit_shl_r_cl(code, rd),
+                    BinOp::Shr => emit_sar_r_cl(code, rd),
+                    BinOp::Shru => emit_shr_r_cl(code, rd),
+                    _ => unreachable!(),
+                }
             }
         }
         _ => {

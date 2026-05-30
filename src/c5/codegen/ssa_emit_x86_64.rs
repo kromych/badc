@@ -375,6 +375,91 @@ fn materialize_int_shifted(
 /// first, then break cycles by routing one source through
 /// `scratch`. The caller must pass a `scratch` whose register
 /// lives outside the allocator's bank.
+/// Emit the predecessor-exit moves for each `Inst::Phi` at the head
+/// of every CFG successor of `self_block`. Mirrors the aarch64
+/// helper: IntReg -> IntReg pairs schedule through the parallel-copy
+/// helper so cycles drop to one scratch-mediated copy; Spill
+/// destinations route through the materialise helper and a store
+/// against rsp.
+///
+/// TODO: extend to FpReg dst / src once a real fixture demands it;
+/// the current promotion path admits only int-store slots
+/// (`slot_stores_only_int`) so the FP case never arises today.
+fn emit_phi_predecessor_moves(
+    code: &mut Vec<u8>,
+    self_block: super::super::ir::BlockId,
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::ir::Terminator;
+    let succs: Vec<super::super::ir::BlockId> =
+        match func.blocks[self_block as usize].terminator {
+            Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            }
+            | Terminator::Bnz {
+                target,
+                fall_through,
+                ..
+            } => alloc::vec![target, fall_through],
+            Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
+        };
+    for succ in succs {
+        let head = func.blocks[succ as usize].inst_range.start;
+        let end = func.blocks[succ as usize].inst_range.end;
+        let mut int_moves: Vec<(u8, u8)> = Vec::new();
+        let mut other_moves: Vec<(Place, Place)> = Vec::new();
+        for id in head..end {
+            let inst = &func.insts[id as usize];
+            let super::super::ir::Inst::Phi { incoming, .. } = inst else {
+                break;
+            };
+            let Some((_, src_v)) = incoming.iter().find(|(b, _)| *b == self_block) else {
+                continue;
+            };
+            let dst_place = alloc.places.get(id as usize).copied().unwrap_or(Place::None);
+            let src_place = alloc
+                .places
+                .get(*src_v as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            match (src_place, dst_place) {
+                (Place::None, _) | (_, Place::None) => {}
+                (Place::IntReg(s), Place::IntReg(t)) => {
+                    if s != t {
+                        int_moves.push((s, t));
+                    }
+                }
+                _ => other_moves.push((src_place, dst_place)),
+            }
+        }
+        schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
+        for (src_place, dst_place) in other_moves {
+            match dst_place {
+                Place::IntReg(t) => {
+                    if materialize_int(code, src_place, Reg(t), frame).is_none() {
+                        return false;
+                    }
+                }
+                Place::Spill(slot) => {
+                    let src_r = match materialize_int(code, src_place, SCRATCH_R10, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    let sp_off = spill_slot_sp_offset(frame, slot);
+                    emit_mov_mem_r(code, Reg::RSP, sp_off, src_r);
+                }
+                Place::FpReg(_) | Place::None => return false,
+            }
+        }
+    }
+    true
+}
+
 fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
@@ -632,6 +717,24 @@ pub(super) fn emit_function(
                     symbol_name: name.clone(),
                 });
             }
+        }
+        // Predecessor-exit moves for any phi at every CFG
+        // successor's head. A Return / TailExt block has no
+        // successor; the helper is a no-op there.
+        if !emit_phi_predecessor_moves(
+            code,
+            block_idx as super::super::ir::BlockId,
+            func,
+            alloc,
+            frame,
+        ) {
+            code.truncate(snapshot);
+            fixups.truncate(fixups_snapshot);
+            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+            data_fixups.truncate(data_fixups_snapshot);
+            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+            return false;
         }
         match block.terminator {
             Terminator::Return(v) => emit_return(code, v, alloc, frame, func),
@@ -1135,6 +1238,14 @@ fn emit_inst(
             tls_total_size,
             frame,
         ),
+        Inst::Phi { .. } => {
+            // The value is materialised by the predecessor-exit
+            // moves emitted just before each branch terminator
+            // that targets this block; at the IR position the
+            // phi's allocated Place already holds the merged
+            // value.
+            true
+        }
         _ => {
             bail_msg("inst variant not yet covered");
             let _ = frame;

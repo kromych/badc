@@ -90,6 +90,44 @@ fn while_loop_terminates() {
     assert_eq!(jit_exit(src, &["jit-while"]), 45);
 }
 
+/// Cross-block reassigned loop counter: `i` is stored at the for-
+/// init block and re-stored in the post (step) block; its load in
+/// the head block sees two reaching defs and would otherwise stay
+/// in the frame slot. Under `BADC_PHI_PROMOTE=1` the slot promotes
+/// through an `Inst::Phi` at the head block; the per-arch emit
+/// places the predecessor-exit moves before each branch so the
+/// counter survives in a register. JIT-runs the result and checks
+/// the loop sum still equals 45 (0 + 1 + ... + 9).
+///
+/// Locks the end-to-end (mem2reg + rename + per-arch emit) path
+/// under the phi-promote gate. Default-off behaviour stays covered
+/// by `while_loop_terminates`.
+#[test]
+#[cfg(feature = "std")]
+fn while_loop_promotes_counter_through_phi_under_phi_promote() {
+    unsafe {
+        std::env::set_var("BADC_PHI_PROMOTE", "1");
+    }
+    let src = r#"
+        int main() {
+            int i;
+            int s;
+            i = 0;
+            s = 0;
+            while (i < 10) {
+                s = s + i;
+                i = i + 1;
+            }
+            return s;
+        }
+    "#;
+    let result = jit_exit_native_optimized(src, &["jit-phi-promote"]);
+    unsafe {
+        std::env::remove_var("BADC_PHI_PROMOTE");
+    }
+    assert_eq!(result, 45);
+}
+
 #[test]
 fn function_call_returns_value() {
     let src = r#"

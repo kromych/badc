@@ -795,7 +795,7 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Inst::ParamRef { idx: i, .. } = inst
             && let Some(&r) = int_args.get(*i as usize)
-            && (idx as usize) < hints.len()
+            && idx < hints.len()
             && hints[idx].is_none()
         {
             hints[idx] = Some(r);

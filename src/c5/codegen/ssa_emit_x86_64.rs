@@ -2459,6 +2459,23 @@ fn emit_binop(
                     emit_pop_r(code, scratch);
                 }
             } else {
+                // The shift writes rcx with the count below. When the
+                // allocator parked an SSA value live across this PC
+                // in rcx -- and the shift isn't in the must-be-callee
+                // call set so values legitimately land in rcx -- the
+                // mov destroys it. push / pop rcx around the shift
+                // when that case fires; the body is reg-to-reg only,
+                // so the 8-byte misalignment is harmless.
+                let rcx_holds_live = rd.0 != Reg::RCX.0
+                    && rm.0 != Reg::RCX.0
+                    && alloc.places.iter().enumerate().any(|(idx, p)| {
+                        let i = idx as u32;
+                        let last = alloc.last_use.get(idx).copied().unwrap_or(0);
+                        matches!(p, Place::IntReg(r) if *r == Reg::RCX.0) && i < v && v < last
+                    });
+                if rcx_holds_live {
+                    emit_push_r(code, Reg::RCX);
+                }
                 if rm.0 != Reg::RCX.0 {
                     emit_mov_rr(code, Reg::RCX, rm);
                 }
@@ -2467,6 +2484,9 @@ fn emit_binop(
                     BinOp::Shr => emit_sar_r_cl(code, rd),
                     BinOp::Shru => emit_shr_r_cl(code, rd),
                     _ => unreachable!(),
+                }
+                if rcx_holds_live {
+                    emit_pop_r(code, Reg::RCX);
                 }
             }
         }

@@ -1290,7 +1290,7 @@ fn emit_inst(
         }
         Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame),
         Inst::Store { addr, value, kind } => {
-            emit_store(code, dst, *addr, *value, *kind, alloc, frame)
+            emit_store(code, dst, v, *addr, *value, *kind, alloc, frame)
         }
         Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame),
         Inst::StoreLocal { off, value, kind } => {
@@ -1847,6 +1847,7 @@ fn emit_load(
 fn emit_store(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     addr: u32,
     value: u32,
     kind: StoreKind,
@@ -1867,7 +1868,7 @@ fn emit_store(
     // (the materialise helper only writes to it when addr_place
     // is a Spill; an IntReg place returns the underlying reg
     // directly). The value-Place picks a separate scratch below.
-    let Some(addr_scratch) = pick_caller_saved_scratch(Reg(0), &[]) else {
+    let Some(addr_scratch) = pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc) else {
         bail_msg("Store: no caller-saved scratch for addr spill load");
         return false;
     };
@@ -2378,7 +2379,8 @@ fn emit_binop(
             // result back to rd. The earlier `mov rd, rn` (line
             // above) left rd holding the lhs.
             if rd.0 == Reg::RCX.0 {
-                let Some(scratch) = pick_caller_saved_scratch(rd, &[rm]) else {
+                let Some(scratch) = pick_caller_saved_scratch_live_aware(rd, &[rm], v, alloc)
+                else {
                     bail_msg("Binop shift: no caller-saved scratch available");
                     return false;
                 };
@@ -3245,7 +3247,7 @@ fn emit_intrinsic(
             // Pick a caller-saved scratch for the size, disjoint
             // from rd. Stage size into it, then round up to a
             // 16-byte multiple.
-            let Some(size_reg) = pick_caller_saved_scratch(rd, &[]) else {
+            let Some(size_reg) = pick_caller_saved_scratch_live_aware(rd, &[], v, alloc) else {
                 bail_msg("Alloca: no caller-saved scratch for size");
                 return false;
             };
@@ -3265,14 +3267,17 @@ fn emit_intrinsic(
             // bookkeeping-slot address, disjoint from rd and the
             // size register. The op then reads the old top, sub
             // size, writes back, and returns the new top.
-            let Some(addr_reg) = pick_caller_saved_scratch(rd, &[size_reg]) else {
+            let Some(addr_reg) = pick_caller_saved_scratch_live_aware(rd, &[size_reg], v, alloc)
+            else {
                 bail_msg("Alloca: no caller-saved scratch for bookkeeping addr");
                 return false;
             };
             let disp = -(current_alloca_top as i32);
             emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
             let rd_phys = if matches!(dst, Place::Spill(_)) {
-                let Some(r) = pick_caller_saved_scratch(rd, &[size_reg, addr_reg]) else {
+                let Some(r) =
+                    pick_caller_saved_scratch_live_aware(rd, &[size_reg, addr_reg], v, alloc)
+                else {
                     bail_msg("Alloca: no caller-saved scratch for spill dst");
                     return false;
                 };

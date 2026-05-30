@@ -1358,7 +1358,7 @@ fn emit_inst(
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, alloc, frame, *current_alloca_top)
         }
-        Inst::Fneg(value) => emit_fneg(code, dst, *value, alloc, frame),
+        Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
@@ -1969,7 +1969,14 @@ fn emit_extend(
 /// Builds the `1 << 63` sign-bit mask on the fly into
 /// `SCRATCH_XMM15` (movq xmm, r10 after loading the immediate
 /// into r10) and xors in place.
-fn emit_fneg(code: &mut Vec<u8>, dst: Place, value: u32, alloc: &Allocation, frame: Frame) -> bool {
+fn emit_fneg(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
     let src_place = alloc
         .places
         .get(value as usize)
@@ -1992,10 +1999,20 @@ fn emit_fneg(code: &mut Vec<u8>, dst: Place, value: u32, alloc: &Allocation, fra
     if dn.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, dn);
     }
-    // Build the sign-bit mask 0x8000_0000_0000_0000 in r10 and
-    // transfer to SCRATCH_XMM15, then xorpd in place.
-    emit_mov_r_imm64(code, SCRATCH_R10, i64::MIN);
-    emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
+    // Build the sign-bit mask 0x8000_0000_0000_0000 in an integer
+    // scratch and transfer to SCRATCH_XMM15, then xorpd in place.
+    // r10 is in the caller_gprs pool since the bank flattening, so
+    // pick a scratch disjoint from every live SSA value at this PC;
+    // otherwise the immediate load clobbers a value the consumer
+    // (typically a downstream Fbinop / Fcmp) needs to read back.
+    let Some(scratch_int) =
+        pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc)
+    else {
+        bail_msg("Fneg: no caller-saved scratch available");
+        return false;
+    };
+    emit_mov_r_imm64(code, scratch_int, i64::MIN);
+    emit_movq_xmm_r(code, SCRATCH_XMM15, scratch_int);
     emit_xorpd(code, dd, SCRATCH_XMM15);
     fp_spill_dst_to_slot(code, dst, dd, frame);
     true
@@ -2143,16 +2160,15 @@ fn emit_binop(
             FpCmpNanFix::None => {}
             FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
                 // Need a 64-bit scratch distinct from `rd` for the
-                // parity-fix setcc. SCRATCH_R10 is outside the
-                // allocator's register pool; pick rcx as a
-                // fallback when `rd` already aliases SCRATCH_R10
-                // (the Place::Spill case). rcx is the 4th SysV
-                // int arg reg and the 1st Win64 one, but we're
-                // not at a call site so no live arg can occupy it.
-                let scratch = if rd.0 == SCRATCH_R10.0 {
-                    Reg(1)
-                } else {
-                    SCRATCH_R10
+                // parity-fix setcc. r10 is in the caller_gprs pool
+                // since the bank flattening, so use the live-aware
+                // picker to land on a register the allocator has
+                // not parked another live value in.
+                let Some(scratch) =
+                    pick_caller_saved_scratch_live_aware(rd, &[], v, alloc)
+                else {
+                    bail_msg("Fcmp: no caller-saved scratch available");
+                    return false;
                 };
                 let fix_cc = if matches!(nan_fix, FpCmpNanFix::AndNotP) {
                     super::x86_64::Cc::Np

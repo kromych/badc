@@ -565,7 +565,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
 }
 
 /// Invoke `f` for each operand `ValueId` referenced by `inst`.
-fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
+pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
     match inst {
         Inst::Imm(_)
         | Inst::ImmData(_)

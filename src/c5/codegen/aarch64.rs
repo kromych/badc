@@ -1226,6 +1226,11 @@ pub(super) fn lower(
             }
         });
     }
+    // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
+    // and emits one stderr line per function classifying it as
+    // eligible for the host-ABI prologue or as requiring the c5
+    // cdecl 16-byte-cell layout.
+    super::ssa_c5_cdecl_audit::maybe_dump_audit(&ssa_funcs);
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds

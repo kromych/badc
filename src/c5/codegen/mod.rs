@@ -44,6 +44,7 @@ mod mach_o;
 mod pe;
 mod ssa_alloc;
 pub(crate) mod ssa_build;
+mod ssa_c5_cdecl_audit;
 #[cfg(feature = "std")]
 mod ssa_dump;
 mod ssa_emit_aarch64;

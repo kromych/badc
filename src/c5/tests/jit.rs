@@ -255,6 +255,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("return_value_in_callee_saved.c", 7),
     ("divmod_preserves_rdx.c", 0),
     ("commutative_imm_lhs_swap.c", 0),
+    ("comparison_imm_lhs_swap.c", 0),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),

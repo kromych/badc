@@ -1169,9 +1169,12 @@ impl<'a> Walker<'a> {
                 // For commutative ops where the constant landed on
                 // lhs (C99 source order `4 * i`), swap operands and
                 // emit BinopI so the literal never spills to a
-                // register. Bit ops Eq / Ne are commutative; the
-                // ordered comparisons Lt / Gt / Le / Ge / Ult / Ugt /
-                // Ule / Uge are not.
+                // register. Bit ops Eq / Ne are commutative; ordered
+                // comparisons Lt / Gt / Le / Ge / Ult / Ugt / Ule /
+                // Uge are not, but swapping operands flips the
+                // comparison direction, so `K < x` rewrites to
+                // `x > K` (and so on), still routing through
+                // BinopI.
                 let commutative = matches!(
                     *op,
                     BinOp::Add
@@ -1182,12 +1185,30 @@ impl<'a> Walker<'a> {
                         | BinOp::Eq
                         | BinOp::Ne
                 );
+                let reversed_cmp = match *op {
+                    BinOp::Lt => Some(BinOp::Gt),
+                    BinOp::Gt => Some(BinOp::Lt),
+                    BinOp::Le => Some(BinOp::Ge),
+                    BinOp::Ge => Some(BinOp::Le),
+                    BinOp::Ult => Some(BinOp::Ugt),
+                    BinOp::Ugt => Some(BinOp::Ult),
+                    BinOp::Ule => Some(BinOp::Uge),
+                    BinOp::Uge => Some(BinOp::Ule),
+                    _ => None,
+                };
                 if imm_safe_op
                     && commutative
                     && let Some(lk) = b.peek_imm(lv)
                 {
                     debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
                     return Ok(b.binop_imm(*op, rv, lk));
+                }
+                if imm_safe_op
+                    && let Some(swapped_op) = reversed_cmp
+                    && let Some(lk) = b.peek_imm(lv)
+                {
+                    debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
+                    return Ok(b.binop_imm(swapped_op, rv, lk));
                 }
                 // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
                 // at a narrower-than-register common type needs

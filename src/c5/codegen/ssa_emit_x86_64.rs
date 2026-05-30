@@ -3377,15 +3377,15 @@ fn emit_return(
     frame: Frame,
     func: &FunctionSsa,
 ) {
-    // SysV / Win64 both classify rax as caller-saved, and
-    // `ssa_alloc::Allocation::gpr_used` is filtered to callee-
-    // saved registers only (see ssa_alloc.rs `gpr_used_callee`).
-    // So the GPR restore loop below never writes rax, and the
-    // integer return can be materialized straight into rax with
-    // no staging. xmm0 is likewise outside the GPR restore loop;
-    // f64 returns ride xmm0 directly. After the restore loop the
-    // f64 is also mirrored into rax so int-shaped callers
-    // (IntReg / Spill) read it uniformly.
+    // The integer return value may live in a callee-saved
+    // register that the prologue saved and the epilogue is about
+    // to restore (e.g. rbx, r12). Stage it into rcx (caller-saved,
+    // never in `gpr_used`) before the restore loop overwrites the
+    // source register, then move rcx into rax after the restore.
+    // FP returns ride xmm0 directly; xmm0 is outside the GPR
+    // restore loop, but the integer mirror into rax happens after
+    // the restore so the bit pattern is available to int-shaped
+    // callers.
     let return_place = if value != super::super::ir::NO_VALUE {
         alloc
             .places
@@ -3396,6 +3396,19 @@ fn emit_return(
         Place::None
     };
     let return_is_fp = matches!(return_place, Place::FpReg(_));
+    let staged_int = match return_place {
+        Place::IntReg(r) if r != Reg::RCX.0 => {
+            emit_mov_rr(code, Reg::RCX, Reg(r));
+            true
+        }
+        Place::IntReg(_) => true,
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot);
+            super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+            true
+        }
+        _ => false,
+    };
     if return_is_fp {
         // SCRATCH_XMM14 is outside the allocator's pool, so a
         // spilled f64 lands there without clobbering an
@@ -3411,23 +3424,10 @@ fn emit_return(
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
     }
-    match return_place {
-        Place::IntReg(r) if r != Reg::RAX.0 => {
-            emit_mov_rr(code, Reg::RAX, Reg(r));
-        }
-        Place::IntReg(_) => {}
-        Place::Spill(slot) => {
-            let sp_off = spill_slot_sp_offset(frame, slot);
-            super::x86_64::emit_mov_r_mem(code, Reg::RAX, Reg::RSP, sp_off);
-        }
-        _ if return_is_fp => {
-            // Mirror the f64 bit pattern into rax so an int-shaped
-            // caller dst (IntReg / Spill) can read rax uniformly.
-            // The value still lives in xmm0 for FpReg-shaped
-            // callers and for host-ABI consumers that read xmm0.
-            super::x86_64::emit_movq_r_xmm(code, Reg::RAX, Reg::XMM0);
-        }
-        _ => {}
+    if staged_int {
+        emit_mov_rr(code, Reg::RAX, Reg::RCX);
+    } else if return_is_fp {
+        super::x86_64::emit_movq_r_xmm(code, Reg::RAX, Reg::XMM0);
     }
     // Leaf-function elision: prologue emitted no save, so the
     // epilogue emits no matching restore. The function lowers to

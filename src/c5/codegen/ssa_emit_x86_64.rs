@@ -1783,12 +1783,16 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Spill-tolerant materialisation: addr goes into r10 (primary
-    // scratch); value goes into rcx when addr already claimed r10
-    // by a spill load, else also r10. rcx is excluded from the
-    // SSA allocator's GPR pools on both SysV and Win64, so it
-    // never clobbers an allocator-held value.
-    let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
+    // Spill-tolerant materialisation: addr goes into r13 (the
+    // primary scratch outside both `caller_gprs` and `callee_gprs`
+    // in `RegBanks::for_target`). value goes into r10 unless the
+    // addr already lives there; in that case route value through
+    // rcx. r10 and rcx ARE in the allocator pool on SysV/Win64,
+    // so callers that hold a live SSA value in r10/rcx across the
+    // Store rely on the per-block liveness extension and on the
+    // post-Store consumers not having read those regs as inputs
+    // for the same instruction.
+    let base = match materialize_int(code, addr_place, super::x86_64::Reg::R13, frame) {
         Some(r) => r,
         None => {
             bail_msg("Store: addr Place not int reg / spill");

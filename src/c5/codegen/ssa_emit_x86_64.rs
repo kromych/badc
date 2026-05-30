@@ -192,18 +192,22 @@ fn int_reg(place: Place) -> Option<Reg> {
 }
 
 /// Scratch register for handlers whose dst is a spill: r10 is
-/// caller-saved on SysV / Win64 and is excluded from the SSA
-/// allocator's caller_gprs pool (which is `[rax, r11]` on x86_64),
-/// so reusing it across an instruction can never clobber a value
-/// the allocator chose.
+/// r10 is in the SSA allocator's `caller_gprs` pool (see
+/// `RegBanks::for_target` for `LinuxX64` / `WindowsX64`), so any
+/// emit handler that reuses it as a scratch must first check
+/// whether the current instruction's `rd` / operand places alias
+/// r10 -- otherwise the scratch write clobbers a live value.
+/// Emit handlers that need a register guaranteed free of
+/// allocator interference use r13 (reserved by the codegen and
+/// outside both pools).
 const SCRATCH_R10: Reg = Reg(10);
-/// Secondary / tertiary int scratches for ops that need more than
-/// one. rcx and rdx are caller-saved on SysV and excluded from the
-/// allocator's `caller_gprs` pool (`[rax, r11]`), so they can be
-/// clobbered freely between insts without colliding with allocator-
-/// held values. Used by emit handlers that work over a base, an
-/// index, and a value (indexed stores) where one register isn't
-/// enough.
+/// Secondary / tertiary int scratches for emit handlers that
+/// need more than one register beyond `rd`. rcx and rdx are also
+/// in the allocator's `caller_gprs` pool, so callers must check
+/// for aliasing with `rd` / operand places exactly as with
+/// `SCRATCH_R10`. Used by emit handlers that work over a base,
+/// an index, and a value (indexed stores) where one register
+/// isn't enough.
 const SCRATCH_RCX: Reg = Reg(1);
 const SCRATCH_RDX: Reg = Reg(2);
 
@@ -2540,24 +2544,45 @@ fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Materialise the immediate into rcx as a scratch. rcx is
-    // caller-saved on every x86_64 ABI we target, and the SSA
-    // allocator excludes it from the pool, so this can't clobber
-    // a live value.
-    super::x86_64::emit_mov_r_imm64(code, Reg::RCX, rhs_imm);
-    // Stage rd = lhs first (x86's two-operand form).
+    // Commutative ops with `rd != rn` can fold the staging mov
+    // into the immediate materialisation: `mov rd, imm; OP rd,
+    // rn` is two instructions and produces `imm OP rn == lhs OP
+    // imm` by commutativity. The non-commutative path below uses
+    // r13 as a scratch (r13 sits outside both
+    // `caller_gprs` and `callee_gprs` in `RegBanks::for_target`,
+    // so the allocator never picks r13 for an SSA value).
+    let commutative = matches!(
+        op,
+        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
+    );
+    if commutative && rd.0 != rn.0 {
+        super::x86_64::emit_mov_r_imm64(code, rd, rhs_imm);
+        match op {
+            BinOp::Add => emit_add_rr(code, rd, rn),
+            BinOp::Mul => emit_imul_rr(code, rd, rn),
+            BinOp::And => emit_and_rr(code, rd, rn),
+            BinOp::Or => emit_or_rr(code, rd, rn),
+            BinOp::Xor => emit_xor_rr(code, rd, rn),
+            _ => unreachable!(),
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
+    // Materialise the immediate into r13 as a scratch and stage
+    // `rd = lhs` (when rd != rn) before the two-operand op.
+    super::x86_64::emit_mov_r_imm64(code, super::x86_64::Reg::R13, rhs_imm);
     if rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
     match op {
-        BinOp::Add => emit_add_rr(code, rd, Reg::RCX),
-        BinOp::Sub => emit_sub_rr(code, rd, Reg::RCX),
-        BinOp::Mul => emit_imul_rr(code, rd, Reg::RCX),
-        BinOp::And => emit_and_rr(code, rd, Reg::RCX),
-        BinOp::Or => emit_or_rr(code, rd, Reg::RCX),
-        BinOp::Xor => emit_xor_rr(code, rd, Reg::RCX),
+        BinOp::Add => emit_add_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::Sub => emit_sub_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::Mul => emit_imul_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::And => emit_and_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::Or => emit_or_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::Xor => emit_xor_rr(code, rd, super::x86_64::Reg::R13),
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
-            emit_cmp_rr(code, rn, Reg::RCX);
+            emit_cmp_rr(code, rn, super::x86_64::Reg::R13);
             if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                 return true;
             }
@@ -2574,7 +2599,7 @@ fn emit_binop_imm(
             emit_movzx_r_r8(code, rd, Reg::RCX);
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
-            emit_cmp_rr(code, rn, Reg::RCX);
+            emit_cmp_rr(code, rn, super::x86_64::Reg::R13);
             if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                 return true;
             }

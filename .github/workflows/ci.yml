@@ -215,6 +215,51 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
+      - name: capture sqlite3 shell crash under gdb (Linux x86_64 only)
+        # The shell SIGSEGVs on Linux x86_64 only; build a -g
+        # version, run it under gdb with the script the
+        # smoke.py first scenario writes (CREATE TABLE etc),
+        # and dump a backtrace + registers + the source
+        # context. Skipped on lanes where the smoke passed.
+        if: matrix.os == 'ubuntu-latest' && failure()
+        continue-on-error: true
+        run: |
+          set +e
+          BADC="$PWD/target/release/badc"
+          WORK="$RUNNER_TEMP/sqlite3-gdb"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cd "$WORK"
+          cp "$GITHUB_WORKSPACE/demos/sqlite3/sqlite3.c" .
+          cp "$GITHUB_WORKSPACE/demos/sqlite3/sqlite3.h" .
+          cp "$GITHUB_WORKSPACE/demos/sqlite3/shell.c" .
+          # Rebuild with -g.
+          echo "=== building shell with -g ==="
+          "$BADC" -g -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=0 \
+            -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+            -DSQLITE_DQS=0 -DSQLITE_OMIT_DEPRECATED \
+            -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE \
+            -DSQLITE_OMIT_AUTOINIT -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+            -DSQLITE_ENABLE_LOCKING_STYLE=0 -DSQLITE_DISABLE_INTRINSIC \
+            -DSQLITE_OMIT_SEH -o shell_g sqlite3.c shell.c 2>&1 | tail -5
+          ls -la shell_g
+          # First failing scenario from smoke.py:
+          cat > in.sql <<'EOF'
+          CREATE TABLE t(x INTEGER, y TEXT);
+          INSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');
+          SELECT * FROM t;
+          .quit
+          EOF
+          echo "=== gdb backtrace ==="
+          gdb -batch \
+            -ex "set pagination off" \
+            -ex "run < in.sql" \
+            -ex "bt 50" \
+            -ex "info reg" \
+            -ex "x/8i \$rip-16" \
+            -ex "frame 0" \
+            -ex "disas" \
+            ./shell_g 2>&1 | head -200
+          echo "=== gdb exit ==="
       - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of
         # integer + bit-twiddle deflate code. Compresses + uncompresses

@@ -225,7 +225,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
-    populate_abi_hints(func, target, &mut hints);
+    let _ = target;
     populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
         return Allocation {

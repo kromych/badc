@@ -244,7 +244,11 @@ jobs:
                os.path.join(workspace, "demos", "sqlite3", "sqlite3.c"),
                os.path.join(workspace, "demos", "sqlite3", "shell.c")],
               capture_output=True, check=True)
-          cmd = [badc, "-g", "-include", "msvc_compat.h", "-", "-o", out]
+          # No -g: the SSA emit ICEs for one of sqlite3's larger
+          # functions under -g (DWARF emission triggers a code
+          # path not yet implemented). Symbols + raw addresses
+          # still give a usable bt.
+          cmd = [badc, "-include", "msvc_compat.h", "-", "-o", out]
           cmd += [f"-D{d}" for d in s.BUILD_DEFINES]
           r = subprocess.run(cmd, input=amalg.stdout)
           sys.exit(r.returncode)

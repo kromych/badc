@@ -1590,9 +1590,7 @@ fn emit_store_local(
     // a GPR before the store; otherwise it routes through the
     // normal int materialisation.
     let rv = if let Place::FpReg(xr) = value_place {
-        let Some(scratch) =
-            pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc)
-        else {
+        let Some(scratch) = pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc) else {
             bail_msg("StoreLocal FpReg: no caller-saved scratch available");
             return false;
         };
@@ -2012,9 +2010,7 @@ fn emit_fneg(
     // pick a scratch disjoint from every live SSA value at this PC;
     // otherwise the immediate load clobbers a value the consumer
     // (typically a downstream Fbinop / Fcmp) needs to read back.
-    let Some(scratch_int) =
-        pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc)
-    else {
+    let Some(scratch_int) = pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc) else {
         bail_msg("Fneg: no caller-saved scratch available");
         return false;
     };
@@ -2171,9 +2167,7 @@ fn emit_binop(
                 // since the bank flattening, so use the live-aware
                 // picker to land on a register the allocator has
                 // not parked another live value in.
-                let Some(scratch) =
-                    pick_caller_saved_scratch_live_aware(rd, &[], v, alloc)
-                else {
+                let Some(scratch) = pick_caller_saved_scratch_live_aware(rd, &[], v, alloc) else {
                     bail_msg("Fcmp: no caller-saved scratch available");
                     return false;
                 };

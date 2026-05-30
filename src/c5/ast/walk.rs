@@ -1166,6 +1166,29 @@ impl<'a> Walker<'a> {
                     debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
                     return Ok(b.binop_imm(*op, lv, rk));
                 }
+                // For commutative ops where the constant landed on
+                // lhs (C99 source order `4 * i`), swap operands and
+                // emit BinopI so the literal never spills to a
+                // register. Bit ops Eq / Ne are commutative; the
+                // ordered comparisons Lt / Gt / Le / Ge / Ult / Ugt /
+                // Ule / Uge are not.
+                let commutative = matches!(
+                    *op,
+                    BinOp::Add
+                        | BinOp::Mul
+                        | BinOp::And
+                        | BinOp::Or
+                        | BinOp::Xor
+                        | BinOp::Eq
+                        | BinOp::Ne
+                );
+                if imm_safe_op
+                    && commutative
+                    && let Some(lk) = b.peek_imm(lv)
+                {
+                    debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
+                    return Ok(b.binop_imm(*op, rv, lk));
+                }
                 // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
                 // at a narrower-than-register common type needs
                 // each operand masked to that width *before* the

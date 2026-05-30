@@ -243,6 +243,117 @@ pub(crate) fn phi_placement(
     result
 }
 
+// TODO: wire `insert_phis` into `run` so cross-block reassigned
+// scalars promote through the merge instead of falling back to the
+// frame slot. Pending the rename extension that fills each phi's
+// incoming entries and the per-arch terminator-exit move emit.
+#[allow(dead_code)]
+/// Inject one `Inst::Phi` per phi-needing slot at the head of each
+/// phi block, returning a `(block, slot) -> phi value id` map the
+/// renamer fills with reaching values from each predecessor.
+///
+/// `phi_slot_kind` is the merged value's `LoadKind` per slot: a
+/// full-width slot uses `LoadKind::I64`; a narrow-load slot uses
+/// that load's kind (the rename's narrow-load extension then sits
+/// on top of the phi value).
+///
+/// The rewrite rebuilds `func.insts`, `func.inst_src`, every
+/// `Block::inst_range`, every operand, every terminator, and every
+/// `Block::exit_acc` via a single `value_remap[old_id] = new_id`
+/// pass so existing `ValueId` references remain consistent. The
+/// phis added at a block's head occupy the first slots of its new
+/// `inst_range`; their order is the iteration order of the per-slot
+/// `BTreeSet` for stable output.
+pub(crate) fn insert_phis(
+    func: &mut FunctionSsa,
+    phi_blocks: &alloc::collections::BTreeMap<i64, BTreeSet<BlockId>>,
+    phi_slot_kind: &alloc::collections::BTreeMap<i64, LoadKind>,
+) -> alloc::collections::BTreeMap<(BlockId, i64), ValueId> {
+    use alloc::collections::BTreeMap;
+
+    let n_blocks = func.blocks.len();
+    let mut per_block: Vec<Vec<(i64, LoadKind)>> = alloc::vec![Vec::new(); n_blocks];
+    for (slot, blocks) in phi_blocks {
+        let kind = phi_slot_kind
+            .get(slot)
+            .copied()
+            .unwrap_or(LoadKind::I64);
+        for &b in blocks {
+            per_block[b as usize].push((*slot, kind));
+        }
+    }
+
+    let n_phis: usize = per_block.iter().map(|v| v.len()).sum();
+    if n_phis == 0 {
+        return BTreeMap::new();
+    }
+
+    let n_old = func.insts.len();
+    let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + n_phis);
+    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + n_phis);
+    let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; n_old];
+    let mut phi_id_at: BTreeMap<(BlockId, i64), ValueId> = BTreeMap::new();
+
+    let old_ranges: Vec<core::ops::Range<u32>> = func
+        .blocks
+        .iter()
+        .map(|b| b.inst_range.clone())
+        .collect();
+
+    for (b_idx, range) in old_ranges.iter().enumerate() {
+        let new_start = new_insts.len() as u32;
+        for &(slot, kind) in &per_block[b_idx] {
+            let new_id = new_insts.len() as ValueId;
+            new_insts.push(Inst::Phi {
+                incoming: Vec::new(),
+                kind,
+            });
+            new_src.push((0, 0));
+            phi_id_at.insert((b_idx as BlockId, slot), new_id);
+        }
+        for old_id in range.start..range.end {
+            let new_id = new_insts.len() as ValueId;
+            new_insts.push(func.insts[old_id as usize].clone());
+            new_src.push(
+                func.inst_src
+                    .get(old_id as usize)
+                    .copied()
+                    .unwrap_or((0, 0)),
+            );
+            value_remap[old_id as usize] = new_id;
+        }
+        let new_end = new_insts.len() as u32;
+        func.blocks[b_idx].inst_range = new_start..new_end;
+    }
+
+    let remap = |op: &mut ValueId| {
+        if *op != NO_VALUE && (*op as usize) < value_remap.len() {
+            *op = value_remap[*op as usize];
+        }
+    };
+    for inst in new_insts.iter_mut() {
+        for_each_operand_mut(inst, remap);
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < value_remap.len() {
+            block.exit_acc = value_remap[block.exit_acc as usize];
+        }
+        match &mut block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => remap(cond),
+            Terminator::Return(v) => {
+                if *v != NO_VALUE {
+                    remap(v);
+                }
+            }
+            Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
+        }
+    }
+
+    func.insts = new_insts;
+    func.inst_src = new_src;
+    phi_id_at
+}
+
 /// Apply `f` to every value-id operand of an instruction. Exhaustive
 /// over `Inst`: a missed operand would leave a stale reference to a
 /// promoted load after the rewrite below.
@@ -1032,6 +1143,124 @@ mod tests {
         let df = dominance_frontiers(&f, &idom);
         let phis = phi_placement(&f, &promotable, &df);
         assert_eq!(phis.get(&-1), Some(&BTreeSet::from([3])));
+    }
+
+    #[test]
+    fn insert_phis_prepends_phi_per_slot_at_join_and_remaps_ids() {
+        // Diamond: 0 -> {1, 2} -> 3. Slot -1 is stored in both
+        // arms; insert_phis must prepend an Inst::Phi at block 3
+        // and remap every existing ValueId in 3 to its post-phi
+        // index. The phi starts with an empty `incoming` list (the
+        // renamer fills it).
+        let insts = alloc::vec![
+            // block 0
+            Inst::Imm(0),
+            // block 1
+            Inst::Imm(1),
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+            },
+            // block 2
+            Inst::Imm(2),
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64,
+            },
+            // block 3
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 3,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        let promotable = BTreeSet::from([-1i64]);
+        let idom = dominators(&f);
+        let df = dominance_frontiers(&f, &idom);
+        let phi_blocks = phi_placement(&f, &promotable, &df);
+        let mut slot_kind = alloc::collections::BTreeMap::new();
+        slot_kind.insert(-1i64, LoadKind::I64);
+        let phi_id_at = insert_phis(&mut f, &phi_blocks, &slot_kind);
+
+        // Block 3 grew by one phi at the head; the LoadLocal that
+        // used to sit at id 5 now sits at id 6 inside the expanded
+        // 5..7 range. The phi for slot -1 in block 3 is at id 5.
+        assert_eq!(f.blocks[3].inst_range, 5..7);
+        let phi_id = *phi_id_at
+            .get(&(3 as BlockId, -1i64))
+            .expect("phi for (block 3, slot -1) must be recorded");
+        assert_eq!(phi_id, 5);
+        match &f.insts[5] {
+            Inst::Phi { incoming, kind } => {
+                assert!(incoming.is_empty(), "phi starts with empty incoming");
+                assert_eq!(*kind, LoadKind::I64);
+            }
+            other => panic!("expected Inst::Phi at id 5, got {other:?}"),
+        }
+        // The LoadLocal slid forward by one phi.
+        match &f.insts[6] {
+            Inst::LoadLocal { off, kind } => {
+                assert_eq!(*off, -1);
+                assert_eq!(*kind, LoadKind::I64);
+            }
+            other => panic!("expected LoadLocal at id 6, got {other:?}"),
+        }
+        // Predecessor blocks gained no phis; their ranges held.
+        assert_eq!(f.blocks[0].inst_range, 0..1);
+        assert_eq!(f.blocks[1].inst_range, 1..3);
+        assert_eq!(f.blocks[2].inst_range, 3..5);
+        // The StoreLocal value operands in blocks 1 and 2 still
+        // point at their Imm definitions, remapped through
+        // value_remap (which is identity here since no phi sits at
+        // their block heads).
+        match &f.insts[2] {
+            Inst::StoreLocal { value, .. } => assert_eq!(*value, 1),
+            other => panic!("expected StoreLocal at id 2, got {other:?}"),
+        }
+        match &f.insts[4] {
+            Inst::StoreLocal { value, .. } => assert_eq!(*value, 3),
+            other => panic!("expected StoreLocal at id 4, got {other:?}"),
+        }
+        // The Return terminator's value operand was at old id 5;
+        // value_remap shifts it to 6 (the same shift the LoadLocal
+        // took).
+        match f.blocks[3].terminator {
+            Terminator::Return(v) => assert_eq!(v, 6),
+            ref other => panic!("expected Return at block 3, got {other:?}"),
+        }
+        assert_eq!(f.blocks[3].exit_acc, 6);
     }
 
     #[test]

@@ -398,6 +398,13 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // widths and signed/unsigned. Catches regressions in the
     // type-tag plumbing at one fixture.
     ("integer_ops_exhaustive.c", 0),
+    // VaArg rd/ap register-aliasing fix: the dst register and the
+    // `&ap` source register can land on the same physical reg;
+    // without the fix the second and later va_arg reads return the
+    // same garbage. `show` prints `first n=3 v[0]=11 v[1]=22
+    // v[2]=33`, which the fixture's main does not check directly --
+    // pin via the exit status (0).
+    ("va_arg_int_seq.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

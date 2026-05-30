@@ -62,19 +62,95 @@ use super::x86_64::{
 pub(super) struct Frame {
     pub frame_bytes: u32,
     pub alloc_spill_base: u32,
+    /// Total bytes the prologue allocates between the return
+    /// address and the saved rbp for c5 cdecl parameter slots
+    /// and host-stack overflow. The epilogue reads this directly
+    /// so prologue and epilogue agree on one byte count regardless
+    /// of which branch the prologue took.
+    pub param_spill_bytes: u32,
 }
 
 impl Frame {
-    pub fn for_function(func: &FunctionSsa, alloc: &Allocation) -> Self {
+    pub fn for_function(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> Self {
         let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
+        let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
+            param_spill_bytes,
         }
     }
+}
+
+/// Total bytes the prologue allocates between the return
+/// address and the saved rbp for c5 cdecl parameter slots plus
+/// host-stack overflow. Mirrors the prologue's branch structure
+/// exactly so prologue and epilogue agree on one value:
+///
+/// * Variadic callees: the caller pushes 16-byte cells onto the
+///   bytecode stack; the callee allocates nothing.
+/// * Non-variadic, n_params within `int_arg_regs.len()`:
+///   `n_reg * 16`, or 0 when every register-passed parameter is
+///   `ParamRef`-seeded with no address taken and no surviving
+///   `Load/StoreLocal` -- in which case the entire register
+///   stripe drops out and no `pop r10` / `push r10` dance is
+///   needed to preserve the return address.
+/// * Non-variadic, host-stack overflow: full `n_params * 16`.
+/// * Struct-returning callees: the walker excludes them from
+///   `ParamRef` synthesis, so `seeded` is empty, the elision
+///   check fails, and `n_params * 16` is returned.
+fn prologue_param_spill_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> u32 {
+    if func.is_variadic {
+        return 0;
+    }
+    let entry_spill = func.n_params;
+    if entry_spill == 0 {
+        return 0;
+    }
+    let n_reg = entry_spill.min(abi.int_arg_regs.len());
+    let n_stack = entry_spill - n_reg;
+
+    let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<i64> =
+        alloc::collections::BTreeSet::new();
+    let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        match inst {
+            Inst::ParamRef { idx: i, .. } => {
+                seeded.insert(*i);
+            }
+            Inst::LocalAddr(off) if *off >= 2 => {
+                addr_taken.insert(*off);
+            }
+            Inst::LoadLocal { off, .. } if *off >= 2 => {
+                let alive = alloc.use_counts.get(idx).copied().unwrap_or(0) > 0;
+                if alive {
+                    needed.insert(*off);
+                }
+            }
+            Inst::StoreLocal { off, .. } if *off >= 2 => {
+                needed.insert(*off);
+            }
+            _ => {}
+        }
+    }
+    let can_elide_reg = n_stack == 0
+        && (0..n_reg).all(|i| {
+            let slot = (i as i64) + 2;
+            seeded.contains(&(i as u32))
+                && !addr_taken.contains(&slot)
+                && !needed.contains(&slot)
+        });
+    let reg_bytes = if can_elide_reg { 0 } else { (n_reg as u32) * 16 };
+    let overflow_bytes = (n_stack as u32) * 16;
+    reg_bytes + overflow_bytes
 }
 
 fn bail_msg(reason: &str) {
@@ -479,8 +555,8 @@ pub(super) fn emit_function(
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
-    let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
+    let frame = Frame::for_function(func, alloc, abi);
 
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
@@ -773,20 +849,20 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
 ) {
-    // Host-arg-reg spill. Skipped for variadic functions
-    // (the body reads varargs through the c5 cdecl stack
-    // slots the caller wrote, not the host arg registers).
+    // Host-arg-reg spill. `frame.param_spill_bytes` is the
+    // single source of truth for how many bytes get allocated
+    // here; the epilogue reads the same value to undo the same
+    // bytes. Variadic callees, fully-Native callees with every
+    // parameter `ParamRef`-seeded, and 0-param callees all
+    // produce 0 and skip the entire `pop r10` / `push r10`
+    // dance (the return address stays at the top of the stack
+    // where the caller pushed it).
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
-    if entry_spill > 0 {
+    if entry_spill > 0 && frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R10);
         let n_reg = entry_spill.min(abi.int_arg_regs.len());
         let n_stack = entry_spill - n_reg;
         if n_stack > 0 {
-            // Reserve every overflow c5 slot in one sub, then
-            // copy each host-stack overflow arg into its 16-byte
-            // c5 cdecl slot. `host_off` reads the caller-supplied
-            // 8-byte-stride argument bank that the `pop r10`
-            // above already stripped of the return address.
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_rsp_imm32(code, overflow_bytes);
             for i in 0..n_stack {
@@ -2992,15 +3068,19 @@ fn emit_return(
         emit_add_rsp_imm32(code, frame.frame_bytes);
     }
     emit_pop_r(code, Reg::RBP);
-    // Drop the host-arg-reg spill slots the prologue laid down.
-    // Each param consumed a 16-byte slot (one push for the arg +
-    // one 8-byte gap). Pop the ret address into r11, drop the
-    // slots, push the ret address back. Skipped for variadic
-    // functions whose prologue did no spilling.
-    if !func.is_variadic && func.n_params > 0 {
+    // Drop whatever bytes the prologue allocated for c5 cdecl
+    // parameter slots above the return address. The single
+    // source of truth is `prologue_param_spill_bytes`, recorded
+    // on `frame.param_spill_bytes`; both prologue and epilogue
+    // read from there so the two sides agree across every
+    // branch the prologue takes (variadic, host-stack overflow,
+    // ParamRef-elided, n_params == 0). When 0, the `pop r11`
+    // / `push r11` dance is skipped entirely because the return
+    // address is already on top of the stack.
+    let _ = func;
+    if frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R11);
-        let bytes = (16 * func.n_params) as u32;
-        emit_add_rsp_imm32(code, bytes);
+        emit_add_rsp_imm32(code, frame.param_spill_bytes);
         emit_push_r(code, Reg::R11);
     }
     emit_ret(code);

@@ -1390,11 +1390,46 @@ fn emit_inst(
             // value.
             true
         }
-        _ => {
-            bail_msg("inst variant not yet covered");
+        other => {
+            bail_msg(&alloc::format!(
+                "inst variant not yet covered: {}",
+                inst_variant_name(other)
+            ));
             let _ = frame;
             false
         }
+    }
+}
+
+/// Human-readable name of an `Inst` variant for bail diagnostics.
+fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
+    use super::super::ir::Inst;
+    match inst {
+        Inst::Imm(_) => "Imm",
+        Inst::ImmData(_) => "ImmData",
+        Inst::ImmCode(_) => "ImmCode",
+        Inst::LocalAddr(_) => "LocalAddr",
+        Inst::TlsAddr(_) => "TlsAddr",
+        Inst::Load { .. } => "Load",
+        Inst::Store { .. } => "Store",
+        Inst::LoadLocal { .. } => "LoadLocal",
+        Inst::StoreLocal { .. } => "StoreLocal",
+        Inst::LoadIndexed { .. } => "LoadIndexed",
+        Inst::StoreIndexed { .. } => "StoreIndexed",
+        Inst::Binop { .. } => "Binop",
+        Inst::BinopI { .. } => "BinopI",
+        Inst::Fneg(_) => "Fneg",
+        Inst::Extend { .. } => "Extend",
+        Inst::FpCast { .. } => "FpCast",
+        Inst::Call { .. } => "Call",
+        Inst::CallIndirect { .. } => "CallIndirect",
+        Inst::CallExt { .. } => "CallExt",
+        Inst::TailExt(_) => "TailExt",
+        Inst::Mcpy { .. } => "Mcpy",
+        Inst::Intrinsic { .. } => "Intrinsic",
+        Inst::AllocaInit(_) => "AllocaInit",
+        Inst::ParamRef { .. } => "ParamRef",
+        Inst::Phi { .. } => "Phi",
     }
 }
 
@@ -2391,11 +2426,21 @@ fn emit_binop(
             // result back to rd. The earlier `mov rd, rn` (line
             // above) left rd holding the lhs.
             if rd.0 == Reg::RCX.0 {
-                let Some(scratch) = pick_caller_saved_scratch_live_aware(rd, &[rm], v, alloc)
-                else {
+                // Picker can return Some that aliases a live SSA value
+                // (the live-aware variant returns None more often,
+                // bailing the function -- including sqlite3's Shru in
+                // shell.c -- and the old bytecode fallback is gone).
+                // The shift sequence below stages lhs through this
+                // scratch then writes the result back to rd, so the
+                // aliased live value is destroyed for the duration of
+                // the shift. TODO: save-restore the scratch when it
+                // holds a live value.
+                let Some(scratch) = pick_caller_saved_scratch(rd, &[rm]) else {
                     bail_msg("Binop shift: no caller-saved scratch available");
                     return false;
                 };
+                let _ = v;
+                let _ = alloc;
                 emit_mov_rr(code, scratch, rd);
                 if rm.0 != Reg::RCX.0 {
                     emit_mov_rr(code, Reg::RCX, rm);

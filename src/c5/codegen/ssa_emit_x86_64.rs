@@ -2237,7 +2237,7 @@ fn emit_binop(
     // need their own marshalling separate from the two-operand
     // path below.
     if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
-        return emit_binop_divmod(code, op, dst, rd, rn, rhs_place, frame);
+        return emit_binop_divmod(code, op, v, dst, rd, rn, rhs_place, alloc, frame);
     }
     let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
         Reg::RCX
@@ -2413,23 +2413,36 @@ fn emit_binop(
 fn emit_binop_divmod(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     rd: Reg,
     rn: Reg,
     rhs_place: Place,
+    alloc: &Allocation,
     frame: Frame,
 ) -> bool {
     let want_remainder = matches!(op, BinOp::Mod | BinOp::Modu);
     let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
 
-    // Materialise the divisor into r10. r10 is not in any
-    // allocator pool and IDIV r/m64 can name it.
-    let Some(div_src) = materialize_int(code, rhs_place, SCRATCH_R10, frame) else {
+    // Pick a divisor scratch register disjoint from rd, rn, rax,
+    // rdx, and every register holding an SSA value live across
+    // this PC. The fixed `r10` choice was safe before the
+    // caller_gprs pool included it; now the allocator can park a
+    // live value in r10, and materialising the divisor into r10
+    // would clobber rn or rd when one of them aliases r10's
+    // previous live value.
+    let Some(divisor_reg) =
+        pick_caller_saved_scratch_live_aware(rd, &[rn, Reg::RAX, Reg::RDX], v, alloc)
+    else {
+        bail_msg("Binop divmod: no caller-saved scratch available");
+        return false;
+    };
+    let Some(div_src) = materialize_int(code, rhs_place, divisor_reg, frame) else {
         bail_msg("Binop divmod: rhs not int reg / spill");
         return false;
     };
-    if div_src.0 != SCRATCH_R10.0 {
-        emit_mov_rr(code, SCRATCH_R10, div_src);
+    if div_src.0 != divisor_reg.0 {
+        emit_mov_rr(code, divisor_reg, div_src);
     }
     // Preserve rax: the allocator can park a live value there
     // that has to be intact after this op. If rd is rax we don't
@@ -2446,10 +2459,10 @@ fn emit_binop_divmod(
     // rax; unsigned zero-extends with `xor edx, edx`.
     if is_unsigned {
         emit_xor_rr(code, Reg::RDX, Reg::RDX);
-        super::x86_64::emit_div_r(code, SCRATCH_R10);
+        super::x86_64::emit_div_r(code, divisor_reg);
     } else {
         super::x86_64::emit_cqo(code);
-        super::x86_64::emit_idiv_r(code, SCRATCH_R10);
+        super::x86_64::emit_idiv_r(code, divisor_reg);
     }
     // Capture result into rd before restoring rax.
     let result_src = if want_remainder { Reg::RDX } else { Reg::RAX };

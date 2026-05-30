@@ -776,24 +776,24 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     if func.is_variadic {
         return;
     }
-    // Below 5 parameters the allocator has enough non-arg registers
-    // that the cross-clobber hazard rarely manifests; firing the
-    // hint there can perturb a downstream call's ParamRef placement
-    // through the libc bridge (c5_vsnprintf et al). 5+ parameter
-    // functions are where the hazard reliably triggers because the
-    // allocator runs out of non-arg-register candidates and starts
-    // picking int_arg_regs[j] as the destination for an earlier
-    // ParamRef.
-    if func.n_params < 5 {
+    // The cross-clobber hazard kicks in once the allocator can run
+    // out of non-arg-register candidates and starts picking an
+    // earlier ParamRef's arg register as a later ParamRef's
+    // destination. The threshold per target is the count of
+    // integer arg registers it can pull from before that happens;
+    // below that count, firing the hint can perturb a downstream
+    // call's ParamRef placement through a libc bridge
+    // (c5_vsnprintf et al).
+    let (int_args, threshold): (&[u8], usize) = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            (&[0, 1, 2, 3, 4, 5, 6, 7], 5)
+        }
+        Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
+        Target::WindowsX64 => (&[1, 2, 8, 9], 4),
+    };
+    if (func.n_params as usize) < threshold {
         return;
     }
-    let int_args: &[u8] = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            &[0, 1, 2, 3, 4, 5, 6, 7]
-        }
-        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
-        Target::WindowsX64 => &[1, 2, 8, 9],
-    };
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Inst::ParamRef { idx: i, .. } = inst
             && let Some(&r) = int_args.get(*i as usize)

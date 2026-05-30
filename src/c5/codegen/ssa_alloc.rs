@@ -776,13 +776,15 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     if func.is_variadic {
         return;
     }
-    // Below 6 parameters the allocator has enough non-arg registers
+    // Below 5 parameters the allocator has enough non-arg registers
     // that the cross-clobber hazard rarely manifests; firing the
     // hint there can perturb a downstream call's ParamRef placement
-    // through the libc bridge (c5_vsnprintf et al). 6+ parameter
-    // functions are where the hazard reliably triggers (every SysV
-    // arg register is a ParamRef destination candidate).
-    if func.n_params < 6 {
+    // through the libc bridge (c5_vsnprintf et al). 5+ parameter
+    // functions are where the hazard reliably triggers because the
+    // allocator runs out of non-arg-register candidates and starts
+    // picking int_arg_regs[j] as the destination for an earlier
+    // ParamRef.
+    if func.n_params < 5 {
         return;
     }
     let int_args: &[u8] = match target {

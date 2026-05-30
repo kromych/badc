@@ -253,6 +253,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("for_loop.c", 10),
     ("recursion_factorial.c", 120),
     ("return_value_in_callee_saved.c", 7),
+    ("commutative_imm_lhs_swap.c", 0),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),

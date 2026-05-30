@@ -216,11 +216,12 @@ jobs:
           cargo build --release --locked
           python demos/sqlite3/smoke.py
       - name: capture sqlite3 shell crash under gdb (Linux x86_64 only)
-        # The shell SIGSEGVs on Linux x86_64 only; build a -g
-        # version, run it under gdb with the script the
-        # smoke.py first scenario writes (CREATE TABLE etc),
-        # and dump a backtrace + registers + the source
-        # context. Skipped on lanes where the smoke passed.
+        # Build the shell the way smoke.py does (amalgamated +
+        # `-include msvc_compat.h`) but with `-g`, then re-run
+        # the first failing scenario inside gdb to dump a
+        # backtrace + registers + disassembly. `continue-on-
+        # error` keeps the diagnostic from masking other
+        # failures in the matrix.
         if: matrix.os == 'ubuntu-latest' && failure()
         continue-on-error: true
         run: |
@@ -231,18 +232,23 @@ jobs:
           WORK="$RUNNER_TEMP/sqlite3-gdb"
           rm -rf "$WORK"; mkdir -p "$WORK"
           cd "$WORK"
-          cp "$GITHUB_WORKSPACE/demos/sqlite3/sqlite3.c" .
-          cp "$GITHUB_WORKSPACE/demos/sqlite3/sqlite3.h" .
-          cp "$GITHUB_WORKSPACE/demos/sqlite3/shell.c" .
-          # Rebuild with -g.
-          echo "=== building shell with -g ==="
-          "$BADC" -g -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=0 \
-            -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
-            -DSQLITE_DQS=0 -DSQLITE_OMIT_DEPRECATED \
-            -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE \
-            -DSQLITE_OMIT_AUTOINIT -DSQLITE_WITHOUT_ZONEMALLOC=1 \
-            -DSQLITE_ENABLE_LOCKING_STYLE=0 -DSQLITE_DISABLE_INTRINSIC \
-            -DSQLITE_OMIT_SEH -o shell_g sqlite3.c shell.c 2>&1 | tail -5
+          echo "=== building shell_g via smoke.py's amalgamator + -g ==="
+          python3 - "$BADC" "$GITHUB_WORKSPACE" "$WORK/shell_g" <<'EOF'
+          import os, subprocess, sys
+          badc, workspace, out = sys.argv[1], sys.argv[2], sys.argv[3]
+          sys.path.insert(0, os.path.join(workspace, "demos", "sqlite3"))
+          import smoke as s
+          amalg = subprocess.run(
+              [sys.executable, os.path.join(workspace, "scripts", "amalgamate.py"),
+               "-o", "-",
+               os.path.join(workspace, "demos", "sqlite3", "sqlite3.c"),
+               os.path.join(workspace, "demos", "sqlite3", "shell.c")],
+              capture_output=True, check=True)
+          cmd = [badc, "-g", "-include", "msvc_compat.h", "-", "-o", out]
+          cmd += [f"-D{d}" for d in s.BUILD_DEFINES]
+          r = subprocess.run(cmd, input=amalg.stdout)
+          sys.exit(r.returncode)
+          EOF
           ls -la shell_g
           # First failing scenario from smoke.py:
           cat > in.sql <<'EOF'

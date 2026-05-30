@@ -714,11 +714,13 @@ fn marshal_args(
                         emit_mov_rr(code, Reg(r), src);
                     }
                 }
-                Place::FpReg(_) => {
-                    bail_msg(&alloc::format!(
-                        "{site}: IntReg placement with FpReg source unsupported"
-                    ));
-                    return false;
+                Place::FpReg(s) => {
+                    // Win64 mirrors variadic FP args into both the
+                    // matching xmm register and the integer slot
+                    // (rcx / rdx / r8 / r9), so the call-arg plan
+                    // can name the integer placement with the value
+                    // sitting in xmm.
+                    super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg(s));
                 }
             }
         }

@@ -819,9 +819,17 @@ fn debug_line_covers_each_function_entry_pc() {
         .arg("--debug-line")
         .arg(&out)
         .output();
-    let Ok(out_text) = dd.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()) else {
+    // posix_spawnp on glibc returns Ok with exit 127 when the
+    // binary is missing, so a missing-tool image lands here with
+    // a non-zero status and empty stdout instead of an Err. Bail
+    // on either signal so the test still runs on stripped images.
+    let Ok(dd_out) = dd else {
         return;
     };
+    if !dd_out.status.success() || dd_out.stdout.is_empty() {
+        return;
+    }
+    let out_text = String::from_utf8_lossy(&dd_out.stdout).into_owned();
     // Extract every (Address, Line) pair from the table body.
     let mut rows: Vec<(u64, u32)> = Vec::new();
     for line in out_text.lines() {

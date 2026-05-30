@@ -484,6 +484,21 @@ impl SsaBuilder {
         if zero_collapses {
             return self.imm(0);
         }
+        // Mul by a positive power of two collapses to a left shift.
+        // Two's-complement arithmetic makes `x * 2^K` and `x << K`
+        // produce the same 64-bit bit pattern for signed and
+        // unsigned operands alike. The shift form lowers to a
+        // single-cycle instruction on every target (`lsl` on
+        // AArch64, `shl` on x86_64) instead of the multi-cycle
+        // `mul` / `imul`. K is bounded by 62 so the i64 stays
+        // positive and the shift amount stays inside the 6-bit
+        // encoding the per-arch BinopI emit accepts.
+        if op == BinOp::Mul && rhs_imm > 0 && (rhs_imm as u64).is_power_of_two() {
+            let k = rhs_imm.trailing_zeros() as i64;
+            if k < 64 {
+                return self.binop_imm(BinOp::Shl, lhs, k);
+            }
+        }
         if let Some(&Inst::BinopI {
             op: inner_op,
             lhs: inner_lhs,

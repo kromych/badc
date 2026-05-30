@@ -257,6 +257,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("commutative_imm_lhs_swap.c", 0),
     ("comparison_imm_lhs_swap.c", 0),
     ("binop_imm_chain_fold.c", 0),
+    ("mul_pow2_to_shift.c", 0),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),

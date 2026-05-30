@@ -435,8 +435,21 @@ def main() -> int:
         check=True,
     )
 
+    # `BADC_SMOKE_KEEP_TMPDIR` (path) collects the run's tempdir
+    # contents into the named directory before exit, regardless
+    # of pass / fail. Used by the CI gdb-diagnostic step to grab
+    # the produced shell binary even when the smoke flagged
+    # failure.
+    keep_dir = os.environ.get("BADC_SMOKE_KEEP_TMPDIR")
     with tempfile.TemporaryDirectory(prefix="sqlite3-smoke-") as work_str:
         work = Path(work_str)
+        if keep_dir:
+            import atexit
+            import shutil
+            atexit.register(
+                lambda: shutil.copytree(work_str, keep_dir, dirs_exist_ok=True)
+                if Path(work_str).is_dir() else None
+            )
         # Run the amalgamator (scripts/amalgamate.py) once and
         # reuse its output for both the no-O and -O builds.
         # Unlike the previous `cat sqlite3.c shell.c > combined.c`

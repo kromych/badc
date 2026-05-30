@@ -232,36 +232,11 @@ jobs:
           WORK="$RUNNER_TEMP/sqlite3-gdb"
           rm -rf "$WORK"; mkdir -p "$WORK"
           cd "$WORK"
-          echo "=== building shell via smoke.py with TMPDIR override ==="
-          # Run smoke.py with TMPDIR pointing at WORK and a wrapper
-          # that copies the built binary out of the auto-removed
-          # tempdir before smoke.py exits non-zero.
-          export TMPDIR="$WORK"
-          BADC="$BADC" python3 - "$WORK" <<'EOF'
-          import os, shutil, subprocess, sys, glob
-          work = sys.argv[1]
-          # Hook tempfile.TemporaryDirectory to mirror its contents
-          # into $WORK/saved before the cleanup fires.
-          import tempfile
-          _orig = tempfile.TemporaryDirectory
-          class _Keep(_orig):
-              def cleanup(self):
-                  dst = os.path.join(work, "saved")
-                  if os.path.isdir(self.name):
-                      shutil.copytree(self.name, dst, dirs_exist_ok=True)
-                  _orig.cleanup(self)
-          tempfile.TemporaryDirectory = _Keep
-          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"],
-                                          "demos", "sqlite3"))
-          import smoke
-          try:
-              smoke.main()
-          except SystemExit:
-              pass
-          # Whatever got built ends up in $WORK/saved.
-          for f in glob.glob(os.path.join(work, "saved", "*")):
-              print("saved:", f)
-          EOF
+          echo "=== running smoke.py with BADC_SMOKE_KEEP_TMPDIR ==="
+          # smoke.py's atexit hook copies its tempdir contents into
+          # $WORK/saved regardless of pass / fail.
+          BADC="$BADC" BADC_SMOKE_KEEP_TMPDIR="$WORK/saved" \
+            python3 "$GITHUB_WORKSPACE/demos/sqlite3/smoke.py" || true
           # Pick the noopt binary if it exists.
           cp "$WORK"/saved/sqlite3shell "$WORK"/shell_g 2>/dev/null \
             || cp "$WORK"/saved/sqlite3shell.opt "$WORK"/shell_g 2>/dev/null \

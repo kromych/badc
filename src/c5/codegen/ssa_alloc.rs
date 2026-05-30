@@ -197,21 +197,27 @@ impl RegBanks {
             Target::LinuxX64 => Self {
                 // System V x86_64. Callee-saved: rbx, r12, r14, r15.
                 // r13 stays reserved as the writer's scratch / legacy
-                // accumulator. Caller-saved opens up to the SysV arg
-                // regs (rdi, rsi, rdx, rcx, r8, r9) plus rax, r10,
-                // r11 so call-arg hints can land values directly.
+                // accumulator. r10 stays reserved as `SCRATCH_R10`
+                // in ssa_emit_x86_64 -- many handlers
+                // (int_or_spill_dst, materialize_int for spilled
+                // sources, the Va* / call-arg marshallers) write r10
+                // unconditionally to land a value in a known register,
+                // so the allocator must not park another SSA value
+                // there. Caller-saved opens up to the SysV arg regs
+                // (rdi, rsi, rdx, rcx, r8, r9) plus rax, r11.
                 callee_gprs: &[3, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 10, 11],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 11],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r14,
-                // r15. Caller-saved opens up to the Win64 arg regs
-                // (rcx, rdx, r8, r9) plus rax, r10, r11. r13 stays
-                // reserved as scratch / legacy accumulator.
+                // r15. r13 / r10 stay reserved as the writer's
+                // scratch (see the LinuxX64 comment for the SCRATCH_R10
+                // contract). Caller-saved opens up to the Win64 arg
+                // regs (rcx, rdx, r8, r9) plus rax, r11.
                 callee_gprs: &[3, 6, 7, 12, 14, 15],
-                caller_gprs: &[0, 1, 2, 8, 9, 10, 11],
+                caller_gprs: &[0, 1, 2, 8, 9, 11],
                 callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                 caller_fprs: &[0, 1, 2, 3, 4, 5],
             },

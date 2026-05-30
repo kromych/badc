@@ -2384,9 +2384,11 @@ fn emit_binop(
         BinOp::Or => emit_or_rr(code, rd, rm),
         BinOp::Xor => emit_xor_rr(code, rd, rm),
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
-            // cmp lhs, rhs ; setcc cl ; movzx rd, cl. The `mov rd,
-            // rn` above clobbered rd to the lhs already; reverse
-            // that into a cmp directly off rn.
+            // cmp lhs, rhs ; setcc rd_low ; movzx rd, rd_low. The
+            // `mov rd, rn` above clobbered rd to the lhs already;
+            // reverse that into a cmp directly off rn. Write setcc
+            // into rd's own low byte (rather than cl) so a live SSA
+            // value parked in rcx is not destroyed.
             emit_cmp_rr(code, rn, rm);
             if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                 return true;
@@ -2400,8 +2402,8 @@ fn emit_binop(
                 BinOp::Ge => Cc::Ge,
                 _ => unreachable!(),
             };
-            emit_setcc_r8(code, cc, Reg::RCX);
-            emit_movzx_r_r8(code, rd, Reg::RCX);
+            emit_setcc_r8(code, cc, rd);
+            emit_movzx_r_r8(code, rd, rd);
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
             emit_cmp_rr(code, rn, rm);
@@ -2415,8 +2417,8 @@ fn emit_binop(
                 BinOp::Uge => Cc::Ae,
                 _ => unreachable!(),
             };
-            emit_setcc_r8(code, cc, Reg::RCX);
-            emit_movzx_r_r8(code, rd, Reg::RCX);
+            emit_setcc_r8(code, cc, rd);
+            emit_movzx_r_r8(code, rd, rd);
         }
         BinOp::Shl | BinOp::Shr | BinOp::Shru => {
             // x86 shifts read the count from cl. When rd is rcx
@@ -2768,8 +2770,8 @@ fn emit_binop_imm(
             BinOp::Uge => Cc::Ae,
             _ => unreachable!(),
         };
-        emit_setcc_r8(code, cc, Reg::RCX);
-        emit_movzx_r_r8(code, rd, Reg::RCX);
+        emit_setcc_r8(code, cc, rd);
+        emit_movzx_r_r8(code, rd, rd);
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
@@ -2831,8 +2833,8 @@ fn emit_binop_imm(
                 BinOp::Ge => Cc::Ge,
                 _ => unreachable!(),
             };
-            emit_setcc_r8(code, cc, Reg::RCX);
-            emit_movzx_r_r8(code, rd, Reg::RCX);
+            emit_setcc_r8(code, cc, rd);
+            emit_movzx_r_r8(code, rd, rd);
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
             emit_cmp_rr(code, rn, scratch);
@@ -2846,8 +2848,8 @@ fn emit_binop_imm(
                 BinOp::Uge => Cc::Ae,
                 _ => unreachable!(),
             };
-            emit_setcc_r8(code, cc, Reg::RCX);
-            emit_movzx_r_r8(code, rd, Reg::RCX);
+            emit_setcc_r8(code, cc, rd);
+            emit_movzx_r_r8(code, rd, rd);
         }
         BinOp::Shl | BinOp::Shr | BinOp::Shru => {
             // Shift count already in cl via the `mov rcx, imm` above.

@@ -1294,7 +1294,7 @@ fn emit_inst(
         }
         Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame),
         Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, *off, *value, *kind, alloc, frame)
+            emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame)
         }
         Inst::LoadIndexed {
             base,
@@ -1561,6 +1561,7 @@ fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, fra
 fn emit_store_local(
     code: &mut Vec<u8>,
     dst: Place,
+    v: super::super::ir::ValueId,
     off: i64,
     value: u32,
     kind: StoreKind,
@@ -1589,8 +1590,14 @@ fn emit_store_local(
     // a GPR before the store; otherwise it routes through the
     // normal int materialisation.
     let rv = if let Place::FpReg(xr) = value_place {
-        super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(xr));
-        SCRATCH_R10
+        let Some(scratch) =
+            pick_caller_saved_scratch_live_aware(Reg(0), &[], v, alloc)
+        else {
+            bail_msg("StoreLocal FpReg: no caller-saved scratch available");
+            return false;
+        };
+        super::x86_64::emit_movq_r_xmm(code, scratch, Reg(xr));
+        scratch
     } else {
         match materialize_int(code, value_place, SCRATCH_R10, frame) {
             Some(r) => r,

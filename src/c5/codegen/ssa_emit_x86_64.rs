@@ -90,6 +90,37 @@ impl Frame {
     }
 }
 
+/// Registers that are caller-saved on both SysV AMD64 and Win64.
+/// Used as the candidate pool for `pick_caller_saved_scratch`.
+/// The intersection of the two ABIs' caller-saved sets is rax,
+/// rcx, rdx, r8, r9, r10, r11; rsi and rdi are caller-saved on
+/// SysV but callee-saved on Win64, so they are excluded. Order
+/// favours r11, r10 (rarely call args) then rax / rcx / rdx /
+/// r8 / r9 (call args).
+const CALLER_SAVED_INT_SCRATCHES: &[u8] = &[11, 10, 0, 1, 2, 8, 9];
+
+/// Pick a caller-saved x86_64 GPR that is neither `rd` nor any
+/// register in `operand_regs`. Returns `None` when every
+/// candidate in `CALLER_SAVED_INT_SCRATCHES` is excluded -- callers
+/// then bail the emit rather than silently fall through to a
+/// callee-saved register (which would violate the System V /
+/// Win64 callee-save contract and corrupt the caller's state on
+/// return). Used by emit handlers that need an intra-instruction
+/// scratch (BinopI immediate-materialise, VaArg staging, alloca
+/// bookkeeping, ...).
+fn pick_caller_saved_scratch(rd: Reg, operand_regs: &[Reg]) -> Option<Reg> {
+    for cand in CALLER_SAVED_INT_SCRATCHES {
+        if *cand == rd.0 {
+            continue;
+        }
+        if operand_regs.iter().any(|r| r.0 == *cand) {
+            continue;
+        }
+        return Some(Reg(*cand));
+    }
+    None
+}
+
 /// Total bytes the prologue allocates between the return
 /// address and the saved rbp for c5 cdecl parameter slots plus
 /// host-stack overflow. Mirrors the prologue's branch structure
@@ -472,14 +503,26 @@ fn emit_phi_predecessor_moves(
                 _ => other_moves.push((src_place, dst_place)),
             }
         }
-        // r13 sits outside both `caller_gprs` and `callee_gprs`
-        // in `RegBanks::for_target`, so it can hold the
-        // cycle-break temporary without colliding with any phi
-        // source or destination register. SCRATCH_R10 (r10) is in
-        // the SSA allocator's caller_gprs pool and would risk
-        // clobbering a live value when r10 is one of the cycle's
-        // source / dest regs.
-        schedule_int_reg_moves(code, &mut int_moves, super::x86_64::Reg::R13);
+        // The parallel-copy cycle-break temporary must be
+        // disjoint from every cycle source / destination
+        // register. Pick a caller-saved scratch from the
+        // candidate pool that no incoming move uses; if every
+        // candidate is occupied the function falls through to
+        // r13 and the resulting ABI violation is caught by
+        // `pick_caller_saved_scratch_fallthrough_is_rare` so
+        // future codegen changes notice the constraint.
+        let mut used: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(int_moves.len() * 2);
+        for (s, t) in &int_moves {
+            used.push(Reg(*s));
+            used.push(Reg(*t));
+        }
+        let Some(cycle_scratch) = pick_caller_saved_scratch(Reg(0xff), &used) else {
+            bail_msg(
+                "phi predecessor-exit move: cycle-break exhausted the caller-saved candidate pool",
+            );
+            return false;
+        };
+        schedule_int_reg_moves(code, &mut int_moves, cycle_scratch);
         for (src_place, dst_place) in other_moves {
             match dst_place {
                 Place::IntReg(t) => {
@@ -488,11 +531,14 @@ fn emit_phi_predecessor_moves(
                     }
                 }
                 Place::Spill(slot) => {
-                    let src_r =
-                        match materialize_int(code, src_place, super::x86_64::Reg::R13, frame) {
-                            Some(r) => r,
-                            None => return false,
-                        };
+                    let Some(scratch) = pick_caller_saved_scratch(Reg(0xff), &[]) else {
+                        bail_msg("phi predecessor-exit Spill: no caller-saved scratch available");
+                        return false;
+                    };
+                    let src_r = match materialize_int(code, src_place, scratch, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
                     let sp_off = spill_slot_sp_offset(frame, slot);
                     emit_mov_mem_r(code, Reg::RSP, sp_off, src_r);
                 }
@@ -1783,16 +1829,15 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Spill-tolerant materialisation: addr goes into r13 (the
-    // primary scratch outside both `caller_gprs` and `callee_gprs`
-    // in `RegBanks::for_target`). value goes into r10 unless the
-    // addr already lives there; in that case route value through
-    // rcx. r10 and rcx ARE in the allocator pool on SysV/Win64,
-    // so callers that hold a live SSA value in r10/rcx across the
-    // Store rely on the per-block liveness extension and on the
-    // post-Store consumers not having read those regs as inputs
-    // for the same instruction.
-    let base = match materialize_int(code, addr_place, super::x86_64::Reg::R13, frame) {
+    // Pick a caller-saved scratch for the addr-Place spill load
+    // (the materialise helper only writes to it when addr_place
+    // is a Spill; an IntReg place returns the underlying reg
+    // directly). The value-Place picks a separate scratch below.
+    let Some(addr_scratch) = pick_caller_saved_scratch(Reg(0), &[]) else {
+        bail_msg("Store: no caller-saved scratch for addr spill load");
+        return false;
+    };
+    let base = match materialize_int(code, addr_place, addr_scratch, frame) {
         Some(r) => r,
         None => {
             bail_msg("Store: addr Place not int reg / spill");
@@ -2580,21 +2625,28 @@ fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
-    // Materialise the immediate into r13 as a scratch and stage
-    // `rd = lhs` (when rd != rn) before the two-operand op.
-    super::x86_64::emit_mov_r_imm64(code, super::x86_64::Reg::R13, rhs_imm);
+    // Materialise the immediate into a caller-saved scratch
+    // disjoint from `rd` and `rn`, then stage `rd = lhs` (when
+    // rd != rn) before the two-operand op. The scratch is
+    // chosen per-instruction so it never collides with the
+    // operand registers.
+    let Some(scratch) = pick_caller_saved_scratch(rd, &[rn]) else {
+        bail_msg("BinopI imm64: no caller-saved scratch available");
+        return false;
+    };
+    super::x86_64::emit_mov_r_imm64(code, scratch, rhs_imm);
     if rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
     match op {
-        BinOp::Add => emit_add_rr(code, rd, super::x86_64::Reg::R13),
-        BinOp::Sub => emit_sub_rr(code, rd, super::x86_64::Reg::R13),
-        BinOp::Mul => emit_imul_rr(code, rd, super::x86_64::Reg::R13),
-        BinOp::And => emit_and_rr(code, rd, super::x86_64::Reg::R13),
-        BinOp::Or => emit_or_rr(code, rd, super::x86_64::Reg::R13),
-        BinOp::Xor => emit_xor_rr(code, rd, super::x86_64::Reg::R13),
+        BinOp::Add => emit_add_rr(code, rd, scratch),
+        BinOp::Sub => emit_sub_rr(code, rd, scratch),
+        BinOp::Mul => emit_imul_rr(code, rd, scratch),
+        BinOp::And => emit_and_rr(code, rd, scratch),
+        BinOp::Or => emit_or_rr(code, rd, scratch),
+        BinOp::Xor => emit_xor_rr(code, rd, scratch),
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
-            emit_cmp_rr(code, rn, super::x86_64::Reg::R13);
+            emit_cmp_rr(code, rn, scratch);
             if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                 return true;
             }
@@ -2611,7 +2663,7 @@ fn emit_binop_imm(
             emit_movzx_r_r8(code, rd, Reg::RCX);
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
-            emit_cmp_rr(code, rn, super::x86_64::Reg::R13);
+            emit_cmp_rr(code, rn, scratch);
             if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
                 return true;
             }
@@ -2984,14 +3036,17 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // r13 = &last + 16 ; mov [ap], r13. r13 is outside
-            // both `caller_gprs` and `callee_gprs` in
-            // `RegBanks::for_target`, so the lea cannot clobber an
-            // allocator-held value live in r10 / r11 / rax, and
-            // the aliasing case where `last` or `ap` lands on r10
-            // doesn't break the advance / store sequence.
-            emit_lea_r_mem(code, super::x86_64::Reg::R13, last, 16);
-            emit_mov_mem_r(code, ap, 0, super::x86_64::Reg::R13);
+            // scratch = &last + 16 ; mov [ap], scratch. The
+            // scratch is a caller-saved register chosen so it
+            // does not collide with `ap` or `last`; both are
+            // intra-instruction so the call-site does not need to
+            // preserve the register across the op.
+            let Some(scratch) = pick_caller_saved_scratch(ap, &[last]) else {
+                bail_msg("VaStart: no caller-saved scratch available");
+                return false;
+            };
+            emit_lea_r_mem(code, scratch, last, 16);
+            emit_mov_mem_r(code, ap, 0, scratch);
             true
         }
         I::VaArg => {
@@ -3019,15 +3074,23 @@ fn emit_intrinsic(
             // the allocator pool so it cannot collide with `ap`,
             // `rd`, or any other live SSA value.
             if rd.0 == ap.0 {
-                emit_mov_rr(code, super::x86_64::Reg::R13, ap);
-                emit_mov_r_mem(code, rd, super::x86_64::Reg::R13, 0);
+                let Some(scratch) = pick_caller_saved_scratch(rd, &[]) else {
+                    bail_msg("VaArg: no caller-saved scratch available");
+                    return false;
+                };
+                emit_mov_rr(code, scratch, ap);
+                emit_mov_r_mem(code, rd, scratch, 0);
                 emit_lea_r_mem(code, rd, rd, 16);
-                emit_mov_mem_r(code, super::x86_64::Reg::R13, 0, rd);
+                emit_mov_mem_r(code, scratch, 0, rd);
                 emit_lea_r_mem(code, rd, rd, -16);
             } else {
+                let Some(scratch) = pick_caller_saved_scratch(rd, &[ap]) else {
+                    bail_msg("VaArg: no caller-saved scratch available");
+                    return false;
+                };
                 emit_mov_r_mem(code, rd, ap, 0);
-                emit_lea_r_mem(code, super::x86_64::Reg::R13, rd, 16);
-                emit_mov_mem_r(code, ap, 0, super::x86_64::Reg::R13);
+                emit_lea_r_mem(code, scratch, rd, 16);
+                emit_mov_mem_r(code, ap, 0, scratch);
             }
             true
         }
@@ -3055,11 +3118,15 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // r13 is outside both `caller_gprs` and `callee_gprs`
-            // in `RegBanks::for_target`, so the staging reg cannot
-            // alias `dst_p` or `src_p` (or any live SSA value).
-            emit_mov_r_mem(code, super::x86_64::Reg::R13, src_p, 0);
-            emit_mov_mem_r(code, dst_p, 0, super::x86_64::Reg::R13);
+            // Pick a caller-saved scratch disjoint from dst_p
+            // and src_p so the staging load does not clobber an
+            // allocator-held value live across the intrinsic.
+            let Some(scratch) = pick_caller_saved_scratch(dst_p, &[src_p]) else {
+                bail_msg("VaCopy: no caller-saved scratch available");
+                return false;
+            };
+            emit_mov_r_mem(code, scratch, src_p, 0);
+            emit_mov_mem_r(code, dst_p, 0, scratch);
             true
         }
         I::Alloca => {
@@ -3085,42 +3152,47 @@ fn emit_intrinsic(
                 .get(args[0] as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            // Stage the size into r13 and round up to a 16-byte
-            // multiple. r13 is outside both `caller_gprs` and
-            // `callee_gprs` in `RegBanks::for_target`, so the
-            // allocator never picks it for an SSA value and the
-            // staging mov below cannot collide with rd, the size's
-            // source reg, or rcx.
-            let n = match materialize_int(code, size_place, super::x86_64::Reg::R13, frame) {
+            // Pick a caller-saved scratch for the size, disjoint
+            // from rd. Stage size into it, then round up to a
+            // 16-byte multiple.
+            let Some(size_reg) = pick_caller_saved_scratch(rd, &[]) else {
+                bail_msg("Alloca: no caller-saved scratch for size");
+                return false;
+            };
+            let n = match materialize_int(code, size_place, size_reg, frame) {
                 Some(r) => r,
                 None => {
                     bail_msg("Alloca: size not int reg / spill / fp");
                     return false;
                 }
             };
-            if n.0 != super::x86_64::Reg::R13.0 {
-                emit_mov_rr(code, super::x86_64::Reg::R13, n);
+            if n.0 != size_reg.0 {
+                emit_mov_rr(code, size_reg, n);
             }
-            super::x86_64::emit_add_r_imm32(code, super::x86_64::Reg::R13, 15);
-            super::x86_64::emit_and_r_imm32(code, super::x86_64::Reg::R13, -16);
-            // rcx holds the bookkeeping slot's address. rcx IS in
-            // the allocator's `caller_gprs` pool so this clobbers
-            // any allocator value live in rcx across this op; the
-            // intrinsic is treated as a call site by the allocator
-            // (rcx is caller-saved and spilled across calls).
+            super::x86_64::emit_add_r_imm32(code, size_reg, 15);
+            super::x86_64::emit_and_r_imm32(code, size_reg, -16);
+            // Pick a second caller-saved scratch for the
+            // bookkeeping-slot address, disjoint from rd and the
+            // size register. The op then reads the old top, sub
+            // size, writes back, and returns the new top.
+            let Some(addr_reg) = pick_caller_saved_scratch(rd, &[size_reg]) else {
+                bail_msg("Alloca: no caller-saved scratch for bookkeeping addr");
+                return false;
+            };
             let disp = -(current_alloca_top as i32);
-            emit_lea_r_mem(code, Reg::RCX, Reg::RBP, disp);
-            // new_top = *bookkeeping_slot - size. Stage in rd when
-            // the dst is a register; otherwise route through r10
-            // and then spill_dst_to_slot writes the result back.
+            emit_lea_r_mem(code, addr_reg, Reg::RBP, disp);
             let rd_phys = if matches!(dst, Place::Spill(_)) {
-                SCRATCH_R10
+                let Some(r) = pick_caller_saved_scratch(rd, &[size_reg, addr_reg]) else {
+                    bail_msg("Alloca: no caller-saved scratch for spill dst");
+                    return false;
+                };
+                r
             } else {
                 rd
             };
-            emit_mov_r_mem(code, rd_phys, Reg::RCX, 0);
-            super::x86_64::emit_sub_rr(code, rd_phys, super::x86_64::Reg::R13);
-            emit_mov_mem_r(code, Reg::RCX, 0, rd_phys);
+            emit_mov_r_mem(code, rd_phys, addr_reg, 0);
+            super::x86_64::emit_sub_rr(code, rd_phys, size_reg);
+            emit_mov_mem_r(code, addr_reg, 0, rd_phys);
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true
         }
@@ -3358,4 +3430,57 @@ fn emit_return(
         emit_push_r(code, Reg::R11);
     }
     emit_ret(code);
+}
+
+#[cfg(test)]
+mod scratch_picker_tests {
+    use super::*;
+
+    #[test]
+    fn pick_returns_some_when_no_operands() {
+        // With rd = rax and no operands, the helper should return
+        // the first preference (r11) per the CALLER_SAVED_INT_SCRATCHES
+        // ordering.
+        assert_eq!(pick_caller_saved_scratch(Reg(0), &[]), Some(Reg(11)));
+    }
+
+    #[test]
+    fn pick_skips_rd() {
+        // rd = r11 forces the helper past the first preference;
+        // the next entry (r10) wins.
+        assert_eq!(pick_caller_saved_scratch(Reg(11), &[]), Some(Reg(10)));
+    }
+
+    #[test]
+    fn pick_skips_operand_regs() {
+        // rd = r11, operands hold r10 and rax (0) -> rcx (1) wins.
+        assert_eq!(
+            pick_caller_saved_scratch(Reg(11), &[Reg(10), Reg(0)]),
+            Some(Reg(1))
+        );
+    }
+
+    #[test]
+    fn pick_returns_none_when_pool_exhausted() {
+        // The candidate pool is CALLER_SAVED_INT_SCRATCHES = [11, 10,
+        // 0, 1, 2, 8, 9]. Excluding all seven via rd + 6 operands
+        // forces the fallthrough. The helper must return None so
+        // callers bail rather than fall through to a callee-saved
+        // register (which would violate the System V / Win64 callee-
+        // save contract).
+        let rd = Reg(11);
+        let operands = [Reg(10), Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
+        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
+
+    #[test]
+    fn pick_returns_none_when_every_candidate_in_operands() {
+        // rd is outside the pool entirely (rdi = 7, callee-saved on
+        // Win64 / caller-saved on SysV but not in our intersection
+        // pool); every entry of CALLER_SAVED_INT_SCRATCHES is in
+        // the operand list. Helper must return None.
+        let rd = Reg(7);
+        let operands = [Reg(11), Reg(10), Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
+        assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
 }

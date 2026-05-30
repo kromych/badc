@@ -243,11 +243,10 @@ pub(crate) fn phi_placement(
     result
 }
 
-// TODO: wire `insert_phis` into `run` so cross-block reassigned
-// scalars promote through the merge instead of falling back to the
-// frame slot. Pending the rename extension that fills each phi's
-// incoming entries and the per-arch terminator-exit move emit.
-#[allow(dead_code)]
+// TODO: per-arch lowering of `Inst::Phi`: IR position is a no-op;
+// each block's terminator emits the predecessor-exit moves for the
+// phis at every CFG successor's head, using the parallel-copy /
+// cycle-breaking helper that handles call-arg materialization.
 /// Inject one `Inst::Phi` per phi-needing slot at the head of each
 /// phi block, returning a `(block, slot) -> phi value id` map the
 /// renamer fills with reaching values from each predecessor.
@@ -587,6 +586,14 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df);
+    // Multi-block merges promote through an SSA phi at each join only
+    // when the gate is set; the per-arch emit reads `Inst::Phi` and
+    // emits the predecessor-exit moves the parallel-copy lowering
+    // expects.
+    #[cfg(feature = "std")]
+    let phi_promote = std::env::var("BADC_PHI_PROMOTE").is_ok();
+    #[cfg(not(feature = "std"))]
+    let phi_promote = false;
     // Slots read at one narrow width promote by extending the reaching
     // value at each load; full-width I64 slots redirect the load to
     // the value directly.
@@ -595,7 +602,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let slots: BTreeSet<i64> = promotable
         .iter()
         .copied()
-        .filter(|s| !phi_blocks.contains_key(s))
+        .filter(|s| phi_promote || !phi_blocks.contains_key(s))
         .filter(|s| slot_stores_only_int(func, *s))
         .filter(|s| {
             if slot_is_full_width(func, *s) {
@@ -634,8 +641,32 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         );
     }
 
-    // Dominator-tree children, from idom.
+    // Phi insertion at iterated-dominance-frontier blocks, for the
+    // promoted slots that need it. `phi_id_at[(b, slot)]` is the new
+    // `Inst::Phi` value-id at block `b`'s head; `phis_at[b]` is the
+    // same lookup keyed by block, populated for O(1) iteration at
+    // block entry and at the predecessor-exit `incoming` push below.
     let n = func.blocks.len();
+    let phi_id_at: alloc::collections::BTreeMap<(BlockId, i64), ValueId> = if phi_promote {
+        let promoted_phi_blocks: alloc::collections::BTreeMap<i64, BTreeSet<BlockId>> = phi_blocks
+            .iter()
+            .filter(|(s, _)| slots.contains(s))
+            .map(|(s, b)| (*s, b.clone()))
+            .collect();
+        let phi_slot_kind: alloc::collections::BTreeMap<i64, LoadKind> = promoted_phi_blocks
+            .keys()
+            .map(|s| (*s, LoadKind::I64))
+            .collect();
+        insert_phis(func, &promoted_phi_blocks, &phi_slot_kind)
+    } else {
+        alloc::collections::BTreeMap::new()
+    };
+    let mut phis_at: Vec<Vec<(i64, ValueId)>> = alloc::vec![Vec::new(); n];
+    for ((b, slot), id) in &phi_id_at {
+        phis_at[*b as usize].push((*slot, *id));
+    }
+
+    // Dominator-tree children, from idom.
     let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
     for (b, &id) in idom.iter().enumerate() {
         if id != NO_BLOCK && id as usize != b {
@@ -678,6 +709,16 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             Frame::Visit(b) => {
                 let range = func.blocks[b as usize].inst_range.clone();
                 let mut saved: Vec<(i64, Option<ValueId>)> = Vec::new();
+                // Phis at this block's head become the reaching
+                // definition for their slot: every later LoadLocal in
+                // the block redirects to the phi value, and every
+                // CFG successor's phi reads the phi value at this
+                // block's exit unless a subsequent StoreLocal
+                // overwrites it.
+                for (slot, phi_id) in &phis_at[b as usize] {
+                    saved.push((*slot, current.get(slot).copied()));
+                    current.insert(*slot, *phi_id);
+                }
                 for id in range.start..range.end {
                     match &func.insts[id as usize] {
                         Inst::StoreLocal { off, value, .. } if slots.contains(off) => {
@@ -699,6 +740,26 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                             }
                         }
                         _ => {}
+                    }
+                }
+                // CFG successors: push the reaching value at this
+                // block's exit onto each successor phi's `incoming`
+                // so the per-arch emit can emit the predecessor-exit
+                // move that materializes the merged value in the
+                // phi's place. Order matches the dom-tree walk; the
+                // BlockId tag makes lookup positional-independent.
+                let term = func.blocks[b as usize].terminator.clone();
+                for succ in successors(&term) {
+                    for (slot, phi_id) in &phis_at[succ as usize].clone() {
+                        if let Some(&val) = current.get(slot) {
+                            if let Inst::Phi { incoming, .. } =
+                                &mut func.insts[*phi_id as usize]
+                            {
+                                incoming.push((b as BlockId, val));
+                            }
+                        } else {
+                            failed.insert(*slot);
+                        }
                     }
                 }
                 stack.push(Frame::Restore(saved));
@@ -1261,6 +1322,113 @@ mod tests {
             ref other => panic!("expected Return at block 3, got {other:?}"),
         }
         assert_eq!(f.blocks[3].exit_acc, 6);
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn run_under_phi_promote_fills_phi_incoming_at_join() {
+        // Diamond: 0 -> {1, 2} -> 3.
+        // Slot -1: stored in both arms with distinct values.
+        // The join load reads the merged value through the phi.
+        // Under BADC_PHI_PROMOTE the rename fills the phi's
+        // `incoming` with one (pred, value) entry per CFG edge.
+        unsafe {
+            std::env::set_var("BADC_PHI_PROMOTE", "1");
+        }
+        let insts = alloc::vec![
+            // block 0: id 0
+            Inst::Imm(0),
+            // block 1: ids 1..3
+            Inst::Imm(11),
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+            },
+            // block 2: ids 3..5
+            Inst::Imm(22),
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64,
+            },
+            // block 3: id 5
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            },
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 3,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..6,
+                terminator: Terminator::Return(5),
+                exit_acc: 5,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        let promoted = run(&mut f);
+        unsafe {
+            std::env::remove_var("BADC_PHI_PROMOTE");
+        }
+        assert!(
+            promoted.contains(&-1),
+            "phi-promoted slot must appear in the returned list"
+        );
+        // The phi sits at the head of block 3. Find it and verify
+        // its incoming records both predecessors with the right
+        // reaching values.
+        let phi_id = f.blocks[3].inst_range.start as usize;
+        match &f.insts[phi_id] {
+            Inst::Phi { incoming, kind } => {
+                assert_eq!(*kind, LoadKind::I64);
+                assert_eq!(
+                    incoming.len(),
+                    2,
+                    "diamond join phi must have two incoming entries"
+                );
+                let from_1 = incoming.iter().find(|(b, _)| *b == 1);
+                let from_2 = incoming.iter().find(|(b, _)| *b == 2);
+                let (_, v1) = from_1.expect("phi.incoming missing block 1 edge");
+                let (_, v2) = from_2.expect("phi.incoming missing block 2 edge");
+                // Block 1 stored Imm(11) (originally at id 1).
+                // Block 2 stored Imm(22) (originally at id 3).
+                // After insert_phis shifts by one phi at block 3,
+                // those Imm definitions sit at the same ids since
+                // no phi was prepended at blocks 1 / 2.
+                match &f.insts[*v1 as usize] {
+                    Inst::Imm(11) => {}
+                    other => panic!("incoming from block 1 should be Imm(11), got {other:?}"),
+                }
+                match &f.insts[*v2 as usize] {
+                    Inst::Imm(22) => {}
+                    other => panic!("incoming from block 2 should be Imm(22), got {other:?}"),
+                }
+            }
+            other => panic!("expected Inst::Phi at block 3 head, got {other:?}"),
+        }
     }
 
     #[test]

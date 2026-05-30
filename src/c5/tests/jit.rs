@@ -405,6 +405,13 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // v[2]=33`, which the fixture's main does not check directly --
     // pin via the exit status (0).
     ("va_arg_int_seq.c", 0),
+    // VaStart + VaCopy emit shapes where the allocator places
+    // `&last` (VaStart) or `&src` / `&dst` (VaCopy) on r10. The
+    // prior emit used SCRATCH_R10 as the staging register and
+    // produced a load through a stale operand when r10 aliased
+    // an operand; the fix routes through r13 (outside both
+    // `caller_gprs` and `callee_gprs`).
+    ("ssa_va_start_va_copy_aliasing.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

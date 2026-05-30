@@ -232,6 +232,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
     populate_return_hints(func, target, &mut hints);
+    populate_param_ref_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
         return Allocation {
@@ -753,6 +754,51 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
                 ResultKind::Fp => try_set(hints, v, ret_fp),
                 ResultKind::None => {}
             }
+        }
+    }
+}
+
+fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    // Hint each `Inst::ParamRef(i)` to its incoming integer-argument
+    // register. The per-arch emit reads the argument register
+    // directly (`movsxd dst, int_arg_regs[i]`); when the allocator
+    // parks a later ParamRef's destination on an earlier ParamRef's
+    // arg-register, the in-place sign-extend clobbers the source the
+    // later ParamRef still needs to read. Hinting each ParamRef's
+    // destination to its matching arg register collapses the read +
+    // write into a single self-update and removes the hazard.
+    //
+    // Variadic callees skip this pass: the va_start / va_arg
+    // intrinsics read `&last` (a `LocalAddr` of the named final
+    // parameter) and walk forward by 16-byte c5 cdecl strides; the
+    // parameter slot the hint would move the ParamRef toward isn't
+    // the slot va_start expects to read from.
+    if func.is_variadic {
+        return;
+    }
+    // Below 6 parameters the allocator has enough non-arg registers
+    // that the cross-clobber hazard rarely manifests; firing the
+    // hint there can perturb a downstream call's ParamRef placement
+    // through the libc bridge (c5_vsnprintf et al). 6+ parameter
+    // functions are where the hazard reliably triggers (every SysV
+    // arg register is a ParamRef destination candidate).
+    if func.n_params < 6 {
+        return;
+    }
+    let int_args: &[u8] = match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        }
+        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
+        Target::WindowsX64 => &[1, 2, 8, 9],
+    };
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if let Inst::ParamRef { idx: i, .. } = inst
+            && let Some(&r) = int_args.get(*i as usize)
+            && (idx as usize) < hints.len()
+            && hints[idx].is_none()
+        {
+            hints[idx] = Some(r);
         }
     }
 }

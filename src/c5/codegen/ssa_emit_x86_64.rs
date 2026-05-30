@@ -2972,12 +2972,14 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // r10 = &last + 16 ; mov [ap], r10. SCRATCH_R10 sits
-            // outside the SSA allocator's gpr pool, so the
-            // computed address survives even when the allocator
-            // picked rax / r11 for ap or last.
-            emit_lea_r_mem(code, SCRATCH_R10, last, 16);
-            emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
+            // r13 = &last + 16 ; mov [ap], r13. r13 is outside
+            // both `caller_gprs` and `callee_gprs` in
+            // `RegBanks::for_target`, so the lea cannot clobber an
+            // allocator-held value live in r10 / r11 / rax, and
+            // the aliasing case where `last` or `ap` lands on r10
+            // doesn't break the advance / store sequence.
+            emit_lea_r_mem(code, super::x86_64::Reg::R13, last, 16);
+            emit_mov_mem_r(code, ap, 0, super::x86_64::Reg::R13);
             true
         }
         I::VaArg => {
@@ -2997,26 +2999,13 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // rd = *ap (old cursor) ; r10 = rd + 16 ; *ap = r10.
-            // The allocator may have picked the same register for
-            // `rd` and `ap` (e.g. rd = rax, ap = rax when the
-            // LocalAddr feeding `&ap` and the VaArg dst landed in
-            // the same place). The `mov rd, [ap]` then clobbers
-            // the `ap` value and the subsequent `mov [ap], r10`
-            // writes through the just-loaded cursor instead of
-            // through ap itself. Hold `&ap` in SCRATCH_R10 across
-            // the load when the aliasing occurs (the store still
-            // uses the held copy, the advance uses a scratch we
-            // can compute inline).
+            // rd = *ap (old cursor) ; r13 = rd + 16 ; *ap = r13.
             // `ap` and `rd` can land on the same physical register
             // when the LocalAddr feeding `&ap` and the VaArg dst
             // share a slot. The advance/store sequence then needs
             // `&ap` preserved across `mov rd, [ap]`. r13 is outside
             // the allocator pool so it cannot collide with `ap`,
-            // `rd`, or any other live SSA value; the previous
-            // version used SCRATCH_R10 which IS in the allocator's
-            // caller_gprs pool on SysV/Win64 and could clobber a
-            // live r10-resident value across this op.
+            // `rd`, or any other live SSA value.
             if rd.0 == ap.0 {
                 emit_mov_rr(code, super::x86_64::Reg::R13, ap);
                 emit_mov_r_mem(code, rd, super::x86_64::Reg::R13, 0);
@@ -3054,10 +3043,11 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // SCRATCH_R10 is outside the SSA allocator's gpr pool
-            // so neither dst_p nor src_p aliases it.
-            emit_mov_r_mem(code, SCRATCH_R10, src_p, 0);
-            emit_mov_mem_r(code, dst_p, 0, SCRATCH_R10);
+            // r13 is outside both `caller_gprs` and `callee_gprs`
+            // in `RegBanks::for_target`, so the staging reg cannot
+            // alias `dst_p` or `src_p` (or any live SSA value).
+            emit_mov_r_mem(code, super::x86_64::Reg::R13, src_p, 0);
+            emit_mov_mem_r(code, dst_p, 0, super::x86_64::Reg::R13);
             true
         }
         I::Alloca => {

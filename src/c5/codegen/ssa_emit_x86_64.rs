@@ -2426,21 +2426,27 @@ fn emit_binop(
             // result back to rd. The earlier `mov rd, rn` (line
             // above) left rd holding the lhs.
             if rd.0 == Reg::RCX.0 {
-                // Picker can return Some that aliases a live SSA value
-                // (the live-aware variant returns None more often,
-                // bailing the function -- including sqlite3's Shru in
-                // shell.c -- and the old bytecode fallback is gone).
-                // The shift sequence below stages lhs through this
-                // scratch then writes the result back to rd, so the
-                // aliased live value is destroyed for the duration of
-                // the shift. TODO: save-restore the scratch when it
-                // holds a live value.
                 let Some(scratch) = pick_caller_saved_scratch(rd, &[rm]) else {
                     bail_msg("Binop shift: no caller-saved scratch available");
                     return false;
                 };
-                let _ = v;
-                let _ = alloc;
+                // When the picker's choice carries an SSA value live
+                // across this PC, push / pop the scratch around the
+                // shift sequence so the live value survives. The
+                // sequence below only touches registers (mov / mov /
+                // shl / mov), so the 8-byte misalignment between push
+                // and pop is irrelevant.
+                let scratch_holds_live =
+                    alloc.places.iter().enumerate().any(|(idx, p)| {
+                        let i = idx as u32;
+                        let last = alloc.last_use.get(idx).copied().unwrap_or(0);
+                        matches!(p, Place::IntReg(r) if *r == scratch.0)
+                            && i < v
+                            && v < last
+                    });
+                if scratch_holds_live {
+                    emit_push_r(code, scratch);
+                }
                 emit_mov_rr(code, scratch, rd);
                 if rm.0 != Reg::RCX.0 {
                     emit_mov_rr(code, Reg::RCX, rm);
@@ -2452,6 +2458,9 @@ fn emit_binop(
                     _ => unreachable!(),
                 }
                 emit_mov_rr(code, rd, scratch);
+                if scratch_holds_live {
+                    emit_pop_r(code, scratch);
+                }
             } else {
                 if rm.0 != Reg::RCX.0 {
                     emit_mov_rr(code, Reg::RCX, rm);

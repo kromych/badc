@@ -896,6 +896,7 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = load_from_memory(mem, addr, LoadKind::I64)?;
             return Ok(());
         }
+        Inst::Phi { .. } => "Phi",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }

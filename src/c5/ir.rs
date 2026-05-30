@@ -190,6 +190,27 @@ pub(crate) enum Inst {
         idx: u32,
         kind: LoadKind,
     },
+    /// SSA phi: at a join block where a promoted slot has more
+    /// than one reaching definition, mem2reg synthesises one of
+    /// these per slot to merge the predecessors' incoming
+    /// values. `incoming` records one `(predecessor_block,
+    /// reaching_value)` pair per predecessor in the same order
+    /// as `Block::predecessors()` so the per-arch emit's
+    /// predecessor-exit `mov phi_dst, source` lookup is
+    /// positional. `kind` records the merged value's width so
+    /// the allocator can pick the integer-vs-FP bank. The
+    /// IR-position emit is a no-op: by the time control reaches
+    /// the phi position the value is already in the phi's
+    /// allocated `Place`, placed there by a `mov` emitted at
+    /// each predecessor block's terminator. C99 6.9.1p11
+    /// (parameters are modifiable lvalues) and the underlying
+    /// SSA construction (Cytron et al.) justify the
+    /// representation; the same shape covers any multiply-
+    /// assigned scalar local.
+    Phi {
+        incoming: Vec<(BlockId, ValueId)>,
+        kind: LoadKind,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

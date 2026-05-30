@@ -616,6 +616,11 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*dst);
             f(*src);
         }
+        Inst::Phi { incoming, .. } => {
+            for (_, v) in incoming {
+                f(*v);
+            }
+        }
     }
 }
 
@@ -641,6 +646,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) | ParamRef { .. } => {
             ResultKind::Int
         }
+        Phi { kind, .. } => match kind {
+            LoadKind::F32 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
         Load { kind, .. } | LoadLocal { kind, .. } => match kind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -822,6 +831,11 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             | Inst::AllocaInit(_)
             | Inst::ParamRef { .. }
             | Inst::TailExt(_) => {}
+            Inst::Phi { incoming, .. } => {
+                for (_, v) in incoming {
+                    bump(*v, pc, &mut last_use);
+                }
+            }
             Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
             Inst::Store { addr, value, .. } => {
                 bump(*addr, pc, &mut last_use);

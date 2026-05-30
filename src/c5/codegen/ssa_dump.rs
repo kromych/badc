@@ -150,6 +150,16 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
+        Phi { incoming, kind } => {
+            let mut parts = String::new();
+            for (i, (b, v)) in incoming.iter().enumerate() {
+                if i > 0 {
+                    parts.push_str(", ");
+                }
+                parts.push_str(&format!("b{b}:v{v}"));
+            }
+            format!("Phi {{ incoming=[{parts}], kind={} }}", fmt_load_kind(*kind))
+        }
     }
 }
 

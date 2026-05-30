@@ -3008,16 +3008,25 @@ fn emit_intrinsic(
             // the load when the aliasing occurs (the store still
             // uses the held copy, the advance uses a scratch we
             // can compute inline).
+            // `ap` and `rd` can land on the same physical register
+            // when the LocalAddr feeding `&ap` and the VaArg dst
+            // share a slot. The advance/store sequence then needs
+            // `&ap` preserved across `mov rd, [ap]`. r13 is outside
+            // the allocator pool so it cannot collide with `ap`,
+            // `rd`, or any other live SSA value; the previous
+            // version used SCRATCH_R10 which IS in the allocator's
+            // caller_gprs pool on SysV/Win64 and could clobber a
+            // live r10-resident value across this op.
             if rd.0 == ap.0 {
-                emit_mov_rr(code, SCRATCH_R10, ap);
-                emit_mov_r_mem(code, rd, SCRATCH_R10, 0);
+                emit_mov_rr(code, super::x86_64::Reg::R13, ap);
+                emit_mov_r_mem(code, rd, super::x86_64::Reg::R13, 0);
                 emit_lea_r_mem(code, rd, rd, 16);
-                emit_mov_mem_r(code, SCRATCH_R10, 0, rd);
+                emit_mov_mem_r(code, super::x86_64::Reg::R13, 0, rd);
                 emit_lea_r_mem(code, rd, rd, -16);
             } else {
                 emit_mov_r_mem(code, rd, ap, 0);
-                emit_lea_r_mem(code, SCRATCH_R10, rd, 16);
-                emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
+                emit_lea_r_mem(code, super::x86_64::Reg::R13, rd, 16);
+                emit_mov_mem_r(code, ap, 0, super::x86_64::Reg::R13);
             }
             true
         }
@@ -3074,40 +3083,42 @@ fn emit_intrinsic(
                 .get(args[0] as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            // Stage the size into SCRATCH_R10 (outside the
-            // allocator pool) and round up to a 16-byte multiple.
-            let n = match materialize_int(code, size_place, SCRATCH_R10, frame) {
+            // Stage the size into r13 and round up to a 16-byte
+            // multiple. r13 is outside both `caller_gprs` and
+            // `callee_gprs` in `RegBanks::for_target`, so the
+            // allocator never picks it for an SSA value and the
+            // staging mov below cannot collide with rd, the size's
+            // source reg, or rcx.
+            let n = match materialize_int(code, size_place, super::x86_64::Reg::R13, frame) {
                 Some(r) => r,
                 None => {
                     bail_msg("Alloca: size not int reg / spill / fp");
                     return false;
                 }
             };
-            if n.0 != SCRATCH_R10.0 {
-                emit_mov_rr(code, SCRATCH_R10, n);
+            if n.0 != super::x86_64::Reg::R13.0 {
+                emit_mov_rr(code, super::x86_64::Reg::R13, n);
             }
-            super::x86_64::emit_add_r_imm32(code, SCRATCH_R10, 15);
-            super::x86_64::emit_and_r_imm32(code, SCRATCH_R10, -16);
-            // rcx = address of bookkeeping slot. rcx sits outside
-            // the SSA allocator pool on both ABIs (it's
-            // int_arg_regs[3]/int_arg_regs[0] but never in pool),
-            // so reusing it as scratch can't clobber an allocator
-            // value live across this op.
+            super::x86_64::emit_add_r_imm32(code, super::x86_64::Reg::R13, 15);
+            super::x86_64::emit_and_r_imm32(code, super::x86_64::Reg::R13, -16);
+            // rcx holds the bookkeeping slot's address. rcx IS in
+            // the allocator's `caller_gprs` pool so this clobbers
+            // any allocator value live in rcx across this op; the
+            // intrinsic is treated as a call site by the allocator
+            // (rcx is caller-saved and spilled across calls).
             let disp = -(current_alloca_top as i32);
             emit_lea_r_mem(code, Reg::RCX, Reg::RBP, disp);
-            // rd_or_scratch = *bookkeeping_slot - n -- recompute the
-            // arena top, write it back, and return it.
+            // new_top = *bookkeeping_slot - size. Stage in rd when
+            // the dst is a register; otherwise route through r10
+            // and then spill_dst_to_slot writes the result back.
             let rd_phys = if matches!(dst, Place::Spill(_)) {
                 SCRATCH_R10
             } else {
                 rd
             };
             emit_mov_r_mem(code, rd_phys, Reg::RCX, 0);
-            super::x86_64::emit_sub_rr(code, rd_phys, SCRATCH_R10);
+            super::x86_64::emit_sub_rr(code, rd_phys, super::x86_64::Reg::R13);
             emit_mov_mem_r(code, Reg::RCX, 0, rd_phys);
-            if rd_phys.0 != rd.0 && !matches!(dst, Place::Spill(_)) {
-                emit_mov_rr(code, rd, rd_phys);
-            }
             spill_dst_to_slot(code, dst, rd_phys, frame);
             true
         }

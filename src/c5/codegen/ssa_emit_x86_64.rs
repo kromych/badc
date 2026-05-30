@@ -1925,8 +1925,7 @@ fn emit_store(
     if let Place::IntReg(r) = value_place {
         addr_operands.push(Reg(r));
     }
-    let Some(addr_scratch) =
-        pick_caller_saved_scratch_live_aware(Reg(0), &addr_operands, v, alloc)
+    let Some(addr_scratch) = pick_caller_saved_scratch_live_aware(Reg(0), &addr_operands, v, alloc)
     else {
         bail_msg("Store: no caller-saved scratch for addr spill load");
         return false;

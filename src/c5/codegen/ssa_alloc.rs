@@ -791,7 +791,7 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
         Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
         Target::WindowsX64 => (&[1, 2, 8, 9], 4),
     };
-    if (func.n_params as usize) < threshold {
+    if func.n_params < threshold {
         return;
     }
     for (idx, inst) in func.insts.iter().enumerate() {

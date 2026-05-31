@@ -295,27 +295,13 @@ jobs:
             exit /b 0
           )
           echo === running %SHELL_OPT% under cdb ===
-          echo .select 1;> "%WORK%\probe.sql"
-          echo .quit>> "%WORK%\probe.sql"
-          rem cdb command sequence:
-          rem   sxe av  -- break on access violation first-chance
-          rem   g       -- run until the event hits
-          rem   .ecxr   -- pin context register to exception context
-          rem   .lastevent / r / k / lm / u  -- dump
-          rem   qd      -- quit and detach
-          (
-            echo sxe av
-            echo sxe c0000005
-            echo g
-            echo .ecxr
-            echo .lastevent
-            echo r
-            echo kn 50
-            echo lm
-            echo u . L40
-            echo qd
-          ) > "%WORK%\cdb_cmd.txt"
-          "%CDB%" -lines -cf "%WORK%\cdb_cmd.txt" -- "%SHELL_OPT%" < "%WORK%\probe.sql" 2>&1
+          rem Drive sqlite3shell via its `-cmd` flag instead of stdin
+          rem so cdb's console does not consume the SQL. `g` resumes
+          rem from the initial breakpoint and the access violation
+          rem stops the debugger; `.ecxr` pins the registers to the
+          rem exception context, `.lastevent` / `r` / `kn 50` / `lm`
+          rem / `u . L40` dump the crash; `qd` detaches and exits.
+          "%CDB%" -c "g; .ecxr; .lastevent; r; kn 50; lm; u . L40; qd" "%SHELL_OPT%" -cmd "SELECT 1;" -cmd ".quit" 2>&1
           echo === cdb exit code: %ERRORLEVEL% ===
       - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of

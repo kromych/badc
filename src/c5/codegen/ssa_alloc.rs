@@ -296,6 +296,56 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             continue;
         }
         let must_be_callee = calls_after_def[idx];
+
+        // For a Binop / BinopI / Extend / Fneg whose lhs operand dies
+        // at this very pc, set the dst's hint to lhs's register so the
+        // 2-operand fusion kicks in (x86_64 `add Rd, Rm` with Rd == lhs;
+        // aarch64 `add Rd, Rn, Rm` with Rd == Rn drops the prior mov).
+        // Apply only when the hint is still empty and the candidate reg
+        // satisfies the must-be-callee constraint; an already-set hint
+        // (call-result / phi / param-ref / call-arg) takes priority.
+        if hints[idx].is_none() {
+            let coalesce_src = match inst {
+                Inst::Binop { lhs, .. } | Inst::BinopI { lhs, .. } => Some(*lhs),
+                Inst::Extend { value, .. } => Some(*value),
+                Inst::Fneg(v) => Some(*v),
+                _ => None,
+            };
+            if let Some(src) = coalesce_src
+                && src != NO_VALUE
+                && (src as usize) < last_use.len()
+                && last_use[src as usize] == pc
+            {
+                let src_place = places[src as usize];
+                let src_reg = match (kind, src_place) {
+                    (ResultKind::Int, Place::IntReg(r)) => Some(r),
+                    (ResultKind::Fp, Place::FpReg(r)) => Some(r),
+                    _ => None,
+                };
+                if let Some(r) = src_reg
+                    && (!must_be_callee || !banks.caller_gprs.contains(&r))
+                {
+                    // Retire src's interval to the free pool early: it
+                    // would expire at pc + 1 anyway, and the dst pick
+                    // below now sees src's reg as free.
+                    let bank_active = match kind {
+                        ResultKind::Int => &mut active_int,
+                        ResultKind::Fp => &mut active_fp,
+                        ResultKind::None => unreachable!(),
+                    };
+                    let bank_free = match kind {
+                        ResultKind::Int => &mut free_int,
+                        ResultKind::Fp => &mut free_fp,
+                        ResultKind::None => unreachable!(),
+                    };
+                    if let Some(pos) = bank_active.iter().position(|(v, _, _)| *v == src) {
+                        bank_active.remove(pos);
+                        bank_free.push(r);
+                        hints[idx] = Some(r);
+                    }
+                }
+            }
+        }
         // Pick the bank.
         let (active, free, banks_caller, used) = match kind {
             ResultKind::Int => (

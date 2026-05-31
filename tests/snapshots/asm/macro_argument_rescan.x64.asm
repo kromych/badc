@@ -15,20 +15,19 @@ Disassembly of section .text:
                	je	0x400253 <.text+0x33>
                	movl	$0x1, %eax
                	retq
-               	movl	$0x4, %r9d
-               	movslq	%r9d, %r9
-               	cmpq	$0x4, %r9
-               	je	0x400273 <.text+0x53>
-               	movl	$0x2, %r9d
-               	movq	%r9, %rax
+               	movl	$0x4, %r11d
+               	movslq	%r11d, %r11
+               	cmpq	$0x4, %r11
+               	je	0x40026f <.text+0x4f>
+               	movl	$0x2, %eax
                	retq
-               	movl	$0x7b, %eax
-               	movslq	%eax, %rax
-               	cmpq	$0x7b, %rax
-               	je	0x40028e <.text+0x6e>
+               	movl	$0x7b, %r11d
+               	movslq	%r11d, %r11
+               	cmpq	$0x7b, %r11
+               	je	0x40028b <.text+0x6b>
                	movl	$0x3, %eax
                	retq
-               	xorq	%r9, %r9
-               	movq	%r9, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

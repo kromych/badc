@@ -65,8 +65,8 @@ Disassembly of section .text:
                	b.ne	0x4003f8 <.text+0x148>
                	mov	x12, #0x10              // =16
                	sxtw	x12, w12
-               	add	x13, x12, #0x8
-               	sxtw	x22, w13
+               	add	x12, x12, #0x8
+               	sxtw	x22, w12
                	mov	x0, x22
                	bl	0x400634 <malloc>
                	mov	x22, #0x0               // =0

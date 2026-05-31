@@ -69,7 +69,8 @@ Disassembly of section .text:
                	mov	x0, x22
                	bl	0x400580 <dlclose>
                	sxtw	x0, w0
-               	sxtw	x0, w23
+               	sxtw	x23, w23
+               	mov	x0, x23
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

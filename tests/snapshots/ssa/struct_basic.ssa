@@ -31,17 +31,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v11  LoadLocal { off=-1, kind=I64 }                   -> x12
     v12  Load { addr=v2, kind=I32 }                       -> x12
     v13  Load { addr=v2, kind=I32 }                       -> x20
-    v14  Binop { op=mul, lhs=v12, rhs=v13 }               -> x13
-    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x20
-    v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x13
-    v17  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x20
-    v18  Load { addr=v17, kind=I32 }                      -> x0
-    v19  Load { addr=v17, kind=I32 }                      -> x12
+    v14  Binop { op=mul, lhs=v12, rhs=v13 }               -> x12
+    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x12
+    v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x12
+    v17  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
+    v18  Load { addr=v17, kind=I32 }                      -> x20
+    v19  Load { addr=v17, kind=I32 }                      -> x13
     v20  Binop { op=mul, lhs=v18, rhs=v19 }               -> x20
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x12
+    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x20
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x20
     v23  Binop { op=add, lhs=v16, rhs=v22 }               -> x12
-    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x20
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x12
     v25  BinopI { op=shr, lhs=v24, rhs_imm=32 }           -> x12
     terminator Return(v25)   (exit_acc=v25)
 ; name=__c5_exit

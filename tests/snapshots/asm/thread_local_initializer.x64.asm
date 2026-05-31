@@ -19,44 +19,44 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movq	%fs:0x0, %r11
-               	subq	$0x10, %r11
-               	movslq	(%r11), %rax
+               	movq	%fs:0x0, %r9
+               	subq	$0x10, %r9
+               	movslq	(%r9), %rax
                	cmpq	$-0x3, %rax
-               	je	0x4002d9 <.text+0x69>
-               	movl	$0x2, %eax
+               	je	0x4002dd <.text+0x6d>
+               	movl	$0x2, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
-               	movq	%fs:0x0, %r11
-               	subq	$0x8, %r11
-               	movslq	(%r11), %rax
-               	cmpq	$0x0, %rax
-               	je	0x400300 <.text+0x90>
+               	movq	%fs:0x0, %rax
+               	subq	$0x8, %rax
+               	movslq	(%rax), %r9
+               	cmpq	$0x0, %r9
+               	je	0x400304 <.text+0x94>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movq	%fs:0x0, %r11
-               	subq	$0x18, %r11
+               	movq	%fs:0x0, %r9
+               	subq	$0x18, %r9
                	movq	%fs:0x0, %rax
                	subq	$0x18, %rax
                	movslq	(%rax), %r8
                	movq	%fs:0x0, %rax
                	subq	$0x10, %rax
                	movslq	(%rax), %rdi
-               	movq	%r8, %rax
-               	addq	%rdi, %rax
-               	movslq	%eax, %rax
-               	movl	%eax, (%r11)
+               	addq	%rdi, %r8
+               	movslq	%r8d, %r8
+               	movl	%r8d, (%r9)
                	movq	%fs:0x0, %rdi
                	subq	$0x18, %rdi
-               	movslq	(%rdi), %rax
-               	cmpq	$0x4, %rax
-               	je	0x400369 <.text+0xf9>
+               	movslq	(%rdi), %r8
+               	cmpq	$0x4, %r8
+               	je	0x40036a <.text+0xfa>
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
+               	xorq	%r8, %r8
+               	movq	%r8, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

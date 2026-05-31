@@ -25,14 +25,14 @@ Disassembly of section .text:
                	str	w20, [x13]
                	ldrsw	x12, [x0]
                	ldrsw	x20, [x0]
-               	mul	x13, x12, x20
-               	sxtw	x13, w13
-               	add	x20, x0, #0x4
-               	ldrsw	x0, [x20]
-               	ldrsw	x12, [x20]
-               	mul	x20, x0, x12
+               	mul	x12, x12, x20
+               	sxtw	x12, w12
+               	add	x0, x0, #0x4
+               	ldrsw	x20, [x0]
+               	ldrsw	x13, [x0]
+               	mul	x20, x20, x13
                	sxtw	x20, w20
-               	add	x12, x13, x20
+               	add	x12, x12, x20
                	sxtw	x12, w12
                	mov	x0, x12
                	ldr	x20, [sp]

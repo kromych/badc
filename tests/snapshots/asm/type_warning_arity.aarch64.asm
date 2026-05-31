@@ -12,8 +12,8 @@ Disassembly of section .text:
                	blr	x16
                	sxtw	x15, w0
                	sxtw	x14, w1
-               	add	x13, x15, x14
-               	sxtw	x0, w13
+               	add	x15, x15, x14
+               	sxtw	x0, w15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

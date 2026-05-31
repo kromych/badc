@@ -21,15 +21,15 @@ Disassembly of section .text:
                	ldursw	x14, [x29, #-0x18]
                	cmp	x14, #0x3
                	b.ge	0x40028c <.text+0x6c>
-               	ldursw	x14, [x29, #-0x10]
-               	sxtw	x13, w15
-               	add	x12, x14, x13
-               	sxtw	x12, w12
-               	stur	w12, [x29, #-0x10]
-               	ldursw	x13, [x29, #-0x18]
-               	add	x12, x13, #0x1
-               	sxtw	x12, w12
-               	stur	w12, [x29, #-0x18]
+               	ldursw	x13, [x29, #-0x10]
+               	sxtw	x14, w15
+               	add	x13, x13, x14
+               	sxtw	x13, w13
+               	stur	w13, [x29, #-0x10]
+               	ldursw	x14, [x29, #-0x18]
+               	add	x14, x14, #0x1
+               	sxtw	x14, w14
+               	stur	w14, [x29, #-0x18]
                	b	0x400258 <.text+0x38>
                	ldursw	x0, [x29, #-0x10]
                	add	sp, sp, #0x20

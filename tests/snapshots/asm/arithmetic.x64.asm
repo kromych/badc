@@ -11,7 +11,8 @@ Disassembly of section .text:
                	callq	*0xfe89(%rip)           # 0x4100c0
                	movl	$0x1e, %r11d
                	movslq	%r11d, %r11
-               	movq	%r11, %r9
-               	shlq	$0x1, %r9
-               	movslq	%r9d, %rax
+               	shlq	$0x1, %r11
+               	movslq	%r11d, %rax
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

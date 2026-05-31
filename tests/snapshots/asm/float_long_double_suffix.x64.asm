@@ -59,43 +59,42 @@ Disassembly of section .text:
                	movq	%r11, %xmm14
                	movq	%r9, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%al
-               	movzbq	%al, %rax
-               	setp	%r11b
+               	setne	%r11b
                	movzbq	%r11b, %r11
-               	orq	%r11, %rax
-               	cmpq	$0x0, %rax
-               	je	0x40034e <.text+0x12e>
-               	movl	$0xe, %r9d
-               	movq	%r9, %rax
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	0x40034a <.text+0x12a>
+               	movl	$0xe, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x420bf08eb0000000, %rax # imm = 0x420BF08EB0000000
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
+               	movabsq	$0x420bf08eb0000000, %r11 # imm = 0x420BF08EB0000000
+               	movq	%r11, %xmm14
+               	movq	%r11, %xmm15
                	ucomisd	%xmm15, %xmm14
-               	setne	%r9b
-               	movzbq	%r9b, %r9
-               	setp	%r11b
+               	setne	%r11b
                	movzbq	%r11b, %r11
-               	orq	%r11, %r9
-               	cmpq	$0x0, %r9
-               	je	0x400395 <.text+0x175>
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	0x400391 <.text+0x171>
                	movl	$0xf, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x7, %r9d
-               	cmpq	$0x7, %r9
-               	je	0x4003ba <.text+0x19a>
-               	movl	$0x10, %r9d
-               	movq	%r9, %rax
+               	movl	$0x7, %r11d
+               	cmpq	$0x7, %r11
+               	je	0x4003b2 <.text+0x192>
+               	movl	$0x10, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

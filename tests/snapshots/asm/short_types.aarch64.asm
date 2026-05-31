@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400414 <.text+0x194>
+               	bl	0x400418 <.text+0x198>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xe8]
                	blr	x16
@@ -22,14 +22,14 @@ Disassembly of section .text:
                	add	x19, x19, #0xf8
                	mov	x14, x19
                	lsl	x13, x20, #3
-               	add	x12, x14, x13
-               	ldr	x13, [x12]
+               	add	x14, x14, x13
+               	ldr	x13, [x14]
                	cbz	x13, 0x40030c <.text+0x8c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0xf8
-               	mov	x12, x19
+               	mov	x14, x19
                	lsl	x13, x20, #3
-               	add	x14, x12, x13
+               	add	x14, x14, x13
                	ldr	x13, [x14]
                	mov	x0, x13
                	ldr	x20, [sp]
@@ -46,39 +46,40 @@ Disassembly of section .text:
                	mov	x12, x19
                	str	x12, [x14]
                	sub	x11, x29, #0x18
-               	add	x12, x11, #0x8
+               	add	x11, x11, #0x8
                	adrp	x19, 0x410000
                	add	x19, x19, #0x116
-               	mov	x11, x19
-               	str	x11, [x12]
+               	mov	x12, x19
+               	str	x12, [x11]
                	sub	x14, x29, #0x18
-               	add	x11, x14, #0x10
+               	add	x14, x14, #0x10
                	adrp	x19, 0x410000
                	add	x19, x19, #0x11d
-               	mov	x14, x19
-               	str	x14, [x11]
-               	sub	x12, x29, #0x18
-               	lsl	x14, x20, #3
-               	add	x11, x12, x14
+               	mov	x12, x19
+               	str	x12, [x14]
+               	sub	x11, x29, #0x18
+               	lsl	x12, x20, #3
+               	add	x11, x11, x12
                	ldr	x22, [x11]
                	mov	x0, x21
                	mov	x1, x22
-               	bl	0x400d88 <dlsym>
+               	bl	0x400c78 <dlsym>
                	cbz	x0, 0x400394 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0xf8
                	mov	x22, x19
                	lsl	x21, x20, #3
-               	add	x12, x22, x21
+               	add	x22, x22, x21
                	ldr	x21, [x0]
-               	str	x21, [x12]
+               	str	x21, [x22]
                	b	0x400394 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0xf8
                	mov	x21, x19
-               	lsl	x0, x20, #3
-               	add	x20, x21, x0
-               	ldr	x0, [x20]
+               	lsl	x20, x20, #3
+               	add	x21, x21, x20
+               	ldr	x20, [x21]
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -88,18 +89,18 @@ Disassembly of section .text:
                	ret
                	sxtw	x15, w0
                	mov	x17, #0xffff            // =65535
-               	and	x14, x15, x17
-               	sxtw	x15, w14
+               	and	x15, x15, x17
+               	sxtw	x14, w15
                	mov	x17, #0x8000            // =32768
-               	and	x13, x15, x17
-               	cbz	x13, 0x4003f8 <.text+0x178>
-               	sxtw	x15, w14
+               	and	x14, x14, x17
+               	cbz	x14, 0x4003fc <.text+0x17c>
+               	sxtw	x13, w15
                	mov	x17, #0x10000           // =65536
-               	sub	x13, x15, x17
+               	sub	x13, x13, x17
                	sxtw	x0, w13
                	ret
-               	sxtw	x15, w14
-               	mov	x0, x15
+               	sxtw	x13, w15
+               	mov	x0, x13
                	ret
                	sxtw	x15, w0
                	mov	x17, #0xffff            // =65535
@@ -107,14 +108,11 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x120
+               	sub	sp, sp, #0x100
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
                	str	x23, [sp, #0x18]
-               	str	x24, [sp, #0x20]
-               	str	x25, [sp, #0x28]
-               	str	x26, [sp, #0x30]
                	mov	x15, #0x4d2             // =1234
                	mov	x14, #0xffd6            // =65494
                	movk	x14, #0xffff, lsl #16
@@ -122,512 +120,445 @@ Disassembly of section .text:
                	movk	x14, #0xffff, lsl #48
                	sxth	x13, w15
                	cmp	x13, #0x4d2
-               	b.eq	0x40048c <.text+0x20c>
-               	mov	x13, #0x1               // =1
-               	mov	x0, x13
+               	b.eq	0x400478 <.text+0x1f8>
+               	mov	x12, #0x1               // =1
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x12, w14
+               	sxth	x13, w14
                	mov	x17, #0xffd6            // =65494
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x12, x17
-               	b.eq	0x4004d8 <.text+0x258>
+               	cmp	x13, x17
+               	b.eq	0x4004b8 <.text+0x238>
                	mov	x12, #0x2               // =2
                	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxth	x13, w15
                	sxth	x12, w14
-               	add	x11, x13, x12
-               	sxtw	x11, w11
-               	sxth	x12, w11
-               	cmp	x12, #0x4a8
-               	b.eq	0x400524 <.text+0x2a4>
+               	add	x13, x13, x12
+               	sxtw	x13, w13
+               	sxth	x13, w13
+               	cmp	x13, #0x4a8
+               	b.eq	0x4004f8 <.text+0x278>
                	mov	x12, #0x3               // =3
                	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x11, w15
+               	sxth	x13, w15
                	sxth	x12, w14
-               	sub	x13, x11, x12
+               	sub	x13, x13, x12
                	sxtw	x13, w13
-               	sxth	x12, w13
-               	cmp	x12, #0x4fc
-               	b.eq	0x400570 <.text+0x2f0>
+               	sxth	x13, w13
+               	cmp	x13, #0x4fc
+               	b.eq	0x400538 <.text+0x2b8>
                	mov	x12, #0x4               // =4
                	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x13, w14
+               	sxth	x14, w14
                	mov	x17, #0x3               // =3
-               	mul	x12, x13, x17
-               	sxtw	x12, w12
-               	sxth	x13, w12
+               	mul	x14, x14, x17
+               	sxtw	x14, w14
+               	sxth	x14, w14
                	mov	x17, #0xff82            // =65410
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x13, x17
-               	b.eq	0x4005cc <.text+0x34c>
-               	mov	x13, #0x5               // =5
-               	mov	x0, x13
+               	cmp	x14, x17
+               	b.eq	0x400588 <.text+0x308>
+               	mov	x12, #0x5               // =5
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sxth	x12, w15
-               	mov	x13, #0x7               // =7
-               	sdiv	x14, x12, x13
-               	sxth	x13, w14
-               	cmp	x13, #0xb0
-               	b.eq	0x400614 <.text+0x394>
-               	mov	x13, #0x6               // =6
-               	mov	x0, x13
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxth	x14, w15
-               	mov	x13, #0x7               // =7
-               	sdiv	x17, x14, x13
-               	msub	x15, x17, x13, x14
-               	sxth	x13, w15
-               	cmp	x13, #0x2
-               	b.eq	0x400660 <.text+0x3e0>
-               	mov	x13, #0x7               // =7
-               	mov	x0, x13
+               	mov	x12, #0x7               // =7
+               	sdiv	x14, x14, x12
+               	sxth	x14, w14
+               	cmp	x14, #0xb0
+               	b.eq	0x4005c4 <.text+0x344>
+               	mov	x12, #0x6               // =6
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sxth	x15, w15
+               	mov	x12, #0x7               // =7
+               	sdiv	x17, x15, x12
+               	msub	x15, x17, x12, x15
+               	sxth	x15, w15
+               	cmp	x15, #0x2
+               	b.eq	0x400604 <.text+0x384>
+               	mov	x12, #0x7               // =7
+               	mov	x0, x12
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x20, #0x1               // =1
-               	sxth	x13, w20
-               	lsl	x14, x13, #14
-               	sxth	x13, w14
+               	sxth	x12, w20
+               	lsl	x12, x12, #14
+               	sxth	x12, w12
                	mov	x17, #0x4000            // =16384
-               	cmp	x13, x17
-               	b.eq	0x4006ac <.text+0x42c>
-               	mov	x13, #0x8               // =8
-               	mov	x0, x13
+               	cmp	x12, x17
+               	b.eq	0x400644 <.text+0x3c4>
+               	mov	x14, #0x8               // =8
+               	mov	x0, x14
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x14, w20
-               	lsl	x21, x14, #16
+               	sxth	x12, w20
+               	lsl	x21, x12, #16
                	mov	x0, x21
-               	bl	0x4003c8 <.text+0x148>
-               	sxth	x21, w0
-               	cmp	x21, #0x0
-               	b.eq	0x4006f8 <.text+0x478>
+               	bl	0x4003cc <.text+0x14c>
+               	sxth	x0, w0
+               	cmp	x0, #0x0
+               	b.eq	0x400684 <.text+0x404>
                	mov	x21, #0x9               // =9
                	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x0, w20
-               	lsl	x22, x0, #15
-               	mov	x0, x22
-               	bl	0x4003c8 <.text+0x148>
-               	sxth	x22, w0
+               	sxth	x20, w20
+               	lsl	x20, x20, #15
+               	mov	x0, x20
+               	bl	0x4003cc <.text+0x14c>
+               	sxth	x0, w0
                	mov	x17, #0x8000            // =32768
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x22, x17
-               	b.eq	0x400754 <.text+0x4d4>
-               	mov	x22, #0xa               // =10
-               	mov	x0, x22
+               	cmp	x0, x17
+               	b.eq	0x4006d4 <.text+0x454>
+               	mov	x20, #0xa               // =10
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0xfff8             // =65528
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	sxth	x22, w0
-               	asr	x0, x22, #1
-               	sxth	x22, w0
+               	sxth	x0, w0
+               	asr	x0, x0, #1
+               	sxth	x0, w0
                	mov	x17, #0xfffc            // =65532
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x22, x17
-               	b.eq	0x4007b8 <.text+0x538>
-               	mov	x22, #0xb               // =11
-               	mov	x0, x22
+               	cmp	x0, x17
+               	b.eq	0x40072c <.text+0x4ac>
+               	mov	x20, #0xb               // =11
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x21, #0xfffe            // =65534
+               	mov	x22, #0xfffe            // =65534
                	mov	x23, #0x1               // =1
                	mov	x17, #0xffff            // =65535
-               	and	x20, x21, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x12, x23, x17
-               	add	x11, x20, x12
-               	sxtw	x11, w11
-               	sxtw	x22, w11
-               	mov	x0, x22
-               	bl	0x400404 <.text+0x184>
-               	mov	x17, #0xffff            // =65535
-               	and	x22, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	eor	x0, x22, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x22, x0, x17
-               	cmp	x22, #0x0
-               	b.eq	0x400838 <.text+0x5b8>
-               	mov	x22, #0xc               // =12
-               	mov	x0, x22
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x17, #0xffff            // =65535
-               	and	x0, x21, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x22, x23, x17
-               	add	x21, x0, x22
-               	sxtw	x21, w21
-               	add	x22, x21, #0x1
-               	sxtw	x24, w22
-               	mov	x0, x24
-               	bl	0x400404 <.text+0x184>
-               	mov	x17, #0xffff            // =65535
-               	and	x24, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x24, x17
-               	cmp	x0, #0x0
-               	b.eq	0x4008a8 <.text+0x628>
-               	mov	x0, #0xd                // =13
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x24, #0xffff            // =65535
-               	movk	x24, #0xffff, lsl #16
-               	movk	x24, #0xffff, lsl #32
-               	movk	x24, #0xffff, lsl #48
-               	mov	x22, #0x1               // =1
-               	mov	x17, #0xffff            // =65535
                	and	x21, x22, x17
-               	sxth	x20, w24
-               	add	x10, x21, x20
-               	sxtw	x10, w10
-               	sxtw	x20, w10
-               	cmp	x20, #0x0
-               	b.eq	0x40090c <.text+0x68c>
-               	mov	x20, #0xe               // =14
-               	mov	x0, x20
+               	mov	x17, #0xffff            // =65535
+               	and	x13, x23, x17
+               	add	x21, x21, x13
+               	sxtw	x21, w21
+               	sxtw	x21, w21
+               	mov	x0, x21
+               	bl	0x400408 <.text+0x188>
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	eor	x0, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	cmp	x0, #0x0
+               	b.eq	0x4007a0 <.text+0x520>
+               	mov	x21, #0xc               // =12
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxth	x25, w24
-               	mov	x0, x25
-               	bl	0x400404 <.text+0x184>
-               	sxtw	x25, w0
                	mov	x17, #0xffff            // =65535
-               	cmp	x25, x17
-               	b.eq	0x400958 <.text+0x6d8>
-               	mov	x25, #0xf               // =15
-               	mov	x0, x25
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sxtw	x24, w0
+               	and	x22, x22, x17
+               	mov	x17, #0xffff            // =65535
+               	and	x21, x23, x17
+               	add	x22, x22, x21
+               	sxtw	x22, w22
+               	add	x22, x22, #0x1
+               	sxtw	x22, w22
+               	mov	x0, x22
+               	bl	0x400408 <.text+0x188>
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x25, x24, x17
-               	mov	x17, #0xffff            // =65535
-               	and	x24, x22, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x22, x24, x17
-               	cmp	x25, x22
-               	b.hi	0x4009b4 <.text+0x734>
-               	mov	x22, #0x10              // =16
+               	and	x0, x0, x17
+               	cmp	x0, #0x0
+               	b.eq	0x400808 <.text+0x588>
+               	mov	x22, #0xd               // =13
                	mov	x0, x22
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	mov	x20, #0x1               // =1
                	mov	x17, #0xffff            // =65535
-               	and	x24, x23, x17
-               	lsl	x20, x24, #15
-               	mov	x0, x20
-               	bl	0x400404 <.text+0x184>
+               	and	x21, x20, x17
+               	sxth	x11, w0
+               	add	x21, x21, x11
+               	sxtw	x21, w21
+               	sxtw	x21, w21
+               	cmp	x21, #0x0
+               	b.eq	0x400860 <.text+0x5e0>
+               	mov	x11, #0xe               // =14
+               	mov	x0, x11
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sxth	x22, w0
+               	mov	x0, x22
+               	bl	0x400408 <.text+0x188>
+               	sxtw	x22, w0
                	mov	x17, #0xffff            // =65535
-               	and	x20, x0, x17
-               	mov	x17, #0x8000            // =32768
-               	eor	x0, x20, x17
+               	cmp	x22, x17
+               	b.eq	0x4008a0 <.text+0x620>
+               	mov	x11, #0xf               // =15
+               	mov	x0, x11
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x20, x0, x17
-               	cmp	x20, #0x0
-               	b.eq	0x400a1c <.text+0x79c>
-               	mov	x20, #0x11              // =17
+               	and	x0, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	and	x20, x20, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x20, x20, x17
+               	cmp	x0, x20
+               	b.hi	0x4008f0 <.text+0x670>
+               	mov	x20, #0x10              // =16
                	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x17, #0xffff            // =65535
+               	and	x23, x23, x17
+               	lsl	x23, x23, #15
+               	mov	x0, x23
+               	bl	0x400408 <.text+0x188>
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x0, x17
+               	mov	x17, #0x8000            // =32768
+               	eor	x0, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	cmp	x0, #0x0
+               	b.eq	0x40094c <.text+0x6cc>
+               	mov	x23, #0x11              // =17
+               	mov	x0, x23
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x8000             // =32768
                	mov	x17, #0xffff            // =65535
-               	and	x20, x0, x17
+               	and	x0, x0, x17
                	mov	x17, #0xffff            // =65535
-               	and	x0, x20, x17
-               	sxtw	x20, w0
-               	asr	x0, x20, #1
-               	sxtw	x20, w0
+               	and	x0, x0, x17
+               	sxtw	x0, w0
+               	asr	x0, x0, #1
+               	sxtw	x0, w0
                	mov	x17, #0x4000            // =16384
-               	cmp	x20, x17
-               	b.eq	0x400a78 <.text+0x7f8>
-               	mov	x20, #0x12              // =18
-               	mov	x0, x20
+               	cmp	x0, x17
+               	b.eq	0x40099c <.text+0x71c>
+               	mov	x23, #0x12              // =18
+               	mov	x0, x23
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xd8
-               	mov	x20, #0x64              // =100
-               	strh	w20, [x0]
-               	sub	x23, x29, #0xd8
-               	add	x20, x23, #0x2
+               	mov	x23, #0x64              // =100
+               	strh	w23, [x0]
+               	sub	x20, x29, #0xd8
+               	add	x20, x20, #0x2
                	mov	x23, #0xc8              // =200
                	strh	w23, [x20]
                	sub	x0, x29, #0xd8
-               	add	x23, x0, #0x4
-               	mov	x0, #0xfed4             // =65236
-               	movk	x0, #0xffff, lsl #16
-               	movk	x0, #0xffff, lsl #32
-               	movk	x0, #0xffff, lsl #48
-               	strh	w0, [x23]
+               	add	x0, x0, #0x4
+               	mov	x23, #0xfed4            // =65236
+               	movk	x23, #0xffff, lsl #16
+               	movk	x23, #0xffff, lsl #32
+               	movk	x23, #0xffff, lsl #48
+               	strh	w23, [x0]
                	sub	x20, x29, #0xd8
-               	add	x22, x20, #0x6
-               	sub	x20, x29, #0xd8
-               	ldrsh	x23, [x20]
-               	sub	x20, x29, #0xd8
-               	add	x25, x20, #0x2
-               	ldrsh	x20, [x25]
-               	add	x25, x23, x20
-               	sxtw	x25, w25
-               	sub	x20, x29, #0xd8
-               	add	x23, x20, #0x4
-               	ldrsh	x20, [x23]
-               	add	x23, x25, x20
-               	sxtw	x26, w23
-               	mov	x0, x26
-               	bl	0x4003c8 <.text+0x148>
-               	strh	w0, [x22]
-               	sub	x26, x29, #0xd8
-               	add	x0, x26, #0x6
-               	ldrsh	x26, [x0]
-               	cmp	x26, #0x0
-               	b.eq	0x400b38 <.text+0x8b8>
-               	mov	x26, #0x13              // =19
-               	mov	x0, x26
+               	add	x20, x20, #0x6
+               	sub	x23, x29, #0xd8
+               	ldrsh	x0, [x23]
+               	sub	x23, x29, #0xd8
+               	add	x23, x23, #0x2
+               	ldrsh	x11, [x23]
+               	add	x0, x0, x11
+               	sxtw	x0, w0
+               	sub	x11, x29, #0xd8
+               	add	x11, x11, #0x4
+               	ldrsh	x23, [x11]
+               	add	x0, x0, x23
+               	sxtw	x21, w0
+               	mov	x0, x21
+               	bl	0x4003cc <.text+0x14c>
+               	strh	w0, [x20]
+               	sub	x21, x29, #0xd8
+               	add	x21, x21, #0x6
+               	ldrsh	x0, [x21]
+               	cmp	x0, #0x0
+               	b.eq	0x400a50 <.text+0x7d0>
+               	mov	x21, #0x13              // =19
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0xe0
-               	mov	x26, #0x7               // =7
-               	strh	w26, [x0]
-               	sub	x22, x29, #0xe0
-               	add	x26, x22, #0x2
-               	mov	x22, #0xfff9            // =65529
-               	movk	x22, #0xffff, lsl #16
-               	movk	x22, #0xffff, lsl #32
-               	movk	x22, #0xffff, lsl #48
-               	strh	w22, [x26]
+               	mov	x21, #0x7               // =7
+               	strh	w21, [x0]
+               	sub	x20, x29, #0xe0
+               	add	x20, x20, #0x2
+               	mov	x21, #0xfff9            // =65529
+               	movk	x21, #0xffff, lsl #16
+               	movk	x21, #0xffff, lsl #32
+               	movk	x21, #0xffff, lsl #48
+               	strh	w21, [x20]
                	sub	x0, x29, #0xe0
-               	add	x22, x0, #0x4
-               	mov	x0, #0xc0de             // =49374
-               	strh	w0, [x22]
-               	sub	x26, x29, #0xe0
-               	ldrsh	x0, [x26]
-               	sub	x26, x29, #0xe0
-               	add	x22, x26, #0x2
-               	ldrsh	x26, [x22]
-               	add	x22, x0, x26
-               	sxtw	x22, w22
-               	cmp	x22, #0x0
-               	b.eq	0x400bc4 <.text+0x944>
-               	mov	x22, #0x14              // =20
-               	mov	x0, x22
+               	add	x0, x0, #0x4
+               	mov	x21, #0xc0de            // =49374
+               	strh	w21, [x0]
+               	sub	x20, x29, #0xe0
+               	ldrsh	x21, [x20]
+               	sub	x20, x29, #0xe0
+               	add	x20, x20, #0x2
+               	ldrsh	x0, [x20]
+               	add	x21, x21, x0
+               	sxtw	x21, w21
+               	cmp	x21, #0x0
+               	b.eq	0x400acc <.text+0x84c>
+               	mov	x0, #0x14               // =20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x26, x29, #0xe0
-               	add	x22, x26, #0x4
-               	ldrh	w26, [x22]
+               	sub	x21, x29, #0xe0
+               	add	x21, x21, #0x4
+               	ldrh	w0, [x21]
                	mov	x17, #0xc0de            // =49374
-               	eor	x22, x26, x17
+               	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x26, x22, x17
-               	cmp	x26, #0x0
-               	b.eq	0x400c1c <.text+0x99c>
-               	mov	x26, #0x15              // =21
-               	mov	x0, x26
+               	and	x0, x0, x17
+               	cmp	x0, #0x0
+               	b.eq	0x400b18 <.text+0x898>
+               	mov	x21, #0x15              // =21
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x22, #0x2a              // =42
-               	mov	x0, x22
+               	mov	x0, #0x2a               // =42
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret

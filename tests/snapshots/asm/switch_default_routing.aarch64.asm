@@ -16,23 +16,23 @@ Disassembly of section .text:
                	mov	x15, #0x63              // =99
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x10]
-               	sxtw	x13, w15
+               	sxtw	x15, w15
                	b	0x40028c <.text+0x6c>
                	ldursw	x0, [x29, #-0x10]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0xa               // =10
-               	stur	w15, [x29, #-0x10]
+               	mov	x13, #0xa               // =10
+               	stur	w13, [x29, #-0x10]
                	b	0x400258 <.text+0x38>
-               	mov	x15, #0x14              // =20
-               	stur	w15, [x29, #-0x10]
+               	mov	x13, #0x14              // =20
+               	stur	w13, [x29, #-0x10]
                	b	0x400258 <.text+0x38>
-               	mov	x15, #0x64              // =100
-               	stur	w15, [x29, #-0x10]
+               	mov	x13, #0x64              // =100
+               	stur	w13, [x29, #-0x10]
                	b	0x400258 <.text+0x38>
-               	cmp	x13, #0x1
+               	cmp	x15, #0x1
                	b.eq	0x400268 <.text+0x48>
-               	cmp	x13, #0x2
+               	cmp	x15, #0x2
                	b.eq	0x400274 <.text+0x54>
                	b	0x400280 <.text+0x60>

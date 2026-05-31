@@ -61,22 +61,21 @@ Disassembly of section .text:
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40033d <.text+0x10d>
-               	movl	$0xb, %r11d
-               	movq	%r11, %rax
+               	je	0x400339 <.text+0x109>
+               	movl	$0xb, %eax
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	0x400357 <.text+0x127>
-               	movl	$0xc, %r11d
-               	movq	%r11, %rax
+               	xorq	%r11, %r11
+               	cmpq	$0x0, %r11
+               	je	0x40034f <.text+0x11f>
+               	movl	$0xc, %eax
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	0x400371 <.text+0x141>
-               	movl	$0xd, %r11d
-               	movq	%r11, %rax
+               	xorq	%r11, %r11
+               	cmpq	$0x0, %r11
+               	je	0x400365 <.text+0x135>
+               	movl	$0xd, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

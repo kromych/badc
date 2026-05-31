@@ -19,18 +19,16 @@ Disassembly of section .text:
                	jmp	0x400258 <.text+0x38>
                	movslq	-0x18(%rbp), %r9
                	cmpq	$0x3, %r9
-               	jge	0x400295 <.text+0x75>
-               	movslq	-0x10(%rbp), %r9
-               	movslq	%r11d, %r8
-               	movq	%r9, %rdi
-               	addq	%r8, %rdi
-               	movslq	%edi, %rdi
-               	movl	%edi, -0x10(%rbp)
-               	movslq	-0x18(%rbp), %r8
-               	movq	%r8, %rdi
-               	addq	$0x1, %rdi
-               	movslq	%edi, %rdi
-               	movl	%edi, -0x18(%rbp)
+               	jge	0x400291 <.text+0x71>
+               	movslq	-0x10(%rbp), %r8
+               	movslq	%r11d, %r9
+               	addq	%r9, %r8
+               	movslq	%r8d, %r8
+               	movl	%r8d, -0x10(%rbp)
+               	movslq	-0x18(%rbp), %r9
+               	addq	$0x1, %r9
+               	movslq	%r9d, %r9
+               	movl	%r9d, -0x18(%rbp)
                	jmp	0x400258 <.text+0x38>
                	movslq	-0x10(%rbp), %rax
                	addq	$0x20, %rsp

@@ -13,9 +13,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	movl	$0xa8, %r11d
-               	movabsq	$-0x1, %r9
-               	imulq	%r11, %r9
-               	cmpq	$0x1000, %r9            # imm = 0x1000
+               	movabsq	$-0x1, %r10
+               	imulq	%r10, %r11
+               	cmpq	$0x1000, %r11           # imm = 0x1000
                	jae	0x400271 <.text+0x51>
                	movl	$0xb, %eax
                	addq	$0x40, %rsp
@@ -31,9 +31,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r8
                	movq	(%r8), %rax
                	movslq	%eax, %rax
-               	movabsq	$-0x1, %r8
-               	imulq	%rax, %r8
-               	cmpq	$0x1000, %r8            # imm = 0x1000
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %rax
+               	cmpq	$0x1000, %rax           # imm = 0x1000
                	jae	0x4002be <.text+0x9e>
                	movl	$0xc, %r8d
                	movq	%r8, %rax
@@ -41,9 +41,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xa8, %eax
-               	movabsq	$-0x1, %r8
-               	imulq	%rax, %r8
-               	cmpq	$0x1000, %r8            # imm = 0x1000
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %rax
+               	cmpq	$0x1000, %rax           # imm = 0x1000
                	jae	0x4002ed <.text+0xcd>
                	movl	$0x1, %r8d
                	movq	%r8, -0x38(%rbp)
@@ -52,17 +52,17 @@ Disassembly of section .text:
                	movq	%r8, -0x38(%rbp)
                	jmp	0x4002fc <.text+0xdc>
                	movq	-0x38(%rbp), %r8
-               	movslq	%r8d, %rax
-               	cmpq	$0x2, %rax
+               	movslq	%r8d, %r8
+               	cmpq	$0x2, %r8
                	je	0x40031e <.text+0xfe>
                	movl	$0xd, %eax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	movl	$0x8, %r8d
-               	movabsq	$-0x1, %rax
-               	imulq	%r8, %rax
-               	cmpq	$0x1000, %rax           # imm = 0x1000
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %r8
+               	cmpq	$0x1000, %r8            # imm = 0x1000
                	jae	0x40034d <.text+0x12d>
                	movl	$0xe, %eax
                	addq	$0x40, %rsp

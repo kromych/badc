@@ -52,19 +52,17 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x0               // =0
                	cmp	x15, #0x0
-               	b.eq	0x400300 <.text+0xd0>
-               	mov	x15, #0xb               // =11
-               	mov	x0, x15
+               	b.eq	0x4002fc <.text+0xcc>
+               	mov	x0, #0xb                // =11
                	ret
-               	mov	x0, #0x0                // =0
-               	cbz	x0, 0x400314 <.text+0xe4>
-               	mov	x15, #0xc               // =12
-               	mov	x0, x15
+               	mov	x15, #0x0               // =0
+               	cbz	x15, 0x40030c <.text+0xdc>
+               	mov	x0, #0xc                // =12
                	ret
-               	mov	x0, #0x0                // =0
-               	cbz	x0, 0x400328 <.text+0xf8>
-               	mov	x15, #0xd               // =13
-               	mov	x0, x15
+               	mov	x15, #0x0               // =0
+               	cbz	x15, 0x40031c <.text+0xec>
+               	mov	x0, #0xd                // =13
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

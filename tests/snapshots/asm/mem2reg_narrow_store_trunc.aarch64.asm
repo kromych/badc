@@ -15,13 +15,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sxtw	x15, w0
                	mov	x17, #0xff              // =255
-               	and	x14, x15, x17
+               	and	x15, x15, x17
                	mov	x17, #0x2c              // =44
-               	eor	x15, x14, x17
+               	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x14, x15, x17
-               	cmp	x14, #0x0
+               	and	x15, x15, x17
+               	cmp	x15, #0x0
                	b.ne	0x400278 <.text+0x58>
                	mov	x14, #0x0               // =0
                	stur	x14, [x29, #-0x10]

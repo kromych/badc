@@ -28,23 +28,23 @@ Disassembly of section .text:
                	ret
                	adrp	x19, 0x410000
                	add	x19, x19, #0xe0
-               	mov	x14, x19
+               	mov	x15, x19
                	mov	x0, #0xb                // =11
-               	str	w0, [x14]
+               	str	w0, [x15]
                	adrp	x19, 0x410000
                	add	x19, x19, #0xe8
                	mov	x13, x19
                	ldr	x0, [x13]
                	ldrsw	x13, [x0]
                	cmp	x13, #0xb
-               	b.eq	0x4002d0 <.text+0xa0>
-               	mov	x13, #0x2               // =2
-               	mov	x0, x13
+               	b.eq	0x4002cc <.text+0x9c>
+               	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x13, #0x0               // =0
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

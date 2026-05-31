@@ -32,14 +32,14 @@ Disassembly of section .text:
                	strb	w20, [x0]
                	ldrb	w22, [x21]
                	mov	x17, #0x41              // =65
-               	eor	x21, x22, x17
+               	eor	x22, x22, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x22, x21, x17
+               	and	x22, x22, x17
                	cmp	x22, #0x0
                	b.ne	0x40035c <.text+0xac>
-               	mov	x22, #0x2a              // =42
-               	mov	x0, x22
+               	mov	x21, #0x2a              // =42
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -47,8 +47,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x21, #0x0               // =0
-               	mov	x0, x21
+               	mov	x22, #0x0               // =0
+               	mov	x0, x22
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

@@ -39,8 +39,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	0x40052d <free>
                	movslq	%eax, %rax
-               	movsbq	%bl, %rax
-               	cmpq	$-0x1, %rax
+               	movsbq	%bl, %rbx
+               	cmpq	$-0x1, %rbx
                	je	0x400381 <.text+0xd1>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -52,11 +52,11 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movslq	%r12d, %rbx
-               	cmpq	$0x2a, %rbx
+               	movslq	%r12d, %r12
+               	cmpq	$0x2a, %r12
                	je	0x4003b8 <.text+0x108>
-               	movl	$0x3, %ebx
-               	movq	%rbx, %rcx
+               	movl	$0x3, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -65,8 +65,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorq	%r12, %r12
+               	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

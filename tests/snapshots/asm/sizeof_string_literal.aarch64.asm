@@ -37,9 +37,9 @@ Disassembly of section .text:
                	mov	x15, #0x5               // =5
                	sxtw	x15, w15
                	cmp	x15, #0x5
-               	b.eq	0x4002b4 <.text+0x94>
-               	mov	x15, #0x11              // =17
-               	mov	x0, x15
+               	b.eq	0x4002b0 <.text+0x90>
+               	mov	x0, #0x11               // =17
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

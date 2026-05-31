@@ -23,10 +23,10 @@ Disassembly of section .text:
                	cmp	x15, #0x5
                	b.ge	0x400308 <.text+0x98>
                	b	0x4002d0 <.text+0x60>
-               	sub	x15, x29, #0x20
-               	ldrsw	x14, [x15]
-               	add	x13, x14, #0x1
-               	str	w13, [x15]
+               	sub	x14, x29, #0x20
+               	ldrsw	x15, [x14]
+               	add	x15, x15, #0x1
+               	str	w15, [x14]
                	b	0x4002ac <.text+0x3c>
                	mov	x20, #0x10              // =16
                	mov	x0, x20
@@ -35,33 +35,33 @@ Disassembly of section .text:
                	ldur	x20, [x29, #-0x10]
                	ldursw	x0, [x29, #-0x20]
                	str	w0, [x20]
-               	ldur	x15, [x29, #-0x10]
-               	add	x0, x15, #0x8
-               	ldur	x15, [x29, #-0x8]
-               	str	x15, [x0]
+               	ldur	x14, [x29, #-0x10]
+               	add	x14, x14, #0x8
+               	ldur	x0, [x29, #-0x8]
+               	str	x0, [x14]
                	ldur	x20, [x29, #-0x10]
                	stur	x20, [x29, #-0x8]
                	b	0x4002bc <.text+0x4c>
                	mov	x20, #0x0               // =0
                	stur	w20, [x29, #-0x18]
-               	ldur	x15, [x29, #-0x8]
-               	stur	x15, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x8]
+               	stur	x0, [x29, #-0x10]
                	b	0x40031c <.text+0xac>
-               	ldur	x15, [x29, #-0x10]
-               	cmp	x15, #0x0
+               	ldur	x0, [x29, #-0x10]
+               	cmp	x0, #0x0
                	b.eq	0x400350 <.text+0xe0>
-               	ldursw	x15, [x29, #-0x18]
-               	ldur	x20, [x29, #-0x10]
-               	ldrsw	x0, [x20]
-               	add	x12, x15, x0
-               	sxtw	x12, w12
-               	stur	w12, [x29, #-0x18]
-               	add	x0, x20, #0x8
-               	ldr	x20, [x0]
-               	stur	x20, [x29, #-0x10]
-               	b	0x40031c <.text+0xac>
                	ldursw	x20, [x29, #-0x18]
-               	mov	x0, x20
+               	ldur	x0, [x29, #-0x10]
+               	ldrsw	x14, [x0]
+               	add	x20, x20, x14
+               	sxtw	x20, w20
+               	stur	w20, [x29, #-0x18]
+               	add	x0, x0, #0x8
+               	ldr	x14, [x0]
+               	stur	x14, [x29, #-0x10]
+               	b	0x40031c <.text+0xac>
+               	ldursw	x14, [x29, #-0x18]
+               	mov	x0, x14
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x50

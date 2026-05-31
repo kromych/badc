@@ -26,21 +26,22 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %r11
+               	leaq	-0x18(%rbp), %r9
                	movl	$0x3, %eax
-               	movl	%eax, (%r11)
+               	movl	%eax, (%r9)
                	leaq	-0x8(%rbp), %r8
                	movslq	(%r8), %rax
                	cmpq	$0x2, %rax
-               	je	0x4002ac <.text+0x8c>
-               	movl	$0x2, %eax
+               	je	0x4002b0 <.text+0x90>
+               	movl	$0x2, %r8d
+               	movq	%r8, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x18(%rbp), %r8
-               	movslq	(%r8), %rax
-               	cmpq	$0x3, %rax
-               	je	0x4002ce <.text+0xae>
+               	leaq	-0x18(%rbp), %rax
+               	movslq	(%rax), %r8
+               	cmpq	$0x3, %r8
+               	je	0x4002d2 <.text+0xb2>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
                	popq	%rbp

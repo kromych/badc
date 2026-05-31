@@ -29,9 +29,9 @@ Disassembly of section .text:
                	sxtw	x21, w14
                	mov	x0, x21
                	bl	0x400238 <.text+0x18>
-               	mul	x21, x20, x0
-               	sxtw	x21, w21
-               	mov	x0, x21
+               	mul	x20, x20, x0
+               	sxtw	x20, w20
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10

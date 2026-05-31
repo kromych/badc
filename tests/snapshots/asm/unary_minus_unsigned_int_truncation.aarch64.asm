@@ -18,10 +18,10 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x13, x14, x17
+               	mul	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x14, x13, x17
+               	and	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x14, x17
@@ -30,154 +30,152 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x15, x17
+               	and	x14, x15, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x0, x13, x17
+               	mul	x0, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	orr	x0, x13, x12
+               	and	x0, x0, x17
+               	orr	x14, x14, x0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
+               	cmp	x14, x17
                	b.eq	0x4002c8 <.text+0xa8>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x12, x15, x17
+               	and	x14, x15, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x0, x12, x17
+               	mul	x0, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	orr	x0, x12, x13
-               	lsr	x13, x0, #31
-               	cmp	x13, #0x1
-               	b.eq	0x400310 <.text+0xf0>
-               	mov	x13, #0x3               // =3
-               	mov	x0, x13
+               	and	x0, x0, x17
+               	orr	x14, x14, x0
+               	lsr	x14, x14, #31
+               	cmp	x14, #0x1
+               	b.eq	0x40030c <.text+0xec>
+               	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x14, #0x0               // =0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
+               	and	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x0, x13, x17
+               	mul	x0, x14, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	orr	x14, x14, x0
+               	lsr	x14, x14, #31
+               	cmp	x14, #0x0
+               	b.eq	0x400354 <.text+0x134>
+               	mov	x0, #0x4                // =4
+               	ret
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x14, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	mul	x0, x14, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x12, x0, x17
-               	orr	x0, x13, x12
-               	lsr	x12, x0, #31
-               	cmp	x12, #0x0
-               	b.eq	0x40035c <.text+0x13c>
-               	mov	x12, #0x4               // =4
+               	orr	x14, x14, x12
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	cmp	x14, x17
+               	b.eq	0x4003ac <.text+0x18c>
+               	mov	x12, #0x5               // =5
                	mov	x0, x12
                	ret
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x15, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	orr	x15, x15, x0
+               	lsr	x15, x15, #31
+               	cmp	x15, #0x1
+               	b.eq	0x4003dc <.text+0x1bc>
+               	mov	x0, #0x6                // =6
+               	ret
+               	mov	x15, #0x1               // =1
+               	mov	x0, #0x0                // =0
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x15, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	eor	x15, x15, x0
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x15, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	mul	x0, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	orr	x15, x15, x0
+               	lsr	x15, x15, #31
+               	mov	x17, #0x1               // =1
+               	eor	x15, x15, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x15, x15, x17
+               	cmp	x15, #0x0
+               	b.eq	0x400458 <.text+0x238>
+               	mov	x0, #0x7                // =7
+               	ret
+               	mov	x15, #0x5               // =5
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x0, x15, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
+               	and	x15, x15, x17
+               	eor	x0, x0, x15
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x12, x0, x17
+               	mul	x15, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x12, x17
+               	and	x15, x15, x17
+               	orr	x0, x0, x15
+               	lsr	x0, x0, #31
+               	mov	x17, #0x1               // =1
+               	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x12, x13, x17
-               	orr	x11, x0, x12
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	cmp	x11, x17
-               	b.eq	0x4003b0 <.text+0x190>
-               	mov	x0, #0x5                // =5
-               	ret
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x15, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x13, x17
-               	orr	x13, x12, x0
-               	lsr	x0, x13, #31
+               	and	x0, x0, x17
                	cmp	x0, #0x1
-               	b.eq	0x4003e0 <.text+0x1c0>
-               	mov	x0, #0x6                // =6
-               	ret
-               	mov	x13, #0x1               // =1
-               	mov	x0, #0x0                // =0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x13, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	eor	x0, x12, x13
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x13, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	orr	x0, x13, x12
-               	lsr	x12, x0, #31
-               	mov	x17, #0x1               // =1
-               	eor	x0, x12, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	cmp	x12, #0x0
-               	b.eq	0x400460 <.text+0x240>
-               	mov	x12, #0x7               // =7
-               	mov	x0, x12
-               	ret
-               	mov	x0, #0x5                // =5
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	eor	x0, x12, x13
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	mul	x0, x13, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	orr	x0, x13, x12
-               	lsr	x12, x0, #31
-               	mov	x17, #0x1               // =1
-               	eor	x0, x12, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x12, x0, x17
-               	cmp	x12, #0x1
-               	b.eq	0x4004dc <.text+0x2bc>
-               	mov	x12, #0x8               // =8
-               	mov	x0, x12
+               	b.eq	0x4004d4 <.text+0x2b4>
+               	mov	x15, #0x8               // =8
+               	mov	x0, x15
                	ret
                	mov	x0, #0x0                // =0
                	ret

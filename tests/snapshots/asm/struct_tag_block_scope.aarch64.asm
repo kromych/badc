@@ -27,21 +27,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x15, x29, #0x18
+               	sub	x14, x29, #0x18
                	mov	x0, #0x3                // =3
-               	str	w0, [x15]
+               	str	w0, [x14]
                	sub	x13, x29, #0x8
                	ldrsw	x0, [x13]
                	cmp	x0, #0x2
-               	b.eq	0x4002a8 <.text+0x88>
-               	mov	x0, #0x2                // =2
+               	b.eq	0x4002ac <.text+0x8c>
+               	mov	x13, #0x2               // =2
+               	mov	x0, x13
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x13, x29, #0x18
-               	ldrsw	x0, [x13]
-               	cmp	x0, #0x3
-               	b.eq	0x4002c8 <.text+0xa8>
+               	sub	x0, x29, #0x18
+               	ldrsw	x13, [x0]
+               	cmp	x13, #0x3
+               	b.eq	0x4002cc <.text+0xac>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

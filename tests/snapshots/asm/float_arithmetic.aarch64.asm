@@ -27,21 +27,21 @@ Disassembly of section .text:
                	fmov	d0, x15
                	fmov	d1, x13
                	fcmp	d0, d1
-               	cset	x12, ne
-               	cbz	x12, 0x400294 <.text+0x74>
+               	cset	x15, ne
+               	cbz	x15, 0x400294 <.text+0x74>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
+               	ldur	x15, [x29, #-0x8]
                	fmov	d0, x14
-               	fmov	d1, x12
+               	fmov	d1, x15
                	fsub	d7, d0, d1
                	fmov	x16, d7
                	stur	x16, [x29, #-0x18]
-               	ldur	x12, [x29, #-0x18]
+               	ldur	x15, [x29, #-0x18]
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x12
+               	fmov	d0, x15
                	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x15, ne
@@ -61,24 +61,24 @@ Disassembly of section .text:
                	fmov	d0, x15
                	fmov	d1, x0
                	fcmp	d0, d1
-               	cset	x12, ne
-               	cbz	x12, 0x40031c <.text+0xfc>
+               	cset	x15, ne
+               	cbz	x15, 0x40031c <.text+0xfc>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
+               	ldur	x15, [x29, #-0x8]
                	fmov	d0, x14
-               	fmov	d1, x12
+               	fmov	d1, x15
                	fdiv	d7, d0, d1
                	fmov	x16, d7
                	stur	x16, [x29, #-0x18]
-               	ldur	x12, [x29, #-0x18]
+               	ldur	x15, [x29, #-0x18]
                	mov	x0, #0x999a             // =39322
                	movk	x0, #0x9999, lsl #16
                	movk	x0, #0x9999, lsl #32
                	movk	x0, #0x3ff9, lsl #48
-               	fmov	d0, x12
+               	fmov	d0, x15
                	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x15, ls
@@ -95,179 +95,186 @@ Disassembly of section .text:
                	fmov	d0, x15
                	fmov	d1, x0
                	fcmp	d0, d1
-               	cset	x12, ge
-               	cbz	x12, 0x4003a4 <.text+0x184>
+               	cset	x15, ge
+               	cbz	x15, 0x4003a4 <.text+0x184>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
+               	ldur	x15, [x29, #-0x8]
+               	fmov	d0, x15
                	fneg	d7, d0
                	fmov	x16, d7
                	stur	x16, [x29, #-0x18]
-               	ldur	x12, [x29, #-0x18]
+               	ldur	x15, [x29, #-0x18]
                	mov	x0, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d0, x0
                	fneg	d7, d0
-               	fmov	d0, x12
+               	fmov	d0, x15
                	fcmp	d0, d7
-               	cset	x0, ne
-               	cbz	x0, 0x4003ec <.text+0x1cc>
-               	mov	x12, #0x6               // =6
-               	mov	x0, x12
+               	cset	x15, ne
+               	cbz	x15, 0x4003e8 <.text+0x1c8>
+               	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x18]
-               	fmov	d0, x0
+               	ldur	x15, [x29, #-0x18]
+               	fmov	d0, x15
                	fneg	d7, d0
-               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d1, x0
+               	mov	x15, #0x3ff8000000000000 // =4609434218613702656
+               	fmov	d1, x15
                	fcmp	d7, d1
-               	cset	x12, ne
-               	cbz	x12, 0x40041c <.text+0x1fc>
-               	mov	x0, #0x7                // =7
+               	cset	x0, ne
+               	cbz	x0, 0x40041c <.text+0x1fc>
+               	mov	x15, #0x7               // =7
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
                	fmov	d1, x14
                	fcmp	d0, d1
                	cset	x0, mi
                	cmp	x0, #0x1
-               	b.eq	0x400448 <.text+0x228>
-               	mov	x0, #0x8                // =8
+               	b.eq	0x40044c <.text+0x22c>
+               	mov	x15, #0x8               // =8
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
                	fmov	d1, x14
                	fcmp	d0, d1
                	cset	x0, gt
                	cmp	x0, #0x0
-               	b.eq	0x400474 <.text+0x254>
-               	mov	x0, #0x9                // =9
+               	b.eq	0x40047c <.text+0x25c>
+               	mov	x15, #0x9               // =9
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
-               	fmov	d1, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
+               	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x0, eq
                	cmp	x0, #0x1
-               	b.eq	0x4004a0 <.text+0x280>
-               	mov	x0, #0xa                // =10
+               	b.eq	0x4004ac <.text+0x28c>
+               	mov	x15, #0xa               // =10
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
                	fmov	d1, x14
                	fcmp	d0, d1
                	cset	x0, ne
                	cmp	x0, #0x1
-               	b.eq	0x4004cc <.text+0x2ac>
-               	mov	x0, #0xb                // =11
+               	b.eq	0x4004dc <.text+0x2bc>
+               	mov	x15, #0xb               // =11
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
-               	fmov	d1, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
+               	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x0, ls
                	cmp	x0, #0x1
-               	b.eq	0x4004f8 <.text+0x2d8>
-               	mov	x0, #0xc                // =12
+               	b.eq	0x40050c <.text+0x2ec>
+               	mov	x15, #0xc               // =12
+               	mov	x0, x15
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x12, [x29, #-0x8]
-               	fmov	d0, x12
+               	ldur	x0, [x29, #-0x8]
+               	fmov	d0, x0
                	fmov	d1, x14
                	fcmp	d0, d1
                	cset	x0, ge
                	cmp	x0, #0x0
-               	b.eq	0x400524 <.text+0x304>
-               	mov	x0, #0xd                // =13
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x12, #0x7               // =7
-               	sxtw	x0, w12
-               	scvtf	d7, x0
-               	fmov	x16, d7
-               	stur	x16, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	mov	x12, #0x401c000000000000 // =4619567317775286272
-               	fmov	d0, x0
-               	fmov	d1, x12
-               	fcmp	d0, d1
-               	cset	x14, ne
-               	cbz	x14, 0x400564 <.text+0x344>
-               	mov	x0, #0xe                // =14
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldur	x14, [x29, #-0x8]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d0, x14
-               	fmov	d1, x0
-               	fadd	d7, d0, d1
-               	fmov	x16, d7
-               	stur	x16, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x8]
-               	fmov	d0, x0
-               	fcvtzs	x14, d0
-               	sxtw	x0, w14
-               	cmp	x0, #0x7
-               	b.eq	0x4005a8 <.text+0x388>
-               	mov	x0, #0xf                // =15
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldur	x14, [x29, #-0x8]
-               	mov	x0, #0x3fe0000000000000 // =4602678819172646912
-               	fmov	d0, x14
-               	fmov	d1, x0
-               	fadd	d7, d0, d1
-               	fcvtzs	x0, d7
-               	sxtw	x14, w0
-               	cmp	x14, #0x8
-               	b.eq	0x4005e0 <.text+0x3c0>
-               	mov	x14, #0x10              // =16
+               	b.eq	0x40053c <.text+0x31c>
+               	mov	x14, #0xd               // =13
                	mov	x0, x14
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3333             // =13107
-               	movk	x0, #0x3333, lsl #16
-               	movk	x0, #0x3333, lsl #32
-               	movk	x0, #0x3ffb, lsl #48
-               	fmov	d0, x0
-               	fneg	d7, d0
+               	mov	x0, #0x7                // =7
+               	sxtw	x0, w0
+               	scvtf	d7, x0
                	fmov	x16, d7
                	stur	x16, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
+               	mov	x14, #0x401c000000000000 // =4619567317775286272
                	fmov	d0, x0
-               	fcvtzs	x14, d0
-               	sxtw	x0, w14
+               	fmov	d1, x14
+               	fcmp	d0, d1
+               	cset	x0, ne
+               	cbz	x0, 0x400580 <.text+0x360>
+               	mov	x14, #0xe               // =14
+               	mov	x0, x14
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldur	x0, [x29, #-0x8]
+               	mov	x14, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d0, x0
+               	fmov	d1, x14
+               	fadd	d7, d0, d1
+               	fmov	x16, d7
+               	stur	x16, [x29, #-0x8]
+               	ldur	x14, [x29, #-0x8]
+               	fmov	d0, x14
+               	fcvtzs	x0, d0
+               	sxtw	x0, w0
+               	cmp	x0, #0x7
+               	b.eq	0x4005c8 <.text+0x3a8>
+               	mov	x14, #0xf               // =15
+               	mov	x0, x14
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldur	x0, [x29, #-0x8]
+               	mov	x14, #0x3fe0000000000000 // =4602678819172646912
+               	fmov	d0, x0
+               	fmov	d1, x14
+               	fadd	d7, d0, d1
+               	fcvtzs	x14, d7
+               	sxtw	x14, w14
+               	cmp	x14, #0x8
+               	b.eq	0x4005fc <.text+0x3dc>
+               	mov	x0, #0x10               // =16
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x14, #0x3333            // =13107
+               	movk	x14, #0x3333, lsl #16
+               	movk	x14, #0x3333, lsl #32
+               	movk	x14, #0x3ffb, lsl #48
+               	fmov	d0, x14
+               	fneg	d7, d0
+               	fmov	x16, d7
+               	stur	x16, [x29, #-0x8]
+               	ldur	x14, [x29, #-0x8]
+               	fmov	d0, x14
+               	fcvtzs	x0, d0
+               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	b.eq	0x400638 <.text+0x418>
-               	mov	x0, #0x11               // =17
+               	b.eq	0x400658 <.text+0x438>
+               	mov	x14, #0x11              // =17
+               	mov	x0, x14
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

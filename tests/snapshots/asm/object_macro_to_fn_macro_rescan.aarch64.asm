@@ -55,9 +55,9 @@ Disassembly of section .text:
                	sxtw	x14, w20
                	cmp	x14, #0x7
                	b.ne	0x400380 <.text+0xe0>
-               	mov	x14, #0x0               // =0
+               	mov	x13, #0x0               // =0
                	mov	x17, #0xff              // =255
-               	and	x13, x14, x17
+               	and	x13, x13, x17
                	stur	x13, [x29, #-0x28]
                	b	0x4003b4 <.text+0x114>
                	adrp	x19, 0x410000
@@ -73,14 +73,14 @@ Disassembly of section .text:
                	bl	0x4002b8 <.text+0x18>
                	stur	x0, [x29, #-0x28]
                	b	0x4003b4 <.text+0x114>
-               	sxtw	x0, w20
-               	add	x20, x0, #0x1
+               	sxtw	x20, w20
+               	add	x20, x20, #0x1
                	sxtw	x20, w20
                	cmp	x20, #0x8
                	b.ne	0x4003dc <.text+0x13c>
-               	mov	x20, #0x0               // =0
+               	mov	x0, #0x0                // =0
                	mov	x17, #0xff              // =255
-               	and	x0, x20, x17
+               	and	x0, x0, x17
                	stur	x0, [x29, #-0x30]
                	b	0x400410 <.text+0x170>
                	adrp	x19, 0x410000

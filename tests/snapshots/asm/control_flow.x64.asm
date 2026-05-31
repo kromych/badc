@@ -17,22 +17,23 @@ Disassembly of section .text:
                	jmp	0x40024e <.text+0x2e>
                	movslq	-0x8(%rbp), %r11
                	cmpq	$0x5, %r11
-               	jge	0x400279 <.text+0x59>
-               	movslq	-0x8(%rbp), %r11
-               	movq	%r11, %r9
+               	jge	0x400276 <.text+0x56>
+               	movslq	-0x8(%rbp), %r9
                	addq	$0x1, %r9
                	movslq	%r9d, %r9
                	movl	%r9d, -0x8(%rbp)
                	jmp	0x40024e <.text+0x2e>
                	movslq	-0x8(%rbp), %r9
                	cmpq	$0x5, %r9
-               	jne	0x400298 <.text+0x78>
+               	jne	0x400295 <.text+0x75>
                	movl	$0x1, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	movq	%r11, %rax
+               	xorq	%r9, %r9
+               	movq	%r9, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

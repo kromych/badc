@@ -13,9 +13,9 @@ Disassembly of section .text:
                	mov	x15, x0
                	sxtw	x14, w1
                	sxtw	x13, w2
-               	add	x12, x14, x13
-               	sxtw	x12, w12
-               	str	w12, [x15]
+               	add	x14, x14, x13
+               	sxtw	x14, w14
+               	str	w14, [x15]
                	mov	x0, #0x0                // =0
                	ret
                	stp	x29, x30, [sp, #-0x10]!

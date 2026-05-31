@@ -13,17 +13,17 @@ Disassembly of section .text:
                	mov	x15, x0
                	ldr	x14, [x15]
                	mov	x13, #0x18              // =24
-               	udiv	x12, x14, x13
+               	udiv	x14, x14, x13
                	ldr	x13, [x15]
                	mov	x15, #0x7               // =7
                	udiv	x17, x13, x15
-               	msub	x14, x17, x15, x13
-               	sxtw	x15, w12
+               	msub	x13, x17, x15, x13
+               	sxtw	x14, w14
                	mov	x17, #0x64              // =100
-               	mul	x12, x15, x17
-               	sxtw	x12, w12
-               	sxtw	x15, w14
-               	add	x14, x12, x15
+               	mul	x14, x14, x17
+               	sxtw	x14, w14
+               	sxtw	x13, w13
+               	add	x14, x14, x13
                	sxtw	x0, w14
                	ret
                	stp	x29, x30, [sp, #-0x10]!
@@ -45,13 +45,14 @@ Disassembly of section .text:
                	bl	0x400238 <.text+0x18>
                	cmp	x0, #0x3ea
                	b.ne	0x4002d0 <.text+0xb0>
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x18]
+               	mov	x20, #0x0               // =0
+               	stur	x20, [x29, #-0x18]
                	b	0x4002dc <.text+0xbc>
-               	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x18]
+               	mov	x20, #0x1               // =1
+               	stur	x20, [x29, #-0x18]
                	b	0x4002dc <.text+0xbc>
-               	ldur	x0, [x29, #-0x18]
+               	ldur	x20, [x29, #-0x18]
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x40

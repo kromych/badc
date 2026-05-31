@@ -16,7 +16,7 @@ Disassembly of section .text:
                	b.ge	0x400250 <.text+0x30>
                	mov	x0, #0x0                // =0
                	ret
-               	add	x13, x14, #0x8
-               	ldr	x14, [x13]
-               	ldrb	w0, [x14]
+               	add	x14, x14, #0x8
+               	ldr	x15, [x14]
+               	ldrb	w0, [x15]
                	ret

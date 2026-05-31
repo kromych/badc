@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v2   Load { addr=v1, kind=I64 }                       -> x20
     v3   CallIndirect { target=v2, args=[] }              -> x0
     v4   Imm(0)                                           -> x20
-    v5   Extend { value=v3, kind=I32 }                    -> x20
+    v5   Extend { value=v3, kind=I32 }                    -> x0
     v6   BinopI { op=le, lhs=v5, rhs_imm=0 }              -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
@@ -18,7 +18,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v9   Load { addr=v8, kind=I64 }                       -> x21
     v10  CallIndirect { target=v9, args=[] }              -> x0
     v11  Imm(0)                                           -> x21
-    v12  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x21
+    v12  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> x0
     v13  BinopI { op=and, lhs=v12, rhs_imm=255 }          -> x0
     v14  Imm(42)                                          -> x0
     terminator Return(v14)   (exit_acc=v14)

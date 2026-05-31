@@ -15,10 +15,8 @@ Disassembly of section .text:
                	jge	0x40024e <.text+0x2e>
                	xorq	%rax, %rax
                	retq
-               	movq	%r9, %r8
-               	addq	$0x8, %r8
-               	movq	(%r8), %r9
-               	movzbq	(%r9), %rax
+               	addq	$0x8, %r9
+               	movq	(%r9), %r11
+               	movzbq	(%r11), %rax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

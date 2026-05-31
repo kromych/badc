@@ -15,20 +15,20 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x15, x0
                	mov	x17, #0x3               // =3
-               	mul	x14, x15, x17
-               	mov	x15, #0x0               // =0
-               	stur	x15, [x29, #-0x10]
-               	stur	x15, [x29, #-0x18]
+               	mul	x15, x15, x17
+               	mov	x14, #0x0               // =0
+               	stur	x14, [x29, #-0x10]
+               	stur	x14, [x29, #-0x18]
                	b	0x400260 <.text+0x40>
-               	ldur	x15, [x29, #-0x18]
-               	cmp	x15, #0x4
+               	ldur	x14, [x29, #-0x18]
+               	cmp	x14, #0x4
                	b.ge	0x400288 <.text+0x68>
-               	ldur	x15, [x29, #-0x10]
-               	add	x13, x15, x14
+               	ldur	x13, [x29, #-0x10]
+               	add	x13, x13, x15
                	stur	x13, [x29, #-0x10]
-               	ldur	x15, [x29, #-0x18]
-               	add	x13, x15, #0x1
-               	stur	x13, [x29, #-0x18]
+               	ldur	x14, [x29, #-0x18]
+               	add	x14, x14, #0x1
+               	stur	x14, [x29, #-0x18]
                	b	0x400260 <.text+0x40>
                	ldur	x0, [x29, #-0x10]
                	add	sp, sp, #0x20

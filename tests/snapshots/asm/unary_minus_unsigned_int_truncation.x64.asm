@@ -12,141 +12,122 @@ Disassembly of section .text:
                	movl	$0x1, %r11d
                	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
                	andq	%r11, %r9
-               	movabsq	$-0x1, %r8
-               	imulq	%r9, %r8
-               	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
-               	andq	%r8, %r9
+               	movabsq	$-0x1, %r10
+               	imulq	%r10, %r9
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	movq	%r9, %r8
+               	andq	%r10, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	cmpq	%r10, %r9
-               	je	0x400275 <.text+0x55>
+               	je	0x400272 <.text+0x52>
                	movl	$0x1, %eax
                	retq
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%r11, %r8
+               	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
+               	andq	%r11, %r9
                	movabsq	$-0x1, %rax
-               	imulq	%r8, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	movq	%r8, %rax
-               	orq	%rdi, %rax
+               	imulq	%r9, %rax
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rdi
-               	cmpq	%r10, %rax
-               	je	0x4002b2 <.text+0x92>
+               	andq	%r10, %rax
+               	orq	%rax, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	cmpq	%r10, %r9
+               	je	0x4002aa <.text+0x8a>
                	movl	$0x2, %eax
                	retq
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%r11, %rdi
+               	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
+               	andq	%r11, %r9
                	movabsq	$-0x1, %rax
-               	imulq	%rdi, %rax
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
-               	movq	%rdi, %rax
-               	orq	%r8, %rax
-               	movq	%rax, %r8
-               	shrq	$0x1f, %r8
-               	cmpq	$0x1, %r8
-               	je	0x4002f5 <.text+0xd5>
-               	movl	$0x3, %r8d
-               	movq	%r8, %rax
+               	imulq	%r9, %rax
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
+               	orq	%rax, %r9
+               	shrq	$0x1f, %r9
+               	cmpq	$0x1, %r9
+               	je	0x4002e4 <.text+0xc4>
+               	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
+               	xorq	%r9, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r9
                	movabsq	$-0x1, %rax
-               	imulq	%r8, %rax
+               	imulq	%r9, %rax
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
+               	orq	%rax, %r9
+               	shrq	$0x1f, %r9
+               	cmpq	$0x0, %r9
+               	je	0x400321 <.text+0x101>
+               	movl	$0x4, %eax
+               	retq
+               	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
+               	andq	%r11, %r9
+               	movabsq	$-0x1, %rax
+               	imulq	%r9, %rax
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	andq	%rax, %rdi
-               	movq	%r8, %rax
-               	orq	%rdi, %rax
-               	movq	%rax, %rdi
-               	shrq	$0x1f, %rdi
-               	cmpq	$0x0, %rdi
-               	je	0x40033a <.text+0x11a>
-               	movl	$0x4, %edi
+               	orq	%rdi, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	cmpq	%r10, %r9
+               	je	0x400364 <.text+0x144>
+               	movl	$0x5, %edi
                	movq	%rdi, %rax
                	retq
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
-               	movabsq	$-0x1, %rdi
-               	imulq	%rax, %rdi
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rdi, %r8
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%r8, %rdi
-               	movq	%rax, %rsi
-               	orq	%rdi, %rsi
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	movq	%rsi, %rdi
-               	cmpq	%r10, %rsi
-               	je	0x40037f <.text+0x15f>
-               	movl	$0x5, %eax
-               	retq
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%r11, %rdi
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	andq	%r8, %rax
-               	movq	%rdi, %r8
-               	orq	%rax, %r8
-               	movq	%r8, %rax
-               	shrq	$0x1f, %rax
-               	cmpq	$0x1, %rax
-               	je	0x4003af <.text+0x18f>
+               	andq	%r10, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
+               	orq	%rax, %r11
+               	shrq	$0x1f, %r11
+               	cmpq	$0x1, %r11
+               	je	0x400390 <.text+0x170>
                	movl	$0x6, %eax
                	retq
-               	movl	$0x1, %r8d
+               	movl	$0x1, %r11d
                	xorq	%rax, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%r8, %rdi
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
-               	movq	%rdi, %rax
-               	xorq	%r8, %rax
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
+               	xorq	%rax, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
                	movabsq	$-0x1, %rax
-               	imulq	%r8, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	movq	%r8, %rax
-               	orq	%rdi, %rax
-               	movq	%rax, %rdi
-               	shrq	$0x1f, %rdi
-               	movq	%rdi, %rax
-               	xorq	$0x1, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	cmpq	$0x0, %rdi
-               	je	0x400423 <.text+0x203>
-               	movl	$0x7, %edi
-               	movq	%rdi, %rax
+               	imulq	%r11, %rax
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %rax
+               	orq	%rax, %r11
+               	shrq	$0x1f, %r11
+               	xorq	$0x1, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	0x4003f8 <.text+0x1d8>
+               	movl	$0x7, %eax
                	retq
-               	movl	$0x5, %eax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
-               	movq	%rdi, %rax
-               	xorq	%r8, %rax
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
-               	movabsq	$-0x1, %rax
-               	imulq	%r8, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	movq	%r8, %rax
-               	orq	%rdi, %rax
-               	movq	%rax, %rdi
-               	shrq	$0x1f, %rdi
-               	movq	%rdi, %rax
+               	movl	$0x5, %r11d
+               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
+               	andq	%r11, %rax
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	xorq	%r11, %rax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	andq	%r11, %rax
+               	movabsq	$-0x1, %r11
+               	imulq	%rax, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	orq	%r11, %rax
+               	shrq	$0x1f, %rax
                	xorq	$0x1, %rax
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdi
-               	cmpq	$0x1, %rdi
-               	je	0x400493 <.text+0x273>
-               	movl	$0x8, %edi
-               	movq	%rdi, %rax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	andq	%r11, %rax
+               	cmpq	$0x1, %rax
+               	je	0x400460 <.text+0x240>
+               	movl	$0x8, %r11d
+               	movq	%r11, %rax
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

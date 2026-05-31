@@ -29,24 +29,24 @@ Disassembly of section .text:
                	str	x17, [x14]
                	ldrsw	x14, [x15]
                	sub	x15, x29, #0x8
-               	sxtw	x12, w13
-               	cmp	x12, #0x2a
+               	sxtw	x13, w13
+               	cmp	x13, #0x2a
                	b.eq	0x4002a4 <.text+0x84>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x13, w14
-               	cmp	x13, #0x7
-               	b.eq	0x4002c8 <.text+0xa8>
-               	mov	x13, #0x2               // =2
-               	mov	x0, x13
+               	sxtw	x14, w14
+               	cmp	x14, #0x7
+               	b.eq	0x4002c4 <.text+0xa4>
+               	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x14, #0x0               // =0
+               	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

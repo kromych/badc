@@ -29,77 +29,77 @@ Disassembly of section .text:
                	sxtw	x6, w6
                	sxtw	x7, w7
                	cmp	x0, #0x1
-               	b.eq	0x400298 <.text+0x78>
-               	mov	x0, #0x1                // =1
+               	b.eq	0x40029c <.text+0x7c>
+               	mov	x8, #0x1                // =1
+               	mov	x0, x8
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x1, #0x2
-               	b.eq	0x4002b0 <.text+0x90>
+               	b.eq	0x4002b4 <.text+0x94>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x2, #0x3
-               	b.eq	0x4002c8 <.text+0xa8>
+               	b.eq	0x4002cc <.text+0xac>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x3, #0x4
-               	b.eq	0x4002e0 <.text+0xc0>
+               	b.eq	0x4002e4 <.text+0xc4>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x4, #0x5
-               	b.eq	0x4002f8 <.text+0xd8>
+               	b.eq	0x4002fc <.text+0xdc>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x5, #0x6
-               	b.eq	0x400310 <.text+0xf0>
+               	b.eq	0x400314 <.text+0xf4>
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x6, #0x7
-               	b.eq	0x400328 <.text+0x108>
+               	b.eq	0x40032c <.text+0x10c>
                	mov	x0, #0x7                // =7
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
                	cmp	x7, #0x8
-               	b.eq	0x400340 <.text+0x120>
+               	b.eq	0x400344 <.text+0x124>
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
-               	ldursw	x8, [x29, #0x90]
-               	cmp	x8, #0x9
+               	ldursw	x7, [x29, #0x90]
+               	cmp	x7, #0x9
                	b.eq	0x400360 <.text+0x140>
-               	mov	x8, #0x9                // =9
-               	mov	x0, x8
+               	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
-               	ldursw	x0, [x29, #0xa0]
-               	cmp	x0, #0xa
+               	ldursw	x7, [x29, #0xa0]
+               	cmp	x7, #0xa
                	b.eq	0x40037c <.text+0x15c>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
-               	ldursw	x8, [x29, #0xb0]
-               	cmp	x8, #0xb
-               	b.eq	0x40039c <.text+0x17c>
-               	mov	x8, #0xb                // =11
-               	mov	x0, x8
+               	ldursw	x7, [x29, #0xb0]
+               	cmp	x7, #0xb
+               	b.eq	0x400398 <.text+0x178>
+               	mov	x0, #0xb                // =11
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x7, #0x0                // =0
+               	mov	x0, x7
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xb0
                	ret

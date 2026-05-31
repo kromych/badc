@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400398 <.text+0xa8>
+               	bl	0x4003a0 <.text+0xb0>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xf0]
                	blr	x16
@@ -25,23 +25,25 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x10
+               	mrs	x14, TPIDR_EL0
+               	add	x14, x14, #0x10
                	mov	x0, #0x63               // =99
-               	str	w0, [x15]
+               	str	w0, [x14]
                	mrs	x13, TPIDR_EL0
                	add	x13, x13, #0x10
                	ldrsw	x0, [x13]
                	cmp	x0, #0x63
-               	b.eq	0x40037c <.text+0x8c>
-               	mov	x0, #0xbad2             // =47826
+               	b.eq	0x400380 <.text+0x90>
+               	mov	x13, #0xbad2            // =47826
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x13, TPIDR_EL0
-               	add	x13, x13, #0x10
-               	ldrsw	x0, [x13]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x10
+               	ldrsw	x13, [x0]
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -65,21 +67,21 @@ Disassembly of section .text:
                	mov	x21, #0x2               // =2
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x400678 <dlopen>
+               	bl	0x400688 <dlopen>
                	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x108
                	mov	x23, x19
                	mov	x0, x22
                	mov	x1, x23
-               	bl	0x400684 <dlsym>
+               	bl	0x400694 <dlsym>
                	mov	x21, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x117
                	mov	x24, x19
                	mov	x0, x22
                	mov	x1, x24
-               	bl	0x400684 <dlsym>
+               	bl	0x400694 <dlsym>
                	mov	x23, x0
                	sub	x25, x29, #0x20
                	adrp	x19, 0x400000
@@ -107,8 +109,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldur	x0, [x29, #-0x28]
                	cmp	x0, #0x63
-               	b.eq	0x4004c0 <.text+0x1d0>
-               	mov	x0, #0x1                // =1
+               	b.eq	0x4004cc <.text+0x1dc>
+               	mov	x26, #0x1               // =1
+               	mov	x0, x26
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -120,11 +123,11 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x26, TPIDR_EL0
-               	add	x26, x26, #0x10
-               	ldrsw	x0, [x26]
-               	cmp	x0, #0x1
-               	b.eq	0x400504 <.text+0x214>
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x10
+               	ldrsw	x26, [x0]
+               	cmp	x26, #0x1
+               	b.eq	0x400510 <.text+0x220>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

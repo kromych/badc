@@ -13,11 +13,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	0xfe87(%rip), %r11      # 0x4100d0
-               	movq	%r11, %r9
-               	addq	$0x5, %r9
-               	movzbq	(%r9), %rax
+               	addq	$0x5, %r11
+               	movzbq	(%r11), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

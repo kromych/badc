@@ -22,8 +22,8 @@ Disassembly of section .text:
                	ldr	x20, [x15]
                	mov	x9, x20
                	blr	x9
-               	sxtw	x20, w0
-               	cmp	x20, #0x0
+               	sxtw	x0, w0
+               	cmp	x0, #0x0
                	b.gt	0x400314 <.text+0x74>
                	mov	x20, #0x1               // =1
                	mov	x0, x20

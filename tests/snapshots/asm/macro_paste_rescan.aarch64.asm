@@ -15,31 +15,29 @@ Disassembly of section .text:
                	b.eq	0x40024c <.text+0x2c>
                	mov	x0, #0xb                // =11
                	ret
-               	mov	x14, #0x3               // =3
-               	cmp	x14, #0x3
-               	b.eq	0x400264 <.text+0x44>
-               	mov	x14, #0xc               // =12
-               	mov	x0, x14
+               	mov	x15, #0x3               // =3
+               	cmp	x15, #0x3
+               	b.eq	0x400260 <.text+0x40>
+               	mov	x0, #0xc                // =12
                	ret
-               	mov	x0, #0x32               // =50
-               	sxtw	x0, w0
-               	cmp	x0, #0x32
-               	b.eq	0x40027c <.text+0x5c>
+               	mov	x15, #0x32              // =50
+               	sxtw	x15, w15
+               	cmp	x15, #0x32
+               	b.eq	0x400278 <.text+0x58>
                	mov	x0, #0xd                // =13
                	ret
-               	mov	x14, #0x11              // =17
-               	sxtw	x14, w14
-               	cmp	x14, #0x11
-               	b.eq	0x400298 <.text+0x78>
-               	mov	x14, #0xe               // =14
-               	mov	x0, x14
+               	mov	x15, #0x11              // =17
+               	sxtw	x15, w15
+               	cmp	x15, #0x11
+               	b.eq	0x400290 <.text+0x70>
+               	mov	x0, #0xe                // =14
                	ret
-               	mov	x0, #0x3                // =3
-               	sxtw	x0, w0
-               	cmp	x0, #0x3
-               	b.eq	0x4002b0 <.text+0x90>
+               	mov	x15, #0x3               // =3
+               	sxtw	x15, w15
+               	cmp	x15, #0x3
+               	b.eq	0x4002a8 <.text+0x88>
                	mov	x0, #0xf                // =15
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

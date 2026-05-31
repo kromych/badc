@@ -32,22 +32,12 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movb	%bl, (%rax)
                	movzbq	(%r12), %r14
-               	movq	%r14, %r12
-               	xorq	$0x41, %r12
-               	movl	$0xffffffff, %r14d      # imm = 0xFFFFFFFF
-               	andq	%r12, %r14
+               	xorq	$0x41, %r14
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	andq	%r11, %r14
                	cmpq	$0x0, %r14
-               	jne	0x400365 <.text+0xb5>
-               	movl	$0x2a, %r14d
-               	movq	%r14, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
-               	movq	%rcx, %rax
-               	addq	$0x40, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%r12, %r12
+               	jne	0x400362 <.text+0xb2>
+               	movl	$0x2a, %r12d
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -56,4 +46,13 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	xorq	%r14, %r14
+               	movq	%r14, %rcx
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	0x10(%rsp), %r14
+               	movq	%rcx, %rax
+               	addq	$0x40, %rsp
+               	popq	%rbp
+               	retq
+               	addb	%al, 0x41(%rdx)

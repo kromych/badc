@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I32)                            -> x15
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x14
+    v4   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x15
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x15
     v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
     terminator Return(v6)   (exit_acc=v6)
@@ -29,22 +29,22 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v3   Store { addr=v1, value=v2, kind=I32 }            -> -
     v4   Imm(3)                                           -> x20
     v5   Call { target_pc=0, args=[v4] }                  -> x0
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=3 }              -> x20
+    v6   BinopI { op=ne, lhs=v5, rhs_imm=3 }              -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(1)                                           -> x0
+    v7   Imm(1)                                           -> x20
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   Imm(3)                                           -> x21
     v9   Call { target_pc=1, args=[v8] }                  -> x0
-    v10  BinopI { op=ne, lhs=v9, rhs_imm=6 }              -> x21
+    v10  BinopI { op=ne, lhs=v9, rhs_imm=6 }              -> x0
     terminator Bz { cond=v10, target=b4, fall=b3 }   (exit_acc=v10)
   block 3  start_pc=0
-    v11  Imm(2)                                           -> x0
+    v11  Imm(2)                                           -> x21
     terminator Return(v11)   (exit_acc=v11)
   block 4  start_pc=0
-    v12  ImmData(8)                                       -> x21
-    v13  Load { addr=v12, kind=I32 }                      -> x0
+    v12  ImmData(8)                                       -> x0
+    v13  Load { addr=v12, kind=I32 }                      -> x21
     v14  BinopI { op=ne, lhs=v13, rhs_imm=10 }            -> x21
     terminator Bz { cond=v14, target=b6, fall=b5 }   (exit_acc=v14)
   block 5  start_pc=0

@@ -11,35 +11,32 @@ Disassembly of section .text:
                	callq	*0xfe89(%rip)           # 0x4100c0
                	movabsq	$-0x1, %r11
                	movslq	%r11d, %r9
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	xorq	%r9, %r8
-               	movl	$0xffffffff, %r9d       # imm = 0xFFFFFFFF
-               	andq	%r8, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	xorq	%r10, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r9
                	cmpq	$0x0, %r9
                	je	0x400269 <.text+0x49>
                	movl	$0x1, %eax
                	retq
-               	movslq	%r11d, %r8
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	xorq	%r8, %rax
-               	movl	$0xffffffff, %r8d       # imm = 0xFFFFFFFF
-               	andq	%rax, %r8
-               	cmpq	$0x0, %r8
-               	je	0x400294 <.text+0x74>
-               	movl	$0x2, %r8d
-               	movq	%r8, %rax
+               	movslq	%r11d, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	xorq	%r10, %r9
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r9
+               	cmpq	$0x0, %r9
+               	je	0x400291 <.text+0x71>
+               	movl	$0x2, %eax
                	retq
-               	movslq	%r11d, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	movq	%rax, %r8
-               	cmpq	%r11, %rax
-               	setne	%r8b
-               	movzbq	%r8b, %r8
-               	cmpq	$0x0, %r8
-               	jne	0x4002c2 <.text+0xa2>
-               	movl	$0x3, %r8d
-               	movq	%r8, %rax
+               	movslq	%r11d, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	cmpq	%r10, %r11
+               	setne	%r11b
+               	movzbq	%r11b, %r11
+               	cmpq	$0x0, %r11
+               	jne	0x4002b8 <.text+0x98>
+               	movl	$0x3, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

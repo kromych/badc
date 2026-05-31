@@ -16,16 +16,14 @@ Disassembly of section .text:
                	movl	%r11d, -0x8(%rbp)
                	jmp	0x40024e <.text+0x2e>
                	movslq	-0x8(%rbp), %r11
-               	movq	%r11, %r9
-               	addq	$0x1, %r9
-               	movslq	%r9d, %r9
-               	movl	%r9d, -0x8(%rbp)
-               	jmp	0x400268 <.text+0x48>
-               	movslq	-0x8(%rbp), %r9
-               	cmpq	$0x5, %r9
+               	addq	$0x1, %r11
+               	movslq	%r11d, %r11
+               	movl	%r11d, -0x8(%rbp)
+               	jmp	0x400265 <.text+0x45>
+               	movslq	-0x8(%rbp), %r11
+               	cmpq	$0x5, %r11
                	jl	0x40024e <.text+0x2e>
                	movslq	-0x8(%rbp), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

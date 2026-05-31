@@ -31,16 +31,16 @@ Disassembly of section .text:
                	mov	x0, #0xf                // =15
                	ret
                	mov	x15, #0x0               // =0
-               	add	x0, x15, #0x4
-               	cmp	x0, #0x4
+               	add	x15, x15, #0x4
+               	cmp	x15, #0x4
                	b.eq	0x4002a0 <.text+0x80>
                	mov	x0, #0x10               // =16
                	ret
                	mov	x15, #0x0               // =0
                	cmp	x15, #0x0
-               	b.eq	0x4002b8 <.text+0x98>
-               	mov	x15, #0x11              // =17
-               	mov	x0, x15
+               	b.eq	0x4002b4 <.text+0x94>
+               	mov	x0, #0x11               // =17
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

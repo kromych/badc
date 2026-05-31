@@ -49,13 +49,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v10)   (exit_acc=v10)
   block 10  start_pc=0
     v11  Imm(484)                                         -> x15
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=484 }           -> x0
+    v12  BinopI { op=ne, lhs=v11, rhs_imm=484 }           -> x15
     terminator Bz { cond=v12, target=b12, fall=b11 }   (exit_acc=v12)
   block 11  start_pc=0
-    v13  Imm(6)                                           -> x15
+    v13  Imm(6)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
   block 12  start_pc=0
-    v14  Imm(384)                                         -> x0
+    v14  Imm(384)                                         -> x15
     v15  BinopI { op=ne, lhs=v14, rhs_imm=384 }           -> x15
     terminator Bz { cond=v15, target=b14, fall=b13 }   (exit_acc=v15)
   block 13  start_pc=0
@@ -63,13 +63,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v16)   (exit_acc=v16)
   block 14  start_pc=0
     v17  Imm(-421)                                        -> x15
-    v18  BinopI { op=ne, lhs=v17, rhs_imm=-421 }          -> x0
+    v18  BinopI { op=ne, lhs=v17, rhs_imm=-421 }          -> x15
     terminator Bz { cond=v18, target=b16, fall=b15 }   (exit_acc=v18)
   block 15  start_pc=0
-    v19  Imm(8)                                           -> x15
+    v19  Imm(8)                                           -> x0
     terminator Return(v19)   (exit_acc=v19)
   block 16  start_pc=0
-    v20  Imm(42)                                          -> x0
+    v20  Imm(42)                                          -> x15
     terminator Return(v20)   (exit_acc=v20)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

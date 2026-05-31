@@ -19,8 +19,8 @@ Disassembly of section .text:
                	ldursw	x15, [x29, #-0x8]
                	cmp	x15, #0x5
                	b.ge	0x400270 <.text+0x50>
-               	ldursw	x15, [x29, #-0x8]
-               	add	x14, x15, #0x1
+               	ldursw	x14, [x29, #-0x8]
+               	add	x14, x14, #0x1
                	sxtw	x14, w14
                	stur	w14, [x29, #-0x8]
                	b	0x400250 <.text+0x30>
@@ -31,8 +31,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x14, #0x0               // =0
+               	mov	x0, x14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

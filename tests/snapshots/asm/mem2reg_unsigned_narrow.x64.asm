@@ -21,79 +21,68 @@ Disassembly of section .text:
                	jmp	0x400262 <.text+0x42>
                	movslq	-0x18(%rbp), %r8
                	cmpq	$0x3, %r8
-               	jge	0x4002c2 <.text+0xa2>
-               	movslq	-0x20(%rbp), %r8
-               	movq	%r11, %rdi
-               	andq	$0xff, %rdi
-               	movq	%r8, %rsi
-               	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
-               	movl	%esi, -0x20(%rbp)
-               	movslq	-0x28(%rbp), %rdi
-               	movq	%r9, %rsi
-               	andq	$0xffff, %rsi           # imm = 0xFFFF
-               	movq	%rdi, %r8
-               	addq	%rsi, %r8
+               	jge	0x4002b8 <.text+0x98>
+               	movslq	-0x20(%rbp), %rdi
+               	movq	%r11, %r8
+               	andq	$0xff, %r8
+               	addq	%r8, %rdi
+               	movslq	%edi, %rdi
+               	movl	%edi, -0x20(%rbp)
+               	movslq	-0x28(%rbp), %r8
+               	movq	%r9, %rdi
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
+               	addq	%rdi, %r8
                	movslq	%r8d, %r8
                	movl	%r8d, -0x28(%rbp)
-               	movslq	-0x18(%rbp), %rsi
-               	movq	%rsi, %r8
+               	movslq	-0x18(%rbp), %rdi
+               	addq	$0x1, %rdi
+               	movslq	%edi, %rdi
+               	movl	%edi, -0x18(%rbp)
+               	jmp	0x400262 <.text+0x42>
+               	xorq	%rdi, %rdi
+               	movl	%edi, -0x30(%rbp)
+               	andq	$0xff, %r11
+               	xorq	$0x2c, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	0x4002f9 <.text+0xd9>
+               	movslq	-0x30(%rbp), %r8
                	addq	$0x1, %r8
                	movslq	%r8d, %r8
-               	movl	%r8d, -0x18(%rbp)
-               	jmp	0x400262 <.text+0x42>
-               	xorq	%r8, %r8
                	movl	%r8d, -0x30(%rbp)
-               	movq	%r11, %rsi
-               	andq	$0xff, %rsi
-               	movq	%rsi, %r11
-               	xorq	$0x2c, %r11
-               	movl	$0xffffffff, %esi       # imm = 0xFFFFFFFF
-               	andq	%r11, %rsi
-               	cmpq	$0x0, %rsi
-               	je	0x40030c <.text+0xec>
-               	movslq	-0x30(%rbp), %rsi
-               	movq	%rsi, %r11
-               	addq	$0x1, %r11
+               	jmp	0x4002f9 <.text+0xd9>
+               	andq	$0xffff, %r9            # imm = 0xFFFF
+               	xorq	$0x2345, %r9            # imm = 0x2345
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	andq	%r11, %r9
+               	cmpq	$0x0, %r9
+               	je	0x400334 <.text+0x114>
+               	movslq	-0x30(%rbp), %r11
+               	addq	$0x2, %r11
                	movslq	%r11d, %r11
                	movl	%r11d, -0x30(%rbp)
-               	jmp	0x40030c <.text+0xec>
-               	movq	%r9, %r11
-               	andq	$0xffff, %r11           # imm = 0xFFFF
-               	movq	%r11, %rsi
-               	xorq	$0x2345, %rsi           # imm = 0x2345
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%rsi, %r11
-               	cmpq	$0x0, %r11
-               	je	0x40034f <.text+0x12f>
-               	movslq	-0x30(%rbp), %r11
-               	movq	%r11, %rsi
-               	addq	$0x2, %rsi
-               	movslq	%esi, %rsi
-               	movl	%esi, -0x30(%rbp)
-               	jmp	0x40034f <.text+0x12f>
-               	movslq	-0x20(%rbp), %rsi
-               	movl	$0x84, %r11d
-               	movslq	%r11d, %r11
-               	cmpq	%r11, %rsi
-               	je	0x40037f <.text+0x15f>
-               	movslq	-0x30(%rbp), %r11
-               	movq	%r11, %r9
+               	jmp	0x400334 <.text+0x114>
+               	movslq	-0x20(%rbp), %r11
+               	movl	$0x84, %r9d
+               	movslq	%r9d, %r9
+               	cmpq	%r9, %r11
+               	je	0x400361 <.text+0x141>
+               	movslq	-0x30(%rbp), %r9
                	addq	$0x4, %r9
                	movslq	%r9d, %r9
                	movl	%r9d, -0x30(%rbp)
-               	jmp	0x40037f <.text+0x15f>
+               	jmp	0x400361 <.text+0x141>
                	movslq	-0x28(%rbp), %r9
                	movl	$0x69cf, %r11d          # imm = 0x69CF
                	movslq	%r11d, %r11
                	cmpq	%r11, %r9
-               	je	0x4003ae <.text+0x18e>
+               	je	0x40038e <.text+0x16e>
                	movslq	-0x30(%rbp), %r11
-               	movq	%r11, %rsi
-               	addq	$0x8, %rsi
-               	movslq	%esi, %rsi
-               	movl	%esi, -0x30(%rbp)
-               	jmp	0x4003ae <.text+0x18e>
+               	addq	$0x8, %r11
+               	movslq	%r11d, %r11
+               	movl	%r11d, -0x30(%rbp)
+               	jmp	0x40038e <.text+0x16e>
                	movslq	-0x30(%rbp), %rax
                	addq	$0x30, %rsp
                	popq	%rbp

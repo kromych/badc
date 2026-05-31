@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400324 <.text+0x104>
+               	bl	0x400320 <.text+0x100>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xc0]
                	blr	x16
@@ -14,8 +14,8 @@ Disassembly of section .text:
                	add	x0, x15, #0x7
                	ret
                	mov	x15, x0
-               	lsl	x14, x15, #1
-               	add	x0, x14, #0x1
+               	lsl	x15, x15, #1
+               	add	x0, x15, #0x1
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -42,8 +42,8 @@ Disassembly of section .text:
                	ldur	x23, [x29, #-0x18]
                	mov	x0, x23
                	bl	0x400244 <.text+0x24>
-               	add	x23, x22, x0
-               	stur	x23, [x29, #-0x10]
+               	add	x22, x22, x0
+               	stur	x22, [x29, #-0x10]
                	ldur	x24, [x29, #-0x10]
                	ldur	x25, [x29, #-0x18]
                	mov	x9, x21
@@ -51,14 +51,13 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	add	x25, x24, x0
-               	stur	x25, [x29, #-0x10]
+               	add	x24, x24, x0
+               	stur	x24, [x29, #-0x10]
                	ldur	x0, [x29, #-0x18]
-               	add	x25, x0, #0x1
-               	stur	x25, [x29, #-0x18]
+               	add	x0, x0, #0x1
+               	stur	x0, [x29, #-0x18]
                	b	0x40029c <.text+0x7c>
-               	ldur	x25, [x29, #-0x10]
-               	mov	x0, x25
+               	ldur	x0, [x29, #-0x10]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	0x400254 <.text+0x34>
                	mov	x17, #0x7f              // =127
-               	and	x20, x0, x17
-               	mov	x0, x20
+               	and	x0, x0, x17
                	ldr	x20, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

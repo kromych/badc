@@ -56,9 +56,9 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
   block 1  start_pc=0
     v7   Imm(8)                                           -> x12
     v8   Imm(16)                                          -> x12
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x13
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x12
     v10  BinopI { op=shr, lhs=v9, rhs_imm=32 }            -> x12
-    v11  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x13
+    v11  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x12
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x12
     v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x22
     v14  CallExt { binding_idx=0, args=[v13], fp_arg_mask=0x0 } -> x0

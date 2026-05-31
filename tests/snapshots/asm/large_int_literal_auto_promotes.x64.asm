@@ -15,51 +15,45 @@ Disassembly of section .text:
                	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
                	movabsq	$-0x8000000000000000, %r9 # imm = 0x8000000000000000
                	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r11, %r8
                	cmpq	%r10, %r11
-               	je	0x40027a <.text+0x5a>
+               	je	0x400277 <.text+0x57>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	movq	%r9, %r8
                	cmpq	%r11, %r9
-               	je	0x40029e <.text+0x7e>
+               	je	0x400298 <.text+0x78>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x7ffffffffffffffe, %r8 # imm = 0x7FFFFFFFFFFFFFFE
+               	movabsq	$0x7ffffffffffffffe, %r9 # imm = 0x7FFFFFFFFFFFFFFE
                	movabsq	$0x7ffffffffffffffe, %r11 # imm = 0x7FFFFFFFFFFFFFFE
-               	movq	%r8, %rax
-               	cmpq	%r11, %r8
-               	je	0x4002d0 <.text+0xb0>
-               	movl	$0x3, %r8d
-               	movq	%r8, %rax
+               	cmpq	%r11, %r9
+               	je	0x4002c3 <.text+0xa3>
+               	movl	$0x3, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
+               	movabsq	$-0x8000000000000000, %r9 # imm = 0x8000000000000000
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	movq	%rax, %r8
-               	cmpq	%r11, %rax
-               	je	0x4002fe <.text+0xde>
+               	cmpq	%r11, %r9
+               	je	0x4002ee <.text+0xce>
                	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x12a05f201, %r8       # imm = 0x12A05F201
+               	movabsq	$0x12a05f201, %r9       # imm = 0x12A05F201
                	movabsq	$0x12a05f201, %r11      # imm = 0x12A05F201
-               	movq	%r8, %rax
-               	cmpq	%r11, %r8
-               	je	0x400330 <.text+0x110>
-               	movl	$0x5, %r8d
-               	movq	%r8, %rax
+               	cmpq	%r11, %r9
+               	je	0x400319 <.text+0xf9>
+               	movl	$0x5, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
+               	xorq	%r9, %r9
+               	movq	%r9, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq

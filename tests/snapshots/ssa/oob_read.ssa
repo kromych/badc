@@ -23,8 +23,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v3   Imm(0)                                           -> x20
     v4   LoadLocal { off=-1, kind=I64 }                   -> x20
     v5   Imm(400)                                         -> x20
-    v6   BinopI { op=add, lhs=v2, rhs_imm=400 }           -> x20
-    v7   Load { addr=v6, kind=I32 }                       -> x0
+    v6   BinopI { op=add, lhs=v2, rhs_imm=400 }           -> x0
+    v7   Load { addr=v6, kind=I32 }                       -> x20
     terminator Return(v7)   (exit_acc=v7)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

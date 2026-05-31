@@ -17,12 +17,12 @@ Disassembly of section .text:
                	stur	w15, [x29, #-0x8]
                	b	0x400250 <.text+0x30>
                	ldursw	x15, [x29, #-0x8]
-               	add	x14, x15, #0x1
-               	sxtw	x14, w14
-               	stur	w14, [x29, #-0x8]
+               	add	x15, x15, #0x1
+               	sxtw	x15, w15
+               	stur	w15, [x29, #-0x8]
                	b	0x400264 <.text+0x44>
-               	ldursw	x14, [x29, #-0x8]
-               	cmp	x14, #0x5
+               	ldursw	x15, [x29, #-0x8]
+               	cmp	x15, #0x5
                	b.lt	0x400250 <.text+0x30>
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x10

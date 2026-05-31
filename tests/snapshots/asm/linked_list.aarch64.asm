@@ -24,23 +24,23 @@ Disassembly of section .text:
                	cmp	x15, #0x5
                	b.ge	0x400310 <.text+0xa0>
                	b	0x4002d4 <.text+0x64>
-               	sub	x15, x29, #0x28
-               	ldrsw	x14, [x15]
-               	add	x13, x14, #0x1
-               	str	w13, [x15]
+               	sub	x14, x29, #0x28
+               	ldrsw	x15, [x14]
+               	add	x15, x15, #0x1
+               	str	w15, [x14]
                	b	0x4002b0 <.text+0x40>
-               	mov	x13, #0x10              // =16
-               	sxtw	x20, w13
+               	mov	x15, #0x10              // =16
+               	sxtw	x20, w15
                	mov	x0, x20
                	bl	0x4004a8 <malloc>
                	stur	x0, [x29, #-0x18]
                	ldur	x20, [x29, #-0x18]
                	ldursw	x0, [x29, #-0x28]
                	str	x0, [x20]
-               	ldur	x15, [x29, #-0x18]
-               	add	x0, x15, #0x8
-               	ldur	x15, [x29, #-0x8]
-               	str	x15, [x0]
+               	ldur	x14, [x29, #-0x18]
+               	add	x14, x14, #0x8
+               	ldur	x0, [x29, #-0x8]
+               	str	x0, [x14]
                	ldur	x20, [x29, #-0x18]
                	stur	x20, [x29, #-0x8]
                	b	0x4002c0 <.text+0x50>
@@ -50,17 +50,17 @@ Disassembly of section .text:
                	ldur	x20, [x29, #-0x10]
                	cmp	x20, #0x0
                	b.eq	0x40034c <.text+0xdc>
-               	ldursw	x20, [x29, #-0x20]
-               	ldur	x15, [x29, #-0x10]
-               	ldr	x0, [x15]
-               	add	x12, x20, x0
-               	stur	w12, [x29, #-0x20]
-               	add	x0, x15, #0x8
-               	ldr	x15, [x0]
-               	stur	x15, [x29, #-0x10]
+               	ldursw	x0, [x29, #-0x20]
+               	ldur	x20, [x29, #-0x10]
+               	ldr	x14, [x20]
+               	add	x0, x0, x14
+               	stur	w0, [x29, #-0x20]
+               	add	x20, x20, #0x8
+               	ldr	x14, [x20]
+               	stur	x14, [x29, #-0x10]
                	b	0x40031c <.text+0xac>
-               	ldursw	x15, [x29, #-0x20]
-               	mov	x0, x15
+               	ldursw	x14, [x29, #-0x20]
+               	mov	x0, x14
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x50

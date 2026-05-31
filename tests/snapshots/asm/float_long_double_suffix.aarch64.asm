@@ -45,34 +45,33 @@ Disassembly of section .text:
                	fmov	d0, x15
                	fmov	d1, x14
                	fcmp	d0, d1
-               	cset	x0, ne
-               	cbz	x0, 0x4002e0 <.text+0xc0>
-               	mov	x14, #0xe               // =14
-               	mov	x0, x14
+               	cset	x15, ne
+               	cbz	x15, 0x4002dc <.text+0xbc>
+               	mov	x0, #0xe                // =14
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xb0000000         // =2952790016
-               	movk	x0, #0xf08e, lsl #32
-               	movk	x0, #0x420b, lsl #48
-               	fmov	d0, x0
-               	fmov	d1, x0
+               	mov	x15, #0xb0000000        // =2952790016
+               	movk	x15, #0xf08e, lsl #32
+               	movk	x15, #0x420b, lsl #48
+               	fmov	d0, x15
+               	fmov	d1, x15
                	fcmp	d0, d1
-               	cset	x14, ne
-               	cbz	x14, 0x400310 <.text+0xf0>
+               	cset	x15, ne
+               	cbz	x15, 0x40030c <.text+0xec>
                	mov	x0, #0xf                // =15
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0x7               // =7
-               	cmp	x14, #0x7
-               	b.eq	0x400330 <.text+0x110>
-               	mov	x14, #0x10              // =16
-               	mov	x0, x14
+               	mov	x15, #0x7               // =7
+               	cmp	x15, #0x7
+               	b.eq	0x400328 <.text+0x108>
+               	mov	x0, #0x10               // =16
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

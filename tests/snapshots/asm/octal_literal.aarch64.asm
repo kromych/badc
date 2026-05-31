@@ -32,13 +32,12 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x1e4             // =484
                	cmp	x15, #0x1e4
-               	b.eq	0x4002b0 <.text+0x80>
-               	mov	x15, #0x6               // =6
-               	mov	x0, x15
+               	b.eq	0x4002ac <.text+0x7c>
+               	mov	x0, #0x6                // =6
                	ret
-               	mov	x0, #0x180              // =384
-               	cmp	x0, #0x180
-               	b.eq	0x4002c4 <.text+0x94>
+               	mov	x15, #0x180             // =384
+               	cmp	x15, #0x180
+               	b.eq	0x4002c0 <.text+0x90>
                	mov	x0, #0x7                // =7
                	ret
                	mov	x15, #0xfe5b            // =65115
@@ -50,9 +49,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x15, x17
-               	b.eq	0x4002f8 <.text+0xc8>
-               	mov	x15, #0x8               // =8
-               	mov	x0, x15
+               	b.eq	0x4002f0 <.text+0xc0>
+               	mov	x0, #0x8                // =8
                	ret
-               	mov	x0, #0x2a               // =42
+               	mov	x15, #0x2a              // =42
+               	mov	x0, x15
                	ret

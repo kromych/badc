@@ -17,8 +17,8 @@ Disassembly of section .text:
                	adrp	x19, 0x410000
                	add	x19, x19, #0xd0
                	mov	x15, x19
-               	add	x14, x15, #0x5
-               	ldrb	w0, [x14]
+               	add	x15, x15, #0x5
+               	ldrb	w0, [x15]
                	ldr	x19, [sp]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

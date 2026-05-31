@@ -31,21 +31,21 @@ Disassembly of section .text:
                	cmp	x15, x14
                	b.ge	0x4002c0 <.text+0xa0>
                	ldursw	x14, [x29, #-0x18]
-               	sub	x13, x29, #0x10
-               	ldr	x15, [x13]
-               	add	x17, x15, #0x10
-               	str	x17, [x13]
-               	ldrsw	x13, [x15]
-               	add	x15, x14, x13
-               	sxtw	x15, w15
-               	stur	w15, [x29, #-0x18]
-               	ldursw	x13, [x29, #-0x20]
-               	add	x15, x13, #0x1
+               	sub	x15, x29, #0x10
+               	ldr	x13, [x15]
+               	add	x17, x13, #0x10
+               	str	x17, [x15]
+               	ldrsw	x15, [x13]
+               	add	x14, x14, x15
+               	sxtw	x14, w14
+               	stur	w14, [x29, #-0x18]
+               	ldursw	x15, [x29, #-0x20]
+               	add	x15, x15, #0x1
                	sxtw	x15, w15
                	stur	w15, [x29, #-0x20]
                	b	0x400278 <.text+0x58>
                	sub	x15, x29, #0x10
-               	sub	x13, x29, #0x8
+               	sub	x14, x29, #0x8
                	ldursw	x0, [x29, #-0x18]
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
@@ -72,8 +72,9 @@ Disassembly of section .text:
                	bl	0x400238 <.text+0x18>
                	add	sp, sp, #0x50
                	cmp	x0, #0x64
-               	b.eq	0x400358 <.text+0x138>
-               	mov	x0, #0xb                // =11
+               	b.eq	0x40035c <.text+0x13c>
+               	mov	x24, #0xb               // =11
+               	mov	x0, x24
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -82,8 +83,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x24, #0x0               // =0
-               	mov	x0, x24
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

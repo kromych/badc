@@ -35,17 +35,16 @@ Disassembly of section .text:
                	movl	$0xf, %eax
                	retq
                	xorq	%r11, %r11
-               	movq	%r11, %rax
-               	addq	$0x4, %rax
-               	cmpq	$0x4, %rax
-               	je	0x4002c5 <.text+0xa5>
+               	addq	$0x4, %r11
+               	cmpq	$0x4, %r11
+               	je	0x4002c2 <.text+0xa2>
                	movl	$0x10, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002df <.text+0xbf>
-               	movl	$0x11, %r11d
-               	movq	%r11, %rax
+               	je	0x4002d8 <.text+0xb8>
+               	movl	$0x11, %eax
                	retq
-               	xorq	%rax, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	retq

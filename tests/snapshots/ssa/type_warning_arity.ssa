@@ -13,8 +13,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x13
     v5   LoadLocal { off=2, kind=I32 }                    -> x13
     v6   LoadLocal { off=3, kind=I32 }                    -> x13
-    v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x13
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x14
+    v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x15
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x15
     v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; name=main

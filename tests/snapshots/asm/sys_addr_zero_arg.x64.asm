@@ -18,8 +18,8 @@ Disassembly of section .text:
                	movq	(%r11), %rbx
                	movq	%rbx, %r11
                	callq	*%r11
-               	movslq	%eax, %rbx
-               	cmpq	$0x0, %rbx
+               	movslq	%eax, %rax
+               	cmpq	$0x0, %rax
                	jg	0x400308 <.text+0x68>
                	movl	$0x1, %ebx
                	movq	%rbx, %rcx

@@ -16,7 +16,7 @@ Disassembly of section .text:
                	movl	$0x8, %ebx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
-               	callq	0x400447 <malloc>
+               	callq	0x400437 <malloc>
                	movl	$0x3, %ebx
                	movl	%ebx, (%rax)
                	movq	%rax, %r8
@@ -25,17 +25,13 @@ Disassembly of section .text:
                	movl	%ebx, (%r8)
                	movslq	(%rax), %rdi
                	movslq	(%rax), %rbx
-               	movq	%rdi, %r8
-               	imulq	%rbx, %r8
-               	movslq	%r8d, %r8
-               	movq	%rax, %rbx
-               	addq	$0x4, %rbx
-               	movslq	(%rbx), %rax
-               	movslq	(%rbx), %rdi
-               	movq	%rax, %rbx
-               	imulq	%rdi, %rbx
+               	imulq	%rbx, %rdi
+               	movslq	%edi, %rdi
+               	addq	$0x4, %rax
+               	movslq	(%rax), %rbx
+               	movslq	(%rax), %r8
+               	imulq	%r8, %rbx
                	movslq	%ebx, %rbx
-               	movq	%r8, %rdi
                	addq	%rbx, %rdi
                	movslq	%edi, %rdi
                	movq	%rdi, %rcx

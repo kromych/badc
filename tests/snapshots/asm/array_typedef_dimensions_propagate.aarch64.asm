@@ -16,25 +16,24 @@ Disassembly of section .text:
                	b.eq	0x400250 <.text+0x30>
                	mov	x0, #0xb                // =11
                	ret
-               	mov	x14, #0x200             // =512
-               	sxtw	x14, w14
-               	cmp	x14, #0x200
-               	b.eq	0x40026c <.text+0x4c>
-               	mov	x14, #0xc               // =12
-               	mov	x0, x14
+               	mov	x15, #0x200             // =512
+               	sxtw	x15, w15
+               	cmp	x15, #0x200
+               	b.eq	0x400268 <.text+0x48>
+               	mov	x0, #0xc                // =12
                	ret
-               	mov	x0, #0x200              // =512
-               	sxtw	x0, w0
-               	cmp	x0, #0x200
-               	b.eq	0x400284 <.text+0x64>
+               	mov	x15, #0x200             // =512
+               	sxtw	x15, w15
+               	cmp	x15, #0x200
+               	b.eq	0x400280 <.text+0x60>
                	mov	x0, #0xd                // =13
                	ret
-               	mov	x14, #0x200             // =512
-               	sxtw	x14, w14
-               	cmp	x14, #0x200
-               	b.eq	0x4002a0 <.text+0x80>
-               	mov	x14, #0xe               // =14
-               	mov	x0, x14
+               	mov	x15, #0x200             // =512
+               	sxtw	x15, w15
+               	cmp	x15, #0x200
+               	b.eq	0x400298 <.text+0x78>
+               	mov	x0, #0xe                // =14
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

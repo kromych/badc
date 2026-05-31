@@ -42,9 +42,10 @@ Disassembly of section .text:
                	movl	$0x5, %r11d
                	movslq	%r11d, %r11
                	cmpq	$0x5, %r11
-               	je	0x4002db <.text+0xbb>
-               	movl	$0x11, %r11d
+               	je	0x4002d7 <.text+0xb7>
+               	movl	$0x11, %eax
+               	retq
+               	xorq	%r11, %r11
                	movq	%r11, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
+               	addb	%al, 0x41(%rdx)

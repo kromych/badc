@@ -16,19 +16,18 @@ Disassembly of section .text:
                	b.eq	0x400250 <.text+0x30>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x14, #0x4               // =4
-               	sxtw	x14, w14
-               	cmp	x14, #0x4
-               	b.eq	0x40026c <.text+0x4c>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	mov	x15, #0x4               // =4
+               	sxtw	x15, w15
+               	cmp	x15, #0x4
+               	b.eq	0x400268 <.text+0x48>
+               	mov	x0, #0x2                // =2
                	ret
-               	mov	x0, #0x7b               // =123
-               	sxtw	x0, w0
-               	cmp	x0, #0x7b
-               	b.eq	0x400284 <.text+0x64>
+               	mov	x15, #0x7b              // =123
+               	sxtw	x15, w15
+               	cmp	x15, #0x7b
+               	b.eq	0x400280 <.text+0x60>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

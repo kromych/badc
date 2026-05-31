@@ -14,32 +14,31 @@ Disassembly of section .text:
                	je	0x400250 <.text+0x30>
                	movl	$0xb, %eax
                	retq
-               	movl	$0x3, %r9d
-               	cmpq	$0x3, %r9
-               	je	0x40026d <.text+0x4d>
-               	movl	$0xc, %r9d
-               	movq	%r9, %rax
+               	movl	$0x3, %r11d
+               	cmpq	$0x3, %r11
+               	je	0x400269 <.text+0x49>
+               	movl	$0xc, %eax
                	retq
-               	movl	$0x32, %eax
-               	movslq	%eax, %rax
-               	cmpq	$0x32, %rax
-               	je	0x400288 <.text+0x68>
+               	movl	$0x32, %r11d
+               	movslq	%r11d, %r11
+               	cmpq	$0x32, %r11
+               	je	0x400285 <.text+0x65>
                	movl	$0xd, %eax
                	retq
-               	movl	$0x11, %r9d
-               	movslq	%r9d, %r9
-               	cmpq	$0x11, %r9
-               	je	0x4002a8 <.text+0x88>
-               	movl	$0xe, %r9d
-               	movq	%r9, %rax
+               	movl	$0x11, %r11d
+               	movslq	%r11d, %r11
+               	cmpq	$0x11, %r11
+               	je	0x4002a1 <.text+0x81>
+               	movl	$0xe, %eax
                	retq
-               	movl	$0x3, %eax
-               	movslq	%eax, %rax
-               	cmpq	$0x3, %rax
-               	je	0x4002c3 <.text+0xa3>
+               	movl	$0x3, %r11d
+               	movslq	%r11d, %r11
+               	cmpq	$0x3, %r11
+               	je	0x4002bd <.text+0x9d>
                	movl	$0xf, %eax
                	retq
-               	xorq	%r9, %r9
-               	movq	%r9, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

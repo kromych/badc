@@ -12,13 +12,13 @@ Disassembly of section .text:
                	blr	x16
                	sxtw	x15, w0
                	sxtw	x14, w1
-               	add	x13, x15, x14
-               	sxtw	x0, w13
+               	add	x15, x15, x14
+               	sxtw	x0, w15
                	ret
                	sxtw	x15, w0
                	sxtw	x14, w1
-               	sub	x13, x15, x14
-               	sxtw	x0, w13
+               	sub	x15, x15, x14
+               	sxtw	x0, w15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -53,10 +53,11 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
-               	sxtw	x22, w23
-               	sxtw	x23, w0
-               	mul	x0, x22, x23
+               	sxtw	x23, w23
                	sxtw	x0, w0
+               	mul	x23, x23, x0
+               	sxtw	x23, w23
+               	mov	x0, x23
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

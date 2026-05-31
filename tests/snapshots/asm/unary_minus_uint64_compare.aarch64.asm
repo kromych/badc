@@ -19,9 +19,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x14, x15, x17
+               	mul	x15, x15, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x14, x17
+               	cmp	x15, x17
                	b.hs	0x400280 <.text+0x60>
                	mov	x0, #0xb                // =11
                	ldr	x19, [sp]
@@ -44,9 +44,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x13, x0, x17
+               	mul	x0, x0, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x13, x17
+               	cmp	x0, x17
                	b.hs	0x4002e8 <.text+0xc8>
                	mov	x13, #0xc               // =12
                	mov	x0, x13
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x13, x0, x17
+               	mul	x0, x0, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x13, x17
+               	cmp	x0, x17
                	b.hs	0x400318 <.text+0xf8>
                	mov	x13, #0x1               // =1
                	stur	x13, [x29, #-0x38]
@@ -70,8 +70,8 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x38]
                	b	0x400324 <.text+0x104>
                	ldur	x13, [x29, #-0x38]
-               	sxtw	x0, w13
-               	cmp	x0, #0x2
+               	sxtw	x13, w13
+               	cmp	x13, #0x2
                	b.eq	0x400348 <.text+0x128>
                	mov	x0, #0xd                // =13
                	ldr	x19, [sp]
@@ -83,9 +83,9 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x0, x13, x17
+               	mul	x13, x13, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x0, x17
+               	cmp	x13, x17
                	b.hs	0x400380 <.text+0x160>
                	mov	x0, #0xe                // =14
                	ldr	x19, [sp]

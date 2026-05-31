@@ -16,17 +16,17 @@ Disassembly of section .text:
                	je	0x400267 <.text+0x37>
                	movl	$0x1, %eax
                	retq
-               	leaq	0xfe72(%rip), %r9       # 0x4100e0
+               	leaq	0xfe72(%rip), %r11      # 0x4100e0
                	movl	$0xb, %eax
-               	movl	%eax, (%r9)
+               	movl	%eax, (%r11)
                	leaq	0xfe6b(%rip), %r8       # 0x4100e8
                	movq	(%r8), %rax
                	movslq	(%rax), %r8
                	cmpq	$0xb, %r8
-               	je	0x40029a <.text+0x6a>
-               	movl	$0x2, %r8d
+               	je	0x400296 <.text+0x66>
+               	movl	$0x2, %eax
+               	retq
+               	xorq	%r8, %r8
                	movq	%r8, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

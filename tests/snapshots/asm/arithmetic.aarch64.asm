@@ -12,6 +12,6 @@ Disassembly of section .text:
                	blr	x16
                	mov	x15, #0x1e              // =30
                	sxtw	x15, w15
-               	lsl	x14, x15, #1
-               	sxtw	x0, w14
+               	lsl	x15, x15, #1
+               	sxtw	x0, w15
                	ret

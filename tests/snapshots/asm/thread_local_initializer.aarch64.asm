@@ -24,53 +24,54 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x18
-               	ldrsw	x0, [x15]
+               	mrs	x14, TPIDR_EL0
+               	add	x14, x14, #0x18
+               	ldrsw	x0, [x14]
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	b.eq	0x4002f8 <.text+0x88>
-               	mov	x0, #0x2                // =2
+               	b.eq	0x4002fc <.text+0x8c>
+               	mov	x14, #0x2               // =2
+               	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x20
-               	ldrsw	x0, [x15]
-               	cmp	x0, #0x0
-               	b.eq	0x400320 <.text+0xb0>
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x20
+               	ldrsw	x14, [x0]
+               	cmp	x14, #0x0
+               	b.eq	0x400324 <.text+0xb4>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x10
+               	mrs	x14, TPIDR_EL0
+               	add	x14, x14, #0x10
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x10
                	ldrsw	x13, [x0]
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x18
                	ldrsw	x12, [x0]
-               	add	x0, x13, x12
-               	sxtw	x0, w0
-               	str	w0, [x15]
+               	add	x13, x13, x12
+               	sxtw	x13, w13
+               	str	w13, [x14]
                	mrs	x12, TPIDR_EL0
                	add	x12, x12, #0x10
-               	ldrsw	x0, [x12]
-               	cmp	x0, #0x4
-               	b.eq	0x400374 <.text+0x104>
+               	ldrsw	x13, [x12]
+               	cmp	x13, #0x4
+               	b.eq	0x400378 <.text+0x108>
                	mov	x0, #0x4                // =4
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x12, #0x0               // =0
-               	mov	x0, x12
+               	mov	x13, #0x0               // =0
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -17,35 +17,34 @@ Disassembly of section .text:
                	sxtw	x14, w15
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	eor	x13, x14, x17
+               	eor	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x14, x13, x17
+               	and	x14, x14, x17
                	cmp	x14, #0x0
                	b.eq	0x400274 <.text+0x54>
                	mov	x0, #0x1                // =1
                	ret
-               	sxtw	x13, w15
+               	sxtw	x14, w15
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	eor	x0, x13, x17
+               	eor	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x0, x17
-               	cmp	x13, #0x0
-               	b.eq	0x4002a4 <.text+0x84>
-               	mov	x13, #0x2               // =2
-               	mov	x0, x13
+               	and	x14, x14, x17
+               	cmp	x14, #0x0
+               	b.eq	0x4002a0 <.text+0x80>
+               	mov	x0, #0x2                // =2
                	ret
-               	sxtw	x0, w15
+               	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x0, x17
-               	cset	x13, ne
-               	cmp	x13, #0x0
-               	b.ne	0x4002cc <.text+0xac>
-               	mov	x13, #0x3               // =3
-               	mov	x0, x13
+               	cmp	x15, x17
+               	cset	x15, ne
+               	cmp	x15, #0x0
+               	b.ne	0x4002c4 <.text+0xa4>
+               	mov	x0, #0x3                // =3
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

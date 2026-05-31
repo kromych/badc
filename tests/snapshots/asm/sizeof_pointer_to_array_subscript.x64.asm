@@ -16,653 +16,555 @@ Disassembly of section .text:
                	leaq	0x10306(%rip), %r9      # 0x410553
                	movq	%r9, (%r11)
                	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x8, %r9
-               	leaq	0x102fb(%rip), %r8      # 0x410560
-               	movq	%r8, (%r9)
+               	addq	$0x8, %r8
+               	leaq	0x102fe(%rip), %r9      # 0x410560
+               	movq	%r9, (%r8)
                	leaq	-0x70(%rbp), %r11
-               	movq	%r11, %r8
-               	addq	$0x10, %r8
-               	leaq	0x102f3(%rip), %r11     # 0x410570
-               	movq	%r11, (%r8)
-               	leaq	-0x70(%rbp), %r9
-               	movq	%r9, %r11
-               	addq	$0x18, %r11
-               	leaq	0x102fb(%rip), %r9      # 0x410590
+               	addq	$0x10, %r11
+               	leaq	0x102f9(%rip), %r9      # 0x410570
                	movq	%r9, (%r11)
                	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x20, %r9
-               	leaq	0x10323(%rip), %r8      # 0x4105d0
-               	movq	%r8, (%r9)
+               	addq	$0x18, %r8
+               	leaq	0x10304(%rip), %r9      # 0x410590
+               	movq	%r9, (%r8)
                	leaq	-0x70(%rbp), %r11
-               	movq	%r11, %r8
+               	addq	$0x20, %r11
+               	leaq	0x1032f(%rip), %r9      # 0x4105d0
+               	movq	%r9, (%r11)
+               	leaq	-0x70(%rbp), %r8
                	addq	$0x28, %r8
-               	leaq	0x1034b(%rip), %r11     # 0x410610
-               	movq	%r11, (%r8)
-               	leaq	-0x70(%rbp), %r9
-               	movq	(%r9), %r11
-               	movq	%r11, %r9
+               	leaq	0x1035a(%rip), %r9      # 0x410610
+               	movq	%r9, (%r8)
+               	leaq	-0x70(%rbp), %r11
+               	movq	(%r11), %r9
                	addq	$0x8, %r9
                	leaq	-0x70(%rbp), %r11
                	movq	(%r11), %r8
-               	movq	%r9, %r11
-               	subq	%r8, %r11
-               	cmpq	$0x8, %r11
-               	je	0x400301 <.text+0xe1>
+               	subq	%r8, %r9
+               	cmpq	$0x8, %r9
+               	je	0x4002ec <.text+0xcc>
                	movl	$0xb, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x10, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
+               	leaq	-0x70(%rbp), %r9
                	addq	$0x8, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0x10, %r9
-               	je	0x40034e <.text+0x12e>
-               	movl	$0xc, %eax
+               	movq	(%r9), %rax
+               	addq	$0x10, %rax
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x8, %r9
+               	movq	(%r9), %r11
+               	subq	%r11, %rax
+               	cmpq	$0x10, %rax
+               	je	0x400331 <.text+0x111>
+               	movl	$0xc, %r11d
+               	movq	%r11, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %rax
                	addq	$0x10, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x20, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x10, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0x20, %r9
-               	je	0x40039b <.text+0x17b>
+               	movq	(%rax), %r11
+               	addq	$0x20, %r11
+               	leaq	-0x70(%rbp), %rax
+               	addq	$0x10, %rax
+               	movq	(%rax), %r9
+               	subq	%r9, %r11
+               	cmpq	$0x20, %r11
+               	je	0x400372 <.text+0x152>
                	movl	$0xd, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x18, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %r11
+               	addq	$0x18, %r11
+               	movq	(%r11), %rax
                	addq	$0x40, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x18, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0x40, %r9
-               	je	0x4003e8 <.text+0x1c8>
-               	movl	$0xe, %eax
+               	leaq	-0x70(%rbp), %r11
+               	addq	$0x18, %r11
+               	movq	(%r11), %r9
+               	subq	%r9, %rax
+               	cmpq	$0x40, %rax
+               	je	0x4003b7 <.text+0x197>
+               	movl	$0xe, %r9d
+               	movq	%r9, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %rax
                	addq	$0x20, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x3c, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x20, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
+               	movq	(%rax), %r9
+               	addq	$0x3c, %r9
+               	leaq	-0x70(%rbp), %rax
+               	addq	$0x20, %rax
+               	movq	(%rax), %r11
+               	subq	%r11, %r9
                	cmpq	$0x3c, %r9
-               	je	0x400435 <.text+0x215>
+               	je	0x4003f8 <.text+0x1d8>
                	movl	$0xf, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x20, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x14, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
+               	leaq	-0x70(%rbp), %r9
                	addq	$0x20, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0x14, %r9
-               	je	0x400482 <.text+0x262>
-               	movl	$0x10, %eax
+               	movq	(%r9), %rax
+               	addq	$0x14, %rax
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x20, %r9
+               	movq	(%r9), %r11
+               	subq	%r11, %rax
+               	cmpq	$0x14, %rax
+               	je	0x40043d <.text+0x21d>
+               	movl	$0x10, %r11d
+               	movq	%r11, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %rax
                	addq	$0x28, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x18, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x28, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0x18, %r9
-               	je	0x4004cf <.text+0x2af>
+               	movq	(%rax), %r11
+               	addq	$0x18, %r11
+               	leaq	-0x70(%rbp), %rax
+               	addq	$0x28, %rax
+               	movq	(%rax), %r9
+               	subq	%r9, %r11
+               	cmpq	$0x18, %r11
+               	je	0x40047e <.text+0x25e>
                	movl	$0x11, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x28, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %r11
+               	addq	$0x28, %r11
+               	movq	(%r11), %rax
                	addq	$0xc, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x28, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
-               	cmpq	$0xc, %r9
-               	je	0x40051c <.text+0x2fc>
-               	movl	$0x12, %eax
+               	leaq	-0x70(%rbp), %r11
+               	addq	$0x28, %r11
+               	movq	(%r11), %r9
+               	subq	%r9, %rax
+               	cmpq	$0xc, %rax
+               	je	0x4004c3 <.text+0x2a3>
+               	movl	$0x12, %r9d
+               	movq	%r9, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
+               	leaq	-0x70(%rbp), %rax
                	addq	$0x28, %rax
-               	movq	(%rax), %r8
-               	movq	%r8, %rax
-               	addq	$0x4, %rax
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %r9
-               	addq	$0x28, %r9
-               	movq	(%r9), %r8
-               	movq	%rax, %r9
-               	subq	%r8, %r9
+               	movq	(%rax), %r9
+               	addq	$0x4, %r9
+               	leaq	-0x70(%rbp), %rax
+               	addq	$0x28, %rax
+               	movq	(%rax), %r11
+               	subq	%r11, %r9
                	cmpq	$0x4, %r9
-               	je	0x400569 <.text+0x349>
+               	je	0x400504 <.text+0x2e4>
                	movl	$0x13, %eax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x78(%rbp)
-               	jmp	0x400575 <.text+0x355>
-               	movslq	-0x78(%rbp), %r8
-               	cmpq	$0x8, %r8
-               	jge	0x4005e0 <.text+0x3c0>
-               	jmp	0x4005a4 <.text+0x384>
-               	leaq	-0x78(%rbp), %r8
-               	movslq	(%r8), %rax
-               	movq	%rax, %r9
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400510 <.text+0x2f0>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x8, %r9
+               	jge	0x40056f <.text+0x34f>
+               	jmp	0x40053c <.text+0x31c>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%r8)
-               	jmp	0x400575 <.text+0x355>
+               	movl	%r9d, (%rax)
+               	jmp	0x400510 <.text+0x2f0>
                	leaq	-0x70(%rbp), %r9
+               	addq	$0x8, %r9
+               	movq	(%r9), %r11
+               	movslq	-0x78(%rbp), %r9
                	movq	%r9, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %r9
-               	movslq	-0x78(%rbp), %rax
-               	movq	%rax, %r8
-               	shlq	$0x1, %r8
-               	movq	%r9, %rdi
-               	addq	%r8, %rdi
-               	movq	%rax, %r8
-               	addq	$0x3e8, %r8             # imm = 0x3E8
-               	movslq	%r8d, %r8
-               	movswq	%r8w, %r8
-               	movw	%r8w, (%rdi)
-               	jmp	0x40058b <.text+0x36b>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x78(%rbp)
-               	jmp	0x4005ec <.text+0x3cc>
-               	movslq	-0x78(%rbp), %r8
-               	cmpq	$0x8, %r8
-               	jge	0x400660 <.text+0x440>
-               	jmp	0x40061b <.text+0x3fb>
-               	leaq	-0x78(%rbp), %r8
-               	movslq	(%r8), %rax
-               	movq	%rax, %rdi
-               	addq	$0x1, %rdi
-               	movl	%edi, (%r8)
-               	jmp	0x4005ec <.text+0x3cc>
-               	leaq	-0x70(%rbp), %rdi
-               	movq	%rdi, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %rdi
-               	movslq	-0x78(%rbp), %rax
-               	movq	%rax, %r8
-               	shlq	$0x1, %r8
-               	movq	%rdi, %r9
-               	addq	%r8, %r9
-               	movswq	(%r9), %r8
-               	movq	%rax, %r9
+               	shlq	$0x1, %rax
+               	addq	%rax, %r11
                	addq	$0x3e8, %r9             # imm = 0x3E8
                	movslq	%r9d, %r9
                	movswq	%r9w, %r9
-               	cmpq	%r9, %r8
-               	je	0x400686 <.text+0x466>
-               	jmp	0x40066c <.text+0x44c>
+               	movw	%r9w, (%r11)
+               	jmp	0x400526 <.text+0x306>
                	xorq	%r9, %r9
                	movl	%r9d, -0x78(%rbp)
-               	jmp	0x40068b <.text+0x46b>
-               	movslq	-0x78(%rbp), %r9
-               	movq	%r9, %rax
-               	addq	$0x14, %rax
-               	movslq	%eax, %rax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	0x400602 <.text+0x3e2>
+               	jmp	0x40057b <.text+0x35b>
                	movslq	-0x78(%rbp), %r9
                	cmpq	$0x8, %r9
-               	jge	0x4006ff <.text+0x4df>
-               	jmp	0x4006ba <.text+0x49a>
-               	leaq	-0x78(%rbp), %r9
-               	movslq	(%r9), %rax
-               	movq	%rax, %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%r9)
-               	jmp	0x40068b <.text+0x46b>
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %r8
-               	movslq	-0x78(%rbp), %rax
-               	movq	%rax, %r9
-               	shlq	$0x1, %r9
-               	movq	%r8, %rdi
-               	addq	%r9, %rdi
-               	movswq	(%rdi), %r9
-               	movq	%rax, %rdi
-               	addq	$0x3e8, %rdi            # imm = 0x3E8
-               	movslq	%edi, %rdi
-               	movswq	%di, %rdi
-               	cmpq	%rdi, %r9
-               	je	0x400724 <.text+0x504>
-               	jmp	0x40070a <.text+0x4ea>
-               	xorq	%rdi, %rdi
-               	movl	%edi, -0x78(%rbp)
-               	jmp	0x400729 <.text+0x509>
-               	movslq	-0x78(%rbp), %rdi
-               	movq	%rdi, %rax
-               	addq	$0x1c, %rax
-               	movslq	%eax, %rax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	0x4006a1 <.text+0x481>
-               	movslq	-0x78(%rbp), %rdi
-               	cmpq	$0x3, %rdi
-               	jge	0x400764 <.text+0x544>
-               	jmp	0x400758 <.text+0x538>
-               	leaq	-0x78(%rbp), %rdi
-               	movslq	(%rdi), %rax
-               	movq	%rax, %r9
-               	addq	$0x1, %r9
-               	movl	%r9d, (%rdi)
-               	jmp	0x400729 <.text+0x509>
-               	xorq	%r9, %r9
-               	movl	%r9d, -0x80(%rbp)
-               	jmp	0x40076f <.text+0x54f>
-               	xorq	%rax, %rax
-               	movl	%eax, -0x78(%rbp)
-               	jmp	0x4007f5 <.text+0x5d5>
-               	movslq	-0x80(%rbp), %r9
-               	cmpq	$0x5, %r9
-               	jge	0x4007f0 <.text+0x5d0>
-               	jmp	0x40079e <.text+0x57e>
-               	leaq	-0x80(%rbp), %r9
-               	movslq	(%r9), %rax
-               	movq	%rax, %rdi
-               	addq	$0x1, %rdi
-               	movl	%edi, (%r9)
-               	jmp	0x40076f <.text+0x54f>
-               	leaq	-0x70(%rbp), %rdi
-               	movq	%rdi, %rax
-               	addq	$0x20, %rax
-               	movq	(%rax), %rdi
-               	movslq	-0x78(%rbp), %rax
-               	movl	$0x14, %r9d
-               	imulq	%rax, %r9
-               	movq	%rdi, %r8
-               	addq	%r9, %r8
-               	movslq	-0x80(%rbp), %r9
-               	movq	%r9, %rdi
-               	shlq	$0x2, %rdi
-               	movq	%r8, %rsi
-               	addq	%rdi, %rsi
-               	movl	$0x64, %edi
-               	imulq	%rax, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	addq	%r9, %rax
-               	movslq	%eax, %rax
-               	movl	%eax, (%rsi)
-               	jmp	0x400785 <.text+0x565>
-               	jmp	0x40073f <.text+0x51f>
-               	movslq	-0x78(%rbp), %rax
-               	cmpq	$0x3, %rax
-               	jge	0x40082e <.text+0x60e>
-               	jmp	0x400823 <.text+0x603>
+               	jge	0x4005e3 <.text+0x3c3>
+               	jmp	0x4005a7 <.text+0x387>
                	leaq	-0x78(%rbp), %rax
-               	movslq	(%rax), %rdi
-               	movq	%rdi, %rsi
-               	addq	$0x1, %rsi
-               	movl	%esi, (%rax)
-               	jmp	0x4007f5 <.text+0x5d5>
-               	xorq	%rsi, %rsi
-               	movl	%esi, -0x80(%rbp)
-               	jmp	0x40083a <.text+0x61a>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x78(%rbp)
-               	jmp	0x400902 <.text+0x6e2>
-               	movslq	-0x80(%rbp), %rsi
-               	cmpq	$0x5, %rsi
-               	jge	0x4008c4 <.text+0x6a4>
-               	jmp	0x400868 <.text+0x648>
-               	leaq	-0x80(%rbp), %rsi
-               	movslq	(%rsi), %rdi
-               	movq	%rdi, %rax
-               	addq	$0x1, %rax
-               	movl	%eax, (%rsi)
-               	jmp	0x40083a <.text+0x61a>
-               	leaq	-0x70(%rbp), %rax
-               	movq	%rax, %rdi
-               	addq	$0x20, %rdi
-               	movq	(%rdi), %rax
-               	movslq	-0x78(%rbp), %rdi
-               	movl	$0x14, %esi
-               	imulq	%rdi, %rsi
-               	movq	%rax, %r9
-               	addq	%rsi, %r9
-               	movslq	-0x80(%rbp), %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	movq	%r9, %r8
-               	addq	%rax, %r8
-               	movslq	(%r8), %rax
-               	movl	$0x64, %r8d
-               	imulq	%rdi, %r8
-               	movslq	%r8d, %r8
-               	movq	%r8, %rdi
-               	addq	%rsi, %rdi
-               	movslq	%edi, %rdi
-               	cmpq	%rdi, %rax
-               	je	0x4008fd <.text+0x6dd>
-               	jmp	0x4008c9 <.text+0x6a9>
-               	jmp	0x40080b <.text+0x5eb>
-               	movslq	-0x78(%rbp), %rdi
-               	movl	$0x5, %r8d
-               	imulq	%rdi, %r8
-               	movslq	%r8d, %r8
-               	movq	%r8, %rdi
-               	addq	$0x28, %rdi
-               	movslq	%edi, %rdi
-               	movslq	-0x80(%rbp), %r8
-               	movq	%rdi, %rax
-               	addq	%r8, %rax
-               	movslq	%eax, %rax
-               	addq	$0x90, %rsp
-               	popq	%rbp
-               	retq
-               	jmp	0x400850 <.text+0x630>
-               	movslq	-0x78(%rbp), %r8
-               	cmpq	$0x3, %r8
-               	jge	0x40093c <.text+0x71c>
-               	jmp	0x400931 <.text+0x711>
-               	leaq	-0x78(%rbp), %r8
-               	movslq	(%r8), %rax
-               	movq	%rax, %rdi
-               	addq	$0x1, %rdi
-               	movl	%edi, (%r8)
-               	jmp	0x400902 <.text+0x6e2>
-               	xorq	%rdi, %rdi
-               	movl	%edi, -0x80(%rbp)
-               	jmp	0x400948 <.text+0x728>
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x40057b <.text+0x35b>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x8, %r9
+               	movq	(%r9), %r11
+               	movslq	-0x78(%rbp), %r9
+               	movq	%r9, %rax
+               	shlq	$0x1, %rax
+               	addq	%rax, %r11
+               	movswq	(%r11), %rax
+               	addq	$0x3e8, %r9             # imm = 0x3E8
+               	movslq	%r9d, %r9
+               	movswq	%r9w, %r9
+               	cmpq	%r9, %rax
+               	je	0x400606 <.text+0x3e6>
+               	jmp	0x4005ef <.text+0x3cf>
                	xorq	%r9, %r9
                	movl	%r9d, -0x78(%rbp)
-               	jmp	0x400a11 <.text+0x7f1>
-               	movslq	-0x80(%rbp), %rdi
-               	cmpq	$0x5, %rdi
-               	jge	0x4009d3 <.text+0x7b3>
-               	jmp	0x400977 <.text+0x757>
-               	leaq	-0x80(%rbp), %rdi
-               	movslq	(%rdi), %rax
-               	movq	%rax, %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%rdi)
-               	jmp	0x400948 <.text+0x728>
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x20, %rax
-               	movq	(%rax), %r8
-               	movslq	-0x78(%rbp), %rax
-               	movl	$0x14, %edi
-               	imulq	%rax, %rdi
-               	movq	%r8, %rsi
-               	addq	%rdi, %rsi
-               	movslq	-0x80(%rbp), %rdi
-               	movq	%rdi, %r8
-               	shlq	$0x2, %r8
-               	movq	%rsi, %r9
-               	addq	%r8, %r9
-               	movslq	(%r9), %r8
-               	movl	$0x64, %r9d
-               	imulq	%rax, %r9
-               	movslq	%r9d, %r9
-               	movq	%r9, %rax
-               	addq	%rdi, %rax
-               	movslq	%eax, %rax
-               	cmpq	%rax, %r8
-               	je	0x400a0c <.text+0x7ec>
-               	jmp	0x4009d8 <.text+0x7b8>
-               	jmp	0x400918 <.text+0x6f8>
-               	movslq	-0x78(%rbp), %rax
-               	movl	$0x5, %r9d
-               	imulq	%rax, %r9
-               	movslq	%r9d, %r9
-               	movq	%r9, %rax
-               	addq	$0x3c, %rax
-               	movslq	%eax, %rax
-               	movslq	-0x80(%rbp), %r9
-               	movq	%rax, %r8
-               	addq	%r9, %r8
-               	movslq	%r8d, %rax
+               	jmp	0x40060b <.text+0x3eb>
+               	movslq	-0x78(%rbp), %r9
+               	addq	$0x14, %r9
+               	movslq	%r9d, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	jmp	0x40095e <.text+0x73e>
+               	jmp	0x400591 <.text+0x371>
                	movslq	-0x78(%rbp), %r9
-               	cmpq	$0x2, %r9
-               	jge	0x400a4c <.text+0x82c>
-               	jmp	0x400a40 <.text+0x820>
-               	leaq	-0x78(%rbp), %r9
-               	movslq	(%r9), %rax
-               	movq	%rax, %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%r9)
-               	jmp	0x400a11 <.text+0x7f1>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x80(%rbp)
-               	jmp	0x400a58 <.text+0x838>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x78(%rbp)
-               	jmp	0x400b42 <.text+0x922>
-               	movslq	-0x80(%rbp), %r8
-               	cmpq	$0x3, %r8
-               	jge	0x400a96 <.text+0x876>
-               	jmp	0x400a87 <.text+0x867>
-               	leaq	-0x80(%rbp), %r8
-               	movslq	(%r8), %rax
-               	movq	%rax, %r9
+               	cmpq	$0x8, %r9
+               	jge	0x400673 <.text+0x453>
+               	jmp	0x400637 <.text+0x417>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%r8)
-               	jmp	0x400a58 <.text+0x838>
-               	xorq	%r9, %r9
-               	movl	%r9d, -0x88(%rbp)
-               	jmp	0x400a9b <.text+0x87b>
-               	jmp	0x400a27 <.text+0x807>
-               	movslq	-0x88(%rbp), %r9
-               	cmpq	$0x4, %r9
-               	jge	0x400b3d <.text+0x91d>
-               	jmp	0x400ad0 <.text+0x8b0>
-               	leaq	-0x88(%rbp), %r9
-               	movslq	(%r9), %rax
-               	movq	%rax, %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%r9)
-               	jmp	0x400a9b <.text+0x87b>
-               	leaq	-0x70(%rbp), %r8
-               	movq	%r8, %rax
-               	addq	$0x28, %rax
-               	movq	(%rax), %r8
-               	movslq	-0x78(%rbp), %rax
-               	movl	$0xc, %r9d
-               	imulq	%rax, %r9
-               	movq	%r8, %rax
-               	addq	%r9, %rax
-               	movslq	-0x80(%rbp), %r8
-               	movq	%r8, %rdi
-               	shlq	$0x2, %rdi
-               	movq	%rax, %r8
-               	addq	%rdi, %r8
-               	movslq	-0x88(%rbp), %rax
-               	movq	%r8, %rsi
-               	addq	%rax, %rsi
+               	movl	%r9d, (%rax)
+               	jmp	0x40060b <.text+0x3eb>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x8, %r9
+               	movq	(%r9), %r11
+               	movslq	-0x78(%rbp), %r9
+               	movq	%r9, %rax
+               	shlq	$0x1, %rax
+               	addq	%rax, %r11
+               	movswq	(%r11), %rax
+               	addq	$0x3e8, %r9             # imm = 0x3E8
                	movslq	%r9d, %r9
-               	movslq	%edi, %rdi
-               	movq	%r9, %r8
-               	addq	%rdi, %r8
-               	movslq	%r8d, %r8
-               	movq	%r8, %rdi
-               	addq	%rax, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, %r8
-               	andq	$0xff, %r8
-               	movb	%r8b, (%rsi)
-               	jmp	0x400ab4 <.text+0x894>
-               	jmp	0x400a6e <.text+0x84e>
-               	movslq	-0x78(%rbp), %r8
-               	cmpq	$0x2, %r8
-               	jge	0x400b7c <.text+0x95c>
-               	jmp	0x400b71 <.text+0x951>
-               	leaq	-0x78(%rbp), %r8
-               	movslq	(%r8), %rdi
-               	movq	%rdi, %rsi
-               	addq	$0x1, %rsi
-               	movl	%esi, (%r8)
-               	jmp	0x400b42 <.text+0x922>
-               	xorq	%rsi, %rsi
-               	movl	%esi, -0x80(%rbp)
-               	jmp	0x400b87 <.text+0x967>
-               	xorq	%rsi, %rsi
-               	movl	%esi, -0x78(%rbp)
-               	jmp	0x400ccd <.text+0xaad>
-               	movslq	-0x80(%rbp), %rsi
-               	cmpq	$0x3, %rsi
-               	jge	0x400bc5 <.text+0x9a5>
-               	jmp	0x400bb6 <.text+0x996>
-               	leaq	-0x80(%rbp), %rsi
-               	movslq	(%rsi), %rdi
-               	movq	%rdi, %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%rsi)
-               	jmp	0x400b87 <.text+0x967>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x88(%rbp)
-               	jmp	0x400bca <.text+0x9aa>
-               	jmp	0x400b58 <.text+0x938>
-               	movslq	-0x88(%rbp), %r8
-               	cmpq	$0x4, %r8
-               	jge	0x400c76 <.text+0xa56>
-               	jmp	0x400bff <.text+0x9df>
-               	leaq	-0x88(%rbp), %r8
-               	movslq	(%r8), %rdi
-               	movq	%rdi, %rsi
-               	addq	$0x1, %rsi
-               	movl	%esi, (%r8)
-               	jmp	0x400bca <.text+0x9aa>
-               	leaq	-0x70(%rbp), %rsi
-               	movq	%rsi, %rdi
-               	addq	$0x28, %rdi
-               	movq	(%rdi), %rsi
-               	movslq	-0x78(%rbp), %rdi
-               	movl	$0xc, %r8d
-               	imulq	%rdi, %r8
-               	movq	%rsi, %rdi
-               	addq	%r8, %rdi
-               	movslq	-0x80(%rbp), %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	movq	%rdi, %rsi
-               	addq	%rax, %rsi
-               	movslq	-0x88(%rbp), %rdi
-               	movq	%rsi, %r9
-               	addq	%rdi, %r9
-               	movzbq	(%r9), %rsi
-               	movslq	%r8d, %r8
-               	movslq	%eax, %rax
-               	movq	%r8, %r9
+               	movswq	%r9w, %r9
+               	cmpq	%r9, %rax
+               	je	0x400696 <.text+0x476>
+               	jmp	0x40067f <.text+0x45f>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x40069b <.text+0x47b>
+               	movslq	-0x78(%rbp), %r9
+               	addq	$0x1c, %r9
+               	movslq	%r9d, %rax
+               	addq	$0x90, %rsp
+               	popq	%rbp
+               	retq
+               	jmp	0x400621 <.text+0x401>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x3, %r9
+               	jge	0x4006d3 <.text+0x4b3>
+               	jmp	0x4006c7 <.text+0x4a7>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x40069b <.text+0x47b>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x80(%rbp)
+               	jmp	0x4006df <.text+0x4bf>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400758 <.text+0x538>
+               	movslq	-0x80(%rbp), %r9
+               	cmpq	$0x5, %r9
+               	jge	0x400753 <.text+0x533>
+               	jmp	0x40070b <.text+0x4eb>
+               	leaq	-0x80(%rbp), %r11
+               	movslq	(%r11), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%r11)
+               	jmp	0x4006df <.text+0x4bf>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x20, %r9
+               	movq	(%r9), %rax
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0x14, %r11d
+               	imulq	%r9, %r11
+               	addq	%r11, %rax
+               	movslq	-0x80(%rbp), %r11
+               	movq	%r11, %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rdi, %rax
+               	movl	$0x64, %r10d
+               	imulq	%r10, %r9
+               	movslq	%r9d, %r9
+               	addq	%r11, %r9
+               	movslq	%r9d, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x4006f5 <.text+0x4d5>
+               	jmp	0x4006b1 <.text+0x491>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x3, %r9
+               	jge	0x400790 <.text+0x570>
+               	jmp	0x400784 <.text+0x564>
+               	leaq	-0x78(%rbp), %r11
+               	movslq	(%r11), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%r11)
+               	jmp	0x400758 <.text+0x538>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x80(%rbp)
+               	jmp	0x40079c <.text+0x57c>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400850 <.text+0x630>
+               	movslq	-0x80(%rbp), %r9
+               	cmpq	$0x5, %r9
+               	jge	0x400818 <.text+0x5f8>
+               	jmp	0x4007c8 <.text+0x5a8>
+               	leaq	-0x80(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x40079c <.text+0x57c>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x20, %r9
+               	movq	(%r9), %r11
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0x14, %eax
+               	imulq	%r9, %rax
+               	addq	%rax, %r11
+               	movslq	-0x80(%rbp), %rax
+               	movq	%rax, %rdi
+               	shlq	$0x2, %rdi
+               	addq	%rdi, %r11
+               	movslq	(%r11), %rdi
+               	movl	$0x64, %r11d
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
                	addq	%rax, %r9
                	movslq	%r9d, %r9
-               	movq	%r9, %rax
+               	cmpq	%r9, %rdi
+               	je	0x40084b <.text+0x62b>
+               	jmp	0x40081d <.text+0x5fd>
+               	jmp	0x40076e <.text+0x54e>
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0x5, %r11d
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
+               	addq	$0x28, %r9
+               	movslq	%r9d, %r9
+               	movslq	-0x80(%rbp), %rdi
+               	addq	%rdi, %r9
+               	movslq	%r9d, %rax
+               	addq	$0x90, %rsp
+               	popq	%rbp
+               	retq
+               	jmp	0x4007b2 <.text+0x592>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x3, %r9
+               	jge	0x400888 <.text+0x668>
+               	jmp	0x40087c <.text+0x65c>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x400850 <.text+0x630>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x80(%rbp)
+               	jmp	0x400894 <.text+0x674>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400948 <.text+0x728>
+               	movslq	-0x80(%rbp), %r9
+               	cmpq	$0x5, %r9
+               	jge	0x400910 <.text+0x6f0>
+               	jmp	0x4008c0 <.text+0x6a0>
+               	leaq	-0x80(%rbp), %rdi
+               	movslq	(%rdi), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rdi)
+               	jmp	0x400894 <.text+0x674>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x20, %r9
+               	movq	(%r9), %rax
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0x14, %edi
+               	imulq	%r9, %rdi
                	addq	%rdi, %rax
+               	movslq	-0x80(%rbp), %rdi
+               	movq	%rdi, %r11
+               	shlq	$0x2, %r11
+               	addq	%r11, %rax
+               	movslq	(%rax), %r11
+               	movl	$0x64, %r10d
+               	imulq	%r10, %r9
+               	movslq	%r9d, %r9
+               	addq	%rdi, %r9
+               	movslq	%r9d, %r9
+               	cmpq	%r9, %r11
+               	je	0x400943 <.text+0x723>
+               	jmp	0x400915 <.text+0x6f5>
+               	jmp	0x400866 <.text+0x646>
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0x5, %r11d
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
+               	addq	$0x3c, %r9
+               	movslq	%r9d, %r9
+               	movslq	-0x80(%rbp), %r11
+               	addq	%r11, %r9
+               	movslq	%r9d, %rax
+               	addq	$0x90, %rsp
+               	popq	%rbp
+               	retq
+               	jmp	0x4008aa <.text+0x68a>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x2, %r9
+               	jge	0x400980 <.text+0x760>
+               	jmp	0x400974 <.text+0x754>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x400948 <.text+0x728>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x80(%rbp)
+               	jmp	0x40098c <.text+0x76c>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400a58 <.text+0x838>
+               	movslq	-0x80(%rbp), %r9
+               	cmpq	$0x3, %r9
+               	jge	0x4009c7 <.text+0x7a7>
+               	jmp	0x4009b8 <.text+0x798>
+               	leaq	-0x80(%rbp), %rdi
+               	movslq	(%rdi), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rdi)
+               	jmp	0x40098c <.text+0x76c>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x88(%rbp)
+               	jmp	0x4009cc <.text+0x7ac>
+               	jmp	0x40095e <.text+0x73e>
+               	movslq	-0x88(%rbp), %r9
+               	cmpq	$0x4, %r9
+               	jge	0x400a53 <.text+0x833>
+               	jmp	0x4009fe <.text+0x7de>
+               	leaq	-0x88(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x4009cc <.text+0x7ac>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x28, %r9
+               	movq	(%r9), %rdi
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0xc, %r11d
+               	imulq	%r11, %r9
+               	addq	%r9, %rdi
+               	movslq	-0x80(%rbp), %rax
+               	shlq	$0x2, %rax
+               	addq	%rax, %rdi
+               	movslq	-0x88(%rbp), %r11
+               	addq	%r11, %rdi
+               	movslq	%r9d, %r9
                	movslq	%eax, %rax
-               	movq	%rax, %r9
+               	addq	%rax, %r9
+               	movslq	%r9d, %r9
+               	addq	%r11, %r9
+               	movslq	%r9d, %r9
+               	andq	$0xff, %r9
+               	movb	%r9b, (%rdi)
+               	jmp	0x4009e5 <.text+0x7c5>
+               	jmp	0x4009a2 <.text+0x782>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x2, %r9
+               	jge	0x400a90 <.text+0x870>
+               	jmp	0x400a84 <.text+0x864>
+               	leaq	-0x78(%rbp), %r11
+               	movslq	(%r11), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%r11)
+               	jmp	0x400a58 <.text+0x838>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x80(%rbp)
+               	jmp	0x400a9c <.text+0x87c>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x78(%rbp)
+               	jmp	0x400bb9 <.text+0x999>
+               	movslq	-0x80(%rbp), %r9
+               	cmpq	$0x3, %r9
+               	jge	0x400ad7 <.text+0x8b7>
+               	jmp	0x400ac8 <.text+0x8a8>
+               	leaq	-0x80(%rbp), %rdi
+               	movslq	(%rdi), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rdi)
+               	jmp	0x400a9c <.text+0x87c>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x88(%rbp)
+               	jmp	0x400adc <.text+0x8bc>
+               	jmp	0x400a6e <.text+0x84e>
+               	movslq	-0x88(%rbp), %r9
+               	cmpq	$0x4, %r9
+               	jge	0x400b6d <.text+0x94d>
+               	jmp	0x400b0e <.text+0x8ee>
+               	leaq	-0x88(%rbp), %r11
+               	movslq	(%r11), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%r11)
+               	jmp	0x400adc <.text+0x8bc>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x28, %r9
+               	movq	(%r9), %rdi
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0xc, %r11d
+               	imulq	%r11, %r9
+               	addq	%r9, %rdi
+               	movslq	-0x80(%rbp), %r11
+               	shlq	$0x2, %r11
+               	addq	%r11, %rdi
+               	movslq	-0x88(%rbp), %rax
+               	addq	%rax, %rdi
+               	movzbq	(%rdi), %rsi
+               	movslq	%r9d, %r9
+               	movslq	%r11d, %r11
+               	addq	%r11, %r9
+               	movslq	%r9d, %r9
+               	addq	%rax, %r9
+               	movslq	%r9d, %r9
                	andq	$0xff, %r9
                	cmpq	%r9, %rsi
-               	je	0x400cc8 <.text+0xaa8>
-               	jmp	0x400c7b <.text+0xa5b>
-               	jmp	0x400b9d <.text+0x97d>
+               	je	0x400bb4 <.text+0x994>
+               	jmp	0x400b72 <.text+0x952>
+               	jmp	0x400ab2 <.text+0x892>
                	movslq	-0x78(%rbp), %r9
-               	movl	$0xc, %eax
-               	imulq	%r9, %rax
-               	movslq	%eax, %rax
-               	movq	%rax, %r9
+               	movl	$0xc, %r11d
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
                	addq	$0x50, %r9
                	movslq	%r9d, %r9
-               	movslq	-0x80(%rbp), %rax
-               	movq	%rax, %rsi
+               	movslq	-0x80(%rbp), %rsi
                	shlq	$0x2, %rsi
                	movslq	%esi, %rsi
-               	movq	%r9, %rax
-               	addq	%rsi, %rax
-               	movslq	%eax, %rax
+               	addq	%rsi, %r9
+               	movslq	%r9d, %r9
                	movslq	-0x88(%rbp), %rsi
-               	movq	%rax, %r9
                	addq	%rsi, %r9
                	movslq	%r9d, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	jmp	0x400be3 <.text+0x9c3>
-               	movslq	-0x78(%rbp), %rsi
-               	cmpq	$0x2, %rsi
-               	jge	0x400d08 <.text+0xae8>
-               	jmp	0x400cfc <.text+0xadc>
-               	leaq	-0x78(%rbp), %rsi
-               	movslq	(%rsi), %rax
-               	movq	%rax, %r9
+               	jmp	0x400af5 <.text+0x8d5>
+               	movslq	-0x78(%rbp), %r9
+               	cmpq	$0x2, %r9
+               	jge	0x400bf1 <.text+0x9d1>
+               	jmp	0x400be5 <.text+0x9c5>
+               	leaq	-0x78(%rbp), %rax
+               	movslq	(%rax), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%rsi)
-               	jmp	0x400ccd <.text+0xaad>
+               	movl	%r9d, (%rax)
+               	jmp	0x400bb9 <.text+0x999>
                	xorq	%r9, %r9
                	movl	%r9d, -0x80(%rbp)
-               	jmp	0x400d17 <.text+0xaf7>
+               	jmp	0x400c00 <.text+0x9e0>
                	xorq	%r9, %r9
                	movq	%r9, %rax
                	addq	$0x90, %rsp
@@ -670,79 +572,66 @@ Disassembly of section .text:
                	retq
                	movslq	-0x80(%rbp), %r9
                	cmpq	$0x3, %r9
-               	jge	0x400d54 <.text+0xb34>
-               	jmp	0x400d46 <.text+0xb26>
-               	leaq	-0x80(%rbp), %r9
-               	movslq	(%r9), %rax
-               	movq	%rax, %rsi
-               	addq	$0x1, %rsi
-               	movl	%esi, (%r9)
-               	jmp	0x400d17 <.text+0xaf7>
-               	xorq	%rsi, %rsi
-               	movl	%esi, -0x88(%rbp)
-               	jmp	0x400d59 <.text+0xb39>
-               	jmp	0x400ce3 <.text+0xac3>
-               	movslq	-0x88(%rbp), %rsi
-               	cmpq	$0x4, %rsi
-               	jge	0x400e04 <.text+0xbe4>
-               	jmp	0x400d8e <.text+0xb6e>
-               	leaq	-0x88(%rbp), %rsi
-               	movslq	(%rsi), %rax
-               	movq	%rax, %r9
+               	jge	0x400c3b <.text+0xa1b>
+               	jmp	0x400c2c <.text+0xa0c>
+               	leaq	-0x80(%rbp), %rsi
+               	movslq	(%rsi), %r9
                	addq	$0x1, %r9
                	movl	%r9d, (%rsi)
-               	jmp	0x400d59 <.text+0xb39>
-               	leaq	-0x70(%rbp), %r9
-               	movq	%r9, %rax
-               	addq	$0x28, %rax
-               	movq	(%rax), %r9
-               	movslq	-0x78(%rbp), %rax
-               	movl	$0xc, %esi
-               	imulq	%rax, %rsi
-               	movq	%r9, %rax
-               	addq	%rsi, %rax
-               	movslq	-0x80(%rbp), %r9
-               	movq	%r9, %rdi
-               	shlq	$0x2, %rdi
-               	movq	%rax, %r9
-               	addq	%rdi, %r9
-               	movslq	-0x88(%rbp), %rax
-               	movq	%r9, %r8
-               	addq	%rax, %r8
-               	movzbq	(%r8), %r9
-               	movslq	%esi, %rsi
-               	movslq	%edi, %rdi
-               	movq	%rsi, %r8
-               	addq	%rdi, %r8
-               	movslq	%r8d, %r8
-               	movq	%r8, %rdi
-               	addq	%rax, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, %r8
-               	andq	$0xff, %r8
-               	cmpq	%r8, %r9
-               	je	0x400e56 <.text+0xc36>
-               	jmp	0x400e09 <.text+0xbe9>
-               	jmp	0x400d2d <.text+0xb0d>
-               	movslq	-0x78(%rbp), %r8
-               	movl	$0xc, %edi
-               	imulq	%r8, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, %r8
-               	addq	$0x6e, %r8
-               	movslq	%r8d, %r8
-               	movslq	-0x80(%rbp), %rdi
-               	movq	%rdi, %r9
-               	shlq	$0x2, %r9
-               	movslq	%r9d, %r9
-               	movq	%r8, %rdi
-               	addq	%r9, %rdi
-               	movslq	%edi, %rdi
+               	jmp	0x400c00 <.text+0x9e0>
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x88(%rbp)
+               	jmp	0x400c40 <.text+0xa20>
+               	jmp	0x400bcf <.text+0x9af>
                	movslq	-0x88(%rbp), %r9
-               	movq	%rdi, %r8
-               	addq	%r9, %r8
-               	movslq	%r8d, %rax
+               	cmpq	$0x4, %r9
+               	jge	0x400cd1 <.text+0xab1>
+               	jmp	0x400c72 <.text+0xa52>
+               	leaq	-0x88(%rbp), %rax
+               	movslq	(%rax), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%rax)
+               	jmp	0x400c40 <.text+0xa20>
+               	leaq	-0x70(%rbp), %r9
+               	addq	$0x28, %r9
+               	movq	(%r9), %rsi
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0xc, %r11d
+               	imulq	%r11, %r9
+               	addq	%r9, %rsi
+               	movslq	-0x80(%rbp), %rax
+               	shlq	$0x2, %rax
+               	addq	%rax, %rsi
+               	movslq	-0x88(%rbp), %r11
+               	addq	%r11, %rsi
+               	movzbq	(%rsi), %rdi
+               	movslq	%r9d, %r9
+               	movslq	%eax, %rax
+               	addq	%rax, %r9
+               	movslq	%r9d, %r9
+               	addq	%r11, %r9
+               	movslq	%r9d, %r9
+               	andq	$0xff, %r9
+               	cmpq	%r9, %rdi
+               	je	0x400d18 <.text+0xaf8>
+               	jmp	0x400cd6 <.text+0xab6>
+               	jmp	0x400c16 <.text+0x9f6>
+               	movslq	-0x78(%rbp), %r9
+               	movl	$0xc, %r11d
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
+               	addq	$0x6e, %r9
+               	movslq	%r9d, %r9
+               	movslq	-0x80(%rbp), %rdi
+               	shlq	$0x2, %rdi
+               	movslq	%edi, %rdi
+               	addq	%rdi, %r9
+               	movslq	%r9d, %r9
+               	movslq	-0x88(%rbp), %rdi
+               	addq	%rdi, %r9
+               	movslq	%r9d, %rax
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	jmp	0x400d72 <.text+0xb52>
+               	jmp	0x400c59 <.text+0xa39>
+               	addb	%al, (%rax)

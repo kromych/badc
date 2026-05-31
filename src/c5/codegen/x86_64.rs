@@ -1530,6 +1530,7 @@ pub(super) fn lower(
                 ok = ok,
                 ent_pc = ent_pc,
             );
+            eprintln!("; name={}", func_ssa.name);
             eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
         }
         if !ok {

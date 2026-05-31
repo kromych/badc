@@ -252,6 +252,16 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let banks = RegBanks::for_target(target);
     let last_use = compute_last_use(func);
     let calls_after_def = compute_calls_after_def(func, &last_use, target);
+    // Call-argument coalescing hints. Run after `last_use` and
+    // `calls_after_def` so the per-value safety guards can read them.
+    // The prior unconditional ABI-hint pass was reverted in commit
+    // 1609bbc after it sent a value to a caller-saved arg register
+    // even when the value's interval extended past the call --
+    // a later use then read the call-clobbered register. Restrict
+    // the hint to values whose last use is exactly this call so the
+    // call consumes them and there is no surviving live range to
+    // protect.
+    populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -710,6 +720,86 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { .. } => ResultKind::Int,
         AllocaInit(_) => ResultKind::None,
+    }
+}
+
+/// Populate per-call-argument coalescing hints. The i-th integer or
+/// FP argument value at each `Inst::Call*` is hinted to the matching
+/// host argument register so the allocator parks the value there from
+/// its definition and the c5 emit's pre-call mov drops out.
+///
+/// Safety guards (mirrors `populate_return_hints`'s leaf gate):
+///
+/// * `last_use[v] == call_pc` -- v must die at this call. If v survives,
+///   it would need either a callee-saved register or a spill, and the
+///   caller-saved arg-register hint would clobber it.
+/// * `!calls_after_def[v]` -- no intervening call between v's def and
+///   the call site. compute_calls_after_def reports those that would
+///   force callee-saved placement; the hint's caller-saved choice is
+///   incompatible.
+/// * v must not already carry a different hint (the existing
+///   ParamRef / Return / Phi passes take precedence).
+///
+/// Variadic call sites still benefit (the c5 internal cdecl ABI passes
+/// every arg through the integer register window) so the function
+/// hints both direct and indirect calls.
+fn populate_call_arg_hints(
+    func: &FunctionSsa,
+    target: Target,
+    last_use: &[u32],
+    calls_after_def: &[bool],
+    hints: &mut [Option<u8>],
+) {
+    let int_args = target.abi().int_arg_regs;
+    // Win64 advances the slot index on every argument regardless of
+    // type, so an int at position 2 lands in `int_args[2]` even when
+    // earlier args were FP. SysV and AAPCS64 advance the int counter
+    // only on int args.
+    let combined_slot = matches!(target, Target::WindowsX64);
+    for (pc, inst) in func.insts.iter().enumerate() {
+        let args: &[ValueId] = match inst {
+            Inst::Call { args, .. } => args,
+            Inst::CallIndirect { args, .. } => args,
+            Inst::CallExt { args, .. } => args,
+            _ => continue,
+        };
+        let pc = pc as u32;
+        let mut next_int = 0usize;
+        for (slot_idx, &v) in args.iter().enumerate() {
+            let vu = v as usize;
+            if vu >= hints.len() {
+                continue;
+            }
+            let kind = result_kind(&func.insts[vu]);
+            let arg_pos = match kind {
+                ResultKind::Int => {
+                    let pos = if combined_slot { slot_idx } else { next_int };
+                    next_int += 1;
+                    pos
+                }
+                // FP argument hinting is left to the existing emit-time
+                // marshal: it threads the per-target FP arg-register
+                // window plus the variadic-only flags (variadic_on_stack,
+                // variadic_int_only) that the allocator does not model.
+                ResultKind::Fp | ResultKind::None => continue,
+            };
+            // Each argument value's last use must be exactly this call,
+            // and no other call may sit between its definition and this
+            // call. Otherwise the caller-saved arg-register hint races
+            // the intervening clobber.
+            if last_use[vu] != pc {
+                continue;
+            }
+            if calls_after_def[vu] {
+                continue;
+            }
+            if hints[vu].is_some() {
+                continue;
+            }
+            if let Some(&r) = int_args.get(arg_pos) {
+                hints[vu] = Some(r);
+            }
+        }
     }
 }
 

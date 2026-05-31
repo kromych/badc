@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/thread_local_per_thread.c:24: warning: unused parameter `arg`
+thread_local_per_thread.c:24: warning: unused parameter `arg`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=thread_main
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/argc.c:1: warning: unused parameter `argv`
+argc.c:1: warning: unused parameter `argv`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=2 variadic=false locals=0

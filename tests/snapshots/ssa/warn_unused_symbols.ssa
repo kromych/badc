@@ -1,11 +1,11 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:10: warning: unused parameter `unused_arg`
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:11: warning: unused variable `unused_local`
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:14: warning: variable `dead_assigned` set but never used
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:28: warning: unused variable `inner_unused`
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:21: warning: unused variable `main_unused`
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:22: warning: unused variable `main_unused_init`
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:25: warning: variable `touched_then_overwritten` set but never used
-/Volumes/src/compilers/badc/tests/fixtures/c/warn_unused_symbols.c:8: warning: unused function `dead_static`
+warn_unused_symbols.c:10: warning: unused parameter `unused_arg`
+warn_unused_symbols.c:11: warning: unused variable `unused_local`
+warn_unused_symbols.c:14: warning: variable `dead_assigned` set but never used
+warn_unused_symbols.c:28: warning: unused variable `inner_unused`
+warn_unused_symbols.c:21: warning: unused variable `main_unused`
+warn_unused_symbols.c:22: warning: unused variable `main_unused_init`
+warn_unused_symbols.c:25: warning: variable `touched_then_overwritten` set but never used
+warn_unused_symbols.c:8: warning: unused function `dead_static`
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=live_static
 fn ent_pc=1 n_params=2 variadic=false locals=4

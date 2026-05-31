@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/fn_ptr_struct_return.c:33: warning: unused parameter `x`
+fn_ptr_struct_return.c:33: warning: unused parameter `x`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=finder_impl
 fn ent_pc=0 n_params=1 variadic=false locals=0

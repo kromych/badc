@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/int_times_double_into_local.c:20: warning: unused parameter `nfft`
+int_times_double_into_local.c:20: warning: unused parameter `nfft`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_lazy_stream
 fn ent_pc=0 n_params=1 variadic=false locals=6

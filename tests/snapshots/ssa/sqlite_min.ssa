@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/sqlite_min.c:18: warning: unused variable `osStat`
+sqlite_min.c:18: warning: unused variable `osStat`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=36

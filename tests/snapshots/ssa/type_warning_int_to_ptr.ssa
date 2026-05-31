@@ -1,5 +1,5 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_int_to_ptr.c:5: warning: integer assigned to pointer in assignment (lhs=int*, rhs=int)
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_int_to_ptr.c:4: warning: variable `p` set but never used
+type_warning_int_to_ptr.c:5: warning: integer assigned to pointer in assignment (lhs=int*, rhs=int)
+type_warning_int_to_ptr.c:4: warning: variable `p` set but never used
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=1

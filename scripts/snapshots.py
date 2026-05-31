@@ -116,11 +116,16 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
     # `--target=<arch>` emits a cross-host advisory on stderr only
     # when the target arch differs from the host arch. The line is
     # host-conditional and would split snapshots by host; drop it.
+    # Diagnostic lines also embed the absolute fixture path
+    # (`/Volumes/src/...` on macOS, `/home/runner/work/...` on
+    # CI). Rewrite any reference to the fixture itself down to
+    # the bare filename so the snapshot is stable.
     text = proc.stderr.decode("utf-8", errors="replace")
     text = "\n".join(
         line for line in text.splitlines()
         if not line.startswith("badc: produced a Linux/")
     )
+    text = text.replace(str(src), src.name)
     if text and not text.endswith("\n"):
         text += "\n"
     dst.write_text(text)

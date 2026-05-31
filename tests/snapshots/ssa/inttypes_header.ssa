@@ -1,13 +1,13 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:14: warning: unused variable `s8`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:15: warning: unused variable `s16`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:16: warning: unused variable `s32`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:18: warning: unused variable `u8`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:19: warning: unused variable `u16`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:20: warning: unused variable `u32`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:22: warning: unused variable `im`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:23: warning: unused variable `um`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:24: warning: unused variable `ip`
-/Volumes/src/compilers/badc/tests/fixtures/c/inttypes_header.c:25: warning: unused variable `up`
+inttypes_header.c:14: warning: unused variable `s8`
+inttypes_header.c:15: warning: unused variable `s16`
+inttypes_header.c:16: warning: unused variable `s32`
+inttypes_header.c:18: warning: unused variable `u8`
+inttypes_header.c:19: warning: unused variable `u16`
+inttypes_header.c:20: warning: unused variable `u32`
+inttypes_header.c:22: warning: unused variable `im`
+inttypes_header.c:23: warning: unused variable `um`
+inttypes_header.c:24: warning: unused variable `ip`
+inttypes_header.c:25: warning: unused variable `up`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=41

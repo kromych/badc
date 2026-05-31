@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/attribute_noop.c:18: warning: unused function `noreturn_helper`
+attribute_noop.c:18: warning: unused function `noreturn_helper`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_lazy_stream
 fn ent_pc=0 n_params=1 variadic=false locals=6

@@ -1,4 +1,4 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/enum_tag_types.c:25: warning: unused variable `xs`
+enum_tag_types.c:25: warning: unused variable `xs`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=classify
 fn ent_pc=0 n_params=1 variadic=false locals=0

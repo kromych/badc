@@ -1,7 +1,7 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_arity.c:4: warning: too few arguments to `add` (expected 2, got 1)
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 3)
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 4)
-/Volumes/src/compilers/badc/tests/fixtures/c/type_warning_arity.c:3: warning: variable `x` set but never used
+type_warning_arity.c:4: warning: too few arguments to `add` (expected 2, got 1)
+type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 3)
+type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 4)
+type_warning_arity.c:3: warning: variable `x` set but never used
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=add
 fn ent_pc=0 n_params=2 variadic=false locals=0

@@ -1,6 +1,6 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/c99_qualifiers.c:47: warning: unused variable `sum`
-/Volumes/src/compilers/badc/tests/fixtures/c/c99_qualifiers.c:51: warning: unused variable `total`
-/Volumes/src/compilers/badc/tests/fixtures/c/c99_qualifiers.c:53: warning: unused variable `tag`
+c99_qualifiers.c:47: warning: unused variable `sum`
+c99_qualifiers.c:51: warning: unused variable `total`
+c99_qualifiers.c:53: warning: unused variable `tag`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=add
 fn ent_pc=0 n_params=2 variadic=false locals=0

@@ -1,6 +1,6 @@
-/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:2: warning: unused variable `x`
-/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:3: warning: unused variable `y`
-/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:4: warning: unused variable `c`
+sizeof_expr.c:2: warning: unused variable `x`
+sizeof_expr.c:3: warning: unused variable `y`
+sizeof_expr.c:4: warning: unused variable `c`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=6

@@ -211,19 +211,19 @@ fn ent_pc=15 n_params=0 variadic=false locals=18
     v94  Fneg(v93)                                        -> d10
     v95  StoreLocal { off=-11, value=v94, kind=I64 }      -> -
     v96  LoadLocal { off=-11, kind=I64 }                  -> x20
-    v97  FpCast { kind=FpToInt, value=v96 }               -> x20
-    v98  Imm(0)                                           -> x0
-    v99  Extend { value=v97, kind=I32 }                   -> x0
-    v100 BinopI { op=ne, lhs=v99, rhs_imm=-2 }            -> x0
+    v97  FpCast { kind=FpToInt, value=v96 }               -> x0
+    v98  Imm(0)                                           -> x20
+    v99  Extend { value=v97, kind=I32 }                   -> x20
+    v100 BinopI { op=ne, lhs=v99, rhs_imm=-2 }            -> x20
     terminator Bz { cond=v100, target=b20, fall=b19 }   (exit_acc=v100)
   block 19  start_pc=0
     v101 ImmData(207)                                     -> x22
-    v102 Extend { value=v97, kind=I32 }                   -> x20
+    v102 Extend { value=v97, kind=I32 }                   -> x21
     v103 CallExt { binding_idx=0, args=[v101, v102], fp_arg_mask=0x0 } -> x0
     v104 Imm(6)                                           -> x0
     terminator Return(v104)   (exit_acc=v104)
   block 20  start_pc=0
-    v105 Imm(0)                                           -> x20
+    v105 Imm(0)                                           -> x21
     terminator Return(v105)   (exit_acc=v105)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

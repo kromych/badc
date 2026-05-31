@@ -283,37 +283,37 @@ Disassembly of section .text:
                	movq	%r11, -0x8(%rbp)
                	movq	-0x8(%rbp), %r9
                	movq	%r9, %xmm14
-               	cvttsd2si	%xmm14, %r9
-               	movslq	%r9d, %r9
-               	cmpq	$0x7, %r9
-               	je	<addr>
-               	movl	$0xf, %eax
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	retq
-               	movq	-0x8(%rbp), %r9
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%r9, %xmm7
-               	movq	%rax, %xmm15
-               	addsd	%xmm15, %xmm7
-               	cvttsd2si	%xmm7, %rax
+               	cvttsd2si	%xmm14, %rax
                	movslq	%eax, %rax
-               	cmpq	$0x8, %rax
+               	cmpq	$0x7, %rax
                	je	<addr>
-               	movl	$0x10, %r9d
+               	movl	$0xf, %r9d
                	movq	%r9, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x3ffb333333333333, %rax # imm = 0x3FFB333333333333
+               	movq	-0x8(%rbp), %rax
+               	movabsq	$0x3fe0000000000000, %r9 # imm = 0x3FE0000000000000
                	movq	%rax, %xmm7
+               	movq	%r9, %xmm15
+               	addsd	%xmm15, %xmm7
+               	cvttsd2si	%xmm7, %r9
+               	movslq	%r9d, %r9
+               	cmpq	$0x8, %r9
+               	je	<addr>
+               	movl	$0x10, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	movabsq	$0x3ffb333333333333, %r9 # imm = 0x3FFB333333333333
+               	movq	%r9, %xmm7
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
                	xorpd	%xmm15, %xmm7
                	movq	%xmm7, %r11
                	movq	%r11, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movq	%rax, %xmm14
+               	movq	-0x8(%rbp), %r9
+               	movq	%r9, %xmm14
                	cvttsd2si	%xmm14, %rax
                	movslq	%eax, %rax
                	cmpq	$-0x1, %rax

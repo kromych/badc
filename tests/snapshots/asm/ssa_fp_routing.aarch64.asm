@@ -525,25 +525,25 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x400e000000000000 // =4615626668101337088
                	fmov	d0, x15
-               	fcvtzs	x15, d0
-               	cmp	x15, #0x3
+               	fcvtzs	x14, d0
+               	cmp	x14, #0x3
                	b.eq	<addr>
-               	mov	x14, #0x17              // =23
-               	mov	x0, x14
+               	mov	x15, #0x17              // =23
+               	mov	x0, x15
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x170
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x400e000000000000 // =4615626668101337088
-               	fmov	d0, x15
+               	mov	x14, #0x400e000000000000 // =4615626668101337088
+               	fmov	d0, x14
                	fneg	d7, d0
                	fmov	x16, d7
                	sub	x17, x29, #0x150
                	str	x16, [x17]
                	sub	x16, x29, #0x150
-               	ldr	x15, [x16]
-               	fmov	d0, x15
+               	ldr	x14, [x16]
+               	fmov	d0, x14
                	fcvtzs	x15, d0
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16

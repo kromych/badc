@@ -361,20 +361,20 @@ Disassembly of section .text:
                	stur	x16, [x29, #-0x58]
                	ldur	x20, [x29, #-0x58]
                	fmov	d0, x20
-               	fcvtzs	x20, d0
-               	sxtw	x0, w20
+               	fcvtzs	x0, d0
+               	sxtw	x20, w0
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	x20, x17
                	b.eq	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x1ca
                	mov	x22, x19
-               	sxtw	x20, w20
+               	sxtw	x21, w0
                	mov	x0, x22
-               	mov	x1, x20
+               	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x6                // =6
@@ -388,8 +388,8 @@ Disassembly of section .text:
                	add	sp, sp, #0xe0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x21, #0x0               // =0
+               	mov	x0, x21
                	ldr	x20, [sp, #0x20]
                	ldr	x21, [sp, #0x28]
                	ldr	x22, [sp, #0x30]

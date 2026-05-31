@@ -652,26 +652,26 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x400e000000000000, %r11 # imm = 0x400E000000000000
                	movq	%r11, %xmm14
-               	cvttsd2si	%xmm14, %r11
-               	cmpq	$0x3, %r11
+               	cvttsd2si	%xmm14, %r9
+               	cmpq	$0x3, %r9
                	je	<addr>
-               	movl	$0x17, %r9d
-               	movq	%r9, %rcx
+               	movl	$0x17, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x170, %rsp            # imm = 0x170
                	popq	%rbp
                	retq
-               	movabsq	$0x400e000000000000, %r11 # imm = 0x400E000000000000
-               	movq	%r11, %xmm7
+               	movabsq	$0x400e000000000000, %r9 # imm = 0x400E000000000000
+               	movq	%r9, %xmm7
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
                	xorpd	%xmm15, %xmm7
                	movq	%xmm7, %r11
                	movq	%r11, -0x150(%rbp)
-               	movq	-0x150(%rbp), %r11
-               	movq	%r11, %xmm14
+               	movq	-0x150(%rbp), %r9
+               	movq	%r9, %xmm14
                	cvttsd2si	%xmm14, %r11
                	cmpq	$-0x3, %r11
                	je	<addr>

@@ -564,18 +564,18 @@ fn ent_pc=29 n_params=0 variadic=false locals=44
     v223 Imm(0)                                           -> x14
     v224 LoadLocal { off=-41, kind=I64 }                  -> x14
     v225 Imm(0)                                           -> x14
-    v226 FpCast { kind=FpToInt, value=v222 }              -> x15
-    v227 BinopI { op=ne, lhs=v226, rhs_imm=3 }            -> x15
+    v226 FpCast { kind=FpToInt, value=v222 }              -> x14
+    v227 BinopI { op=ne, lhs=v226, rhs_imm=3 }            -> x14
     terminator Bz { cond=v227, target=b46, fall=b45 }   (exit_acc=v227)
   block 45  start_pc=0
-    v228 Imm(23)                                          -> x14
+    v228 Imm(23)                                          -> x15
     terminator Return(v228)   (exit_acc=v228)
   block 46  start_pc=0
-    v229 Imm(4615626668101337088)                         -> x15
+    v229 Imm(4615626668101337088)                         -> x14
     v230 Fneg(v229)                                       -> d7
     v231 StoreLocal { off=-42, value=v230, kind=I64 }     -> -
-    v232 LoadLocal { off=-42, kind=I64 }                  -> x15
-    v233 Imm(0)                                           -> x14
+    v232 LoadLocal { off=-42, kind=I64 }                  -> x14
+    v233 Imm(0)                                           -> x15
     v234 FpCast { kind=FpToInt, value=v232 }              -> x15
     v235 BinopI { op=ne, lhs=v234, rhs_imm=-3 }           -> x15
     terminator Bz { cond=v235, target=b48, fall=b47 }   (exit_acc=v235)

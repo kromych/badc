@@ -333,14 +333,14 @@ Disassembly of section .text:
                	movq	%r11, -0x58(%rbp)
                	movq	-0x58(%rbp), %rbx
                	movq	%rbx, %xmm14
-               	cvttsd2si	%xmm14, %rbx
-               	movslq	%ebx, %rax
-               	cmpq	$-0x2, %rax
+               	cvttsd2si	%xmm14, %rax
+               	movslq	%eax, %rbx
+               	cmpq	$-0x2, %rbx
                	je	<addr>
                	leaq	<rip>, %r14
-               	movslq	%ebx, %rbx
+               	movslq	%eax, %r12
                	movq	%r14, %rdi
-               	movq	%rbx, %rsi
+               	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -353,8 +353,8 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rcx
+               	xorq	%r12, %r12
+               	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

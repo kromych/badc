@@ -154,31 +154,31 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v93  Binop { op=fadd, lhs=v91, rhs=v92 }              -> d7
     v94  StoreLocal { off=-1, value=v93, kind=I64 }       -> -
     v95  LoadLocal { off=-1, kind=I64 }                   -> x14
-    v96  FpCast { kind=FpToInt, value=v95 }               -> x14
-    v97  Imm(0)                                           -> x0
-    v98  Extend { value=v96, kind=I32 }                   -> x14
-    v99  BinopI { op=ne, lhs=v98, rhs_imm=7 }             -> x14
+    v96  FpCast { kind=FpToInt, value=v95 }               -> x0
+    v97  Imm(0)                                           -> x14
+    v98  Extend { value=v96, kind=I32 }                   -> x0
+    v99  BinopI { op=ne, lhs=v98, rhs_imm=7 }             -> x0
     terminator Bz { cond=v99, target=b30, fall=b29 }   (exit_acc=v99)
   block 29  start_pc=0
-    v100 Imm(15)                                          -> x0
+    v100 Imm(15)                                          -> x14
     terminator Return(v100)   (exit_acc=v100)
   block 30  start_pc=0
-    v101 LoadLocal { off=-1, kind=I64 }                   -> x14
-    v102 Imm(4602678819172646912)                         -> x0
+    v101 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v102 Imm(4602678819172646912)                         -> x14
     v103 Binop { op=fadd, lhs=v101, rhs=v102 }            -> d7
-    v104 FpCast { kind=FpToInt, value=v103 }              -> x0
-    v105 Imm(0)                                           -> x14
-    v106 Extend { value=v104, kind=I32 }                  -> x0
-    v107 BinopI { op=ne, lhs=v106, rhs_imm=8 }            -> x0
+    v104 FpCast { kind=FpToInt, value=v103 }              -> x14
+    v105 Imm(0)                                           -> x0
+    v106 Extend { value=v104, kind=I32 }                  -> x14
+    v107 BinopI { op=ne, lhs=v106, rhs_imm=8 }            -> x14
     terminator Bz { cond=v107, target=b32, fall=b31 }   (exit_acc=v107)
   block 31  start_pc=0
-    v108 Imm(16)                                          -> x14
+    v108 Imm(16)                                          -> x0
     terminator Return(v108)   (exit_acc=v108)
   block 32  start_pc=0
-    v109 Imm(4610334938539176755)                         -> x0
+    v109 Imm(4610334938539176755)                         -> x14
     v110 Fneg(v109)                                       -> d7
     v111 StoreLocal { off=-1, value=v110, kind=I64 }      -> -
-    v112 LoadLocal { off=-1, kind=I64 }                   -> x0
+    v112 LoadLocal { off=-1, kind=I64 }                   -> x14
     v113 FpCast { kind=FpToInt, value=v112 }              -> x0
     v114 Imm(0)                                           -> x14
     v115 Extend { value=v113, kind=I32 }                  -> x0

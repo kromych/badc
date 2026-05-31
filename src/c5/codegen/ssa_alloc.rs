@@ -340,13 +340,6 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 // `mov rd, [rd]` and aarch64 `ldr rd, [rd]` both read
                 // the operand before writing the result.
                 Inst::Load { addr, .. } => Some(*addr),
-                // Int<->Fp conversion has a single-int operand. dst
-                // is the OTHER bank so the bank check below rejects
-                // the int-typed source for an Fp dst (and vice versa);
-                // the hint then no-ops. Keep listed for documentation
-                // -- when banks match (rare paths) the coalesce still
-                // fires safely.
-                Inst::FpCast { value, .. } => Some(*value),
                 _ => None,
             };
             if let Some(src) = coalesce_src

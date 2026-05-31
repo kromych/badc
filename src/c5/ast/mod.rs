@@ -428,6 +428,11 @@ pub(crate) struct FinishedFunction {
     pub end_pc: usize,
     pub n_params: usize,
     pub is_variadic: bool,
+    /// True if the source declarator carried an `inline` /
+    /// `__inline` / `__inline__` function specifier (C99 6.7.4).
+    /// The walker propagates this onto `FunctionSsa::is_inline` so
+    /// `ssa_inline` bypasses its body-size cap for these.
+    pub is_inline: bool,
     pub n_locals: i64,
     /// Per-parameter type tags in declared order. The walker
     /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated

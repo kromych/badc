@@ -517,6 +517,13 @@ pub struct Compiler {
     /// definition.
     uses_alloca_in_current_fn: bool,
 
+    /// True when the most recent decl-spec parse consumed an
+    /// `inline` / `__inline` / `__inline__` keyword. Captured at
+    /// function-symbol commit time onto `FinishedFunction::is_inline`
+    /// and reset after, so it scopes to the immediately following
+    /// declarator only.
+    pending_is_inline: bool,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -1030,6 +1037,7 @@ impl Compiler {
             loc_offs: 0,
             max_loc_offs: 0,
             uses_alloca_in_current_fn: false,
+            pending_is_inline: false,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

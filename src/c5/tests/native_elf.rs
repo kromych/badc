@@ -299,6 +299,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("tail_call_no_address_escape.c", 0),
     ("fib.c", 0),
     ("queens.c", 0),
+    ("inline_keyword_uncaps.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),

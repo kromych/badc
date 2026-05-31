@@ -95,13 +95,69 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	callq	<addr>
+               	xorq	%r11, %r11
+               	movq	%r11, %xmm7
+               	movq	%r11, %xmm15
+               	divsd	%xmm15, %xmm7
+               	xorq	%r11, %r11
+               	movl	%r11d, -0x10(%rbp)
+               	movq	%r11, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	setb	%r9b
+               	movzbq	%r9b, %r9
+               	setnp	%r11b
+               	movzbq	%r11b, %r11
+               	andq	%r11, %r9
+               	cmpq	$0x0, %r9
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r11
+               	movslq	(%r11), %r9
+               	orq	$0x1, %r9
+               	movl	%r9d, (%r11)
+               	jmp	<addr>
                	xorq	%r9, %r9
-               	movl	%r9d, -0x10(%rbp)
-               	movq	%rax, %xmm14
                	movq	%r9, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%r8b
+               	ucomisd	%xmm15, %xmm7
+               	seta	%r8b
+               	movzbq	%r8b, %r8
+               	cmpq	$0x0, %r8
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %r8
+               	orq	$0x2, %r8
+               	movl	%r8d, (%r9)
+               	jmp	<addr>
+               	xorq	%r8, %r8
+               	movq	%r8, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	setbe	%r11b
+               	movzbq	%r11b, %r11
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r8
+               	movslq	(%r8), %r11
+               	orq	$0x4, %r11
+               	movl	%r11d, (%r8)
+               	jmp	<addr>
+               	xorq	%r11, %r11
+               	movq	%r11, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	setae	%r9b
+               	movzbq	%r9b, %r9
+               	cmpq	$0x0, %r9
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r11
+               	movslq	(%r11), %r9
+               	orq	$0x8, %r9
+               	movl	%r9d, (%r11)
+               	jmp	<addr>
+               	xorq	%r9, %r9
+               	movq	%r9, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	sete	%r8b
                	movzbq	%r8b, %r8
                	setnp	%r11b
                	movzbq	%r11b, %r11
@@ -110,115 +166,52 @@ Disassembly of section .text:
                	je	<addr>
                	leaq	-0x10(%rbp), %r9
                	movslq	(%r9), %r8
-               	orq	$0x1, %r8
+               	orq	$0x10, %r8
                	movl	%r8d, (%r9)
                	jmp	<addr>
                	xorq	%r8, %r8
-               	movq	%rax, %xmm14
                	movq	%r8, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	seta	%dil
-               	movzbq	%dil, %rdi
-               	cmpq	$0x0, %rdi
-               	je	<addr>
-               	leaq	-0x10(%rbp), %r8
-               	movslq	(%r8), %rdi
-               	orq	$0x2, %rdi
-               	movl	%edi, (%r8)
-               	jmp	<addr>
-               	xorq	%rdi, %rdi
-               	movq	%rax, %xmm14
-               	movq	%rdi, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setbe	%r9b
-               	movzbq	%r9b, %r9
-               	setnp	%r11b
+               	ucomisd	%xmm15, %xmm7
+               	setne	%r11b
                	movzbq	%r11b, %r11
-               	andq	%r11, %r9
-               	cmpq	$0x0, %r9
-               	je	<addr>
-               	leaq	-0x10(%rbp), %rdi
-               	movslq	(%rdi), %r9
-               	orq	$0x4, %r9
-               	movl	%r9d, (%rdi)
-               	jmp	<addr>
-               	xorq	%r9, %r9
-               	movq	%rax, %xmm14
-               	movq	%r9, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setae	%r8b
-               	movzbq	%r8b, %r8
-               	cmpq	$0x0, %r8
-               	je	<addr>
-               	leaq	-0x10(%rbp), %r9
-               	movslq	(%r9), %r8
-               	orq	$0x8, %r8
-               	movl	%r8d, (%r9)
-               	jmp	<addr>
-               	xorq	%r8, %r8
-               	movq	%rax, %xmm14
-               	movq	%r8, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	sete	%dil
-               	movzbq	%dil, %rdi
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %rdi
-               	cmpq	$0x0, %rdi
-               	je	<addr>
-               	leaq	-0x10(%rbp), %r8
-               	movslq	(%r8), %rdi
-               	orq	$0x10, %rdi
-               	movl	%edi, (%r8)
-               	jmp	<addr>
-               	xorq	%rdi, %rdi
-               	movq	%rax, %xmm14
-               	movq	%rdi, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%r9b
-               	movzbq	%r9b, %r9
-               	setp	%r11b
-               	movzbq	%r11b, %r11
-               	orq	%r11, %r9
-               	cmpq	$0x0, %r9
+               	setp	%r10b
+               	movzbq	%r10b, %r10
+               	orq	%r10, %r11
+               	cmpq	$0x0, %r11
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rdi
-               	movslq	(%rdi), %r9
-               	orq	$0x20, %r9
-               	movl	%r9d, (%rdi)
-               	jmp	<addr>
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setb	%r9b
-               	movzbq	%r9b, %r9
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %r9
-               	cmpq	$0x0, %r9
-               	je	<addr>
                	leaq	-0x10(%rbp), %r8
-               	movslq	(%r8), %r9
-               	orq	$0x40, %r9
-               	movl	%r9d, (%r8)
+               	movslq	(%r8), %r11
+               	orq	$0x20, %r11
+               	movl	%r11d, (%r8)
                	jmp	<addr>
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	sete	%al
-               	movzbq	%al, %rax
-               	setnp	%r11b
+               	ucomisd	%xmm7, %xmm7
+               	setb	%r11b
                	movzbq	%r11b, %r11
-               	andq	%r11, %rax
-               	cmpq	$0x0, %rax
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	leaq	-0x10(%rbp), %r9
-               	movslq	(%r9), %rax
-               	orq	$0x80, %rax
-               	movl	%eax, (%r9)
+               	movslq	(%r9), %r11
+               	orq	$0x40, %r11
+               	movl	%r11d, (%r9)
                	jmp	<addr>
-               	movslq	-0x10(%rbp), %rax
-               	cmpq	$0x0, %rax
+               	ucomisd	%xmm7, %xmm7
+               	sete	%r11b
+               	movzbq	%r11b, %r11
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r8
+               	movslq	(%r8), %r11
+               	orq	$0x80, %r11
+               	movl	%r11d, (%r8)
+               	jmp	<addr>
+               	movslq	-0x10(%rbp), %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	leaq	<rip>, %rbx
                	movslq	-0x10(%rbp), %r12
@@ -250,4 +243,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

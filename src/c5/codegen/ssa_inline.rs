@@ -126,27 +126,22 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
-            Inst::LoadLocal { off, .. } => {
+            Inst::LoadLocal { .. } => {
+                // The splice drops every LoadLocal because the
+                // caller's frame has no matching slot. That is only
+                // safe when the load's result is dead inside the
+                // callee body -- a live read would lose data.
                 if used[idx] {
                     say(&alloc::format!("live LoadLocal at v{}", idx));
                     return false;
                 }
-                // True locals (off < 2) and the BP / return-addr slots
-                // would not exist in the caller's frame after splice.
-                if *off < 2 {
-                    say(&alloc::format!("LoadLocal off={} below cdecl cells", off));
-                    return false;
-                }
             }
-            Inst::StoreLocal { off, .. } => {
-                // Walker emits `StoreLocal { off >= 2 }` as the cdecl
-                // param-cell save at function entry. The splice drops
-                // it because the caller's frame has no matching cell.
-                // True-local stores (off < 2) escape the splice.
-                if *off < 2 {
-                    say(&alloc::format!("StoreLocal off={} below cdecl cells", off));
-                    return false;
-                }
+            Inst::StoreLocal { .. } => {
+                // StoreLocal has no result; the splice drops it.
+                // The store's slot writes into a frame the caller
+                // does not own, but with every LoadLocal also
+                // dropped no observation of the missing write
+                // survives the splice.
             }
             _ => {
                 say(&alloc::format!("disallowed inst {:?}", inst));

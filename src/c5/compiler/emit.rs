@@ -624,6 +624,7 @@ impl Compiler {
             end_pc: self.next_ent_pc,
             n_params,
             is_variadic,
+            is_inline: self.pending_is_inline,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
@@ -632,6 +633,7 @@ impl Compiler {
             return_struct_size,
             alloca_top_slot,
         };
+        self.pending_is_inline = false;
         self.finished_functions.push(finished);
     }
 

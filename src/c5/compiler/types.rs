@@ -501,6 +501,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Long
         || tk == Token::Short
         || tk == Token::FuncSpec
+        || tk == Token::Inline
 }
 
 /// True for any token that may start a c5 declaration -- a base-type

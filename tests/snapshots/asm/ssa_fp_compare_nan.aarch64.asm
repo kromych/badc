@@ -105,105 +105,98 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
-               	bl	<addr>
-               	mov	x14, #0x0               // =0
-               	stur	w14, [x29, #-0x10]
-               	fmov	d0, x0
-               	fmov	d1, x14
-               	fcmp	d0, d1
-               	cset	x13, mi
-               	cbz	x13, <addr>
-               	sub	x14, x29, #0x10
-               	ldrsw	x13, [x14]
-               	mov	x17, #0x1               // =1
-               	orr	x13, x13, x17
-               	str	w13, [x14]
-               	b	<addr>
-               	mov	x13, #0x0               // =0
-               	fmov	d0, x0
-               	fmov	d1, x13
-               	fcmp	d0, d1
-               	cset	x12, gt
-               	cbz	x12, <addr>
-               	sub	x13, x29, #0x10
-               	ldrsw	x12, [x13]
-               	mov	x17, #0x2               // =2
-               	orr	x12, x12, x17
-               	str	w12, [x13]
-               	b	<addr>
-               	mov	x12, #0x0               // =0
-               	fmov	d0, x0
-               	fmov	d1, x12
-               	fcmp	d0, d1
-               	cset	x14, ls
-               	cbz	x14, <addr>
-               	sub	x12, x29, #0x10
-               	ldrsw	x14, [x12]
-               	mov	x17, #0x4               // =4
-               	orr	x14, x14, x17
-               	str	w14, [x12]
-               	b	<addr>
-               	mov	x14, #0x0               // =0
-               	fmov	d0, x0
-               	fmov	d1, x14
-               	fcmp	d0, d1
-               	cset	x13, ge
-               	cbz	x13, <addr>
-               	sub	x14, x29, #0x10
-               	ldrsw	x13, [x14]
-               	mov	x17, #0x8               // =8
-               	orr	x13, x13, x17
-               	str	w13, [x14]
-               	b	<addr>
-               	mov	x13, #0x0               // =0
-               	fmov	d0, x0
-               	fmov	d1, x13
-               	fcmp	d0, d1
-               	cset	x12, eq
-               	cbz	x12, <addr>
-               	sub	x13, x29, #0x10
-               	ldrsw	x12, [x13]
-               	mov	x17, #0x10              // =16
-               	orr	x12, x12, x17
-               	str	w12, [x13]
-               	b	<addr>
-               	mov	x12, #0x0               // =0
-               	fmov	d0, x0
-               	fmov	d1, x12
-               	fcmp	d0, d1
-               	cset	x14, ne
-               	cmp	x14, #0x0
-               	b.ne	<addr>
-               	sub	x12, x29, #0x10
-               	ldrsw	x14, [x12]
-               	mov	x17, #0x20              // =32
-               	orr	x14, x14, x17
-               	str	w14, [x12]
-               	b	<addr>
-               	fmov	d0, x0
-               	fmov	d1, x0
-               	fcmp	d0, d1
+               	mov	x15, #0x0               // =0
+               	fmov	d0, x15
+               	fmov	d1, x15
+               	fdiv	d7, d0, d1
+               	mov	x15, #0x0               // =0
+               	stur	w15, [x29, #-0x10]
+               	fmov	d1, x15
+               	fcmp	d7, d1
                	cset	x14, mi
                	cbz	x14, <addr>
-               	sub	x13, x29, #0x10
-               	ldrsw	x14, [x13]
-               	mov	x17, #0x40              // =64
+               	sub	x15, x29, #0x10
+               	ldrsw	x14, [x15]
+               	mov	x17, #0x1               // =1
                	orr	x14, x14, x17
-               	str	w14, [x13]
+               	str	w14, [x15]
                	b	<addr>
-               	fmov	d0, x0
-               	fmov	d1, x0
-               	fcmp	d0, d1
-               	cset	x0, eq
-               	cbz	x0, <addr>
+               	mov	x14, #0x0               // =0
+               	fmov	d1, x14
+               	fcmp	d7, d1
+               	cset	x13, gt
+               	cbz	x13, <addr>
                	sub	x14, x29, #0x10
-               	ldrsw	x0, [x14]
-               	mov	x17, #0x80              // =128
-               	orr	x0, x0, x17
-               	str	w0, [x14]
+               	ldrsw	x13, [x14]
+               	mov	x17, #0x2               // =2
+               	orr	x13, x13, x17
+               	str	w13, [x14]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
-               	cbz	x0, <addr>
+               	mov	x13, #0x0               // =0
+               	fmov	d1, x13
+               	fcmp	d7, d1
+               	cset	x15, ls
+               	cbz	x15, <addr>
+               	sub	x13, x29, #0x10
+               	ldrsw	x15, [x13]
+               	mov	x17, #0x4               // =4
+               	orr	x15, x15, x17
+               	str	w15, [x13]
+               	b	<addr>
+               	mov	x15, #0x0               // =0
+               	fmov	d1, x15
+               	fcmp	d7, d1
+               	cset	x14, ge
+               	cbz	x14, <addr>
+               	sub	x15, x29, #0x10
+               	ldrsw	x14, [x15]
+               	mov	x17, #0x8               // =8
+               	orr	x14, x14, x17
+               	str	w14, [x15]
+               	b	<addr>
+               	mov	x14, #0x0               // =0
+               	fmov	d1, x14
+               	fcmp	d7, d1
+               	cset	x13, eq
+               	cbz	x13, <addr>
+               	sub	x14, x29, #0x10
+               	ldrsw	x13, [x14]
+               	mov	x17, #0x10              // =16
+               	orr	x13, x13, x17
+               	str	w13, [x14]
+               	b	<addr>
+               	mov	x13, #0x0               // =0
+               	fmov	d1, x13
+               	fcmp	d7, d1
+               	cset	x15, ne
+               	cmp	x15, #0x0
+               	b.ne	<addr>
+               	sub	x13, x29, #0x10
+               	ldrsw	x15, [x13]
+               	mov	x17, #0x20              // =32
+               	orr	x15, x15, x17
+               	str	w15, [x13]
+               	b	<addr>
+               	fcmp	d7, d7
+               	cset	x15, mi
+               	cbz	x15, <addr>
+               	sub	x14, x29, #0x10
+               	ldrsw	x15, [x14]
+               	mov	x17, #0x40              // =64
+               	orr	x15, x15, x17
+               	str	w15, [x14]
+               	b	<addr>
+               	fcmp	d7, d7
+               	cset	x15, eq
+               	cbz	x15, <addr>
+               	sub	x13, x29, #0x10
+               	ldrsw	x15, [x13]
+               	mov	x17, #0x80              // =128
+               	orr	x15, x15, x17
+               	str	w15, [x13]
+               	b	<addr>
+               	ldursw	x15, [x29, #-0x10]
+               	cbz	x15, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x150
                	mov	x20, x19

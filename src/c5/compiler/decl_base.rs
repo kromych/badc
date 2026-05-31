@@ -192,6 +192,9 @@ impl Compiler {
         // for the type keyword.
         let mut m = IntModifiers::default();
         while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::Inline {
+                self.pending_is_inline = true;
+            }
             if !self.try_consume_int_modifier(&mut m)? {
                 // const / volatile / restrict / _Atomic / etc. --
                 // all no-ops in c5, just consume.

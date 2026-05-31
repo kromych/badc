@@ -272,12 +272,17 @@ pub(crate) enum Token {
     /// twice in a row; both spellings yield `Ty::Long` so 64-bit-
     /// storage code stays portable across C platforms.
     Long,
-    /// Function specifier (`inline`, `register`, `auto`).
-    /// Consumed as a no-op anywhere a storage class may
-    /// appear. `auto` is the C default, `register` is a
-    /// historical hint, `inline` is something a real
-    /// optimizer would honour -- c5 ignores all three.
+    /// Function specifier (`register`, `auto`, `_Noreturn`,
+    /// `noreturn`). Consumed as a no-op anywhere a storage class
+    /// may appear. `auto` is the C default, `register` is a
+    /// historical hint, `_Noreturn` is a hint to optimisers about
+    /// non-returning calls.
     FuncSpec,
+    /// `inline` / `__inline` / `__inline__` (C99 6.7.4). Tracked
+    /// distinctly from the no-op specifiers so the parser can
+    /// flag the function symbol for the SSA inliner, which
+    /// bypasses the body-size cap for inline-marked callees.
+    Inline,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is

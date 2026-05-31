@@ -1448,10 +1448,12 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("short", Token::Short),
     ("long", Token::Long),
     ("_Bool", Token::IntMod),
-    // Function specifiers -- accepted, no effect.
-    ("inline", Token::FuncSpec),
-    ("__inline", Token::FuncSpec),
-    ("__inline__", Token::FuncSpec),
+    // C99 6.7.4 `inline` -- the inliner reads the flag set on the
+    // function symbol when this keyword leads its decl-specs.
+    ("inline", Token::Inline),
+    ("__inline", Token::Inline),
+    ("__inline__", Token::Inline),
+    // Other function specifiers -- accepted, no effect.
     ("register", Token::FuncSpec),
     ("auto", Token::FuncSpec),
     // C11 _Noreturn -- pure hint to optimizers (the called function

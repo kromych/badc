@@ -35,7 +35,7 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x120, %rsp            # imm = 0x120
                	xorq	%r11, %r11
                	addq	$0x1, %r11
                	addq	$0x2, %r11
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	movq	%r9, -0x18(%rbp)
                	jmp	<addr>
                	movq	-0x18(%rbp), %rax
-               	addq	$0x20, %rsp
+               	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

@@ -104,9 +104,21 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
     for inst in &func.insts {
         match inst {
             Inst::Load { addr, .. } => mark(*addr, &mut used),
+            Inst::Store { addr, value, .. } => {
+                mark(*addr, &mut used);
+                mark(*value, &mut used);
+            }
+            Inst::StoreLocal { value, .. } => mark(*value, &mut used),
             Inst::LoadIndexed { base, index, .. } => {
                 mark(*base, &mut used);
                 mark(*index, &mut used);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                mark(*base, &mut used);
+                mark(*index, &mut used);
+                mark(*value, &mut used);
             }
             Inst::Binop { lhs, rhs, .. } => {
                 mark(*lhs, &mut used);
@@ -116,6 +128,21 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             Inst::Fneg(v) => mark(*v, &mut used),
             Inst::Extend { value, .. } => mark(*value, &mut used),
             Inst::FpCast { value, .. } => mark(*value, &mut used),
+            Inst::Mcpy { dst, src, .. } => {
+                mark(*dst, &mut used);
+                mark(*src, &mut used);
+            }
+            Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+                for &a in args {
+                    mark(a, &mut used);
+                }
+            }
+            Inst::CallIndirect { target, args } => {
+                mark(*target, &mut used);
+                for &a in args {
+                    mark(a, &mut used);
+                }
+            }
             _ => {}
         }
     }

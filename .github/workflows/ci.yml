@@ -260,6 +260,45 @@ jobs:
             -ex "disas" \
             ./shell_g 2>&1 | head -200
           echo "=== gdb exit ==="
+      - name: capture sqlite3 shell crash under cdb (Windows only)
+        # Mirror of the Linux gdb capture for the Windows runners.
+        # Rebuilds the optimized shell via smoke.py with the
+        # tempdir preserved, then runs it under cdb to dump the
+        # crash module + offending instruction + stack on the
+        # first access violation. `continue-on-error` keeps the
+        # diagnostic from masking other matrix failures.
+        if: runner.os == 'Windows' && failure()
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if not exist "%CDB%" (
+            echo cdb.exe not found at "%CDB%"
+            exit /b 0
+          )
+          set "BADC=%CD%\target\release\badc.exe"
+          set "WORK=%RUNNER_TEMP%\sqlite3-cdb"
+          if exist "%WORK%" rmdir /s /q "%WORK%"
+          mkdir "%WORK%"
+          echo === running smoke.py with BADC_SMOKE_KEEP_TMPDIR ===
+          set "BADC_SMOKE_KEEP_TMPDIR=%WORK%\saved"
+          python "%GITHUB_WORKSPACE%\demos\sqlite3\smoke.py"
+          set "SHELL_OPT="
+          for /f "delims=" %%F in ('dir /b /s "%WORK%\saved\sqlite3shell.opt.exe" 2^>nul') do (
+            if not defined SHELL_OPT set "SHELL_OPT=%%F"
+          )
+          if not defined SHELL_OPT (
+            echo no sqlite3shell.opt.exe found under "%WORK%\saved"
+            dir /s "%WORK%" 2>&1
+            exit /b 0
+          )
+          echo === running %SHELL_OPT% under cdb ===
+          echo "select 1;" > "%WORK%\probe.sql"
+          "%CDB%" -g -G -c "g; .lastevent; r; k; lm; u . L20; q" ^
+            -- "%SHELL_OPT%" < "%WORK%\probe.sql" 2>&1
+          echo === cdb exit ===
       - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of
         # integer + bit-twiddle deflate code. Compresses + uncompresses

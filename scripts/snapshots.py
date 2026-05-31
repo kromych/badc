@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -156,8 +157,15 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bo
     extra: list[str] = []
     if stop is not None:
         extra.append(f"--stop-address=0x{stop:x}")
+    # llvm-objdump's output text differs from GNU objdump's enough that
+    # snapshots taken with one cannot match the other (mnemonic spelling,
+    # operand syntax, header line shape). Prefer llvm-objdump everywhere
+    # so the snapshot tree is determined by `badc`'s output rather than
+    # the host's binutils choice. Fall back to plain `objdump` for hosts
+    # that ship only the GNU form.
+    tool = "llvm-objdump" if shutil.which("llvm-objdump") else "objdump"
     proc = subprocess.run(
-        ["objdump", *OBJDUMP_FLAGS, *extra, str(tmp_bin)],
+        [tool, *OBJDUMP_FLAGS, *extra, str(tmp_bin)],
         capture_output=True,
         check=False,
     )

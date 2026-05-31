@@ -776,6 +776,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: snapshots-clean
+      - name: install llvm-objdump
+        # scripts/snapshots.py prefers llvm-objdump over GNU objdump so
+        # the disassembly text is determined by `badc`'s output rather
+        # than the host's binutils choice. The committed snapshots were
+        # produced with llvm-objdump; require it here too.
+        run: sudo apt-get update -y && sudo apt-get install -y llvm
       - name: build badc release
         run: cargo build --release --locked
       - name: regenerate snapshots

@@ -1080,77 +1080,16 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
 fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
-    let bump = |target: ValueId, current_pc: u32, last_use: &mut [u32]| {
-        if target != NO_VALUE
-            && (target as usize) < last_use.len()
-            && last_use[target as usize] < current_pc
-        {
-            last_use[target as usize] = current_pc;
-        }
-    };
     for (idx, inst) in func.insts.iter().enumerate() {
         let pc = idx as u32;
-        match inst {
-            Inst::Imm(_)
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::LocalAddr(_)
-            | Inst::TlsAddr(_)
-            | Inst::AllocaInit(_)
-            | Inst::ParamRef { .. }
-            | Inst::TailExt(_) => {}
-            Inst::Phi { incoming, .. } => {
-                for (_, v) in incoming {
-                    bump(*v, pc, &mut last_use);
-                }
+        for_each_operand(inst, |target| {
+            if target != NO_VALUE
+                && (target as usize) < last_use.len()
+                && last_use[target as usize] < pc
+            {
+                last_use[target as usize] = pc;
             }
-            Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
-            Inst::Store { addr, value, .. } => {
-                bump(*addr, pc, &mut last_use);
-                bump(*value, pc, &mut last_use);
-            }
-            Inst::LoadLocal { .. } => {}
-            Inst::StoreLocal { value, .. } => bump(*value, pc, &mut last_use),
-            Inst::LoadIndexed { base, index, .. } => {
-                bump(*base, pc, &mut last_use);
-                bump(*index, pc, &mut last_use);
-            }
-            Inst::StoreIndexed {
-                base, index, value, ..
-            } => {
-                bump(*base, pc, &mut last_use);
-                bump(*index, pc, &mut last_use);
-                bump(*value, pc, &mut last_use);
-            }
-            Inst::Binop { lhs, rhs, .. } => {
-                bump(*lhs, pc, &mut last_use);
-                bump(*rhs, pc, &mut last_use);
-            }
-            Inst::BinopI { lhs, .. } => bump(*lhs, pc, &mut last_use),
-            Inst::Fneg(v) => bump(*v, pc, &mut last_use),
-            Inst::Extend { value, .. } => bump(*value, pc, &mut last_use),
-            Inst::FpCast { value, .. } => bump(*value, pc, &mut last_use),
-            Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
-                for &a in args {
-                    bump(a, pc, &mut last_use);
-                }
-            }
-            Inst::CallIndirect { target, args } => {
-                bump(*target, pc, &mut last_use);
-                for &a in args {
-                    bump(a, pc, &mut last_use);
-                }
-            }
-            Inst::Mcpy { dst, src, .. } => {
-                bump(*dst, pc, &mut last_use);
-                bump(*src, pc, &mut last_use);
-            }
-            Inst::Intrinsic { args, .. } => {
-                for &a in args {
-                    bump(a, pc, &mut last_use);
-                }
-            }
-        }
+        });
     }
     // Also: each block's exit_acc keeps that value live to the
     // end of the block, and the terminator's branch may consume

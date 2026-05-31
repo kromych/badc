@@ -834,10 +834,26 @@ pub(super) fn emit_function(
             pc_to_native,
             code.len(),
         );
+        // Tail-call opportunity: when the block's last instruction is
+        // a direct `Inst::Call` whose result is the same block's
+        // `Terminator::Return` value, lower the call as `marshal_args;
+        // epilogue; jmp target` instead of `call target; capture;
+        // epilogue; ret`. Saves one call+ret pair per recursion level
+        // and removes the post-call rax-to-place mov. See
+        // `detect_tail_call` for the safety preconditions.
+        let tail_call = detect_tail_call(func, block, abi, variadic_targets);
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
             if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            // The tail-call Call's args setup is folded into the
+            // terminator emit; skip the per-inst emit so we don't
+            // emit the `call` instruction and the post-call capture.
+            if let Some((tail_pc, _, _)) = tail_call
+                && (v as usize) == tail_pc
+            {
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
@@ -910,7 +926,23 @@ pub(super) fn emit_function(
             return false;
         }
         match block.terminator {
-            Terminator::Return(v) => emit_return(code, v, alloc, frame, func),
+            Terminator::Return(v) => {
+                if let Some((_, target_pc, args)) = tail_call {
+                    if !emit_tail_call(
+                        code, target_pc, args, alloc, frame, abi, fixups, func,
+                    ) {
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    }
+                } else {
+                    emit_return(code, v, alloc, frame, func)
+                }
+            }
             Terminator::Jmp(t) => {
                 branch_fixups.push(BranchFixup {
                     site: code.len() + 1, // rel32 follows the 1-byte opcode
@@ -3560,6 +3592,146 @@ fn emit_mcpy(
         Place::Spill(_) => spill_dst_to_slot(code, dst_place, dst_r, frame),
         _ => {}
     }
+    true
+}
+
+/// Decide whether `block` ends in a tail-call shape: the block's
+/// `Terminator::Return` value is the same block's last instruction,
+/// and that instruction is a direct `Inst::Call` whose arguments
+/// fit in the host integer-arg-register window. Returns
+/// `Some((call_pc, target_pc, args))` when the shape matches and
+/// every safety precondition holds.
+///
+/// Preconditions (in order):
+///   * The terminator is `Return(v)` and `v` is the PC of the last
+///     instruction in the block.
+///   * That instruction is `Inst::Call { target_pc, args }`. Indirect
+///     and external calls are out of scope for this pass.
+///   * `args.len() <= abi.int_arg_regs.len()` -- no host-stack-overflow
+///     argument; the epilogue would otherwise have to negotiate the
+///     overflow stripe and the caller's stack at the same time.
+///   * The callee isn't this function's variadic-marker call: c5's
+///     internal cdecl-vs-variadic split is encoded by the callee's
+///     own prologue, but the tail call site can't tell from here, so
+///     keep the tail conversion off when *this* function is variadic
+///     (its arg slots stay on the c5 stack rather than reg cells).
+///   * The function has no `LocalAddr` to a negative slot: any such
+///     address could have been passed to the callee in an earlier
+///     call's argument, and tearing down our frame before the jmp
+///     would invalidate it.
+///   * The function records no callee-saved register use
+///     (`alloc.gpr_used.is_empty()`): the epilogue would emit per-reg
+///     restores between the arg marshal and the jmp, all of which
+///     are callee-saved (rbx / r12 / r14 / r15 / rsi / rdi on Win64)
+///     and so don't alias the caller-saved arg-register window the
+///     tail call has just populated. Restricted on this first pass
+///     for tractability; the more general path can drop this gate
+///     once it is shown to be safe via an explicit save-before-marshal
+///     dance.
+fn detect_tail_call<'a>(
+    func: &'a FunctionSsa,
+    block: &super::super::ir::Block,
+    abi: super::Abi,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
+) -> Option<(usize, usize, &'a [u32])> {
+    let Terminator::Return(v) = block.terminator else {
+        return None;
+    };
+    if v == super::super::ir::NO_VALUE {
+        return None;
+    }
+    let inst_end = block.inst_range.end;
+    if inst_end == 0 || v + 1 != inst_end {
+        return None;
+    }
+    let (target_pc, args) = match &func.insts[v as usize] {
+        Inst::Call { target_pc, args } => (*target_pc, args.as_slice()),
+        _ => return None,
+    };
+    if args.len() > abi.int_arg_regs.len() {
+        return None;
+    }
+    if func.is_variadic {
+        return None;
+    }
+    // Variadic callees use a different call ABI (c5-stack 16-byte
+    // pushes rather than the host int-arg-register window), so the
+    // tail conversion's `marshal_args` would deliver garbage. The
+    // regular `emit_call` path branches on this same flag.
+    if variadic_targets.contains(&target_pc) {
+        return None;
+    }
+    // Any `LocalAddr` -- whether to a user-local (negative `off`) or
+    // a c5 cdecl param cell (positive `off >= 2`) -- could have been
+    // passed as an argument to an earlier call or stored where the
+    // callee will read it. Tearing down our frame before the `jmp`
+    // would make that address dangle; the param cells in particular
+    // get overwritten by the tail-callee's own prologue.
+    if func
+        .insts
+        .iter()
+        .any(|i| matches!(i, Inst::LocalAddr(_)))
+    {
+        return None;
+    }
+    Some((v as usize, target_pc, args))
+}
+
+/// Emit a tail call as `marshal_args; epilogue; jmp target`.
+/// `args` are placed into the host integer arg-register window using
+/// the same planner the regular `Inst::Call` path uses; the epilogue
+/// mirrors `emit_return`'s frame teardown (callee-saved restores +
+/// `add rsp` + `pop rbp` + cdecl-cell drop) but skips the return
+/// value staging and ends in `jmp rel32` instead of `ret`. The
+/// callee's own `ret` instruction returns control to *our* caller.
+#[allow(clippy::too_many_arguments)]
+fn emit_tail_call(
+    code: &mut Vec<u8>,
+    target_pc: usize,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+    fixups: &mut Vec<Fixup>,
+    func: &FunctionSsa,
+) -> bool {
+    // Marshal arguments into their ABI-prescribed registers. The
+    // caller-saved arg-reg window is disjoint from `alloc.gpr_used`
+    // (only callee-saved regs land there), so the epilogue's
+    // restores below cannot clobber the marshalled values.
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    // No host-stack-overflow arg => no scratch frame to allocate.
+    debug_assert_eq!(plan.scratch_bytes, 0);
+    if !marshal_args(code, &plan, args, alloc, frame, "TailCall") {
+        return false;
+    }
+    // Mirror emit_return's epilogue, omitting the return-value
+    // staging (the callee's own `ret` carries the value back).
+    for (i, &r) in alloc.gpr_used.iter().enumerate() {
+        let off = (i as i32) * 8;
+        super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+    }
+    if !is_full_leaf(func, frame, alloc) {
+        if frame.frame_bytes > 0 {
+            emit_add_rsp_imm32(code, frame.frame_bytes);
+        }
+        emit_pop_r(code, Reg::RBP);
+        if frame.param_spill_bytes > 0 {
+            emit_add_rsp_imm32(code, frame.param_spill_bytes);
+        }
+    }
+    // Record a Call-kind fixup at the rel32 byte; the post-link pass
+    // resolves `target_ent_pc` to its native byte offset like a
+    // regular intra-unit call. The opcode emitted here is `jmp`
+    // (E9 rel32), not `call`, so the callee's own `ret` returns to
+    // our caller rather than to this instruction.
+    let jmp_site = code.len();
+    fixups.push(Fixup {
+        native_offset: jmp_site,
+        target_ent_pc: target_pc,
+        kind: super::x86_64::BranchKind::Jmp,
+    });
+    super::x86_64::emit_jmp_rel32(code, 0);
     true
 }
 

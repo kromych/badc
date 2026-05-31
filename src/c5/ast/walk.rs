@@ -117,48 +117,6 @@ pub(crate) fn walk_function(
     // base, so this index matches the `val` the parser stored
     // for each declared param.
     let arg_slot_base: i64 = if returns_struct { 3 } else { 2 };
-    for i in 0..param_tys.len() {
-        let pty = param_tys[i];
-        let local_slot = param_local_slots[i];
-        if local_slot >= 0 {
-            continue;
-        }
-        let stripped = pty & !(1i64 << 30);
-        let is_struct_value =
-            stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
-        if is_struct_value {
-            let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
-            if id >= structs.len() {
-                continue;
-            }
-            let size = structs[id].size as i64;
-            let arg_slot = (i as i64) + arg_slot_base;
-            let dst = b.local_addr(local_slot);
-            let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-            b.mcpy(dst, src, size);
-            continue;
-        }
-        // FP-by-value param. The parser allocated a local slot
-        // for `x` so the body can read it back through the
-        // standard `LoadLocal { kind: F32 }` path; without
-        // re-narrowing the host-arg-register value at function
-        // entry the local stays uninitialised and every `x`
-        // reference reads stack garbage. C99 6.5.2.2 says the
-        // call passed a 4-byte float; the c5 cdecl widens to
-        // 8 bytes in the host arg slot. Read the slot as I64
-        // (preserves the bit pattern) and narrow back via a
-        // `Store { kind: F32 }` into the local. F64 / `double`
-        // shares the I64 storage width (8 bytes both inbound and
-        // on the local), so this widen-then-narrow step does not
-        // apply.
-        let is_float = stripped == crate::c5::token::Ty::Float as i64;
-        if is_float {
-            let arg_slot = (i as i64) + arg_slot_base;
-            let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-            let dst = b.local_addr(local_slot);
-            b.store(dst, val, super::super::ir::StoreKind::F32);
-        }
-    }
     // Parameter-slot promotion seed: for each non-relocated,
     // non-struct, non-float-narrowed parameter, emit a `ParamRef`
     // + `StoreLocal` to the c5 cdecl arg slot. The store gives
@@ -171,7 +129,13 @@ pub(crate) fn walk_function(
     // callees skip this -- the hidden out-pointer shifts every
     // declared param's incoming arg reg up by one, which
     // `Inst::ParamRef(i)`'s direct `int_arg_regs[i]` index does
-    // not handle.
+    // not handle. This loop runs before the struct / float
+    // entry-copy loop below so `Inst::ParamRef` reads the host
+    // arg register while it still holds the caller-supplied
+    // value: the struct mcpy emits scratch writes (its result
+    // place can land on any caller-saved reg, including a host
+    // arg reg) and any reordering would let those writes clobber
+    // the incoming argument before its `ParamRef` materialised.
     if !is_variadic && !returns_struct {
         let int_arg_regs_count = target.abi().int_arg_regs.len();
         for i in 0..param_tys.len().min(int_arg_regs_count) {
@@ -226,6 +190,48 @@ pub(crate) fn walk_function(
             let arg_slot = (i as i64) + arg_slot_base;
             let pr = b.param_ref(i as u32, load_kind);
             b.store_local(arg_slot, pr, store_kind);
+        }
+    }
+    for i in 0..param_tys.len() {
+        let pty = param_tys[i];
+        let local_slot = param_local_slots[i];
+        if local_slot >= 0 {
+            continue;
+        }
+        let stripped = pty & !(1i64 << 30);
+        let is_struct_value =
+            stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
+        if is_struct_value {
+            let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+            if id >= structs.len() {
+                continue;
+            }
+            let size = structs[id].size as i64;
+            let arg_slot = (i as i64) + arg_slot_base;
+            let dst = b.local_addr(local_slot);
+            let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+            b.mcpy(dst, src, size);
+            continue;
+        }
+        // FP-by-value param. The parser allocated a local slot
+        // for `x` so the body can read it back through the
+        // standard `LoadLocal { kind: F32 }` path; without
+        // re-narrowing the host-arg-register value at function
+        // entry the local stays uninitialised and every `x`
+        // reference reads stack garbage. C99 6.5.2.2 says the
+        // call passed a 4-byte float; the c5 cdecl widens to
+        // 8 bytes in the host arg slot. Read the slot as I64
+        // (preserves the bit pattern) and narrow back via a
+        // `Store { kind: F32 }` into the local. F64 / `double`
+        // shares the I64 storage width (8 bytes both inbound and
+        // on the local), so this widen-then-narrow step does not
+        // apply.
+        let is_float = stripped == crate::c5::token::Ty::Float as i64;
+        if is_float {
+            let arg_slot = (i as i64) + arg_slot_base;
+            let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+            let dst = b.local_addr(local_slot);
+            b.store(dst, val, super::super::ir::StoreKind::F32);
         }
     }
     let mut ctx = Walker {

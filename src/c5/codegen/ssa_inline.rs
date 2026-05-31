@@ -478,7 +478,7 @@ fn splice_multi_block(
     let _ = prefix_id;
 
     // Step 3: postfix block placeholder (filled after callee splices).
-    // We need its ID stable now so the callee's Return → Jmp(postfix)
+    // We need its ID stable now so the callee's Return -> Jmp(postfix)
     // points to it; emit insts + terminator below after the callee.
     let postfix_block_slot = new_blocks.len();
     new_blocks.push(Block {

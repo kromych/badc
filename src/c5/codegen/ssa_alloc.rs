@@ -231,6 +231,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
+    populate_return_hints(func, target, &mut hints);
     populate_param_ref_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
@@ -251,15 +252,16 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let banks = RegBanks::for_target(target);
     let last_use = compute_last_use(func);
     let calls_after_def = compute_calls_after_def(func, &last_use, target);
-    // ABI coalescing hints. All three passes are guarded by per-value
-    // `calls_after_def` / `last_use` checks so a missed predicate
-    // falls through to the default policy and no caller-saved hint
-    // pre-commits a value that has to survive past a call. The prior
-    // unconditional ABI-hint pass (commit 3469094) was reverted in
-    // 1609bbc precisely because it lacked these guards.
+    // Call-argument coalescing hints. Run after `last_use` and
+    // `calls_after_def` so the per-value safety guards can read them.
+    // The prior unconditional ABI-hint pass was reverted in commit
+    // 1609bbc after it sent a value to a caller-saved arg register
+    // even when the value's interval extended past the call --
+    // a later use then read the call-clobbered register. Restrict
+    // the hint to values whose last use is exactly this call so the
+    // call consumes them and there is no surviving live range to
+    // protect.
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
-    populate_call_result_hints(func, target, &calls_after_def, &mut hints);
-    populate_return_hints(func, target, &calls_after_def, &mut hints);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -801,59 +803,32 @@ fn populate_call_arg_hints(
     }
 }
 
-/// Hint each `Inst::Call*` result to the ABI return register so the
-/// post-call capture mov disappears when the value lives only across
-/// the next few instructions. Guarded by `!calls_after_def[v]` -- the
-/// result's interval must not cross another call, otherwise the
-/// caller-saved return register would be clobbered by that later
-/// call's prologue / arg setup.
-fn populate_call_result_hints(
-    func: &FunctionSsa,
-    target: Target,
-    calls_after_def: &[bool],
-    hints: &mut [Option<u8>],
-) {
-    let (ret_int, ret_fp) = match target {
-        Target::MacOSAarch64
-        | Target::LinuxAarch64
-        | Target::WindowsAarch64
-        | Target::LinuxX64
-        | Target::WindowsX64 => (0u8, 0u8),
-    };
-    for (idx, inst) in func.insts.iter().enumerate() {
-        if !matches!(
+/// Populate coalescing hints for ABI-fixed registers so the linear
+/// scan lands call arguments directly in their ABI register, captures
+/// a call result in the return register, and keeps a Return-value in
+/// the return register. The pick-reg path honours each hint only when
+/// the register is free and live-across-call-compatible, so a missed
+/// hint falls back to the default policy.
+fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
+    // Hint the value feeding `Terminator::Return` to the ABI
+    // return register so a leaf function's exit move drops out.
+    // Scope restricted to leaf functions: the hint is unsafe
+    // when a call sits between the return value's def and the
+    // Return, because the allocator's must-be-callee filter
+    // checks the value's [def, last_use] interval, but the hint
+    // pre-commits the value to a caller-saved register before
+    // that interval ends -- under-reported back-edge live
+    // ranges then escape the must-be-callee guard. Leaf
+    // functions have no calls and so no clobber to worry about.
+    let has_call = func.insts.iter().any(|inst| {
+        matches!(
             inst,
             Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) {
-            continue;
-        }
-        if idx >= hints.len() || hints[idx].is_some() {
-            continue;
-        }
-        if calls_after_def.get(idx).copied().unwrap_or(false) {
-            continue;
-        }
-        match result_kind(inst) {
-            ResultKind::Int => hints[idx] = Some(ret_int),
-            ResultKind::Fp => hints[idx] = Some(ret_fp),
-            ResultKind::None => {}
-        }
+        )
+    });
+    if has_call {
+        return;
     }
-}
-
-/// Hint the value feeding `Terminator::Return` to the ABI return
-/// register. The pick-reg path honours the hint only when the
-/// register is free and the value's interval is call-clobber-free
-/// (`!calls_after_def[v]`); a missed predicate falls back to the
-/// default policy. The earlier leaf-only gate over-restricted the
-/// hint -- a return value defined after the function's last call
-/// is also safe.
-fn populate_return_hints(
-    func: &FunctionSsa,
-    target: Target,
-    calls_after_def: &[bool],
-    hints: &mut [Option<u8>],
-) {
     let (ret_int, ret_fp) = match target {
         Target::MacOSAarch64
         | Target::LinuxAarch64
@@ -874,9 +849,6 @@ fn populate_return_hints(
             && v != NO_VALUE
             && (v as usize) < func.insts.len()
         {
-            if calls_after_def.get(v as usize).copied().unwrap_or(false) {
-                continue;
-            }
             match result_kind(&func.insts[v as usize]) {
                 ResultKind::Int => try_set(hints, v, ret_int),
                 ResultKind::Fp => try_set(hints, v, ret_fp),

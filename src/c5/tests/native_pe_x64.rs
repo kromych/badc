@@ -396,6 +396,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_array_partial_init_zero.c", 0),
     ("ssa_call_result_spill.c", 0),
     ("struct_field_assign_from_call.c", 0),
+    ("struct_byval_param_followed_by_ptr.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),
     ("ssa_fp_routing.c", 0),
     ("ssa_callee_saved_x19.c", 0),

@@ -2507,7 +2507,7 @@ fn emit_binop(
             emit_setcc_r8(code, cc, rd);
             emit_movzx_r_r8(code, rd, rd);
         }
-        BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+        BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror => {
             // x86 shifts read the count from cl. When rd is rcx
             // the in-place shift would need both the lhs and the
             // count in rcx at once: stage the lhs into a scratch
@@ -2541,6 +2541,7 @@ fn emit_binop(
                     BinOp::Shl => emit_shl_r_cl(code, scratch),
                     BinOp::Shr => emit_sar_r_cl(code, scratch),
                     BinOp::Shru => emit_shr_r_cl(code, scratch),
+                    BinOp::Ror => super::x86_64::emit_ror_r_cl(code, scratch),
                     _ => unreachable!(),
                 }
                 emit_mov_rr(code, rd, scratch);
@@ -2572,6 +2573,7 @@ fn emit_binop(
                     BinOp::Shl => emit_shl_r_cl(code, rd),
                     BinOp::Shr => emit_sar_r_cl(code, rd),
                     BinOp::Shru => emit_shr_r_cl(code, rd),
+                    BinOp::Ror => super::x86_64::emit_ror_r_cl(code, rd),
                     _ => unreachable!(),
                 }
                 if rcx_holds_live {
@@ -2786,6 +2788,13 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             super::x86_64::emit_shr_r_imm8(code, rd, shift_amount.unwrap());
+            true
+        }
+        BinOp::Ror if shift_amount.is_some() => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         BinOp::Add if imm_fits_i32 => {

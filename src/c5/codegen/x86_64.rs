@@ -778,6 +778,21 @@ pub(super) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, imm);
 }
 
+/// `ROR r/m64, imm8` (bit-rotate right). ModR/M.reg = 1, imm at end.
+pub(super) fn emit_ror_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xC1);
+    emit_byte(code, modrm(0b11, 1, dst.lo()));
+    emit_byte(code, imm);
+}
+
+/// `ROR r/m64, cl` (bit-rotate right by `cl`). ModR/M.reg = 1.
+pub(super) fn emit_ror_r_cl(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xD3);
+    emit_byte(code, modrm(0b11, 1, dst.lo()));
+}
+
 // ---- Immediate-form ALU. `ADD r/m64, imm32` / `SUB r/m64, imm32`,
 //      etc. All share opcode `81` with a different /N digit.
 
@@ -1417,6 +1432,13 @@ pub(super) fn lower(
         // callee's body reads its parameters via `ParamRef`.
         super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
             super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+        });
+        // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
+        // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
+        // so post-inline parameter substitutions expose the constant
+        // rotate counts.
+        super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
+            super::ssa_rotate::run(&mut ssa_funcs);
         });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`

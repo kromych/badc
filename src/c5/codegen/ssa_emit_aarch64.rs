@@ -2945,6 +2945,7 @@ fn emit_binop(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
+        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);
@@ -3085,6 +3086,7 @@ fn emit_binop_imm(
         BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
         BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
         BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
+        BinOp::Ror => shift_amount.map(|s| super::aarch64::enc_ror_imm(rd, rn, s)),
         BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
         BinOp::Add => imm12.map(|v| enc_add_imm(rd, rn, v)),
         BinOp::Sub => imm12.map(|v| enc_sub_imm(rd, rn, v)),
@@ -3153,6 +3155,7 @@ fn emit_binop_imm(
         BinOp::Shl => enc_lslv(rd, rn, rm),
         BinOp::Shr => enc_asrv(rd, rn, rm),
         BinOp::Shru => enc_lsrv(rd, rn, rm),
+        BinOp::Ror => super::aarch64::enc_rorv(rd, rn, rm),
         _ => return false,
     };
     emit(code, word);

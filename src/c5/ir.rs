@@ -265,6 +265,11 @@ pub(crate) enum BinOp {
     Shl,
     Shr,
     Shru,
+    /// Bit-rotate right: `(x >> c) | (x << (W - c))` where W is
+    /// the type width. The `ssa_rotate` pass folds the canonical
+    /// shift / OR shape to this opcode so x86_64's `ror` and
+    /// aarch64's `ror` lower to a single instruction.
+    Ror,
     Add,
     Sub,
     Mul,

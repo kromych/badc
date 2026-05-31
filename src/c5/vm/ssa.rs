@@ -1496,6 +1496,7 @@ fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
         BinOp::Shl => ((lhs as u64) << (rhs as u32 & 63)) as i64,
         BinOp::Shr => lhs >> (rhs as u32 & 63),
         BinOp::Shru => ((lhs as u64) >> (rhs as u32 & 63)) as i64,
+        BinOp::Ror => (lhs as u64).rotate_right(rhs as u32 & 63) as i64,
         BinOp::Eq => (lhs == rhs) as i64,
         BinOp::Ne => (lhs != rhs) as i64,
         BinOp::Lt => (lhs < rhs) as i64,

@@ -358,6 +358,21 @@ pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
+pub(super) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_2C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
+/// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
+pub(super) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    0x93C0_0000
+        | ((rn.0 as u32) << 16)
+        | (((shift as u32) & 63) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
 // ---- Floating-point (double-precision). ----
 //
 // All FP arithmetic happens in d-regs; the c5 stack passes the raw
@@ -1229,6 +1244,9 @@ pub(super) fn lower(
         // the ordering rationale.
         super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
             super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+        });
+        super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
+            super::ssa_rotate::run(&mut ssa_funcs);
         });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`

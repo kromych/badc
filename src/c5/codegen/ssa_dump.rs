@@ -250,6 +250,7 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Shl => "shl",
         BinOp::Shr => "shr",
         BinOp::Shru => "shru",
+        BinOp::Ror => "ror",
         BinOp::Add => "add",
         BinOp::Sub => "sub",
         BinOp::Mul => "mul",

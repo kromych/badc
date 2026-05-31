@@ -20,8 +20,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x11
     v2   Imm(0)                                           -> x9
-    v3   Extend { value=v1, kind=I32 }                    -> x11
-    v4   BinopI { op=ne, lhs=v3, rhs_imm=1 }              -> x11
+    v3   LoadLocal { off=-1, kind=I32 }                   -> x9
+    v4   BinopI { op=ne, lhs=v1, rhs_imm=1 }              -> x11
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   Imm(1)                                           -> x0
@@ -53,8 +53,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 10  start_pc=0
     v14  Imm(1)                                           -> x11
     v15  Imm(0)                                           -> x0
-    v16  Extend { value=v14, kind=I32 }                   -> x11
-    v17  BinopI { op=ne, lhs=v16, rhs_imm=1 }             -> x11
+    v16  LoadLocal { off=-2, kind=I32 }                   -> x0
+    v17  BinopI { op=ne, lhs=v14, rhs_imm=1 }             -> x11
     terminator Bz { cond=v17, target=b12, fall=b11 }   (exit_acc=v17)
   block 11  start_pc=0
     v18  Imm(6)                                           -> x0

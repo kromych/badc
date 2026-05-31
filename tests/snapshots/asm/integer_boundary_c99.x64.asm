@@ -400,7 +400,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movq	0xf8(%rsp), %r15
-               	movsbq	%r15b, %r15
                	cmpq	$0x7f, %r15
                	sete	%r15b
                	movzbq	%r15b, %r15
@@ -605,7 +604,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movq	0xf0(%rsp), %rbx
-               	movswq	%bx, %rbx
                	cmpq	$0x7fff, %rbx           # imm = 0x7FFF
                	sete	%bl
                	movzbq	%bl, %rbx
@@ -637,7 +635,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movq	0xe8(%rsp), %r12
-               	movswq	%r12w, %r12
                	cmpq	$-0x8000, %r12          # imm = 0x8000
                	sete	%r12b
                	movzbq	%r12b, %r12
@@ -647,9 +644,7 @@ Disassembly of section .text:
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
                	jne	<addr>
-               	movq	0xe8(%rsp), %rax
-               	movswq	%ax, %rax
-               	movq	%rax, %r10
+               	movq	0xe8(%rsp), %r10
                	andq	$0xffff, %r10           # imm = 0xFFFF
                	movq	%r10, 0xe0(%rsp)
                	jmp	<addr>
@@ -671,36 +666,35 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xe0(%rsp), %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	xorq	$0x8000, %rax           # imm = 0x8000
+               	movq	0xe0(%rsp), %r14
+               	andq	$0xffff, %r14           # imm = 0xFFFF
+               	xorq	$0x8000, %r14           # imm = 0x8000
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
-               	cmpq	$0x0, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	andq	%r11, %r14
+               	cmpq	$0x0, %r14
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
                	jmp	<addr>
                	xorq	%rbx, %rbx
                	cmpq	$0x0, %rbx
                	jne	<addr>
                	movl	$0x12345, %eax          # imm = 0x12345
-               	movslq	%eax, %rax
                	movswq	%ax, %r10
                	movq	%r10, 0xd8(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
-               	movl	$0x7d, %r14d
-               	movl	%r14d, (%r15)
+               	movl	$0x7d, %r12d
+               	movl	%r12d, (%r15)
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %r14
                	leaq	<rip>, %r15
                	movl	$0x5f, %ebx
-               	movq	%r12, %rdi
-               	movq	%r14, %rcx
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
                	movq	%rbx, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
@@ -716,11 +710,10 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
+               	xorq	%r12, %r12
+               	cmpq	$0x0, %r12
                	jne	<addr>
-               	movabsq	$-0x2a, %rax
-               	movswq	%ax, %r10
+               	movabsq	$-0x2a, %r10
                	movq	%r10, 0xd0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
@@ -729,24 +722,24 @@ Disassembly of section .text:
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %r14
                	leaq	<rip>, %r15
-               	movl	$0x64, %r14d
-               	movq	%r12, %rdi
+               	movl	$0x64, %r12d
+               	movq	%r14, %rdi
                	movq	%rbx, %rcx
-               	movq	%r14, %rdx
+               	movq	%r12, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xd0(%rsp), %rax
-               	movslq	%eax, %rax
-               	cmpq	$-0x2a, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	movq	0xd0(%rsp), %r12
+               	movslq	%r12d, %r12
+               	cmpq	$-0x2a, %r12
+               	sete	%r12b
+               	movzbq	%r12b, %r12
+               	cmpq	$0x0, %r12
                	jne	<addr>
                	jmp	<addr>
                	xorq	%rbx, %rbx
@@ -754,9 +747,6 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0xffff, %r10d          # imm = 0xFFFF
                	movq	%r10, 0xc8(%rsp)
-               	movq	0xc8(%rsp), %r10
-               	andq	$0xffff, %r10           # imm = 0xFFFF
-               	movq	%r10, 0xc0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
                	movl	$0x7f, %r14d
@@ -776,31 +766,195 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xc0(%rsp), %r15
+               	movq	0xc8(%rsp), %rbx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r15
-               	xorq	$0xffff, %r15           # imm = 0xFFFF
+               	andq	%r11, %rbx
+               	xorq	$0xffff, %rbx           # imm = 0xFFFF
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r15
+               	andq	%r11, %rbx
+               	cmpq	$0x0, %rbx
+               	sete	%bl
+               	movzbq	%bl, %rbx
+               	cmpq	$0x0, %rbx
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r15
+               	movl	$0x80, %r12d
+               	movl	%r12d, (%r15)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %rbx
+               	leaq	<rip>, %r15
+               	movl	$0x6e, %r14d
+               	movq	%rbx, %rdi
+               	movq	%r12, %rcx
+               	movq	%r14, %rdx
+               	movq	%r15, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0xc8(%rsp), %rax
+               	cmpq	$0xffff, %rax           # imm = 0xFFFF
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rbx
+               	jne	<addr>
+               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
+               	movl	%eax, -0x70(%rbp)
+               	jmp	<addr>
+               	leaq	<rip>, %r14
+               	movl	$0x81, %r12d
+               	movl	%r12d, (%r14)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %r14
+               	movl	$0x70, %ebx
+               	movq	%r15, %rdi
+               	movq	%r12, %rcx
+               	movq	%rbx, %rdx
+               	movq	%r14, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	-0x70(%rbp), %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	leaq	-0x70(%rbp), %rax
+               	movl	(%rax), %r15d
+               	addq	$0x1, %r15
+               	movl	%r15d, (%rax)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x82, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x76, %r15d
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	-0x70(%rbp), %r15d
                	cmpq	$0x0, %r15
                	sete	%r15b
                	movzbq	%r15b, %r15
                	cmpq	$0x0, %r15
                	jne	<addr>
                	jmp	<addr>
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	xorq	%rax, %rax
+               	movl	%eax, -0x70(%rbp)
+               	leaq	-0x70(%rbp), %r15
+               	movl	(%r15), %eax
+               	addq	$-0x1, %rax
+               	movl	%eax, (%r15)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x83, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x78, %r15d
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movl	-0x70(%rbp), %eax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
+               	movq	%r10, 0xc0(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x84, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r14d
+               	movq	%r14, %rdi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %rbx
+               	movl	$0x7b, %r14d
+               	movq	%r15, %rdi
+               	movq	%r12, %rcx
+               	movq	%r14, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0xc0(%rsp), %r14
+               	cmpq	$0x7fffffff, %r14       # imm = 0x7FFFFFFF
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	jmp	<addr>
                	xorq	%r12, %r12
                	cmpq	$0x0, %r12
                	jne	<addr>
+               	movabsq	$-0x80000000, %rax      # imm = 0x80000000
+               	movslq	%eax, %r10
+               	movq	%r10, 0xb8(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rbx
-               	movl	$0x80, %r15d
+               	movl	$0x85, %r15d
                	movl	%r15d, (%rbx)
                	movl	$0x2, %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r14
                	leaq	<rip>, %rbx
-               	movl	$0x6e, %r12d
+               	movl	$0x7e, %r12d
                	movq	%r14, %rdi
                	movq	%r15, %rcx
                	movq	%r12, %rdx
@@ -810,173 +964,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xc8(%rsp), %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpq	$0xffff, %rax           # imm = 0xFFFF
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
-               	jne	<addr>
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%eax, -0x70(%rbp)
-               	jmp	<addr>
-               	leaq	<rip>, %r12
-               	movl	$0x81, %r15d
-               	movl	%r15d, (%r12)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r12
-               	movl	$0x70, %r14d
-               	movq	%rbx, %rdi
-               	movq	%r15, %rcx
-               	movq	%r14, %rdx
-               	movq	%r12, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	-0x70(%rbp), %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	leaq	-0x70(%rbp), %rax
-               	movl	(%rax), %ebx
-               	addq	$0x1, %rbx
-               	movl	%ebx, (%rax)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x82, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x76, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	-0x70(%rbp), %ebx
-               	cmpq	$0x0, %rbx
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	xorq	%rax, %rax
-               	movl	%eax, -0x70(%rbp)
-               	leaq	-0x70(%rbp), %rbx
-               	movl	(%rbx), %eax
-               	addq	$-0x1, %rax
-               	movl	%eax, (%rbx)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x83, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x78, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movl	-0x70(%rbp), %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r12, %r12
-               	cmpq	$0x0, %r12
-               	jne	<addr>
-               	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
-               	movq	%r10, 0xb8(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x84, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %r12d
-               	movq	%r12, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r14
-               	movl	$0x7b, %r12d
-               	movq	%rbx, %rdi
-               	movq	%r15, %rcx
-               	movq	%r12, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0xb8(%rsp), %r12
-               	movslq	%r12d, %r12
-               	cmpq	$0x7fffffff, %r12       # imm = 0x7FFFFFFF
-               	sete	%r12b
-               	movzbq	%r12b, %r12
-               	cmpq	$0x0, %r12
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r15, %r15
-               	cmpq	$0x0, %r15
-               	jne	<addr>
-               	movabsq	$-0x80000000, %rax      # imm = 0x80000000
-               	movslq	%eax, %r10
-               	movq	%r10, 0xb0(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x85, %ebx
-               	movl	%ebx, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x7e, %r15d
-               	movq	%r12, %rdi
-               	movq	%rbx, %rcx
-               	movq	%r15, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0xb0(%rsp), %rax
+               	movq	0xb8(%rsp), %rax
                	movslq	%eax, %rax
                	cmpq	$-0x80000000, %rax      # imm = 0x80000000
                	sete	%al
@@ -984,90 +972,90 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
                	jne	<addr>
-               	movq	0xb0(%rsp), %r10
+               	movq	0xb8(%rsp), %r10
                	movslq	%r10d, %r10
-               	movq	%r10, 0xa8(%rsp)
+               	movq	%r10, 0xb0(%rsp)
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x86, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
+               	leaq	<rip>, %rbx
+               	movl	$0x86, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x80, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x80, %r15d
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xa8(%rsp), %rbx
-               	cmpq	$-0x80000000, %rbx      # imm = 0x80000000
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r15, %r15
+               	movq	0xb0(%rsp), %r15
+               	cmpq	$-0x80000000, %r15      # imm = 0x80000000
+               	sete	%r15b
+               	movzbq	%r15b, %r15
                	cmpq	$0x0, %r15
                	jne	<addr>
-               	movq	0xb0(%rsp), %rax
-               	movslq	%eax, %rax
-               	movl	$0xffffffff, %r12d      # imm = 0xFFFFFFFF
-               	andq	%rax, %r12
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x87, %r12d
-               	movl	%r12d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r14
-               	movl	$0x86, %r15d
+               	xorq	%r12, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	movq	0xb8(%rsp), %rax
+               	movslq	%eax, %rax
+               	movl	$0xffffffff, %r14d      # imm = 0xFFFFFFFF
+               	andq	%rax, %r14
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x87, %r14d
+               	movl	%r14d, (%rbx)
+               	movl	$0x2, %ebx
                	movq	%rbx, %rdi
-               	movq	%r12, %rcx
-               	movq	%r15, %rdx
-               	movq	%r14, %rsi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %rbx
+               	movl	$0x86, %r12d
+               	movq	%r15, %rdi
+               	movq	%r14, %rcx
+               	movq	%r12, %rdx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	movq	%r12, %rax
-               	cmpq	%r11, %r12
+               	movq	%r14, %rax
+               	cmpq	%r11, %r14
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rbx
                	jne	<addr>
                	movabsq	$-0x1, %rax
                	movq	%rax, -0x98(%rbp)
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x88, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x88, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %ebx
                	movq	%rbx, %rdi
-               	movq	%r15, %rcx
-               	movq	%r15, %rdx
-               	movq	%r14, %rsi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %rbx
+               	movq	%r15, %rdi
+               	movq	%r12, %rcx
+               	movq	%r12, %rdx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1080,131 +1068,99 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
                	jne	<addr>
                	leaq	-0x98(%rbp), %rax
-               	movq	(%rax), %rbx
-               	addq	$0x1, %rbx
-               	movq	%rbx, (%rax)
+               	movq	(%rax), %r15
+               	addq	$0x1, %r15
+               	movq	%r15, (%rax)
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x8c, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %rbx
+               	movl	$0x8c, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x8e, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	-0x98(%rbp), %rbx
-               	cmpq	$0x0, %rbx
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	leaq	-0x98(%rbp), %rax
-               	movq	(%rax), %rbx
-               	addq	$-0x1, %rbx
-               	movq	%rbx, (%rax)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x8d, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x90, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	-0x98(%rbp), %rbx
-               	cmpq	$-0x1, %rbx
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
-               	movq	%r10, 0xa0(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
                	movl	$0x8e, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x92, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0xa0(%rsp), %rbx
-               	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
-               	cmpq	%r11, %rbx
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	movq	-0x98(%rbp), %r15
+               	cmpq	$0x0, %r15
+               	sete	%r15b
+               	movzbq	%r15b, %r15
+               	cmpq	$0x0, %r15
                	jne	<addr>
                	jmp	<addr>
                	xorq	%r15, %r15
                	cmpq	$0x0, %r15
                	jne	<addr>
-               	movabsq	$-0x1, %r10
-               	movq	%r10, 0x98(%rsp)
+               	leaq	-0x98(%rbp), %rax
+               	movq	(%rax), %r15
+               	addq	$-0x1, %r15
+               	movq	%r15, (%rax)
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x8f, %r12d
-               	movl	%r12d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
+               	leaq	<rip>, %rbx
+               	movl	$0x8d, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r14
-               	movl	$0x95, %r15d
-               	movq	%rbx, %rdi
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x90, %r15d
+               	movq	%r14, %rdi
                	movq	%r12, %rcx
                	movq	%r15, %rdx
-               	movq	%r14, %rsi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x98(%rsp), %r15
-               	sarq	$0x1, %r15
+               	movq	-0x98(%rbp), %r15
                	cmpq	$-0x1, %r15
+               	sete	%r15b
+               	movzbq	%r15b, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	movabsq	$0x7fffffffffffffff, %r10 # imm = 0x7FFFFFFFFFFFFFFF
+               	movq	%r10, 0xa8(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x8e, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x92, %r15d
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0xa8(%rsp), %r15
+               	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
+               	cmpq	%r11, %r15
                	sete	%r15b
                	movzbq	%r15b, %r15
                	cmpq	$0x0, %r15
@@ -1213,124 +1169,155 @@ Disassembly of section .text:
                	xorq	%r12, %r12
                	cmpq	$0x0, %r12
                	jne	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, 0x90(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x90, %ebx
-               	movl	%ebx, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %r15
-               	leaq	<rip>, %r14
-               	movl	$0x9a, %r12d
-               	movq	%r15, %rdi
-               	movq	%rbx, %rcx
-               	movq	%r12, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x90(%rsp), %r12
-               	shrq	$0x1, %r12
-               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
-               	cmpq	%r11, %r12
-               	sete	%r12b
-               	movzbq	%r12b, %r12
-               	cmpq	$0x0, %r12
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
                	movabsq	$-0x1, %r10
-               	movq	%r10, 0x88(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x91, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0x9d, %ebx
-               	movq	%r12, %rdi
-               	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x88(%rsp), %rbx
-               	shrq	$0x20, %rbx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rbx
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r15, %r15
-               	cmpq	$0x0, %r15
-               	jne	<addr>
-               	movabsq	$-0x12c, %r10           # imm = 0xFED4
-               	movq	%r10, 0x78(%rsp)
-               	movq	0x78(%rsp), %r15
-               	movslq	%r15d, %r15
-               	movsbq	%r15b, %r10
-               	movq	%r10, 0x80(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x92, %r12d
-               	movl	%r12d, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	leaq	<rip>, %r14
-               	movl	$0xa0, %r15d
-               	movq	%rbx, %rdi
-               	movq	%r12, %rcx
-               	movq	%r15, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x80(%rsp), %r14
-               	movsbq	%r14b, %r14
-               	movl	$0xd4, %ebx
-               	movsbq	%bl, %rbx
-               	cmpq	%rbx, %r14
-               	sete	%r14b
-               	movzbq	%r14b, %r14
-               	cmpq	$0x0, %r14
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r12, %r12
-               	cmpq	$0x0, %r12
-               	jne	<addr>
+               	movq	%r10, 0xa0(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %rbx
-               	movl	$0x96, %r14d
+               	movl	$0x8f, %r14d
                	movl	%r14d, (%rbx)
                	movl	$0x2, %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r15
                	leaq	<rip>, %rbx
-               	movl	$0xa9, %r12d
+               	movl	$0x95, %r12d
                	movq	%r15, %rdi
                	movq	%r14, %rcx
                	movq	%r12, %rdx
                	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0xa0(%rsp), %r12
+               	sarq	$0x1, %r12
+               	cmpq	$-0x1, %r12
+               	sete	%r12b
+               	movzbq	%r12b, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
+               	movq	%r10, 0x98(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x90, %r15d
+               	movl	%r15d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r12
+               	leaq	<rip>, %rbx
+               	movl	$0x9a, %r14d
+               	movq	%r12, %rdi
+               	movq	%r15, %rcx
+               	movq	%r14, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x98(%rsp), %r14
+               	shrq	$0x1, %r14
+               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
+               	cmpq	%r11, %r14
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r15, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	movabsq	$-0x1, %r10
+               	movq	%r10, 0x90(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x91, %r12d
+               	movl	%r12d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r14
+               	leaq	<rip>, %rbx
+               	movl	$0x9d, %r15d
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
+               	movq	%r15, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x90(%rsp), %r15
+               	shrq	$0x20, %r15
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %r15
+               	sete	%r15b
+               	movzbq	%r15b, %r15
+               	cmpq	$0x0, %r15
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r12, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	movabsq	$-0x12c, %r10           # imm = 0xFED4
+               	movq	%r10, 0x88(%rsp)
+               	movq	0x88(%rsp), %r10
+               	movsbq	%r10b, %r10
+               	movq	%r10, 0x80(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0x92, %r14d
+               	movl	%r14d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %rbx
+               	movl	$0xa0, %r12d
+               	movq	%r15, %rdi
+               	movq	%r14, %rcx
+               	movq	%r12, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x80(%rsp), %rbx
+               	movsbq	%bl, %rbx
+               	movl	$0xd4, %r15d
+               	movsbq	%r15b, %r15
+               	cmpq	%r15, %rbx
+               	sete	%bl
+               	movzbq	%bl, %rbx
+               	cmpq	$0x0, %rbx
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r12, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	jmp	<addr>
+               	leaq	<rip>, %r15
+               	movl	$0x96, %ebx
+               	movl	%ebx, (%r15)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %r14
+               	leaq	<rip>, %r15
+               	movl	$0xa9, %r12d
+               	movq	%r14, %rdi
+               	movq	%rbx, %rcx
+               	movq	%r12, %rdx
+               	movq	%r15, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -1344,46 +1331,44 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%r15, %r15
-               	cmpq	$0x0, %r15
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
-               	movq	0x78(%rsp), %rax
-               	movslq	%eax, %rax
-               	movq	%rax, %r10
+               	movq	0x88(%rsp), %r10
                	andq	$0xff, %r10
-               	movq	%r10, 0x70(%rsp)
+               	movq	%r10, 0x78(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r12
-               	movl	$0x97, %r14d
-               	movl	%r14d, (%r12)
-               	movl	$0x2, %r15d
-               	movq	%r15, %rdi
+               	movl	$0x97, %ebx
+               	movl	%ebx, (%r12)
+               	movl	$0x2, %r14d
+               	movq	%r14, %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r15
                	leaq	<rip>, %r12
-               	movl	$0xaa, %r15d
-               	movq	%rbx, %rdi
-               	movq	%r14, %rcx
-               	movq	%r15, %rdx
+               	movl	$0xaa, %r14d
+               	movq	%r15, %rdi
+               	movq	%rbx, %rcx
+               	movq	%r14, %rdx
                	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x70(%rsp), %rax
-               	andq	$0xff, %rax
-               	xorq	$0xd4, %rax
+               	movq	0x78(%rsp), %r14
+               	andq	$0xff, %r14
+               	xorq	$0xd4, %r14
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
-               	cmpq	$0x0, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	andq	%r11, %r14
+               	cmpq	$0x0, %r14
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rbx
                	jne	<addr>
                	jmp	<addr>
                	leaq	<rip>, %r12
@@ -1392,19 +1377,19 @@ Disassembly of section .text:
                	movl	$0x2, %r12d
                	movq	%r12, %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r14
                	leaq	<rip>, %r12
-               	movl	$0xaf, %r14d
-               	movq	%rbx, %rdi
+               	movl	$0xaf, %ebx
+               	movq	%r14, %rdi
                	movq	%r15, %rcx
-               	movq	%r14, %rdx
+               	movq	%rbx, %rdx
                	movq	%r12, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x70(%rsp), %rax
+               	movq	0x78(%rsp), %rax
                	andq	$0xff, %rax
                	cmpq	$0xd4, %rax
                	sete	%al
@@ -1412,33 +1397,32 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
                	movl	$0x12345, %eax          # imm = 0x12345
-               	movslq	%eax, %rax
                	movswq	%ax, %r10
-               	movq	%r10, 0x68(%rsp)
+               	movq	%r10, 0x70(%rsp)
                	jmp	<addr>
-               	leaq	<rip>, %r14
+               	leaq	<rip>, %rbx
                	movl	$0x99, %r15d
-               	movl	%r15d, (%r14)
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rdi
+               	movl	%r15d, (%rbx)
+               	movl	$0x2, %r14d
+               	movq	%r14, %rdi
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	<rip>, %r14
-               	movl	$0xb0, %ebx
+               	leaq	<rip>, %rbx
+               	movl	$0xb0, %r14d
                	movq	%r12, %rdi
                	movq	%r15, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
+               	movq	%r14, %rdx
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x68(%rsp), %rax
+               	movq	0x70(%rsp), %rax
                	movswq	%ax, %rax
                	cmpq	$0x2345, %rax           # imm = 0x2345
                	sete	%al
@@ -1450,25 +1434,25 @@ Disassembly of section .text:
                	cmpq	$0x0, %r15
                	jne	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0x9a, %ebx
-               	movl	%ebx, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
+               	leaq	<rip>, %rbx
+               	movl	$0x9a, %r14d
+               	movl	%r14d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	<rip>, %r14
+               	leaq	<rip>, %rbx
                	movl	$0xb5, %r15d
                	movq	%r12, %rdi
-               	movq	%rbx, %rcx
+               	movq	%r14, %rcx
                	movq	%r15, %rdx
-               	movq	%r14, %rsi
+               	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x68(%rsp), %rax
+               	movq	0x70(%rsp), %rax
                	movswq	%ax, %rax
                	cmpq	$0x2345, %rax           # imm = 0x2345
                	sete	%al
@@ -1480,21 +1464,20 @@ Disassembly of section .text:
                	cmpq	$0x0, %r12
                	jne	<addr>
                	movl	$0x1ffff, %eax          # imm = 0x1FFFF
-               	movslq	%eax, %rax
                	movswq	%ax, %r10
-               	movq	%r10, 0x60(%rsp)
+               	movq	%r10, 0x68(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
-               	movl	$0x9b, %ebx
-               	movl	%ebx, (%r15)
+               	movl	$0x9b, %r14d
+               	movl	%r14d, (%r15)
                	movl	$0x2, %r12d
                	movq	%r12, %rdi
                	callq	<addr>
-               	movq	%rax, %r14
+               	movq	%rax, %rbx
                	leaq	<rip>, %r15
                	movl	$0xb6, %r12d
-               	movq	%r14, %rdi
-               	movq	%rbx, %rcx
+               	movq	%rbx, %rdi
+               	movq	%r14, %rcx
                	movq	%r12, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
@@ -1502,7 +1485,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x60(%rsp), %rax
+               	movq	0x68(%rsp), %rax
                	movswq	%ax, %rax
                	cmpq	$-0x1, %rax
                	sete	%al
@@ -1510,8 +1493,8 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	jne	<addr>
                	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
                	jmp	<addr>
                	leaq	<rip>, %r15
@@ -1520,154 +1503,9 @@ Disassembly of section .text:
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r14
-               	leaq	<rip>, %r15
-               	movl	$0xba, %ebx
-               	movq	%r14, %rdi
-               	movq	%r12, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r15, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x60(%rsp), %rax
-               	movswq	%ax, %rax
-               	cmpq	$-0x1, %rax
-               	sete	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
-               	jne	<addr>
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	movq	%r10, 0x50(%rsp)
-               	movl	$0x1, %r10d
-               	movq	%r10, 0x58(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %rbx
-               	movl	$0x9d, %r12d
-               	movl	%r12d, (%rbx)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %r15
-               	leaq	<rip>, %rbx
-               	movl	$0xbb, %r14d
-               	movq	%r15, %rdi
-               	movq	%r12, %rcx
-               	movq	%r14, %rdx
-               	movq	%rbx, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x50(%rsp), %rbx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rbx
-               	movq	0x58(%rsp), %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
-               	cmpq	%r14, %rbx
-               	seta	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r12, %r12
-               	cmpq	$0x0, %r12
-               	jne	<addr>
-               	movq	0x50(%rsp), %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
-               	movslq	%eax, %r10
-               	movq	%r10, 0x40(%rsp)
-               	movq	0x58(%rsp), %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
-               	movslq	%eax, %r10
-               	movq	%r10, 0x48(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r14
-               	movl	$0xa0, %ebx
-               	movl	%ebx, (%r14)
-               	movl	$0x2, %r14d
-               	movq	%r14, %rdi
-               	callq	<addr>
-               	movq	%rax, %r15
-               	leaq	<rip>, %r14
-               	movl	$0xc2, %r12d
-               	movq	%r15, %rdi
-               	movq	%rbx, %rcx
-               	movq	%r12, %rdx
-               	movq	%r14, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x40(%rsp), %rax
-               	movslq	%eax, %rax
-               	movq	0x48(%rsp), %r15
-               	movslq	%r15d, %r15
-               	cmpq	%r15, %rax
-               	setl	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%rbx, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	movl	$0x1, %r10d
-               	movq	%r10, 0x38(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r15
-               	movl	$0xa1, %r14d
-               	movl	%r14d, (%r15)
-               	movl	$0x2, %r15d
-               	movq	%r15, %rdi
-               	callq	<addr>
-               	movq	%rax, %r12
-               	leaq	<rip>, %r15
-               	movl	$0xc5, %ebx
-               	movq	%r12, %rdi
-               	movq	%r14, %rcx
-               	movq	%rbx, %rdx
-               	movq	%r15, %rsi
-               	movb	$0x0, %al
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
-               	movq	0x38(%rsp), %rbx
-               	movslq	%ebx, %rbx
-               	shlq	$0x1e, %rbx
-               	cmpq	$0x40000000, %rbx       # imm = 0x40000000
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
-               	jmp	<addr>
-               	xorq	%r14, %r14
-               	cmpq	$0x0, %r14
-               	jne	<addr>
-               	movl	$0x1, %r10d
-               	movq	%r10, 0x30(%rsp)
-               	jmp	<addr>
-               	leaq	<rip>, %r15
-               	movl	$0xaa, %r12d
-               	movl	%r12d, (%r15)
-               	movl	$0x2, %r15d
-               	movq	%r15, %rdi
-               	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %r15
-               	movl	$0xcd, %r14d
+               	movl	$0xba, %r14d
                	movq	%rbx, %rdi
                	movq	%r12, %rcx
                	movq	%r14, %rdx
@@ -1677,15 +1515,44 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x30(%rsp), %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
-               	shlq	$0x1f, %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %r14
-               	sete	%r14b
+               	movq	0x68(%rsp), %rax
+               	movswq	%ax, %rax
+               	cmpq	$-0x1, %rax
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rbx
+               	jne	<addr>
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	movq	%r10, 0x58(%rsp)
+               	movl	$0x1, %r10d
+               	movq	%r10, 0x60(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %r14
+               	movl	$0x9d, %r12d
+               	movl	%r12d, (%r14)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %r14
+               	movl	$0xbb, %ebx
+               	movq	%r15, %rdi
+               	movq	%r12, %rcx
+               	movq	%rbx, %rdx
+               	movq	%r14, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x58(%rsp), %r14
+               	movq	0x60(%rsp), %r10
+               	cmpq	%r10, %r14
+               	seta	%r14b
                	movzbq	%r14b, %r14
                	cmpq	$0x0, %r14
                	jne	<addr>
@@ -1693,52 +1560,90 @@ Disassembly of section .text:
                	xorq	%r12, %r12
                	cmpq	$0x0, %r12
                	jne	<addr>
-               	movabsq	$-0x1, %r10
-               	movq	%r10, 0x28(%rsp)
+               	movq	0x58(%rsp), %r10
+               	movslq	%r10d, %r10
+               	movq	%r10, 0x48(%rsp)
+               	movq	0x60(%rsp), %r10
+               	movslq	%r10d, %r10
+               	movq	%r10, 0x50(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %rbx
+               	movl	$0xa0, %r14d
+               	movl	%r14d, (%rbx)
+               	movl	$0x2, %ebx
+               	movq	%rbx, %rdi
+               	callq	<addr>
+               	movq	%rax, %r15
+               	leaq	<rip>, %rbx
+               	movl	$0xc2, %r12d
+               	movq	%r15, %rdi
+               	movq	%r14, %rcx
+               	movq	%r12, %rdx
+               	movq	%rbx, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x48(%rsp), %rax
+               	movslq	%eax, %rax
+               	movq	0x50(%rsp), %r15
+               	movslq	%r15d, %r15
+               	cmpq	%r15, %rax
+               	setl	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%r14, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	movl	$0x1, %r10d
+               	movq	%r10, 0x40(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
-               	movl	$0xab, %ebx
+               	movl	$0xa1, %ebx
                	movl	%ebx, (%r15)
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r14
+               	movq	%rax, %r12
                	leaq	<rip>, %r15
-               	movl	$0xcf, %r12d
-               	movq	%r14, %rdi
+               	movl	$0xc5, %r14d
+               	movq	%r12, %rdi
                	movq	%rbx, %rcx
-               	movq	%r12, %rdx
+               	movq	%r14, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x28(%rsp), %r12
-               	movslq	%r12d, %r12
-               	cmpq	$-0x1, %r12
-               	sete	%r12b
-               	movzbq	%r12b, %r12
-               	cmpq	$0x0, %r12
+               	movq	0x40(%rsp), %r14
+               	shlq	$0x1e, %r14
+               	cmpq	$0x40000000, %r14       # imm = 0x40000000
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
                	jmp	<addr>
                	xorq	%rbx, %rbx
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	movq	%r10, 0x20(%rsp)
+               	movl	$0x1, %r10d
+               	movq	%r10, 0x38(%rsp)
                	jmp	<addr>
                	leaq	<rip>, %r15
-               	movl	$0xac, %r14d
-               	movl	%r14d, (%r15)
+               	movl	$0xaa, %r12d
+               	movl	%r12d, (%r15)
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %r12
+               	movq	%rax, %r14
                	leaq	<rip>, %r15
-               	movl	$0xd3, %ebx
-               	movq	%r12, %rdi
-               	movq	%r14, %rcx
+               	movl	$0xcd, %ebx
+               	movq	%r14, %rdi
+               	movq	%r12, %rcx
                	movq	%rbx, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
@@ -1746,18 +1651,82 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movq	0x20(%rsp), %rbx
+               	movq	0x38(%rsp), %rbx
+               	shlq	$0x1f, %rbx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rbx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rbx
                	sete	%bl
                	movzbq	%bl, %rbx
                	cmpq	$0x0, %rbx
                	jne	<addr>
                	jmp	<addr>
+               	xorq	%r12, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	movabsq	$-0x1, %r10
+               	movq	%r10, 0x30(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %r15
+               	movl	$0xab, %r14d
+               	movl	%r14d, (%r15)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %rbx
+               	leaq	<rip>, %r15
+               	movl	$0xcf, %r12d
+               	movq	%rbx, %rdi
+               	movq	%r14, %rcx
+               	movq	%r12, %rdx
+               	movq	%r15, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x30(%rsp), %r12
+               	cmpq	$-0x1, %r12
+               	sete	%r12b
+               	movzbq	%r12b, %r12
+               	cmpq	$0x0, %r12
+               	jne	<addr>
+               	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
+               	jne	<addr>
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	movq	%r10, 0x28(%rsp)
+               	jmp	<addr>
+               	leaq	<rip>, %r15
+               	movl	$0xac, %ebx
+               	movl	%ebx, (%r15)
+               	movl	$0x2, %r15d
+               	movq	%r15, %rdi
+               	callq	<addr>
+               	movq	%rax, %r12
+               	leaq	<rip>, %r15
+               	movl	$0xd3, %r14d
+               	movq	%r12, %rdi
+               	movq	%rbx, %rcx
+               	movq	%r14, %rdx
+               	movq	%r15, %rsi
+               	movb	$0x0, %al
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	jmp	<addr>
+               	movq	0x28(%rsp), %r14
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	cmpq	%r11, %r14
+               	sete	%r14b
+               	movzbq	%r14b, %r14
+               	cmpq	$0x0, %r14
+               	jne	<addr>
+               	jmp	<addr>
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rbx
                	jne	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
@@ -1770,12 +1739,12 @@ Disassembly of section .text:
                	movl	$0x2, %r15d
                	movq	%r15, %rdi
                	callq	<addr>
-               	movq	%rax, %rbx
+               	movq	%rax, %r14
                	leaq	<rip>, %r15
-               	movl	$0xd5, %r14d
-               	movq	%rbx, %rdi
+               	movl	$0xd5, %ebx
+               	movq	%r14, %rdi
                	movq	%r12, %rcx
-               	movq	%r14, %rdx
+               	movq	%rbx, %rdx
                	movq	%r15, %rsi
                	movb	$0x0, %al
                	callq	<addr>

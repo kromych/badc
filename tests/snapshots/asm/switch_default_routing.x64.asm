@@ -15,7 +15,6 @@ Disassembly of section .text:
                	movl	$0x63, %r11d
                	xorq	%r9, %r9
                	movl	%r9d, -0x10(%rbp)
-               	movslq	%r11d, %r11
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
                	addq	$0x10, %rsp
@@ -36,4 +35,3 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

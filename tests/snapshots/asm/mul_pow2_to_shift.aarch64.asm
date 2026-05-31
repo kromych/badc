@@ -93,59 +93,55 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x19, [sp, #0x10]
                	mov	x15, #0x7               // =7
-               	sxtw	x14, w15
-               	lsl	x13, x14, #1
-               	sxtw	x13, w13
-               	lsl	x12, x14, #2
-               	sxtw	x12, w12
-               	lsl	x11, x14, #3
-               	sxtw	x11, w11
-               	lsl	x10, x14, #4
-               	sxtw	x10, w10
-               	lsl	x14, x14, #10
+               	lsl	x14, x15, #1
                	sxtw	x14, w14
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x9, x15, x17
-               	lsl	x8, x9, #1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x8, x8, x17
-               	lsl	x9, x9, #8
+               	lsl	x13, x15, #2
+               	sxtw	x13, w13
+               	lsl	x12, x15, #3
+               	sxtw	x12, w12
+               	lsl	x11, x15, #4
+               	sxtw	x11, w11
+               	lsl	x10, x15, #10
+               	sxtw	x10, w10
+               	lsl	x9, x15, #1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x9, x9, x17
+               	lsl	x8, x15, #8
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x8, x8, x17
                	lsl	x7, x15, #5
                	lsl	x15, x15, #16
-               	sxtw	x13, w13
-               	sxtw	x12, w12
-               	add	x13, x13, x12
-               	sxtw	x13, w13
-               	sxtw	x11, w11
-               	add	x13, x13, x11
-               	sxtw	x13, w13
-               	sxtw	x10, w10
-               	add	x13, x13, x10
-               	sxtw	x13, w13
                	sxtw	x14, w14
-               	add	x13, x13, x14
                	sxtw	x13, w13
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x8, x8, x17
-               	add	x13, x13, x8
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
+               	add	x14, x14, x13
+               	sxtw	x14, w14
+               	sxtw	x12, w12
+               	add	x14, x14, x12
+               	sxtw	x14, w14
+               	sxtw	x11, w11
+               	add	x14, x14, x11
+               	sxtw	x14, w14
+               	sxtw	x10, w10
+               	add	x14, x14, x10
+               	sxtw	x14, w14
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x9, x9, x17
-               	add	x13, x13, x9
+               	add	x14, x14, x9
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	add	x13, x13, x7
-               	add	x20, x13, x15
+               	and	x14, x14, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x8, x8, x17
+               	add	x14, x14, x8
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x14, x14, x17
+               	add	x14, x14, x7
+               	add	x20, x14, x15
                	adrp	x19, <page>
                	add	x19, x19, #0x150
                	mov	x21, x19

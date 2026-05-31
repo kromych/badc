@@ -26,7 +26,6 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x24              // =36
                	mov	x0, #0x1                // =1
-               	sxtw	x15, w15
                	lsl	x0, x0, x15
                	sub	x0, x0, #0x1
                	mov	x17, #0xffff            // =65535

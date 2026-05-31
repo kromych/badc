@@ -8,9 +8,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v2   Imm(0)                                           -> x9
     v3   Imm(16)                                          -> x9
     v4   Imm(0)                                           -> x8
-    v5   Extend { value=v3, kind=I32 }                    -> x9
-    v6   Extend { value=v1, kind=I32 }                    -> x11
-    v7   Binop { op=sub, lhs=v5, rhs=v6 }                 -> x9
+    v5   LoadLocal { off=-2, kind=I32 }                   -> x8
+    v6   LoadLocal { off=-1, kind=I32 }                   -> x8
+    v7   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x9
     v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x9
     v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x9
     v10  BinopI { op=ne, lhs=v9, rhs_imm=1 }              -> x9

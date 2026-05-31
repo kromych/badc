@@ -137,7 +137,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(42)                                          -> x11
+    v1   Imm(42)                                          -> x0
     v2   Imm(0)                                           -> x9
     v3   Imm(0)                                           -> x9
     v4   StoreLocal { off=-2, value=v3, kind=I32 }        -> -
@@ -155,8 +155,8 @@ fn ent_pc=16 n_params=0 variadic=false locals=2
   block 3  start_pc=0
     terminator Jmp(b2)
   block 4  start_pc=0
-    v11  Extend { value=v1, kind=I32 }                    -> x0
-    terminator Return(v11)   (exit_acc=v11)
+    v11  LoadLocal { off=-1, kind=I32 }                   -> x9
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=17 ---
 ; name=adjacent_fors
 fn ent_pc=17 n_params=0 variadic=false locals=3

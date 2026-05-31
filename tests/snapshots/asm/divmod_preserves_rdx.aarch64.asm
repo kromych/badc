@@ -97,14 +97,10 @@ Disassembly of section .text:
                	mov	x14, #0x32              // =50
                	mov	x13, #0x19              // =25
                	mov	x12, #0xc               // =12
-               	sxtw	x15, w15
                	mov	x11, #0x8               // =8
                	sdiv	x10, x15, x11
-               	sxtw	x14, w14
                	sdiv	x9, x14, x11
-               	sxtw	x13, w13
                	sdiv	x8, x13, x11
-               	sxtw	x12, w12
                	sdiv	x7, x12, x11
                	sxtw	x10, w10
                	sxtw	x9, w9

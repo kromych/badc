@@ -241,7 +241,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x7, %r9d
-               	movslq	%r9d, %r9
                	cvtsi2sd	%r9, %xmm7
                	leaq	-0x40(%rbp), %r9
                	cvtsd2ss	%xmm7, %xmm15
@@ -277,3 +276,5 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

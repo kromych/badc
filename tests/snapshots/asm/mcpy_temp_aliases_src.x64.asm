@@ -25,32 +25,22 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	movl	$0x9, %r15d
                	movl	$0xa, %r14d
-               	movslq	%r11d, %r11
-               	movslq	%r9d, %r9
                	addq	%r9, %r11
                	movslq	%r11d, %r11
-               	movslq	%r8d, %r8
                	addq	%r8, %r11
                	movslq	%r11d, %r11
-               	movslq	%edi, %rdi
                	addq	%rdi, %r11
                	movslq	%r11d, %r11
-               	movslq	%esi, %rsi
                	addq	%rsi, %r11
                	movslq	%r11d, %r11
-               	movslq	%edx, %rdx
                	addq	%rdx, %r11
                	movslq	%r11d, %r11
-               	movslq	%ecx, %rcx
                	addq	%rcx, %r11
                	movslq	%r11d, %r11
-               	movslq	%eax, %rax
                	addq	%rax, %r11
                	movslq	%r11d, %r11
-               	movslq	%r15d, %r15
                	addq	%r15, %r11
                	movslq	%r11d, %r11
-               	movslq	%r14d, %r14
                	addq	%r14, %r11
                	movslq	%r11d, %r11
                	leaq	-0x20(%rbp), %r14
@@ -141,4 +131,3 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

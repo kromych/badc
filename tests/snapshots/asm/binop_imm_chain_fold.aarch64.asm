@@ -94,7 +94,6 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	mov	x15, #0xa               // =10
-               	sxtw	x15, w15
                	add	x14, x15, #0x3
                	sxtw	x14, w14
                	add	x14, x14, #0x7

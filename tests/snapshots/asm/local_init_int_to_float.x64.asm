@@ -146,7 +146,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x3039, %ebx           # imm = 0x3039
-               	movslq	%ebx, %rbx
                	cvtsi2sd	%rbx, %xmm6
                	leaq	-0x20(%rbp), %rbx
                	cvtsd2ss	%xmm6, %xmm15
@@ -195,7 +194,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0x7, %r12
-               	movslq	%r12d, %r12
                	cvtsi2sd	%r12, %xmm7
                	movq	%xmm7, %r11
                	movq	%r11, -0x30(%rbp)
@@ -247,8 +245,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xffffffff, %r12d      # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r12
                	cvtsi2sd	%r12, %xmm7
                	leaq	-0x40(%rbp), %r12
                	cvtsd2ss	%xmm7, %xmm15
@@ -361,4 +357,3 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

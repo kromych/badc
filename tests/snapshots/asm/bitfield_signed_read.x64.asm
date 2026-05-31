@@ -229,7 +229,6 @@ Disassembly of section .text:
                	andq	$0x3, %rax
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
-               	movslq	%r8d, %r8
                	addq	%r8, %rax
                	movslq	%eax, %rax
                	cmpq	$0x5, %rax
@@ -243,3 +242,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

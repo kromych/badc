@@ -16,8 +16,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	mov	x15, #0xf               // =15
                	mov	x14, #0x10              // =16
-               	sxtw	x14, w14
-               	sxtw	x15, w15
                	sub	x14, x14, x15
                	sxtw	x14, w14
                	cmp	x14, #0x1

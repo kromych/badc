@@ -12,11 +12,15 @@ Disassembly of section .text:
                	blr	x16
                	mov	x0, #0x1                // =1
                	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x15, #0x5               // =5
-               	sxtw	x15, w15
                	add	x15, x15, #0x1
                	sxtw	x15, w15
                	sxtw	x0, w15
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -49,7 +53,6 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	mov	x15, #0x1               // =1
                	mov	x14, #0x5               // =5
-               	sxtw	x14, w14
                	add	x14, x14, #0x1
                	sxtw	x14, w14
                	sxtw	x14, w14

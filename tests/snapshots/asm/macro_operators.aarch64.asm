@@ -214,7 +214,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0x2a              // =42
-               	sxtw	x15, w15
                	cmp	x15, #0x2a
                	b.eq	<addr>
                	mov	x14, #0x7               // =7

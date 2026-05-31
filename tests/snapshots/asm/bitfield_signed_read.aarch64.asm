@@ -331,7 +331,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	lsl	x0, x0, #62
                	asr	x0, x0, #62
-               	sxtw	x13, w13
                	add	x0, x0, x13
                	sxtw	x0, w0
                	cmp	x0, #0x5

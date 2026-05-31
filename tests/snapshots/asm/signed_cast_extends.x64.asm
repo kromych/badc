@@ -83,7 +83,6 @@ Disassembly of section .text:
                	subq	$0xe0, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0xff, %r11d
-               	andq	$0xff, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x1, %r11
@@ -96,7 +95,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x80, %r11d
-               	andq	$0xff, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x80, %r11
@@ -109,7 +107,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x7f, %r11d
-               	andq	$0xff, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$0x7f, %r11
@@ -122,8 +119,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xff, %r11d
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x1, %r11
@@ -136,8 +131,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x12345678, %r11d      # imm = 0x12345678
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$0x78, %r11
@@ -150,8 +143,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x1234abff, %r11d      # imm = 0x1234ABFF
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x1, %r11
@@ -164,7 +155,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0xffff, %r11d          # imm = 0xFFFF
-               	andq	$0xffff, %r11           # imm = 0xFFFF
                	movswq	%r11w, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x1, %r11
@@ -177,7 +167,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x8000, %r11d          # imm = 0x8000
-               	andq	$0xffff, %r11           # imm = 0xFFFF
                	movswq	%r11w, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x8000, %r11          # imm = 0x8000
@@ -190,8 +179,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x12345678, %r11d      # imm = 0x12345678
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	movswq	%r11w, %r11
                	movslq	%r11d, %r11
                	cmpq	$0x5678, %r11           # imm = 0x5678
@@ -204,8 +191,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x1234ffff, %r11d      # imm = 0x1234FFFF
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	movswq	%r11w, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x1, %r11
@@ -218,7 +203,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0x2a, %r11
-               	movsbq	%r11b, %r11
                	movslq	%r11d, %r11
                	cmpq	$-0x2a, %r11
                	je	<addr>

@@ -87,7 +87,6 @@ Disassembly of section .text:
                	xorq	%r11, %r11
                	movl	%r11d, -0x8(%rbp)
                	movl	$0x2, %r9d
-               	movslq	%r9d, %r9
                	jmp	<addr>
                	movslq	-0x8(%rbp), %r8
                	cmpq	$0x7, %r8
@@ -159,7 +158,6 @@ Disassembly of section .text:
                	xorq	%r12, %r12
                	movl	%r12d, -0x8(%rbp)
                	movl	$0x1, %eax
-               	movslq	%eax, %rax
                	jmp	<addr>
                	movslq	-0x8(%rbp), %rbx
                	cmpq	$0x106b, %rbx           # imm = 0x106B
@@ -237,5 +235,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -160,8 +160,8 @@ fn ent_pc=15 n_params=0 variadic=false locals=7
   block 12  start_pc=0
     v48  Imm(42)                                          -> x11
     v49  Imm(0)                                           -> x9
-    v50  Extend { value=v48, kind=I32 }                   -> x11
-    v51  BinopI { op=ne, lhs=v50, rhs_imm=42 }            -> x11
+    v50  LoadLocal { off=-2, kind=I32 }                   -> x9
+    v51  BinopI { op=ne, lhs=v48, rhs_imm=42 }            -> x11
     terminator Bz { cond=v51, target=b14, fall=b13 }   (exit_acc=v51)
   block 13  start_pc=0
     v52  Imm(7)                                           -> x9

@@ -24,32 +24,22 @@ Disassembly of section .text:
                	mov	x8, #0x8                // =8
                	mov	x7, #0x9                // =9
                	mov	x6, #0xa                // =10
-               	sxtw	x15, w15
-               	sxtw	x14, w14
                	add	x15, x15, x14
                	sxtw	x15, w15
-               	sxtw	x13, w13
                	add	x15, x15, x13
                	sxtw	x15, w15
-               	sxtw	x12, w12
                	add	x15, x15, x12
                	sxtw	x15, w15
-               	sxtw	x11, w11
                	add	x15, x15, x11
                	sxtw	x15, w15
-               	sxtw	x10, w10
                	add	x15, x15, x10
                	sxtw	x15, w15
-               	sxtw	x9, w9
                	add	x15, x15, x9
                	sxtw	x15, w15
-               	sxtw	x8, w8
                	add	x15, x15, x8
                	sxtw	x15, w15
-               	sxtw	x7, w7
                	add	x15, x15, x7
                	sxtw	x15, w15
-               	sxtw	x6, w6
                	add	x15, x15, x6
                	sxtw	x15, w15
                	sub	x6, x29, #0x20

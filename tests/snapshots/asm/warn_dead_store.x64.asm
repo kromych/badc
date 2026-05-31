@@ -11,11 +11,15 @@ Disassembly of section .text:
                	callq	*<rip>
                	movl	$0x1, %eax
                	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
                	movl	$0x5, %r11d
-               	movslq	%r11d, %r11
                	addq	$0x1, %r11
                	movslq	%r11d, %r11
                	movslq	%r11d, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -49,7 +53,6 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movl	$0x1, %r11d
                	movl	$0x5, %r9d
-               	movslq	%r9d, %r9
                	addq	$0x1, %r9
                	movslq	%r9d, %r9
                	movslq	%r9d, %r9
@@ -70,3 +73,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

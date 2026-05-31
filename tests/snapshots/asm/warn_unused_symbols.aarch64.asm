@@ -20,7 +20,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x50
                	mov	x15, #0x5               // =5
-               	sxtw	x15, w15
                	add	x15, x15, #0x1
                	sxtw	x15, w15
                	sxtw	x15, w15

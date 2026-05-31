@@ -498,6 +498,25 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
 /// The replacement instruction for a promoted narrow load: a mask of
 /// the reaching value for an unsigned kind, a sign-extension for a
 /// signed one.
+/// Whether an `Inst::Imm(k)` carries the same value through a
+/// narrow-load round-trip of `kind`. A signed narrow kind admits
+/// `k` in its two's-complement representable range; an unsigned
+/// narrow kind admits `k` in its zero-extended range. When the
+/// predicate holds, the post-promotion masking / sign-extension
+/// the load would have performed produces the original `k`, so
+/// the load's id can be redirected straight at the `Imm`.
+fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
+    match kind {
+        LoadKind::I8 => (-128..=127).contains(&k),
+        LoadKind::I16 => (-32768..=32767).contains(&k),
+        LoadKind::I32 => (i32::MIN as i64..=i32::MAX as i64).contains(&k),
+        LoadKind::U8 => (0..=0xff).contains(&k),
+        LoadKind::U16 => (0..=0xffff).contains(&k),
+        LoadKind::U32 => (0..=0xffff_ffff).contains(&k),
+        LoadKind::I64 | LoadKind::F32 => false,
+    }
+}
+
 fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
     match kind {
         LoadKind::U8 => Inst::BinopI {
@@ -826,13 +845,19 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 // the redirect in place so consumers point
                 // directly at the ParamRef value. The same applies
                 // when the reaching value is itself an
-                // `Inst::Extend` of the matching kind.
+                // `Inst::Extend` of the matching kind, or an
+                // `Inst::Imm` whose value already fits in the
+                // narrow kind's representable range (no
+                // re-extension or masking changes the value).
                 let already_extended = matches!(
                     func.insts.get(v as usize),
                     Some(Inst::ParamRef { kind: pkind, .. }) if *pkind == kind
                 ) || matches!(
                     func.insts.get(v as usize),
                     Some(Inst::Extend { kind: pkind, .. }) if *pkind == kind
+                ) || matches!(
+                    func.insts.get(v as usize),
+                    Some(Inst::Imm(k)) if imm_fits_load_kind(*k, kind)
                 );
                 if already_extended {
                     continue;

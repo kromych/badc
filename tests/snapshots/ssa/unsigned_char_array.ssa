@@ -150,8 +150,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v63  Imm(5)                                           -> x12
     v64  Imm(0)                                           -> x0
     v65  ImmData(88)                                      -> x0
-    v66  BinopI { op=and, lhs=v63, rhs_imm=255 }          -> x3
-    v67  Binop { op=add, lhs=v65, rhs=v66 }               -> x0
+    v66  LoadLocal { off=-1, kind=U8 }                    -> x3
+    v67  Binop { op=add, lhs=v65, rhs=v63 }               -> x0
     v68  Load { addr=v67, kind=U8 }                       -> x0
     v69  BinopI { op=xor, lhs=v68, rhs_imm=6 }            -> x0
     v70  BinopI { op=and, lhs=v69, rhs_imm=4294967295 }   -> x0
@@ -160,8 +160,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
   block 11  start_pc=0
     v72  ImmData(239)                                     -> x14
     v73  ImmData(88)                                      -> x0
-    v74  BinopI { op=and, lhs=v63, rhs_imm=255 }          -> x12
-    v75  Binop { op=add, lhs=v73, rhs=v74 }               -> x0
+    v74  LoadLocal { off=-1, kind=U8 }                    -> x7
+    v75  Binop { op=add, lhs=v73, rhs=v63 }               -> x0
     v76  Load { addr=v75, kind=U8 }                       -> x3
     v77  CallExt { binding_idx=0, args=[v72, v76], fp_arg_mask=0x0 } -> x0
     v78  Imm(1)                                           -> x0

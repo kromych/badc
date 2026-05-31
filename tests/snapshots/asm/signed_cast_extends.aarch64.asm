@@ -92,8 +92,6 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	mov	x15, #0xff              // =255
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
@@ -110,8 +108,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0x80              // =128
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xff80            // =65408
@@ -128,8 +124,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0x7f              // =127
-               	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	cmp	x15, #0x7f
@@ -142,9 +136,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0xff              // =255
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
@@ -162,9 +153,6 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x5678            // =22136
                	movk	x15, #0x1234, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	cmp	x15, #0x78
@@ -178,9 +166,6 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0xabff            // =44031
                	movk	x15, #0x1234, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	sxtb	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
@@ -197,8 +182,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0xffff            // =65535
-               	mov	x17, #0xffff            // =65535
-               	and	x15, x15, x17
                	sxth	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
@@ -215,8 +198,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, #0x8000            // =32768
-               	mov	x17, #0xffff            // =65535
-               	and	x15, x15, x17
                	sxth	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0x8000            // =32768
@@ -234,9 +215,6 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0x5678            // =22136
                	movk	x15, #0x1234, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	sxth	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0x5678            // =22136
@@ -251,9 +229,6 @@ Disassembly of section .text:
                	ret
                	mov	x15, #0xffff            // =65535
                	movk	x15, #0x1234, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	sxth	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffff            // =65535
@@ -273,7 +248,6 @@ Disassembly of section .text:
                	movk	x15, #0xffff, lsl #16
                	movk	x15, #0xffff, lsl #32
                	movk	x15, #0xffff, lsl #48
-               	sxtb	x15, w15
                	sxtw	x15, w15
                	mov	x17, #0xffd6            // =65494
                	movk	x17, #0xffff, lsl #16

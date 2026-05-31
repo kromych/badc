@@ -250,7 +250,6 @@ Disassembly of section .text:
                	movk	x14, #0xffff, lsl #16
                	movk	x14, #0xffff, lsl #32
                	movk	x14, #0xffff, lsl #48
-               	sxth	x14, w14
                	sxtw	x14, w14
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16

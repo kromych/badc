@@ -23,7 +23,6 @@ Disassembly of section .text:
                	xorq	%r11, %r11
                	movl	%r11d, -0x8(%rbp)
                	movl	$0x1, %r9d
-               	movslq	%r9d, %r9
                	cmpq	$0x0, %r9
                	jne	<addr>
                	movl	$0x1, %r11d
@@ -106,4 +105,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

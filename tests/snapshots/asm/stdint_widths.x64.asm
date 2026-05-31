@@ -238,7 +238,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0x1, %r9
-               	movswq	%r9w, %r9
                	movslq	%r9d, %r9
                	cmpq	$-0x1, %r9
                	je	<addr>

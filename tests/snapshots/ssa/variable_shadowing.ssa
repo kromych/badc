@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(10)                                          -> x11
+    v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x9
     v3   Imm(1)                                           -> x9
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
@@ -14,8 +14,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v5   Imm(0)                                           -> x8
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0
-    v6   Extend { value=v1, kind=I32 }                    -> x0
-    terminator Return(v6)   (exit_acc=v6)
+    v6   LoadLocal { off=-1, kind=I32 }                   -> x9
+    terminator Return(v1)   (exit_acc=v1)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

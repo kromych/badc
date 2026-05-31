@@ -111,8 +111,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v28  Imm(2)                                           -> x0
     v29  Imm(0)                                           -> x12
     v30  Imm(4611686018427387904)                         -> x3
-    v31  Extend { value=v28, kind=I32 }                   -> x0
-    v32  FpCast { kind=IntToFp, value=v31 }               -> [spill 4]
+    v31  LoadLocal { off=-1, kind=I32 }                   -> x8
+    v32  FpCast { kind=IntToFp, value=v28 }               -> [spill 4]
     v33  CallExt { binding_idx=147, args=[v30, v32], fp_arg_mask=0x3 } -> x0
     v34  Imm(4616189618054758400)                         -> x3
     v35  Binop { op=fne, lhs=v33, rhs=v34 }               -> x0
@@ -124,8 +124,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v37  Imm(3)                                           -> x0
     v38  Imm(0)                                           -> x3
     v39  Imm(4611686018427387904)                         -> x12
-    v40  Extend { value=v37, kind=I32 }                   -> x0
-    v41  FpCast { kind=IntToFp, value=v40 }               -> [spill 5]
+    v40  LoadLocal { off=-1, kind=I32 }                   -> x8
+    v41  FpCast { kind=IntToFp, value=v37 }               -> [spill 5]
     v42  CallExt { binding_idx=147, args=[v39, v41], fp_arg_mask=0x3 } -> x0
     v43  Imm(4620693217682128896)                         -> x12
     v44  Binop { op=fne, lhs=v42, rhs=v43 }               -> x0

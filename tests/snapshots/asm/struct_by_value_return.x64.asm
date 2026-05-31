@@ -40,23 +40,24 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
                	movslq	%edi, %r11
                	movl	$0xdead, %r9d           # imm = 0xDEAD
                	movl	$0xbeef, %r8d           # imm = 0xBEEF
                	movl	$0xcafe, %edi           # imm = 0xCAFE
                	movl	$0xfacef, %esi          # imm = 0xFACEF
-               	movslq	%r9d, %r9
-               	movslq	%r8d, %r8
                	addq	%r8, %r9
                	movslq	%r9d, %r9
-               	movslq	%edi, %rdi
                	addq	%rdi, %r9
                	movslq	%r9d, %r9
-               	movslq	%esi, %rsi
                	addq	%rsi, %r9
                	movslq	%r9d, %r9
                	addq	%r11, %r9
                	movslq	%r9d, %rax
+               	addq	$0x20, %rsp
+               	popq	%rbp
                	retq
                	popq	%r10
                	subq	$0x10, %rsp
@@ -138,14 +139,10 @@ Disassembly of section .text:
                	movl	$0xbeef, %r15d          # imm = 0xBEEF
                	movl	$0xcafe, %r14d          # imm = 0xCAFE
                	movl	$0xfacef, %r12d         # imm = 0xFACEF
-               	movslq	%eax, %rax
-               	movslq	%r15d, %r15
                	addq	%r15, %rax
                	movslq	%eax, %rax
-               	movslq	%r14d, %r14
                	addq	%r14, %rax
                	movslq	%eax, %rax
-               	movslq	%r12d, %r12
                	addq	%r12, %rax
                	movslq	%eax, %rax
                	addq	%rbx, %rax
@@ -388,4 +385,4 @@ Disassembly of section .text:
                	addq	$0x130, %rsp            # imm = 0x130
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

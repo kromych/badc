@@ -173,9 +173,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=9
   block 30  start_pc=0
     v47  Imm(-1)                                          -> x9
     v48  Imm(0)                                           -> x11
-    v49  Extend { value=v47, kind=I16 }                   -> x9
+    v49  LoadLocal { off=-7, kind=I16 }                   -> x11
     v50  Imm(0)                                           -> x11
-    v51  Extend { value=v49, kind=I32 }                   -> x9
+    v51  Extend { value=v47, kind=I32 }                   -> x9
     v52  BinopI { op=ne, lhs=v51, rhs_imm=-1 }            -> x9
     terminator Bz { cond=v52, target=b32, fall=b31 }   (exit_acc=v52)
   block 31  start_pc=0

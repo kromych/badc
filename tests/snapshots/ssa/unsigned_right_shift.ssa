@@ -67,8 +67,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2147483648)                                  -> x11
     v2   Imm(0)                                           -> x9
-    v3   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x11
-    v4   BinopI { op=shru, lhs=v3, rhs_imm=1 }            -> x11
+    v3   LoadLocal { off=-1, kind=U32 }                   -> x9
+    v4   BinopI { op=shru, lhs=v1, rhs_imm=1 }            -> x11
     v5   Imm(0)                                           -> x9
     v6   BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x11
     v7   BinopI { op=xor, lhs=v6, rhs_imm=1073741824 }    -> x11

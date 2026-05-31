@@ -51,10 +51,7 @@ Disassembly of section .text:
                	add	x11, x11, #0x8
                	mov	x10, #0x3               // =3
                	str	w10, [x11]
-               	sxtw	x15, w15
-               	mov	x17, #0xff              // =255
-               	and	x9, x14, x17
-               	add	x15, x15, x9
+               	add	x15, x15, x14
                	sxtw	x15, w15
                	cmp	x15, #0xa5
                	b.eq	<addr>
@@ -127,8 +124,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x17, #0xff              // =255
-               	and	x14, x14, x17
                	cmp	x14, #0x41
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

@@ -89,7 +89,6 @@ Disassembly of section .text:
                	movl	$0x32, %r9d
                	movl	$0x19, %r8d
                	movl	$0xc, %edi
-               	movslq	%r11d, %r11
                	movl	$0x8, %esi
                	movq	%rsi, %r10
                	pushq	%rax
@@ -98,7 +97,6 @@ Disassembly of section .text:
                	idivq	%r10
                	movq	%rax, %rdx
                	popq	%rax
-               	movslq	%r9d, %r9
                	movq	%rsi, %r10
                	pushq	%rax
                	pushq	%rdx
@@ -108,14 +106,12 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movslq	%r8d, %r8
                	movq	%rsi, %r10
                	pushq	%rdx
                	movq	%r8, %rax
                	cqto
                	idivq	%r10
                	popq	%rdx
-               	movslq	%edi, %rdi
                	movq	%rsi, %r10
                	pushq	%rax
                	pushq	%rdx

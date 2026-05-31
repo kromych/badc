@@ -83,10 +83,6 @@ Disassembly of section .text:
                	subq	$0x60, %rsp
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
                	movl	$0x2, %r9d
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r9
                	movq	%r9, %r10
                	pushq	%rax
                	pushq	%rdx
@@ -106,10 +102,6 @@ Disassembly of section .text:
                	retq
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	movl	$0x7, %eax
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %rax
                	movq	%rax, %r10
                	pushq	%rax
                	pushq	%rdx

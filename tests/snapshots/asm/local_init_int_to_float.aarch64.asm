@@ -165,7 +165,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x20, #0x3039            // =12345
-               	sxtw	x20, w20
                	scvtf	d8, x20
                	sub	x20, x29, #0x20
                	fcvt	s0, d8
@@ -218,7 +217,6 @@ Disassembly of section .text:
                	movk	x21, #0xffff, lsl #16
                	movk	x21, #0xffff, lsl #32
                	movk	x21, #0xffff, lsl #48
-               	sxtw	x21, w21
                	scvtf	d9, x21
                	fmov	x16, d9
                	stur	x16, [x29, #-0x30]
@@ -263,9 +261,6 @@ Disassembly of section .text:
                	ret
                	mov	x21, #0xffff            // =65535
                	movk	x21, #0xffff, lsl #16
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x21, x21, x17
                	scvtf	d9, x21
                	sub	x21, x29, #0x40
                	fcvt	s0, d9

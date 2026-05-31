@@ -183,8 +183,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=10
   block 12  start_pc=0
     v93  Imm(7)                                           -> x9
     v94  Imm(0)                                           -> x8
-    v95  Extend { value=v93, kind=I32 }                   -> x9
-    v96  FpCast { kind=IntToFp, value=v95 }               -> d7
+    v95  LoadLocal { off=-7, kind=I32 }                   -> x8
+    v96  FpCast { kind=IntToFp, value=v93 }               -> d7
     v97  LocalAddr(-8)                                    -> x9
     v98  Store { addr=v97, value=v96, kind=F32 }          -> -
     v99  LoadLocal { off=-8, kind=F32 }                   -> d6

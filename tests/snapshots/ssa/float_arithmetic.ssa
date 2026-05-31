@@ -139,8 +139,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
   block 26  start_pc=0
     v82  Imm(7)                                           -> x0
     v83  Imm(0)                                           -> x9
-    v84  Extend { value=v82, kind=I32 }                   -> x0
-    v85  FpCast { kind=IntToFp, value=v84 }               -> d7
+    v84  LoadLocal { off=-4, kind=I32 }                   -> x9
+    v85  FpCast { kind=IntToFp, value=v82 }               -> d7
     v86  StoreLocal { off=-1, value=v85, kind=I64 }       -> -
     v87  LoadLocal { off=-1, kind=I64 }                   -> x0
     v88  Imm(4619567317775286272)                         -> x9

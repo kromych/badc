@@ -204,7 +204,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x7                // =7
-               	sxtw	x0, w0
                	scvtf	d7, x0
                	fmov	x16, d7
                	stur	x16, [x29, #-0x8]

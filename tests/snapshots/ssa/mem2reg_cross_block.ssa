@@ -16,8 +16,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Bz { cond=v7, target=b3, fall=b2 }   (exit_acc=v7)
   block 2  start_pc=0
     v8   LoadLocal { off=-2, kind=I32 }                   -> x8
-    v9   Extend { value=v1, kind=I32 }                    -> x9
-    v10  Binop { op=add, lhs=v8, rhs=v9 }                 -> x8
+    v9   LoadLocal { off=-1, kind=I32 }                   -> x9
+    v10  Binop { op=add, lhs=v8, rhs=v1 }                 -> x8
     v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x8
     v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x8
     v13  StoreLocal { off=-2, value=v12, kind=I32 }       -> -

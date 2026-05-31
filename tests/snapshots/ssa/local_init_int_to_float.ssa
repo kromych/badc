@@ -97,8 +97,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=18
   block 4  start_pc=0
     v23  Imm(12345)                                       -> x3
     v24  Imm(0)                                           -> x0
-    v25  Extend { value=v23, kind=I32 }                   -> x3
-    v26  FpCast { kind=IntToFp, value=v25 }               -> d6
+    v25  LoadLocal { off=-3, kind=I32 }                   -> x0
+    v26  FpCast { kind=IntToFp, value=v23 }               -> d6
     v27  LocalAddr(-4)                                    -> x3
     v28  Store { addr=v27, value=v26, kind=F32 }          -> -
     v29  LoadLocal { off=-4, kind=F32 }                   -> d7
@@ -124,8 +124,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=18
   block 8  start_pc=0
     v42  Imm(-7)                                          -> x12
     v43  Imm(0)                                           -> x0
-    v44  Extend { value=v42, kind=I32 }                   -> x12
-    v45  FpCast { kind=IntToFp, value=v44 }               -> d7
+    v44  LoadLocal { off=-5, kind=I32 }                   -> x0
+    v45  FpCast { kind=IntToFp, value=v42 }               -> d7
     v46  StoreLocal { off=-6, value=v45, kind=I64 }       -> -
     v47  LoadLocal { off=-6, kind=I64 }                   -> x12
     v48  Imm(4620130267728707584)                         -> x0
@@ -152,8 +152,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=18
   block 12  start_pc=0
     v62  Imm(4294967295)                                  -> x12
     v63  Imm(0)                                           -> x0
-    v64  BinopI { op=and, lhs=v62, rhs_imm=4294967295 }   -> x12
-    v65  FpCast { kind=IntToFp, value=v64 }               -> d7
+    v64  LoadLocal { off=-7, kind=U32 }                   -> x0
+    v65  FpCast { kind=IntToFp, value=v62 }               -> d7
     v66  LocalAddr(-8)                                    -> x12
     v67  Store { addr=v66, value=v65, kind=F32 }          -> -
     v68  LoadLocal { off=-8, kind=F32 }                   -> d6

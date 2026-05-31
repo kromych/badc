@@ -34,24 +34,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
                	sxtw	x15, w0
                	mov	x14, #0xdead            // =57005
                	mov	x13, #0xbeef            // =48879
                	mov	x12, #0xcafe            // =51966
                	mov	x11, #0xacef            // =44271
                	movk	x11, #0xf, lsl #16
-               	sxtw	x14, w14
-               	sxtw	x13, w13
                	add	x14, x14, x13
                	sxtw	x14, w14
-               	sxtw	x12, w12
                	add	x14, x14, x12
                	sxtw	x14, w14
-               	sxtw	x11, w11
                	add	x14, x14, x11
                	sxtw	x14, w14
                	add	x14, x14, x15
                	sxtw	x0, w14
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
@@ -130,14 +131,10 @@ Disassembly of section .text:
                	mov	x22, #0xcafe            // =51966
                	mov	x21, #0xacef            // =44271
                	movk	x21, #0xf, lsl #16
-               	sxtw	x0, w0
-               	sxtw	x23, w23
                	add	x0, x0, x23
                	sxtw	x0, w0
-               	sxtw	x22, w22
                	add	x0, x0, x22
                	sxtw	x0, w0
-               	sxtw	x21, w21
                	add	x0, x0, x21
                	sxtw	x0, w0
                	add	x0, x0, x20

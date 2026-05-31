@@ -16,7 +16,6 @@ Disassembly of section .text:
                	mov	x15, #0x2               // =2
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x10]
-               	sxtw	x15, w15
                	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	add	sp, sp, #0x10

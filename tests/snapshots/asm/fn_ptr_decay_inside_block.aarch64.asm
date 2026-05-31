@@ -27,7 +27,6 @@ Disassembly of section .text:
                	mov	x15, #0x0               // =0
                	stur	w15, [x29, #-0x8]
                	mov	x14, #0x1               // =1
-               	sxtw	x14, w14
                	cmp	x14, #0x0
                	b.ne	<addr>
                	mov	x15, #0x1               // =1

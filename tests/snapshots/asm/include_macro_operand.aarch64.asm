@@ -42,7 +42,6 @@ Disassembly of section .text:
                	mov	x0, x23
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtb	x20, w20
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -58,10 +57,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x21, w21
                	cmp	x21, #0x2a
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
+               	mov	x20, #0x3               // =3
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

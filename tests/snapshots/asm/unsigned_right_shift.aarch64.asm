@@ -90,9 +90,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x15, #0x80000000        // =2147483648
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	lsr	x15, x15, #1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16

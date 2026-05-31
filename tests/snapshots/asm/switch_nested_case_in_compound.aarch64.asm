@@ -96,7 +96,6 @@ Disassembly of section .text:
                	mov	x15, #0x0               // =0
                	stur	w15, [x29, #-0x8]
                	mov	x14, #0x2               // =2
-               	sxtw	x14, w14
                	b	<addr>
                	ldursw	x13, [x29, #-0x8]
                	cmp	x13, #0x7
@@ -171,7 +170,6 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	stur	w21, [x29, #-0x8]
                	mov	x0, #0x1                // =1
-               	sxtw	x0, w0
                	b	<addr>
                	ldursw	x20, [x29, #-0x8]
                	mov	x17, #0x106b            // =4203

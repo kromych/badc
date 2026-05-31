@@ -142,7 +142,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x2a, %r11d
+               	movl	$0x2a, %eax
                	xorq	%r9, %r9
                	movl	%r9d, -0x10(%rbp)
                	jmp	<addr>
@@ -156,7 +156,6 @@ Disassembly of section .text:
                	movl	%r9d, (%r8)
                	jmp	<addr>
                	jmp	<addr>
-               	movslq	%r11d, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

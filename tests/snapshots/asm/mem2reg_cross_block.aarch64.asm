@@ -22,8 +22,7 @@ Disassembly of section .text:
                	cmp	x14, #0x3
                	b.ge	<addr>
                	ldursw	x13, [x29, #-0x10]
-               	sxtw	x14, w15
-               	add	x13, x13, x14
+               	add	x13, x13, x15
                	sxtw	x13, w13
                	stur	w13, [x29, #-0x10]
                	ldursw	x14, [x29, #-0x18]

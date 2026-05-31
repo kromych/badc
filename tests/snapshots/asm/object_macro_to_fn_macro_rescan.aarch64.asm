@@ -52,8 +52,7 @@ Disassembly of section .text:
                	str	x25, [sp, #0x28]
                	str	x19, [sp, #0x30]
                	mov	x20, #0x7               // =7
-               	sxtw	x14, w20
-               	cmp	x14, #0x7
+               	cmp	x20, #0x7
                	b.ne	<addr>
                	mov	x13, #0x0               // =0
                	mov	x17, #0xff              // =255
@@ -73,7 +72,6 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x28]
                	b	<addr>
-               	sxtw	x20, w20
                	add	x20, x20, #0x1
                	sxtw	x20, w20
                	cmp	x20, #0x8

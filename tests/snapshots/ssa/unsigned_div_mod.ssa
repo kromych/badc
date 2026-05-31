@@ -69,9 +69,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v2   Imm(0)                                           -> x9
     v3   Imm(2)                                           -> x9
     v4   Imm(0)                                           -> x8
-    v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x11
-    v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x9
-    v7   Binop { op=divu, lhs=v5, rhs=v6 }                -> x11
+    v5   LoadLocal { off=-1, kind=U32 }                   -> x8
+    v6   LoadLocal { off=-2, kind=U32 }                   -> x8
+    v7   Binop { op=divu, lhs=v1, rhs=v3 }                -> x11
     v8   Imm(0)                                           -> x9
     v9   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x11
     v10  BinopI { op=ne, lhs=v9, rhs_imm=2147483647 }     -> x11
@@ -84,9 +84,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v13  Imm(0)                                           -> x0
     v14  Imm(7)                                           -> x0
     v15  Imm(0)                                           -> x8
-    v16  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x11
-    v17  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x0
-    v18  Binop { op=modu, lhs=v16, rhs=v17 }              -> x11
+    v16  LoadLocal { off=-5, kind=U32 }                   -> x8
+    v17  LoadLocal { off=-6, kind=U32 }                   -> x8
+    v18  Binop { op=modu, lhs=v12, rhs=v14 }              -> x11
     v19  Imm(0)                                           -> x0
     v20  BinopI { op=and, lhs=v18, rhs_imm=4294967295 }   -> x11
     v21  BinopI { op=xor, lhs=v20, rhs_imm=3 }            -> x11

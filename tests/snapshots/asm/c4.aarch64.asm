@@ -257,9 +257,6 @@ Disassembly of section .text:
                	mov	x25, x19
                	ldr	x25, [x25]
                	ldrb	w25, [x25]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x25, x25, x17
                	cmp	x25, #0x0
                	cset	x25, ne
                	stur	x25, [x29, #-0x30]
@@ -911,9 +908,6 @@ Disassembly of section .text:
                	mov	x26, x19
                	ldr	x26, [x26]
                	ldrb	w26, [x26]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x26, x26, x17
                	cmp	x26, #0x0
                	cset	x26, ne
                	stur	x26, [x29, #-0xe8]
@@ -972,9 +966,6 @@ Disassembly of section .text:
                	mov	x26, x19
                	ldr	x26, [x26]
                	ldrb	w26, [x26]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x26, x26, x17
                	cmp	x26, #0x0
                	cset	x26, ne
                	stur	x26, [x29, #-0xf8]

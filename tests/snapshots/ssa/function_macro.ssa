@@ -27,10 +27,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
   block 3  start_pc=0
     v23  LoadLocal { off=2, kind=I64 }                    -> x11
     v24  Load { addr=v23, kind=U8 }                       -> x11
-    v25  BinopI { op=and, lhs=v24, rhs_imm=4294967295 }   -> x11
-    v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x11
-    v27  StoreLocal { off=-2, value=v26, kind=I64 }       -> -
-    terminator Bz { cond=v26, target=b7, fall=b6 }   (exit_acc=v26)
+    v25  BinopI { op=eq, lhs=v24, rhs_imm=0 }             -> x11
+    v26  StoreLocal { off=-2, value=v25, kind=I64 }       -> -
+    terminator Bz { cond=v25, target=b7, fall=b6 }   (exit_acc=v25)
   block 4  start_pc=0
     v8   LoadLocal { off=2, kind=I64 }                    -> x11
     v9   Load { addr=v8, kind=U8 }                        -> x11
@@ -43,15 +42,14 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v14  LoadLocal { off=-1, kind=I64 }                   -> x11
     terminator Bz { cond=v14, target=b3, fall=b2 }   (exit_acc=v14)
   block 6  start_pc=0
-    v28  LoadLocal { off=3, kind=I64 }                    -> x9
-    v29  Load { addr=v28, kind=U8 }                       -> x9
-    v30  BinopI { op=and, lhs=v29, rhs_imm=4294967295 }   -> x9
-    v31  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x9
-    v32  StoreLocal { off=-2, value=v31, kind=I64 }       -> -
-    terminator Jmp(b7)   (exit_acc=v32)
+    v27  LoadLocal { off=3, kind=I64 }                    -> x9
+    v28  Load { addr=v27, kind=U8 }                       -> x9
+    v29  BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> x9
+    v30  StoreLocal { off=-2, value=v29, kind=I64 }       -> -
+    terminator Jmp(b7)   (exit_acc=v30)
   block 7  start_pc=0
-    v33  LoadLocal { off=-2, kind=I64 }                   -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v31  LoadLocal { off=-2, kind=I64 }                   -> x0
+    terminator Return(v31)   (exit_acc=v31)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=helper_one
 fn ent_pc=1 n_params=0 variadic=false locals=5

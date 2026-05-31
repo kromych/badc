@@ -90,8 +90,6 @@ Disassembly of section .text:
                	addq	$0x1, %r9
                	movb	%r9b, (%r11)
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	jne	<addr>
                	movl	$0x1, %r8d
@@ -105,8 +103,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r8
                	je	<addr>
                	movzbq	-0x8(%rbp), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -137,8 +133,6 @@ Disassembly of section .text:
                	addq	$0x1, %r9
                	movw	%r9w, (%r11)
                	movzwq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	jne	<addr>
                	movl	$0x1, %r8d
@@ -152,8 +146,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r8
                	je	<addr>
                	movzwq	-0x8(%rbp), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -184,8 +176,6 @@ Disassembly of section .text:
                	addq	$0x1, %r9
                	movl	%r9d, (%r11)
                	movl	(%r11), %r11d
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	jne	<addr>
                	movl	$0x1, %r8d
@@ -199,8 +189,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r8
                	je	<addr>
                	movl	-0x8(%rbp), %r11d
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -231,8 +219,6 @@ Disassembly of section .text:
                	addq	$0x10, %r9
                	movb	%r9b, (%r11)
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	jne	<addr>
                	movl	$0x1, %r8d
@@ -246,8 +232,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r8
                	je	<addr>
                	movzbq	-0x8(%rbp), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -278,8 +262,6 @@ Disassembly of section .text:
                	addq	$0x10, %r9
                	movw	%r9w, (%r11)
                	movzwq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	jne	<addr>
                	movl	$0x1, %r8d
@@ -293,8 +275,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r8
                	je	<addr>
                	movzwq	-0x8(%rbp), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -325,8 +305,6 @@ Disassembly of section .text:
                	addq	$0x1, %r8
                	movb	%r8b, (%r9)
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
                	cmpq	$0x0, %r9
                	jne	<addr>
                	movl	$0x1, %r11d
@@ -340,8 +318,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %r11
                	je	<addr>
                	movzbq	-0x8(%rbp), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
                	cmpq	$0x0, %r9
                	sete	%r9b
                	movzbq	%r9b, %r9

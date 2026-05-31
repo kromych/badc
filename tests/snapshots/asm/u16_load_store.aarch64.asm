@@ -118,9 +118,6 @@ Disassembly of section .text:
                	strh	w22, [x0]
                	sub	x21, x29, #0x20
                	ldrb	w21, [x21]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x21, x21, x17
                	cmp	x21, #0x0
                	cset	x21, ne
                	stur	x21, [x29, #-0x40]
@@ -128,9 +125,6 @@ Disassembly of section .text:
                	sub	x22, x29, #0x20
                	add	x22, x22, #0x1
                	ldrb	w22, [x22]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x22, x22, x17
                	cmp	x22, #0x0
                	cset	x22, ne
                	stur	x22, [x29, #-0x40]
@@ -184,9 +178,6 @@ Disassembly of section .text:
                	sub	x21, x29, #0x20
                	add	x21, x21, #0x4
                	ldrb	w21, [x21]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x21, x21, x17
                	cmp	x21, #0x0
                	b.eq	<addr>
                	mov	x22, #0x3               // =3

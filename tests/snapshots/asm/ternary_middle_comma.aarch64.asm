@@ -435,9 +435,6 @@ Disassembly of section .text:
                	cbnz	x22, <addr>
                	sub	x23, x29, #0x60
                	ldrb	w23, [x23]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x23, x23, x17
                	cmp	x23, #0x0
                	cset	x23, ne
                	stur	x23, [x29, #-0xe0]

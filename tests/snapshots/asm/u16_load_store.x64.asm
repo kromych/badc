@@ -108,8 +108,6 @@ Disassembly of section .text:
                	movw	%r14w, (%rax)
                	leaq	-0x20(%rbp), %r12
                	movzbq	(%r12), %r12
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r12
                	cmpq	$0x0, %r12
                	setne	%r12b
                	movzbq	%r12b, %r12
@@ -119,8 +117,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %r14
                	addq	$0x1, %r14
                	movzbq	(%r14), %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
                	cmpq	$0x0, %r14
                	setne	%r14b
                	movzbq	%r14b, %r14
@@ -176,8 +172,6 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %r12
                	addq	$0x4, %r12
                	movzbq	(%r12), %r12
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r12
                	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x3, %r14d
@@ -216,4 +210,3 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

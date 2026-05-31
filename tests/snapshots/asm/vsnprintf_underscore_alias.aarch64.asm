@@ -236,9 +236,6 @@ Disassembly of section .text:
                	ldursw	x11, [x29, #-0x10]
                	add	x11, x22, x11
                	ldrb	w11, [x11]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x11, x11, x17
                	cmp	x11, #0x0
                	b.eq	<addr>
                	ldursw	x12, [x29, #-0x10]
@@ -1356,9 +1353,6 @@ Disassembly of section .text:
                	ldursw	x25, [x29, #-0x60]
                	add	x0, x0, x25
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	ldursw	x25, [x29, #-0x60]
@@ -1481,9 +1475,6 @@ Disassembly of section .text:
                	b	<addr>
                	b	<addr>
                	ldurb	w0, [x29, #-0x70]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>

@@ -50,8 +50,6 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	addq	$0x5, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0x5, %eax
@@ -59,8 +57,6 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	addq	$0x13, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0x6, %eax
@@ -87,8 +83,6 @@ Disassembly of section .text:
                	leaq	<rip>, %r11
                	addq	$0x5, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0x9, %eax
@@ -96,4 +90,4 @@ Disassembly of section .text:
                	xorq	%r11, %r11
                	movq	%r11, %rax
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

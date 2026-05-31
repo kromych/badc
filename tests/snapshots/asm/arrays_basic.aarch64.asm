@@ -210,9 +210,6 @@ Disassembly of section .text:
                	mov	x0, x19
                	add	x0, x0, #0x2
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x21, #0x8               // =8

@@ -319,25 +319,24 @@ fn ent_pc=14 n_params=0 variadic=false locals=28
     v180 LocalAddr(-12)                                   -> x14
     v181 Imm(0)                                           -> x15
     v182 Load { addr=v180, kind=U8 }                      -> x14
-    v183 BinopI { op=and, lhs=v182, rhs_imm=4294967295 }  -> x14
-    v184 BinopI { op=ne, lhs=v183, rhs_imm=0 }            -> x14
-    v185 StoreLocal { off=-28, value=v184, kind=I64 }     -> -
-    terminator Jmp(b37)   (exit_acc=v185)
+    v183 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x14
+    v184 StoreLocal { off=-28, value=v183, kind=I64 }     -> -
+    terminator Jmp(b37)   (exit_acc=v184)
   block 37  start_pc=0
-    v186 LoadLocal { off=-28, kind=I64 }                  -> x14
-    terminator Bz { cond=v186, target=b39, fall=b38 }   (exit_acc=v186)
+    v185 LoadLocal { off=-28, kind=I64 }                  -> x14
+    terminator Bz { cond=v185, target=b39, fall=b38 }   (exit_acc=v185)
   block 38  start_pc=0
-    v187 ImmData(199)                                     -> x12
-    v188 Extend { value=v175, kind=I32 }                  -> x15
-    v189 LocalAddr(-12)                                   -> x0
-    v190 Imm(0)                                           -> x3
-    v191 Load { addr=v189, kind=U8 }                      -> x14
-    v192 CallExt { binding_idx=0, args=[v187, v188, v191], fp_arg_mask=0x0 } -> x0
-    v193 Imm(5)                                           -> x0
-    terminator Return(v193)   (exit_acc=v193)
+    v186 ImmData(199)                                     -> x12
+    v187 Extend { value=v175, kind=I32 }                  -> x15
+    v188 LocalAddr(-12)                                   -> x0
+    v189 Imm(0)                                           -> x3
+    v190 Load { addr=v188, kind=U8 }                      -> x14
+    v191 CallExt { binding_idx=0, args=[v186, v187, v190], fp_arg_mask=0x0 } -> x0
+    v192 Imm(5)                                           -> x0
+    terminator Return(v192)   (exit_acc=v192)
   block 39  start_pc=0
-    v194 Imm(0)                                           -> x14
-    terminator Return(v194)   (exit_acc=v194)
+    v193 Imm(0)                                           -> x14
+    terminator Return(v193)   (exit_acc=v193)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

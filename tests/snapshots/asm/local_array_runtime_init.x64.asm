@@ -420,8 +420,6 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rax
                	addq	$0x5, %rax
                	movzbq	(%rax), %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
                	cmpq	$0x0, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -450,5 +448,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

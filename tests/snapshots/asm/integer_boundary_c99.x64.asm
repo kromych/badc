@@ -333,8 +333,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movzbq	-0x8(%rbp), %r15
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r15
                	cmpq	$0x0, %r15
                	sete	%r15b
                	movzbq	%r15b, %r15
@@ -538,8 +536,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movzwq	-0x20(%rbp), %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
                	cmpq	$0x0, %r14
                	sete	%r14b
                	movzbq	%r14b, %r14
@@ -881,8 +877,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	-0x70(%rbp), %ebx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rbx
                	cmpq	$0x0, %rbx
                	sete	%bl
                	movzbq	%bl, %rbx
@@ -1814,3 +1808,5 @@ Disassembly of section .text:
                	addq	$0x240, %rsp            # imm = 0x240
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

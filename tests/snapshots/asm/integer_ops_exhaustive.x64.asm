@@ -1387,8 +1387,6 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	-0xe0(%rbp), %ebx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rbx
                	cmpq	$0x0, %rbx
                	sete	%bl
                	movzbq	%bl, %rbx
@@ -1460,8 +1458,6 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movzbq	-0xe8(%rbp), %r15
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r15
                	cmpq	$0x0, %r15
                	sete	%r15b
                	movzbq	%r15b, %r15
@@ -1775,4 +1771,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

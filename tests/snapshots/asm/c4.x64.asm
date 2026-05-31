@@ -216,8 +216,6 @@ Disassembly of section .text:
                	leaq	<rip>, %r12
                	movq	(%r12), %r12
                	movzbq	(%r12), %r12
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r12
                	cmpq	$0x0, %r12
                	setne	%r12b
                	movzbq	%r12b, %r12
@@ -788,8 +786,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rbx
                	movzbq	(%rbx), %rbx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rbx
                	cmpq	$0x0, %rbx
                	setne	%bl
                	movzbq	%bl, %rbx
@@ -840,8 +836,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movq	(%rbx), %rbx
                	movzbq	(%rbx), %rbx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rbx
                	cmpq	$0x0, %rbx
                	setne	%bl
                	movzbq	%bl, %rbx
@@ -5504,4 +5498,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

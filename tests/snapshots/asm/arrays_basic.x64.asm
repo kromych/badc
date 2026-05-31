@@ -205,8 +205,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	addq	$0x2, %rax
                	movzbq	(%rax), %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0x8, %r12d
@@ -420,5 +418,3 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

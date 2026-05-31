@@ -500,6 +500,57 @@ impl SsaBuilder {
                 return self.binop_imm(BinOp::Shl, lhs, k);
             }
         }
+        // `And` with a mask whose low N bits are all set is a
+        // no-op when the lhs is an unsigned-narrow load that
+        // already zero-extended to 64 bits: a U8/U16/U32 load
+        // clears the top 64-N bits, so ANDing back through a
+        // mask that covers those low bits preserves the value.
+        // Surfaces from `(u8/u16/u32) == 0` after the C99
+        // 6.3.1.1 integer promotion's implicit cast.
+        if op == BinOp::And {
+            let load_width = match self.func.insts.get(lhs as usize) {
+                Some(Inst::Load {
+                    kind: LoadKind::U8, ..
+                })
+                | Some(Inst::LoadLocal {
+                    kind: LoadKind::U8, ..
+                })
+                | Some(Inst::LoadIndexed {
+                    kind: LoadKind::U8, ..
+                }) => Some(8u32),
+                Some(Inst::Load {
+                    kind: LoadKind::U16,
+                    ..
+                })
+                | Some(Inst::LoadLocal {
+                    kind: LoadKind::U16,
+                    ..
+                })
+                | Some(Inst::LoadIndexed {
+                    kind: LoadKind::U16,
+                    ..
+                }) => Some(16u32),
+                Some(Inst::Load {
+                    kind: LoadKind::U32,
+                    ..
+                })
+                | Some(Inst::LoadLocal {
+                    kind: LoadKind::U32,
+                    ..
+                })
+                | Some(Inst::LoadIndexed {
+                    kind: LoadKind::U32,
+                    ..
+                }) => Some(32u32),
+                _ => None,
+            };
+            if let Some(width) = load_width {
+                let coverage_mask: u64 = if width >= 64 { !0 } else { (1u64 << width) - 1 };
+                if (rhs_imm as u64) & coverage_mask == coverage_mask {
+                    return lhs;
+                }
+            }
+        }
         if let Some(&Inst::BinopI {
             op: inner_op,
             lhs: inner_lhs,

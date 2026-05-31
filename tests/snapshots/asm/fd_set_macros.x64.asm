@@ -115,8 +115,6 @@ Disassembly of section .text:
                	movslq	-0x98(%rbp), %r9
                	addq	%r9, %r8
                	movzbq	(%r8), %r8
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r8
                	cmpq	$0x0, %r8
                	je	<addr>
                	jmp	<addr>
@@ -650,3 +648,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

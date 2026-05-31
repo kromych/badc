@@ -112,9 +112,6 @@ Disassembly of section .text:
                	mov	x15, x19
                	add	x15, x15, #0x5
                	ldrb	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -205,9 +202,6 @@ Disassembly of section .text:
                	mov	x0, x19
                	add	x0, x0, #0x2
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0x9               // =9
@@ -221,9 +215,6 @@ Disassembly of section .text:
                	mov	x0, x19
                	add	x0, x0, #0xf
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0xa               // =10
@@ -382,9 +373,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	add	x0, x0, #0x5
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0x15              // =21
@@ -463,9 +451,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x2
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0x1b              // =27
@@ -520,9 +505,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x3
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0x20              // =32
@@ -534,9 +516,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x7
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x15, #0x21              // =33

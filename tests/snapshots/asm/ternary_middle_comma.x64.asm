@@ -414,8 +414,6 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	-0x60(%rbp), %r14
                	movzbq	(%r14), %r14
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
                	cmpq	$0x0, %r14
                	setne	%r14b
                	movzbq	%r14b, %r14
@@ -454,5 +452,3 @@ Disassembly of section .text:
                	addq	$0x110, %rsp            # imm = 0x110
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

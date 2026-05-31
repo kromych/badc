@@ -40,8 +40,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x10(%rbp), %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
@@ -64,8 +62,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x20(%rbp), %r9
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
                	cmpq	$0x0, %r9
                	sete	%r9b
                	movzbq	%r9b, %r9
@@ -256,3 +252,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -18,9 +18,6 @@ Disassembly of section .text:
                	add	x19, x19, #0xd0
                	mov	x15, x19
                	ldrb	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

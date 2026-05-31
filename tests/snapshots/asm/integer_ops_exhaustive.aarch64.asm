@@ -1605,9 +1605,6 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	ldur	w20, [x29, #-0xe0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x20, x20, x17
                	cmp	x20, #0x0
                	cset	x20, eq
                	cmp	x20, #0x0
@@ -1689,9 +1686,6 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	ldurb	w27, [x29, #-0xe8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x27, x27, x17
                	cmp	x27, #0x0
                	cset	x27, eq
                	cmp	x27, #0x0

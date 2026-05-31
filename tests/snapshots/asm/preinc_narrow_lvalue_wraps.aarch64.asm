@@ -98,9 +98,6 @@ Disassembly of section .text:
                	add	x14, x14, #0x1
                	strb	w14, [x15]
                	ldrb	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
@@ -112,9 +109,6 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x18]
                	cbz	x13, <addr>
                	ldurb	w15, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x18]
@@ -143,9 +137,6 @@ Disassembly of section .text:
                	add	x14, x14, #0x1
                	strh	w14, [x15]
                	ldrh	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
@@ -157,9 +148,6 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x18]
                	cbz	x13, <addr>
                	ldurh	w15, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x18]
@@ -189,9 +177,6 @@ Disassembly of section .text:
                	add	x14, x14, #0x1
                	str	w14, [x15]
                	ldr	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
@@ -203,9 +188,6 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x18]
                	cbz	x13, <addr>
                	ldur	w15, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x18]
@@ -234,9 +216,6 @@ Disassembly of section .text:
                	add	x14, x14, #0x10
                	strb	w14, [x15]
                	ldrb	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
@@ -248,9 +227,6 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x18]
                	cbz	x13, <addr>
                	ldurb	w15, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x18]
@@ -279,9 +255,6 @@ Disassembly of section .text:
                	add	x14, x14, #0x10
                	strh	w14, [x15]
                	ldrh	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
@@ -293,9 +266,6 @@ Disassembly of section .text:
                	stur	x13, [x29, #-0x18]
                	cbz	x13, <addr>
                	ldurh	w15, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x18]
@@ -324,9 +294,6 @@ Disassembly of section .text:
                	add	x13, x13, #0x1
                	strb	w13, [x14]
                	ldrb	w14, [x14]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	b.ne	<addr>
                	mov	x15, #0x1               // =1
@@ -338,9 +305,6 @@ Disassembly of section .text:
                	stur	x15, [x29, #-0x20]
                	cbz	x15, <addr>
                	ldurb	w14, [x29, #-0x8]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	cset	x14, eq
                	stur	x14, [x29, #-0x20]

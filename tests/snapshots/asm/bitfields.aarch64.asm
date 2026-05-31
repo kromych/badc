@@ -127,9 +127,6 @@ Disassembly of section .text:
                	sub	x15, x29, #0x10
                	add	x15, x15, #0x4
                	ldr	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	mov	x17, #0x5678            // =22136
                	movk	x17, #0x1234, lsl #16
                	cmp	x15, x17
@@ -205,9 +202,6 @@ Disassembly of section .text:
                	sub	x13, x29, #0x10
                	add	x13, x13, #0x4
                	ldr	w13, [x13]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
                	mov	x17, #0x5678            // =22136
                	movk	x17, #0x1234, lsl #16
                	cmp	x13, x17

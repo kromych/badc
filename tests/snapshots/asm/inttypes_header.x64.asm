@@ -143,8 +143,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -200,8 +198,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -257,8 +253,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -284,8 +278,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x1, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -341,8 +333,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -383,8 +373,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x2, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -440,8 +428,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11
@@ -497,8 +483,6 @@ Disassembly of section .text:
                	jne	<addr>
                	addq	$0x3, %r11
                	movzbq	(%r11), %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	setne	%r11b
                	movzbq	%r11b, %r11

@@ -456,9 +456,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x5
                	ldrb	w0, [x0]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x0, ne
                	stur	x0, [x29, #-0x20]

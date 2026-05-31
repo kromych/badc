@@ -36,9 +36,6 @@ Disassembly of section .text:
                	b	<addr>
                	ldur	x15, [x29, #0x10]
                	ldrb	w15, [x15]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
                	cmp	x15, #0x0
                	cset	x15, eq
                	stur	x15, [x29, #-0x10]
@@ -57,9 +54,6 @@ Disassembly of section .text:
                	b	<addr>
                	ldur	x14, [x29, #0x20]
                	ldrb	w14, [x14]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	cset	x14, eq
                	stur	x14, [x29, #-0x10]

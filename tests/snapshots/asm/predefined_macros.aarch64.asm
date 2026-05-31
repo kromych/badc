@@ -69,9 +69,6 @@ Disassembly of section .text:
                	ret
                	add	x14, x14, #0xb
                	ldrb	w14, [x14]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -114,9 +111,6 @@ Disassembly of section .text:
                	ret
                	add	x14, x14, #0x8
                	ldrb	w14, [x14]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
@@ -128,9 +122,6 @@ Disassembly of section .text:
                	add	x19, x19, #0xe5
                	mov	x14, x19
                	ldrb	w14, [x14]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
                	cmp	x14, #0x0
                	b.ne	<addr>
                	mov	x0, #0x9                // =9

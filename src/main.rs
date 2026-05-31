@@ -169,7 +169,7 @@ fn main() {
     let mut trace = false;
     let mut optimize_flag = false;
     let mut dump_ssa = false;
-    let mut inline_cap: u32 = 32;
+    let mut inline_cap: u32 = 64;
     let mut emit_debug_info = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;

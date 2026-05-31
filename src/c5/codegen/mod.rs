@@ -1268,8 +1268,8 @@ pub struct NativeOptions {
     /// Upper bound (in SSA `Inst` count) on a leaf function body
     /// that may be inlined at its call sites under `-O`. The
     /// `--inline-cap=N` CLI flag drives this; 0 disables the pass.
-    /// Default 32, matching the typical small-helper threshold
-    /// `gcc` / `clang` use (`--param max-inline-insns-single=N`).
+    /// Default 64, matching gcc / clang `-O2`'s
+    /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
     pub inline_cap: u32,
 }
 
@@ -1319,7 +1319,7 @@ impl NativeOptions {
             output_kind: OutputKind::Executable,
             debug_info: false,
             dump_ssa: false,
-            inline_cap: 32,
+            inline_cap: 64,
         }
     }
 

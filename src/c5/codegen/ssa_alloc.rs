@@ -1065,8 +1065,14 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
     };
     // used_set: values referenced in a block but defined outside it
     // (upward exposed). kill: values defined in the block's range.
+    // phi_live_out: per-predecessor set of phi-incoming values --
+    // these must be live at the end of the predecessor regardless
+    // of where they are defined (a loop body whose phi reads a value
+    // defined in that same body needs the value to survive the back
+    // edge, but `~kill[B]` would otherwise drop it).
     let mut used_set = vec![0u64; nblocks * words];
     let mut kill = vec![0u64; nblocks * words];
+    let mut phi_live_out = vec![0u64; nblocks * words];
     for (b, blk) in func.blocks.iter().enumerate() {
         let base = b * words;
         let (start, end) = (blk.inst_range.start, blk.inst_range.end);
@@ -1079,6 +1085,14 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
             }
         };
         for idx in start..end {
+            if let Inst::Phi { incoming, .. } = &func.insts[idx as usize] {
+                for (pred, v) in incoming {
+                    if *v != NO_VALUE {
+                        bit(&mut phi_live_out, (*pred as usize) * words, *v);
+                    }
+                }
+                continue;
+            }
             for_each_operand(&func.insts[idx as usize], &mut mark);
         }
         if blk.exit_acc != NO_VALUE {
@@ -1091,7 +1105,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         }
     }
     // Backward dataflow to a fixed point:
-    //   live_out[b] = U live_in[succ];
+    //   live_out[b] = phi_live_out[b] | U live_in[succ];
     //   live_in[b]  = gen[b] | (live_out[b] & ~kill[b]).
     let mut live_in = vec![0u64; nblocks * words];
     let mut live_out = vec![0u64; nblocks * words];
@@ -1109,6 +1123,7 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
                 }
             }
             for w in 0..words {
+                scratch[w] |= phi_live_out[base + w];
                 live_out[base + w] = scratch[w];
                 let ni = used_set[base + w] | (scratch[w] & !kill[base + w]);
                 if ni != live_in[base + w] {

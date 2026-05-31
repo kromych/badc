@@ -26,9 +26,9 @@ Disassembly of section .text:
                	addq	$0x10, %r8
                	movq	(%r8), %r10
                	movq	%r10, 0x40(%rsp)
-               	movq	%r11, %rdx
-               	addq	$0x20, %rdx
-               	movq	(%rdx), %r10
+               	movq	%r11, %r8
+               	addq	$0x20, %r8
+               	movq	(%r8), %r10
                	movq	%r10, 0x38(%rsp)
                	addq	$0x28, %r11
                	movq	(%r11), %r10

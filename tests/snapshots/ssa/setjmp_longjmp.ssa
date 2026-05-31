@@ -63,14 +63,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=69
   block 8  start_pc=0
     v25  LocalAddr(-65)                                   -> x20
     v26  BinopI { op=add, lhs=v25, rhs_imm=512 }          -> x20
-    v27  Load { addr=v26, kind=I32 }                      -> x0
-    v28  BinopI { op=ne, lhs=v27, rhs_imm=7 }             -> x0
+    v27  Load { addr=v26, kind=I32 }                      -> x20
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=7 }             -> x20
     terminator Bz { cond=v28, target=b10, fall=b9 }   (exit_acc=v28)
   block 9  start_pc=0
-    v29  Imm(15)                                          -> x20
+    v29  Imm(15)                                          -> x0
     terminator Return(v29)   (exit_acc=v29)
   block 10  start_pc=0
-    v30  Imm(0)                                           -> x0
+    v30  Imm(0)                                           -> x20
     terminator Return(v30)   (exit_acc=v30)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

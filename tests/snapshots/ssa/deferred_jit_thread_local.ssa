@@ -32,45 +32,45 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     terminator Return(v11)   (exit_acc=v11)
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[20, 21, 22] fp_used=[]
+  spill_count=0 gpr_used=[20, 21] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x20
     v2   Call { target_pc=1, args=[v1] }                  -> x0
     v3   TlsAddr(0)                                       -> x0
-    v4   Load { addr=v3, kind=I32 }                       -> x20
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=7 }              -> x20
+    v4   Load { addr=v3, kind=I32 }                       -> x0
+    v5   BinopI { op=ne, lhs=v4, rhs_imm=7 }              -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(1)                                           -> x21
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   TlsAddr(8)                                       -> x20
-    v8   Load { addr=v7, kind=I32 }                       -> x21
-    v9   BinopI { op=ne, lhs=v8, rhs_imm=-3 }             -> x21
+    v7   TlsAddr(8)                                       -> x0
+    v8   Load { addr=v7, kind=I32 }                       -> x0
+    v9   BinopI { op=ne, lhs=v8, rhs_imm=-3 }             -> x0
     terminator Bz { cond=v9, target=b4, fall=b3 }   (exit_acc=v9)
   block 3  start_pc=0
-    v10  Imm(2)                                           -> x22
+    v10  Imm(2)                                           -> x20
     terminator Return(v10)   (exit_acc=v10)
   block 4  start_pc=0
-    v11  TlsAddr(0)                                       -> x20
-    v12  TlsAddr(0)                                       -> x22
-    v13  Load { addr=v12, kind=I32 }                      -> x21
-    v14  TlsAddr(8)                                       -> x22
-    v15  Load { addr=v14, kind=I32 }                      -> x12
-    v16  Binop { op=add, lhs=v13, rhs=v15 }               -> x21
-    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x21
-    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x21
+    v11  TlsAddr(0)                                       -> x21
+    v12  TlsAddr(0)                                       -> x20
+    v13  Load { addr=v12, kind=I32 }                      -> x20
+    v14  TlsAddr(8)                                       -> x13
+    v15  Load { addr=v14, kind=I32 }                      -> x13
+    v16  Binop { op=add, lhs=v13, rhs=v15 }               -> x20
+    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x20
+    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x20
     v19  Store { addr=v11, value=v18, kind=I32 }          -> -
-    v20  TlsAddr(0)                                       -> x12
-    v21  Load { addr=v20, kind=I32 }                      -> x21
-    v22  BinopI { op=ne, lhs=v21, rhs_imm=4 }             -> x21
+    v20  TlsAddr(0)                                       -> x13
+    v21  Load { addr=v20, kind=I32 }                      -> x13
+    v22  BinopI { op=ne, lhs=v21, rhs_imm=4 }             -> x13
     terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
   block 5  start_pc=0
-    v23  Imm(3)                                           -> x12
+    v23  Imm(3)                                           -> x20
     terminator Return(v23)   (exit_acc=v23)
   block 6  start_pc=0
-    v24  Imm(0)                                           -> x21
+    v24  Imm(0)                                           -> x13
     terminator Return(v24)   (exit_acc=v24)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

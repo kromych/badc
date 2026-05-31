@@ -119,25 +119,25 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
     v29  ImmCode(ent_pc=2)                                -> x21
     v30  Store { addr=v28, value=v29, kind=I64 }          -> -
     v31  LocalAddr(-4)                                    -> x20
-    v32  Load { addr=v31, kind=I64 }                      -> x24
-    v33  Imm(0)                                           -> x20
-    v34  Imm(2)                                           -> x21
-    v35  Imm(3)                                           -> x20
+    v32  Load { addr=v31, kind=I64 }                      -> x20
+    v33  Imm(0)                                           -> x21
+    v34  Imm(2)                                           -> x24
+    v35  Imm(3)                                           -> x21
     v36  LoadLocal { off=-5, kind=I64 }                   -> x23
     v37  CallIndirect { target=v32, args=[v34, v35] }     -> x0
     v38  BinopI { op=ne, lhs=v37, rhs_imm=5 }             -> x0
     terminator Bz { cond=v38, target=b8, fall=b7 }   (exit_acc=v38)
   block 7  start_pc=0
-    v39  Imm(4)                                           -> x20
+    v39  Imm(4)                                           -> x21
     terminator Return(v39)   (exit_acc=v39)
   block 8  start_pc=0
     v40  LocalAddr(-4)                                    -> x0
     v41  BinopI { op=add, lhs=v40, rhs_imm=8 }            -> x0
     v42  Load { addr=v41, kind=I64 }                      -> x23
     v43  Imm(0)                                           -> x0
-    v44  Imm(10)                                          -> x20
+    v44  Imm(10)                                          -> x21
     v45  Imm(4)                                           -> x22
-    v46  LoadLocal { off=-5, kind=I64 }                   -> x24
+    v46  LoadLocal { off=-5, kind=I64 }                   -> x20
     v47  CallIndirect { target=v42, args=[v44, v45] }     -> x0
     v48  BinopI { op=ne, lhs=v47, rhs_imm=6 }             -> x0
     terminator Bz { cond=v48, target=b10, fall=b9 }   (exit_acc=v48)
@@ -147,28 +147,28 @@ fn ent_pc=4 n_params=0 variadic=false locals=9
   block 10  start_pc=0
     v50  LocalAddr(-4)                                    -> x0
     v51  BinopI { op=add, lhs=v50, rhs_imm=16 }           -> x0
-    v52  Load { addr=v51, kind=I64 }                      -> x24
+    v52  Load { addr=v51, kind=I64 }                      -> x20
     v53  Imm(0)                                           -> x0
     v54  Imm(1)                                           -> x22
-    v55  Imm(2)                                           -> x21
+    v55  Imm(2)                                           -> x24
     v56  LoadLocal { off=-5, kind=I64 }                   -> x23
     v57  CallIndirect { target=v52, args=[v54, v55] }     -> x0
     v58  BinopI { op=ne, lhs=v57, rhs_imm=-1 }            -> x0
     terminator Bz { cond=v58, target=b12, fall=b11 }   (exit_acc=v58)
   block 11  start_pc=0
-    v59  Imm(6)                                           -> x21
+    v59  Imm(6)                                           -> x24
     terminator Return(v59)   (exit_acc=v59)
   block 12  start_pc=0
     v60  ImmCode(ent_pc=0)                                -> x23
-    v61  Imm(0)                                           -> x21
-    v62  LoadLocal { off=-6, kind=I64 }                   -> x21
-    v63  Imm(8)                                           -> x20
-    v64  Imm(9)                                           -> x21
+    v61  Imm(0)                                           -> x24
+    v62  LoadLocal { off=-6, kind=I64 }                   -> x24
+    v63  Imm(8)                                           -> x21
+    v64  Imm(9)                                           -> x24
     v65  Call { target_pc=3, args=[v60, v63, v64] }       -> x0
     v66  BinopI { op=ne, lhs=v65, rhs_imm=17 }            -> x0
     terminator Bz { cond=v66, target=b14, fall=b13 }   (exit_acc=v66)
   block 13  start_pc=0
-    v67  Imm(7)                                           -> x21
+    v67  Imm(7)                                           -> x24
     terminator Return(v67)   (exit_acc=v67)
   block 14  start_pc=0
     v68  Imm(0)                                           -> x0

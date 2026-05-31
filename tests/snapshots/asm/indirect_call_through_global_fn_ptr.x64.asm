@@ -40,8 +40,8 @@ Disassembly of section .text:
                	movq	%r14, %rdx
                	movq	%r12, %rsi
                	callq	*%r11
-               	movslq	(%rbx), %rax
-               	movq	%rax, %rcx
+               	movslq	(%rbx), %rbx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

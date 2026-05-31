@@ -26,13 +26,13 @@ fn ent_pc=0 n_params=1 variadic=true locals=3
     v15  Load { addr=v14, kind=I64 }                      -> x15
     v16  LocalAddr(-1)                                    -> x14
     v17  Intrinsic { kind=5, args=[v16] }                 -> x12
-    v18  Load { addr=v17, kind=I64 }                      -> x14
+    v18  Load { addr=v17, kind=I64 }                      -> x12
     v19  Binop { op=add, lhs=v15, rhs=v18 }               -> x15
     v20  Store { addr=v14, value=v19, kind=I64 }          -> -
     terminator Jmp(b2)   (exit_acc=v20)
   block 4  start_pc=0
     v21  LocalAddr(-1)                                    -> x15
-    v22  Intrinsic { kind=6, args=[v21] }                 -> x14
+    v22  Intrinsic { kind=6, args=[v21] }                 -> x12
     v23  LoadLocal { off=-2, kind=I64 }                   -> x0
     terminator Return(v23)   (exit_acc=v23)
 ; name=var_one

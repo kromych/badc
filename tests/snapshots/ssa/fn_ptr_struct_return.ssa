@@ -51,45 +51,45 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     terminator Return(v14)   (exit_acc=v14)
   block 4  start_pc=0
     v15  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v16  Load { addr=v7, kind=I64 }                       -> x20
-    v17  Imm(0)                                           -> x24
+    v16  Load { addr=v7, kind=I64 }                       -> x22
+    v17  Imm(0)                                           -> x20
     v18  CallIndirect { target=v16, args=[v17] }          -> x0
     v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x0
     terminator Bz { cond=v19, target=b6, fall=b5 }   (exit_acc=v19)
   block 5  start_pc=0
-    v20  Imm(3)                                           -> x24
+    v20  Imm(3)                                           -> x20
     terminator Return(v20)   (exit_acc=v20)
   block 6  start_pc=0
     v21  ImmCode(ent_pc=1)                                -> x21
-    v22  Imm(0)                                           -> x24
-    v23  Imm(0)                                           -> x22
-    v24  LoadLocal { off=-6, kind=I64 }                   -> x20
+    v22  Imm(0)                                           -> x20
+    v23  Imm(0)                                           -> x24
+    v24  LoadLocal { off=-6, kind=I64 }                   -> x22
     v25  CallIndirect { target=v21, args=[v23] }          -> x0
     v26  BinopI { op=eq, lhs=v25, rhs_imm=0 }             -> x0
     terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
-    v27  Imm(4)                                           -> x22
+    v27  Imm(4)                                           -> x24
     terminator Return(v27)   (exit_acc=v27)
   block 8  start_pc=0
-    v28  Imm(0)                                           -> x20
-    v29  LoadLocal { off=-6, kind=I64 }                   -> x22
+    v28  Imm(0)                                           -> x22
+    v29  LoadLocal { off=-6, kind=I64 }                   -> x24
     v30  CallIndirect { target=v21, args=[v28] }          -> x0
     v31  BinopI { op=eq, lhs=v30, rhs_imm=0 }             -> x0
     terminator Bz { cond=v31, target=b10, fall=b9 }   (exit_acc=v31)
   block 9  start_pc=0
-    v32  Imm(5)                                           -> x20
+    v32  Imm(5)                                           -> x22
     terminator Return(v32)   (exit_acc=v32)
   block 10  start_pc=0
     v33  ImmData(16)                                      -> x0
-    v34  Imm(0)                                           -> x20
-    v35  LoadLocal { off=-11, kind=I64 }                  -> x20
-    v36  Load { addr=v33, kind=I64 }                      -> x22
-    v37  Imm(0)                                           -> x20
+    v34  Imm(0)                                           -> x22
+    v35  LoadLocal { off=-11, kind=I64 }                  -> x22
+    v36  Load { addr=v33, kind=I64 }                      -> x24
+    v37  Imm(0)                                           -> x22
     v38  CallIndirect { target=v36, args=[v37] }          -> x0
     v39  BinopI { op=eq, lhs=v38, rhs_imm=0 }             -> x0
     terminator Bz { cond=v39, target=b12, fall=b11 }   (exit_acc=v39)
   block 11  start_pc=0
-    v40  Imm(6)                                           -> x20
+    v40  Imm(6)                                           -> x22
     terminator Return(v40)   (exit_acc=v40)
   block 12  start_pc=0
     v41  Imm(0)                                           -> x0

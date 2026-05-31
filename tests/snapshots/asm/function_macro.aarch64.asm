@@ -21,48 +21,48 @@ Disassembly of section .text:
                	stur	x14, [x29, #0x20]
                	b	<addr>
                	ldur	x14, [x29, #0x10]
-               	ldrb	w15, [x14]
-               	stur	x15, [x29, #-0x8]
-               	cbz	x15, <addr>
+               	ldrb	w14, [x14]
+               	stur	x14, [x29, #-0x8]
+               	cbz	x14, <addr>
                	b	<addr>
-               	add	x13, x29, #0x10
-               	ldr	x15, [x13]
-               	add	x15, x15, #0x1
-               	str	x15, [x13]
-               	add	x14, x29, #0x20
+               	add	x14, x29, #0x10
                	ldr	x15, [x14]
                	add	x15, x15, #0x1
                	str	x15, [x14]
+               	add	x13, x29, #0x20
+               	ldr	x15, [x13]
+               	add	x15, x15, #0x1
+               	str	x15, [x13]
                	b	<addr>
                	ldur	x15, [x29, #0x10]
-               	ldrb	w13, [x15]
+               	ldrb	w15, [x15]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, eq
-               	stur	x13, [x29, #-0x10]
-               	cbz	x13, <addr>
+               	and	x15, x15, x17
+               	cmp	x15, #0x0
+               	cset	x15, eq
+               	stur	x15, [x29, #-0x10]
+               	cbz	x15, <addr>
                	b	<addr>
-               	ldur	x14, [x29, #0x10]
-               	ldrb	w15, [x14]
+               	ldur	x15, [x29, #0x10]
+               	ldrb	w15, [x15]
                	ldur	x14, [x29, #0x20]
-               	ldrb	w13, [x14]
-               	cmp	x15, x13
+               	ldrb	w14, [x14]
+               	cmp	x15, x14
                	cset	x15, eq
                	stur	x15, [x29, #-0x8]
                	b	<addr>
                	ldur	x15, [x29, #-0x8]
                	cbz	x15, <addr>
                	b	<addr>
-               	ldur	x15, [x29, #0x20]
-               	ldrb	w13, [x15]
+               	ldur	x14, [x29, #0x20]
+               	ldrb	w14, [x14]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, eq
-               	stur	x13, [x29, #-0x10]
+               	and	x14, x14, x17
+               	cmp	x14, #0x0
+               	cset	x14, eq
+               	stur	x14, [x29, #-0x10]
                	b	<addr>
                	ldur	x0, [x29, #-0x10]
                	add	sp, sp, #0x10

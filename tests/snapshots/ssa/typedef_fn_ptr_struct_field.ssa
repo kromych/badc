@@ -39,19 +39,19 @@ fn ent_pc=1 n_params=0 variadic=false locals=15
     terminator Return(v16)   (exit_acc=v16)
   block 2  start_pc=0
     v17  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v18  Load { addr=v8, kind=I64 }                       -> x24
-    v19  Imm(4)                                           -> x25
-    v20  Imm(5)                                           -> x20
+    v18  Load { addr=v8, kind=I64 }                       -> x20
+    v19  Imm(4)                                           -> x24
+    v20  Imm(5)                                           -> x25
     v21  CallIndirect { target=v18, args=[v19, v20] }     -> x0
     v22  BinopI { op=ne, lhs=v21, rhs_imm=20 }            -> x0
     terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
   block 3  start_pc=0
-    v23  Imm(2)                                           -> x20
+    v23  Imm(2)                                           -> x25
     terminator Return(v23)   (exit_acc=v23)
   block 4  start_pc=0
     v24  LocalAddr(-2)                                    -> x0
     v25  Load { addr=v24, kind=I64 }                      -> x22
-    v26  Imm(2)                                           -> x20
+    v26  Imm(2)                                           -> x25
     v27  Imm(9)                                           -> x23
     v28  CallIndirect { target=v25, args=[v26, v27] }     -> x0
     v29  BinopI { op=ne, lhs=v28, rhs_imm=18 }            -> x0
@@ -61,14 +61,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=15
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
     v31  LocalAddr(-2)                                    -> x0
-    v32  Load { addr=v31, kind=I64 }                      -> x24
+    v32  Load { addr=v31, kind=I64 }                      -> x20
     v33  Imm(6)                                           -> x23
-    v34  Imm(4)                                           -> x25
+    v34  Imm(4)                                           -> x24
     v35  CallIndirect { target=v32, args=[v33, v34] }     -> x0
     v36  BinopI { op=ne, lhs=v35, rhs_imm=24 }            -> x0
     terminator Bz { cond=v36, target=b8, fall=b7 }   (exit_acc=v36)
   block 7  start_pc=0
-    v37  Imm(4)                                           -> x25
+    v37  Imm(4)                                           -> x24
     terminator Return(v37)   (exit_acc=v37)
   block 8  start_pc=0
     v38  Imm(0)                                           -> x0

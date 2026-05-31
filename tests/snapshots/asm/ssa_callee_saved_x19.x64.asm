@@ -10,12 +10,12 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	leaq	<rip>, %r11
-               	movslq	(%r11), %r9
-               	cmpq	$0x0, %r9
+               	movslq	(%r11), %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
-               	leaq	<rip>, %r11
-               	movl	$0x2, %r9d
-               	movl	%r9d, (%r11)
+               	leaq	<rip>, %r9
+               	movl	$0x2, %r11d
+               	movl	%r11d, (%r9)
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq

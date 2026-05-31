@@ -79,10 +79,10 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %r12
                	movslq	(%r12), %r15
                	leaq	-0x48(%rbp), %rbx
-               	movq	(%rbx), %r14
-               	movl	$0x4, %ebx
-               	movq	%r14, %r11
-               	movq	%rbx, %rdi
+               	movq	(%rbx), %rbx
+               	movl	$0x4, %r14d
+               	movq	%rbx, %r11
+               	movq	%r14, %rdi
                	callq	*%r11
                	addq	%rax, %r15
                	movl	%r15d, (%r12)
@@ -105,4 +105,3 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

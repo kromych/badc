@@ -77,25 +77,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v45  LoadLocal { off=-1, kind=I64 }                   -> x12
     v46  Imm(4)                                           -> x12
     v47  BinopI { op=add, lhs=v17, rhs_imm=4 }            -> x12
-    v48  Load { addr=v47, kind=I32 }                      -> x11
-    v49  BinopI { op=ne, lhs=v48, rhs_imm=1073741824 }    -> x11
+    v48  Load { addr=v47, kind=I32 }                      -> x12
+    v49  BinopI { op=ne, lhs=v48, rhs_imm=1073741824 }    -> x12
     terminator Bz { cond=v49, target=b8, fall=b7 }   (exit_acc=v49)
   block 7  start_pc=0
-    v50  Imm(4)                                           -> x12
+    v50  Imm(4)                                           -> x11
     terminator Return(v50)   (exit_acc=v50)
   block 8  start_pc=0
-    v51  LoadLocal { off=-2, kind=I64 }                   -> x11
-    v52  Imm(0)                                           -> x11
-    v53  Load { addr=v23, kind=I64 }                      -> x11
-    v54  BinopI { op=ne, lhs=v53, rhs_imm=4607182418800017408 } -> x11
+    v51  LoadLocal { off=-2, kind=I64 }                   -> x12
+    v52  Imm(0)                                           -> x12
+    v53  Load { addr=v23, kind=I64 }                      -> x12
+    v54  BinopI { op=ne, lhs=v53, rhs_imm=4607182418800017408 } -> x12
     terminator Bz { cond=v54, target=b10, fall=b9 }   (exit_acc=v54)
   block 9  start_pc=0
-    v55  Imm(5)                                           -> x12
+    v55  Imm(5)                                           -> x11
     terminator Return(v55)   (exit_acc=v55)
   block 10  start_pc=0
-    v56  LoadLocal { off=-2, kind=I64 }                   -> x11
-    v57  Imm(8)                                           -> x11
-    v58  BinopI { op=add, lhs=v23, rhs_imm=8 }            -> x11
+    v56  LoadLocal { off=-2, kind=I64 }                   -> x12
+    v57  Imm(8)                                           -> x12
+    v58  BinopI { op=add, lhs=v23, rhs_imm=8 }            -> x12
     v59  Load { addr=v58, kind=I64 }                      -> x12
     v60  BinopI { op=ne, lhs=v59, rhs_imm=4611686018427387904 } -> x12
     terminator Bz { cond=v60, target=b12, fall=b11 }   (exit_acc=v60)

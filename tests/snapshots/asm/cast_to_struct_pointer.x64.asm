@@ -23,8 +23,8 @@ Disassembly of section .text:
                	addq	$0x8, %r8
                	xorq	%rbx, %rbx
                	movq	%rbx, (%r8)
-               	movslq	(%rax), %rdi
-               	movq	%rdi, %rcx
+               	movslq	(%rax), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x20, %rsp

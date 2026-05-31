@@ -97,10 +97,10 @@ Disassembly of section .text:
                	sub	x20, x29, #0x8
                	ldrsw	x22, [x20]
                	sub	x23, x29, #0x48
-               	ldr	x21, [x23]
-               	mov	x24, #0x4               // =4
-               	mov	x9, x21
-               	str	x24, [sp, #-0x10]!
+               	ldr	x23, [x23]
+               	mov	x21, #0x4               // =4
+               	mov	x9, x23
+               	str	x21, [sp, #-0x10]!
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10

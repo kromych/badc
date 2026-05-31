@@ -63,8 +63,8 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %r8
-               	movq	(%r8), %rsi
-               	addq	%rsi, %r9
+               	movq	(%r8), %r8
+               	addq	%r8, %r9
                	movq	%r9, (%rdi)
                	jmp	<addr>
                	jmp	<addr>
@@ -120,19 +120,19 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x200(%rbp), %rax
-               	movq	(%rax), %rbx
-               	cmpq	$0x0, %rbx
+               	movq	(%rax), %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
-               	movl	$0x3, %eax
-               	movq	%rax, %rcx
+               	movl	$0x3, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
-               	leaq	-0x200(%rbp), %rbx
-               	addq	$0x1f8, %rbx            # imm = 0x1F8
-               	movq	(%rbx), %rax
+               	leaq	-0x200(%rbp), %rax
+               	addq	$0x1f8, %rax            # imm = 0x1F8
+               	movq	(%rax), %rax
                	cmpq	$0x3f, %rax
                	je	<addr>
                	movl	$0x4, %ebx
@@ -144,18 +144,18 @@ Disassembly of section .text:
                	retq
                	leaq	-0x200(%rbp), %rax
                	addq	$0xb8, %rax
-               	movq	(%rax), %rbx
-               	cmpq	$0x17, %rbx
+               	movq	(%rax), %rax
+               	cmpq	$0x17, %rax
                	je	<addr>
-               	movl	$0x5, %eax
-               	movq	%rax, %rcx
+               	movl	$0x5, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rcx
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x230, %rsp            # imm = 0x230

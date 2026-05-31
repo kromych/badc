@@ -35,16 +35,16 @@ Disassembly of section .text:
                	ldr	x13, [x15]
                	add	x17, x13, #0x10
                	str	x17, [x15]
-               	ldrsw	x15, [x13]
-               	add	x14, x14, x15
+               	ldrsw	x13, [x13]
+               	add	x14, x14, x13
                	sxtw	x14, w14
                	stur	w14, [x29, #-0x18]
-               	ldursw	x15, [x29, #-0x20]
-               	add	x15, x15, #0x1
-               	sxtw	x15, w15
-               	stur	w15, [x29, #-0x20]
+               	ldursw	x13, [x29, #-0x20]
+               	add	x13, x13, #0x1
+               	sxtw	x13, w13
+               	stur	w13, [x29, #-0x20]
                	b	<addr>
-               	sub	x15, x29, #0x10
+               	sub	x13, x29, #0x10
                	sub	x14, x29, #0x8
                	ldursw	x0, [x29, #-0x18]
                	ldr	x19, [sp]

@@ -23,8 +23,7 @@ Disassembly of section .text:
                	add	x13, x0, #0x8
                	mov	x20, #0x0               // =0
                	str	x20, [x13]
-               	ldrsw	x12, [x0]
-               	mov	x0, x12
+               	ldrsw	x0, [x0]
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x30

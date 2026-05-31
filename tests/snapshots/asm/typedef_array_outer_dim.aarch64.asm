@@ -62,8 +62,8 @@ Disassembly of section .text:
                	ldursw	x11, [x29, #-0x10]
                	lsl	x11, x11, #3
                	add	x13, x13, x11
-               	ldr	x11, [x13]
-               	add	x14, x14, x11
+               	ldr	x13, [x13]
+               	add	x14, x14, x13
                	str	x14, [x12]
                	b	<addr>
                	b	<addr>
@@ -122,17 +122,18 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x200
-               	ldr	x20, [x0]
-               	cmp	x20, #0x0
+               	ldr	x0, [x0]
+               	cmp	x0, #0x0
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
+               	mov	x20, #0x3               // =3
+               	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x230
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x20, x29, #0x200
-               	add	x20, x20, #0x1f8
-               	ldr	x0, [x20]
+               	sub	x0, x29, #0x200
+               	add	x0, x0, #0x1f8
+               	ldr	x0, [x0]
                	cmp	x0, #0x3f
                	b.eq	<addr>
                	mov	x20, #0x4               // =4
@@ -143,16 +144,16 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x200
                	add	x0, x0, #0xb8
-               	ldr	x20, [x0]
-               	cmp	x20, #0x17
+               	ldr	x0, [x0]
+               	cmp	x0, #0x17
                	b.eq	<addr>
-               	mov	x0, #0x5                // =5
+               	mov	x20, #0x5               // =5
+               	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x230
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	add	sp, sp, #0x230
                	ldp	x29, x30, [sp], #0x10

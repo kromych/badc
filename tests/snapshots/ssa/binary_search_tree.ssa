@@ -77,7 +77,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=2
     terminator Jmp(b4)   (exit_acc=v45)
 ; name=search
 fn ent_pc=2 n_params=2 variadic=false locals=2
-  spill_count=0 gpr_used=[20, 21, 22, 23] fp_used=[]
+  spill_count=0 gpr_used=[20, 21, 22] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x20
@@ -119,8 +119,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v25  LoadLocal { off=2, kind=I64 }                    -> x22
     v26  Imm(16)                                          -> x22
     v27  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x20
-    v28  Load { addr=v27, kind=I64 }                      -> x23
-    v29  LoadLocal { off=3, kind=I64 }                    -> x20
+    v28  Load { addr=v27, kind=I64 }                      -> x20
+    v29  LoadLocal { off=3, kind=I64 }                    -> x22
     v30  Call { target_pc=2, args=[v28, v3] }             -> x0
     terminator Return(v30)   (exit_acc=v30)
 ; name=main

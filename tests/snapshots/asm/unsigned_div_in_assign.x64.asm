@@ -21,22 +21,23 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	popq	%rdx
                	popq	%rax
-               	movq	(%r11), %r8
-               	movl	$0x7, %r11d
+               	movq	(%r11), %r11
+               	movl	$0x7, %r8d
+               	movq	%r8, %r10
                	pushq	%rax
                	pushq	%rdx
-               	movq	%r8, %rax
+               	movq	%r11, %rax
                	xorq	%rdx, %rdx
-               	divq	%r11
-               	movq	%rdx, %r8
+               	divq	%r10
+               	movq	%rdx, %r11
                	popq	%rdx
                	popq	%rax
                	movslq	%r9d, %r9
-               	movl	$0x64, %r11d
-               	imulq	%r11, %r9
+               	movl	$0x64, %r10d
+               	imulq	%r10, %r9
                	movslq	%r9d, %r9
-               	movslq	%r8d, %r8
-               	addq	%r8, %r9
+               	movslq	%r11d, %r11
+               	addq	%r11, %r9
                	movslq	%r9d, %rax
                	retq
                	pushq	%rbp
@@ -60,31 +61,30 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	popq	%rdx
                	popq	%rax
-               	movq	(%r8), %r11
-               	movl	$0x7, %r8d
-               	movq	%r8, %r10
+               	movq	(%r8), %r8
+               	movl	$0x7, %r11d
                	pushq	%rax
                	pushq	%rdx
-               	movq	%r11, %rax
+               	movq	%r8, %rax
                	xorq	%rdx, %rdx
-               	divq	%r10
-               	movq	%rdx, %r11
+               	divq	%r11
+               	movq	%rdx, %r8
                	popq	%rdx
                	popq	%rax
                	movslq	%r9d, %r9
-               	movl	$0x64, %r10d
-               	imulq	%r10, %r9
+               	movl	$0x64, %r11d
+               	imulq	%r11, %r9
                	movslq	%r9d, %r9
-               	movslq	%r11d, %r11
-               	addq	%r11, %r9
+               	movslq	%r8d, %r8
+               	addq	%r8, %r9
                	movslq	%r9d, %r9
                	cmpq	$0x3ea, %r9             # imm = 0x3EA
                	jne	<addr>
-               	xorq	%r11, %r11
-               	movq	%r11, -0x18(%rbp)
+               	xorq	%r8, %r8
+               	movq	%r8, -0x18(%rbp)
                	jmp	<addr>
-               	movl	$0x1, %r11d
-               	movq	%r11, -0x18(%rbp)
+               	movl	$0x1, %r8d
+               	movq	%r8, -0x18(%rbp)
                	jmp	<addr>
                	movq	-0x18(%rbp), %rax
                	addq	$0x20, %rsp

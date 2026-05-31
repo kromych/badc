@@ -31,8 +31,8 @@ Disassembly of section .text:
                	ldr	x21, [x13]
                	add	x13, x15, #0x10
                	ldr	x22, [x13]
-               	add	x10, x15, #0x20
-               	ldr	x23, [x10]
+               	add	x13, x15, #0x20
+               	ldr	x23, [x13]
                	add	x15, x15, #0x28
                	ldr	x24, [x15]
                	adrp	x19, <page>

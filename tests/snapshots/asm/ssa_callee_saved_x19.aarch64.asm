@@ -17,13 +17,13 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0xe8
                	mov	x15, x19
-               	ldrsw	x14, [x15]
-               	cbz	x14, <addr>
+               	ldrsw	x15, [x15]
+               	cbz	x15, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0xe8
-               	mov	x15, x19
-               	mov	x14, #0x2               // =2
-               	str	w14, [x15]
+               	mov	x14, x19
+               	mov	x15, #0x2               // =2
+               	str	w15, [x14]
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]

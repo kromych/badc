@@ -24,36 +24,36 @@ Disassembly of section .text:
                	movq	%r9, 0x20(%rbp)
                	jmp	<addr>
                	movq	0x10(%rbp), %r9
-               	movzbq	(%r9), %r11
-               	movq	%r11, -0x8(%rbp)
-               	cmpq	$0x0, %r11
+               	movzbq	(%r9), %r9
+               	movq	%r9, -0x8(%rbp)
+               	cmpq	$0x0, %r9
                	je	<addr>
                	jmp	<addr>
-               	leaq	0x10(%rbp), %r8
-               	movq	(%r8), %r11
-               	addq	$0x1, %r11
-               	movq	%r11, (%r8)
-               	leaq	0x20(%rbp), %r9
+               	leaq	0x10(%rbp), %r9
                	movq	(%r9), %r11
                	addq	$0x1, %r11
                	movq	%r11, (%r9)
+               	leaq	0x20(%rbp), %r8
+               	movq	(%r8), %r11
+               	addq	$0x1, %r11
+               	movq	%r11, (%r8)
                	jmp	<addr>
                	movq	0x10(%rbp), %r11
-               	movzbq	(%r11), %r8
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r8
-               	cmpq	$0x0, %r8
-               	sete	%r8b
-               	movzbq	%r8b, %r8
-               	movq	%r8, -0x10(%rbp)
-               	cmpq	$0x0, %r8
+               	movzbq	(%r11), %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
+               	sete	%r11b
+               	movzbq	%r11b, %r11
+               	movq	%r11, -0x10(%rbp)
+               	cmpq	$0x0, %r11
                	je	<addr>
                	jmp	<addr>
-               	movq	0x10(%rbp), %r9
-               	movzbq	(%r9), %r11
+               	movq	0x10(%rbp), %r11
+               	movzbq	(%r11), %r11
                	movq	0x20(%rbp), %r9
-               	movzbq	(%r9), %r8
-               	cmpq	%r8, %r11
+               	movzbq	(%r9), %r9
+               	cmpq	%r9, %r11
                	sete	%r11b
                	movzbq	%r11b, %r11
                	movq	%r11, -0x8(%rbp)
@@ -62,14 +62,14 @@ Disassembly of section .text:
                	cmpq	$0x0, %r11
                	je	<addr>
                	jmp	<addr>
-               	movq	0x20(%rbp), %r11
-               	movzbq	(%r11), %r8
+               	movq	0x20(%rbp), %r9
+               	movzbq	(%r9), %r9
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r8
-               	cmpq	$0x0, %r8
-               	sete	%r8b
-               	movzbq	%r8b, %r8
-               	movq	%r8, -0x10(%rbp)
+               	andq	%r11, %r9
+               	cmpq	$0x0, %r9
+               	sete	%r9b
+               	movzbq	%r9b, %r9
+               	movq	%r9, -0x10(%rbp)
                	jmp	<addr>
                	movq	-0x10(%rbp), %rax
                	addq	$0x10, %rsp

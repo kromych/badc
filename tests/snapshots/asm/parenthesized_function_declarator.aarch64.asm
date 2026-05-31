@@ -54,21 +54,21 @@ Disassembly of section .text:
                	cset	x20, eq
                	stur	x20, [x29, #-0x20]
                	cbnz	x20, <addr>
-               	ldrsw	x21, [x0]
-               	cmp	x21, #0xa
-               	cset	x21, ne
-               	stur	x21, [x29, #-0x20]
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0xa
+               	cset	x0, ne
+               	stur	x0, [x29, #-0x20]
                	b	<addr>
-               	ldur	x21, [x29, #-0x20]
-               	cbz	x21, <addr>
-               	mov	x0, #0x2                // =2
+               	ldur	x0, [x29, #-0x20]
+               	cbz	x0, <addr>
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x21, #0x0               // =0
-               	mov	x0, x21
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x30

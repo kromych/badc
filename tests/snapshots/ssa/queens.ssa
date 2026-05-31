@@ -35,27 +35,27 @@ fn ent_pc=0 n_params=3 variadic=false locals=3
     v24  LoadLocal { off=2, kind=I64 }                    -> x10
     v25  BinopI { op=shl, lhs=v18, rhs_imm=2 }            -> x11
     v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x11
-    v27  Load { addr=v26, kind=I32 }                      -> x10
-    v28  Binop { op=sub, lhs=v5, rhs=v27 }                -> x11
-    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x11
-    v30  BinopI { op=shr, lhs=v29, rhs_imm=32 }           -> x11
+    v27  Load { addr=v26, kind=I32 }                      -> x11
+    v28  Binop { op=sub, lhs=v5, rhs=v27 }                -> x10
+    v29  BinopI { op=shl, lhs=v28, rhs_imm=32 }           -> x10
+    v30  BinopI { op=shr, lhs=v29, rhs_imm=32 }           -> x10
     v31  StoreLocal { off=-3, value=v30, kind=I32 }       -> -
-    v32  LoadLocal { off=-3, kind=I32 }                   -> x10
-    v33  BinopI { op=lt, lhs=v32, rhs_imm=0 }             -> x10
+    v32  LoadLocal { off=-3, kind=I32 }                   -> x11
+    v33  BinopI { op=lt, lhs=v32, rhs_imm=0 }             -> x11
     terminator Bz { cond=v33, target=b6, fall=b5 }   (exit_acc=v33)
   block 4  start_pc=0
     v49  Imm(0)                                           -> x10
     terminator Return(v49)   (exit_acc=v49)
   block 5  start_pc=0
-    v34  LoadLocal { off=-3, kind=I32 }                   -> x11
-    v35  BinopI { op=mul, lhs=v34, rhs_imm=-1 }           -> x11
+    v34  LoadLocal { off=-3, kind=I32 }                   -> x10
+    v35  BinopI { op=mul, lhs=v34, rhs_imm=-1 }           -> x10
     v36  StoreLocal { off=-3, value=v35, kind=I32 }       -> -
     terminator Jmp(b6)   (exit_acc=v36)
   block 6  start_pc=0
-    v37  LoadLocal { off=2, kind=I64 }                    -> x11
-    v38  LoadLocal { off=-1, kind=I32 }                   -> x11
-    v39  BinopI { op=shl, lhs=v38, rhs_imm=2 }            -> x11
-    v40  Binop { op=add, lhs=v1, rhs=v39 }                -> x11
+    v37  LoadLocal { off=2, kind=I64 }                    -> x10
+    v38  LoadLocal { off=-1, kind=I32 }                   -> x10
+    v39  BinopI { op=shl, lhs=v38, rhs_imm=2 }            -> x10
+    v40  Binop { op=add, lhs=v1, rhs=v39 }                -> x10
     v41  Load { addr=v40, kind=I32 }                      -> x10
     v42  LoadLocal { off=4, kind=I32 }                    -> x11
     v43  Binop { op=eq, lhs=v41, rhs=v5 }                 -> x10

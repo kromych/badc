@@ -29,22 +29,22 @@ Disassembly of section .text:
                	mov	x14, #0x1               // =1
                	str	w14, [x13]
                	sub	x15, x29, #0x10
-               	ldrsw	x14, [x15]
-               	sub	x15, x29, #0x10
-               	add	x15, x15, #0x4
-               	ldrsw	x13, [x15]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	sub	x13, x29, #0x10
-               	add	x13, x13, #0x8
-               	ldrsw	x15, [x13]
-               	add	x14, x14, x15
-               	sxtw	x14, w14
-               	sub	x15, x29, #0x10
-               	add	x15, x15, #0xc
-               	ldrsw	x13, [x15]
-               	add	x14, x14, x13
-               	sxtw	x0, w14
+               	ldrsw	x15, [x15]
+               	sub	x14, x29, #0x10
+               	add	x14, x14, #0x4
+               	ldrsw	x14, [x14]
+               	add	x15, x15, x14
+               	sxtw	x15, w15
+               	sub	x14, x29, #0x10
+               	add	x14, x14, #0x8
+               	ldrsw	x14, [x14]
+               	add	x15, x15, x14
+               	sxtw	x15, w15
+               	sub	x14, x29, #0x10
+               	add	x14, x14, #0xc
+               	ldrsw	x14, [x14]
+               	add	x15, x15, x14
+               	sxtw	x0, w15
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

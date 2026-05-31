@@ -106,11 +106,10 @@ Disassembly of section .text:
                	ret
                	sub	x20, x29, #0x208
                	add	x20, x20, #0x200
-               	ldrsw	x0, [x20]
-               	cmp	x0, #0x7
+               	ldrsw	x20, [x20]
+               	cmp	x20, #0x7
                	b.eq	<addr>
-               	mov	x20, #0xf               // =15
-               	mov	x0, x20
+               	mov	x0, #0xf                // =15
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -120,7 +119,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x270
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x20, #0x0               // =0
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

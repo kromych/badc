@@ -38,18 +38,19 @@ Disassembly of section .text:
                	bl	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x10
-               	ldrsw	x20, [x0]
-               	cmp	x20, #0x7
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x7
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x20, #0x1               // =1
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x20, TPIDR_EL0
-               	add	x20, x20, #0x18
-               	ldrsw	x0, [x20]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x18
+               	ldrsw	x0, [x0]
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
@@ -67,20 +68,20 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	mrs	x20, TPIDR_EL0
                	add	x20, x20, #0x10
-               	ldrsw	x13, [x20]
-               	mrs	x20, TPIDR_EL0
-               	add	x20, x20, #0x18
-               	ldrsw	x12, [x20]
-               	add	x13, x13, x12
-               	sxtw	x13, w13
-               	str	w13, [x0]
-               	mrs	x12, TPIDR_EL0
-               	add	x12, x12, #0x10
-               	ldrsw	x13, [x12]
+               	ldrsw	x20, [x20]
+               	mrs	x13, TPIDR_EL0
+               	add	x13, x13, #0x18
+               	ldrsw	x13, [x13]
+               	add	x20, x20, x13
+               	sxtw	x20, w20
+               	str	w20, [x0]
+               	mrs	x13, TPIDR_EL0
+               	add	x13, x13, #0x10
+               	ldrsw	x13, [x13]
                	cmp	x13, #0x4
                	b.eq	<addr>
-               	mov	x12, #0x3               // =3
-               	mov	x0, x12
+               	mov	x20, #0x3               // =3
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x20

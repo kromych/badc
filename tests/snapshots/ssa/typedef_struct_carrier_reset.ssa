@@ -40,20 +40,20 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v29  LoadLocal { off=-1, kind=I32 }                   -> x13
     v30  BinopI { op=shl, lhs=v29, rhs_imm=2 }            -> x13
     v31  Binop { op=add, lhs=v1, rhs=v30 }                -> x11
-    v32  Load { addr=v31, kind=I32 }                      -> x10
-    v33  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x11
-    v34  Binop { op=add, lhs=v33, rhs=v30 }               -> x11
-    v35  Load { addr=v34, kind=I32 }                      -> x13
-    v36  Binop { op=add, lhs=v32, rhs=v35 }               -> x10
-    v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x10
-    v38  BinopI { op=shr, lhs=v37, rhs_imm=32 }           -> x10
+    v32  Load { addr=v31, kind=I32 }                      -> x11
+    v33  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x10
+    v34  Binop { op=add, lhs=v33, rhs=v30 }               -> x10
+    v35  Load { addr=v34, kind=I32 }                      -> x10
+    v36  Binop { op=add, lhs=v32, rhs=v35 }               -> x11
+    v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x11
+    v38  BinopI { op=shr, lhs=v37, rhs_imm=32 }           -> x11
     v39  Binop { op=add, lhs=v27, rhs=v38 }               -> x12
     v40  Store { addr=v26, value=v39, kind=I32 }          -> -
     terminator Jmp(b2)   (exit_acc=v40)
   block 4  start_pc=0
     v41  LoadLocal { off=2, kind=I64 }                    -> x12
     v42  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x12
-    v43  LoadLocal { off=-2, kind=I32 }                   -> x10
+    v43  LoadLocal { off=-2, kind=I32 }                   -> x11
     v44  Store { addr=v42, value=v43, kind=I32 }          -> -
     v45  LoadLocal { off=2, kind=I64 }                    -> x14
     v46  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x15
@@ -77,17 +77,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=23
     v7   LocalAddr(-21)                                   -> x0
     v8   Imm(20)                                          -> x20
     v9   BinopI { op=add, lhs=v7, rhs_imm=20 }            -> x0
-    v10  Load { addr=v9, kind=I32 }                       -> x20
-    v11  BinopI { op=ne, lhs=v10, rhs_imm=5 }             -> x20
+    v10  Load { addr=v9, kind=I32 }                       -> x0
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=5 }             -> x0
     terminator Bz { cond=v11, target=b4, fall=b3 }   (exit_acc=v11)
   block 3  start_pc=0
-    v12  Imm(2)                                           -> x0
+    v12  Imm(2)                                           -> x20
     terminator Return(v12)   (exit_acc=v12)
   block 4  start_pc=0
-    v13  LocalAddr(-21)                                   -> x20
-    v14  BinopI { op=add, lhs=v13, rhs_imm=40 }           -> x0
-    v15  Imm(20)                                          -> x0
-    v16  BinopI { op=add, lhs=v13, rhs_imm=60 }           -> x20
+    v13  LocalAddr(-21)                                   -> x0
+    v14  BinopI { op=add, lhs=v13, rhs_imm=40 }           -> x20
+    v15  Imm(20)                                          -> x20
+    v16  BinopI { op=add, lhs=v13, rhs_imm=60 }           -> x0
     v17  Load { addr=v16, kind=I32 }                      -> x0
     v18  BinopI { op=ne, lhs=v17, rhs_imm=6 }             -> x0
     terminator Bz { cond=v18, target=b6, fall=b5 }   (exit_acc=v18)
@@ -97,14 +97,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=23
   block 6  start_pc=0
     v20  LocalAddr(-21)                                   -> x0
     v21  BinopI { op=add, lhs=v20, rhs_imm=160 }          -> x0
-    v22  Load { addr=v21, kind=I32 }                      -> x20
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=100 }           -> x20
+    v22  Load { addr=v21, kind=I32 }                      -> x0
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=100 }           -> x0
     terminator Bz { cond=v23, target=b8, fall=b7 }   (exit_acc=v23)
   block 7  start_pc=0
-    v24  Imm(4)                                           -> x0
+    v24  Imm(4)                                           -> x20
     terminator Return(v24)   (exit_acc=v24)
   block 8  start_pc=0
-    v25  Imm(0)                                           -> x20
+    v25  Imm(0)                                           -> x0
     terminator Return(v25)   (exit_acc=v25)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

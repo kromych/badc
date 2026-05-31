@@ -34,12 +34,12 @@ Disassembly of section .text:
                	stur	w12, [x29, #-0x10]
                	lsl	x11, x11, #2
                	add	x11, x15, x11
-               	ldrsw	x10, [x11]
-               	sub	x11, x13, x10
-               	sxtw	x11, w11
-               	stur	w11, [x29, #-0x18]
-               	ldursw	x10, [x29, #-0x18]
-               	cmp	x10, #0x0
+               	ldrsw	x11, [x11]
+               	sub	x10, x13, x11
+               	sxtw	x10, w10
+               	stur	w10, [x29, #-0x18]
+               	ldursw	x11, [x29, #-0x18]
+               	cmp	x11, #0x0
                	b.ge	<addr>
                	b	<addr>
                	mov	x10, #0x0               // =0
@@ -47,18 +47,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x11, [x29, #-0x18]
+               	ldursw	x10, [x29, #-0x18]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x11, x11, x17
-               	stur	w11, [x29, #-0x18]
+               	mul	x10, x10, x17
+               	stur	w10, [x29, #-0x18]
                	b	<addr>
-               	ldursw	x11, [x29, #-0x8]
-               	lsl	x11, x11, #2
-               	add	x11, x15, x11
-               	ldrsw	x10, [x11]
+               	ldursw	x10, [x29, #-0x8]
+               	lsl	x10, x10, #2
+               	add	x10, x15, x10
+               	ldrsw	x10, [x10]
                	cmp	x10, x13
                	b.ne	<addr>
                	mov	x0, #0x1                // =1

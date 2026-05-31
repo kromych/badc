@@ -36,8 +36,8 @@ Disassembly of section .text:
                	movq	(%r9), %rdi
                	leaq	0x10(%rdi), %r10
                	movq	%r10, (%r9)
-               	movq	(%rdi), %r9
-               	addq	%r9, %r11
+               	movq	(%rdi), %rdi
+               	addq	%rdi, %r11
                	movq	%r11, (%r8)
                	jmp	<addr>
                	leaq	-0x8(%rbp), %r11

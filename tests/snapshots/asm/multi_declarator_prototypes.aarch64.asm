@@ -46,16 +46,16 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0xd0
                	mov	x13, x19
-               	ldrsw	x0, [x13]
-               	cmp	x0, #0xa
+               	ldrsw	x13, [x13]
+               	cmp	x13, #0xa
                	b.eq	<addr>
-               	mov	x13, #0x3               // =3
-               	mov	x0, x13
+               	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
+               	mov	x13, #0x0               // =0
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

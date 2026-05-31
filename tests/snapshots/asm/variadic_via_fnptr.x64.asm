@@ -20,36 +20,36 @@ Disassembly of section .text:
                	movq	(%r8), %r9
                	leaq	0x10(%r9), %r11
                	movq	%r11, (%r8)
-               	movslq	(%r9), %r8
-               	leaq	-0x8(%rbp), %r9
-               	movq	(%r9), %r11
+               	movslq	(%r9), %r9
+               	leaq	-0x8(%rbp), %r8
+               	movq	(%r8), %r11
                	leaq	0x10(%r11), %r10
-               	movq	%r10, (%r9)
-               	movslq	(%r11), %r9
-               	leaq	-0x8(%rbp), %r11
-               	movq	(%r11), %rdi
+               	movq	%r10, (%r8)
+               	movslq	(%r11), %r11
+               	leaq	-0x8(%rbp), %r8
+               	movq	(%r8), %rdi
                	leaq	0x10(%rdi), %r10
-               	movq	%r10, (%r11)
-               	movslq	(%rdi), %r11
-               	leaq	-0x8(%rbp), %rdi
+               	movq	%r10, (%r8)
+               	movslq	(%rdi), %rdi
+               	leaq	-0x8(%rbp), %r8
                	movslq	0x10(%rbp), %rsi
                	movl	$0x3e8, %r10d           # imm = 0x3E8
                	imulq	%r10, %rsi
                	movslq	%esi, %rsi
-               	movslq	%r8d, %r8
-               	movl	$0x64, %r10d
-               	imulq	%r10, %r8
-               	movslq	%r8d, %r8
-               	addq	%r8, %rsi
-               	movslq	%esi, %rsi
                	movslq	%r9d, %r9
-               	movl	$0xa, %r10d
+               	movl	$0x64, %r10d
                	imulq	%r10, %r9
                	movslq	%r9d, %r9
                	addq	%r9, %rsi
                	movslq	%esi, %rsi
                	movslq	%r11d, %r11
+               	movl	$0xa, %r10d
+               	imulq	%r10, %r11
+               	movslq	%r11d, %r11
                	addq	%r11, %rsi
+               	movslq	%esi, %rsi
+               	movslq	%edi, %rdi
+               	addq	%rdi, %rsi
                	movslq	%esi, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

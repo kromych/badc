@@ -56,11 +56,11 @@ Disassembly of section .text:
                	add	x0, x0, x14
                	stur	w0, [x29, #-0x20]
                	add	x20, x20, #0x8
-               	ldr	x14, [x20]
-               	stur	x14, [x29, #-0x10]
+               	ldr	x20, [x20]
+               	stur	x20, [x29, #-0x10]
                	b	<addr>
-               	ldursw	x14, [x29, #-0x20]
-               	mov	x0, x14
+               	ldursw	x20, [x29, #-0x20]
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x50

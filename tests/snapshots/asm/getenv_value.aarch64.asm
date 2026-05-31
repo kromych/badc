@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w20, [x0]
-               	mov	x0, x20
+               	ldrb	w0, [x0]
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x30

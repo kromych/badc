@@ -31,13 +31,11 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %r8
-               	movslq	(%r8), %rax
-               	cmpq	$0xa, %rax
+               	movslq	(%r8), %r8
+               	cmpq	$0xa, %r8
                	je	<addr>
-               	movl	$0x3, %r8d
+               	movl	$0x3, %eax
+               	retq
+               	xorq	%r8, %r8
                	movq	%r8, %rax
                	retq
-               	xorq	%rax, %rax
-               	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

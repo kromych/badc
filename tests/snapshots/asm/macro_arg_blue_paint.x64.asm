@@ -15,16 +15,16 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	movq	%rdi, %r11
-               	movq	(%r11), %r9
-               	movslq	(%r9), %rax
+               	movq	(%r11), %r11
+               	movslq	(%r11), %rax
                	retq
                	movq	%rdi, %r11
-               	movq	(%r11), %r9
-               	movslq	(%r9), %rax
+               	movq	(%r11), %r11
+               	movslq	(%r11), %rax
                	retq
                	movq	%rdi, %r11
-               	movq	(%r11), %r9
-               	movslq	(%r9), %r11
+               	movq	(%r11), %r11
+               	movslq	(%r11), %r11
                	addq	$0x7, %r11
                	movslq	%r11d, %rax
                	retq
@@ -42,8 +42,8 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	callq	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %r12
-               	movslq	(%r12), %rax
+               	movq	(%rax), %rax
+               	movslq	(%rax), %rax
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0xb, %r12d
@@ -55,8 +55,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %r12
-               	movslq	(%r12), %rax
+               	movq	(%rax), %rax
+               	movslq	(%rax), %rax
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0xc, %r12d
@@ -68,8 +68,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %r12
-               	movslq	(%r12), %rax
+               	movq	(%rax), %rax
+               	movslq	(%rax), %rax
                	addq	$0x7, %rax
                	movslq	%eax, %rax
                	cmpq	$0x6b, %rax
@@ -90,3 +90,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

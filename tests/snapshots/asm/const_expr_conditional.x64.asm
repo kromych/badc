@@ -28,22 +28,22 @@ Disassembly of section .text:
                	movl	$0x1, %r9d
                	movl	%r9d, (%r8)
                	leaq	-0x10(%rbp), %r11
-               	movslq	(%r11), %r9
-               	leaq	-0x10(%rbp), %r11
-               	addq	$0x4, %r11
-               	movslq	(%r11), %r8
-               	addq	%r8, %r9
-               	movslq	%r9d, %r9
-               	leaq	-0x10(%rbp), %r8
-               	addq	$0x8, %r8
-               	movslq	(%r8), %r11
-               	addq	%r11, %r9
-               	movslq	%r9d, %r9
-               	leaq	-0x10(%rbp), %r11
-               	addq	$0xc, %r11
-               	movslq	(%r11), %r8
-               	addq	%r8, %r9
-               	movslq	%r9d, %rax
+               	movslq	(%r11), %r11
+               	leaq	-0x10(%rbp), %r9
+               	addq	$0x4, %r9
+               	movslq	(%r9), %r9
+               	addq	%r9, %r11
+               	movslq	%r11d, %r11
+               	leaq	-0x10(%rbp), %r9
+               	addq	$0x8, %r9
+               	movslq	(%r9), %r9
+               	addq	%r9, %r11
+               	movslq	%r11d, %r11
+               	leaq	-0x10(%rbp), %r9
+               	addq	$0xc, %r9
+               	movslq	(%r9), %r9
+               	addq	%r9, %r11
+               	movslq	%r11d, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

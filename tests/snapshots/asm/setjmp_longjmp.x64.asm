@@ -106,11 +106,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x208(%rbp), %rbx
                	addq	$0x200, %rbx            # imm = 0x200
-               	movslq	(%rbx), %rax
-               	cmpq	$0x7, %rax
+               	movslq	(%rbx), %rbx
+               	cmpq	$0x7, %rbx
                	je	<addr>
-               	movl	$0xf, %ebx
-               	movq	%rbx, %rcx
+               	movl	$0xf, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -119,8 +119,8 @@ Disassembly of section .text:
                	addq	$0x250, %rsp            # imm = 0x250
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorq	%rbx, %rbx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

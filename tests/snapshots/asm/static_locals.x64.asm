@@ -37,10 +37,10 @@ Disassembly of section .text:
                	addq	%rdi, %r9
                	movslq	%r9d, %r9
                	movl	%r9d, (%r8)
-               	movslq	(%r11), %rdi
-               	movslq	(%r8), %r11
-               	addq	%r11, %rdi
-               	movslq	%edi, %rax
+               	movslq	(%r11), %r11
+               	movslq	(%r8), %r8
+               	addq	%r8, %r11
+               	movslq	%r11d, %rax
                	retq
                	leaq	<rip>, %r11
                	movslq	(%r11), %r9

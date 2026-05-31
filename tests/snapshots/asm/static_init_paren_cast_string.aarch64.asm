@@ -17,8 +17,8 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0x128
                	mov	x15, x19
-               	ldr	x14, [x15]
-               	ldrb	w15, [x14]
+               	ldr	x15, [x15]
+               	ldrb	w15, [x15]
                	mov	x17, #0x5               // =5
                	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535
@@ -34,9 +34,9 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0x128
                	mov	x15, x19
-               	ldr	x0, [x15]
-               	add	x0, x0, #0x5
-               	ldrb	w15, [x0]
+               	ldr	x15, [x15]
+               	add	x15, x15, #0x5
+               	ldrb	w15, [x15]
                	mov	x17, #0x1a              // =26
                	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535
@@ -53,8 +53,8 @@ Disassembly of section .text:
                	add	x19, x19, #0x128
                	mov	x15, x19
                	add	x15, x15, #0x8
-               	ldr	x0, [x15]
-               	ldrb	w15, [x0]
+               	ldr	x15, [x15]
+               	ldrb	w15, [x15]
                	mov	x17, #0x9               // =9
                	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535
@@ -71,9 +71,9 @@ Disassembly of section .text:
                	add	x19, x19, #0x128
                	mov	x15, x19
                	add	x15, x15, #0x8
-               	ldr	x0, [x15]
-               	add	x0, x0, #0x9
-               	ldrb	w15, [x0]
+               	ldr	x15, [x15]
+               	add	x15, x15, #0x9
+               	ldrb	w15, [x15]
                	mov	x17, #0x4               // =4
                	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535
@@ -90,9 +90,9 @@ Disassembly of section .text:
                	add	x19, x19, #0x128
                	mov	x15, x19
                	add	x15, x15, #0x10
-               	ldr	x0, [x15]
-               	add	x0, x0, #0x9
-               	ldrb	w15, [x0]
+               	ldr	x15, [x15]
+               	add	x15, x15, #0x9
+               	ldrb	w15, [x15]
                	mov	x17, #0x1               // =1
                	eor	x15, x15, x17
                	mov	x17, #0xffff            // =65535

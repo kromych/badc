@@ -33,16 +33,16 @@ Disassembly of section .text:
                	movq	(%r11), %r8
                	leaq	0x10(%r8), %r10
                	movq	%r10, (%r11)
-               	movslq	(%r8), %r11
-               	addq	%r11, %r9
+               	movslq	(%r8), %r8
+               	addq	%r8, %r9
                	movslq	%r9d, %r9
                	movl	%r9d, -0x18(%rbp)
-               	movslq	-0x20(%rbp), %r11
-               	addq	$0x1, %r11
-               	movslq	%r11d, %r11
-               	movl	%r11d, -0x20(%rbp)
+               	movslq	-0x20(%rbp), %r8
+               	addq	$0x1, %r8
+               	movslq	%r8d, %r8
+               	movl	%r8d, -0x20(%rbp)
                	jmp	<addr>
-               	leaq	-0x10(%rbp), %r11
+               	leaq	-0x10(%rbp), %r8
                	leaq	-0x8(%rbp), %r9
                	movslq	-0x18(%rbp), %rax
                	addq	$0x20, %rsp

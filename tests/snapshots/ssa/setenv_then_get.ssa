@@ -34,7 +34,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v11  LoadLocal { off=-1, kind=I64 }                   -> x23
     v12  Imm(0)                                           -> x23
-    v13  Load { addr=v6, kind=U8 }                        -> x23
+    v13  Load { addr=v6, kind=U8 }                        -> x0
     terminator Return(v13)   (exit_acc=v13)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

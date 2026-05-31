@@ -22,31 +22,31 @@ Disassembly of section .text:
                	ldr	x14, [x13]
                	add	x17, x14, #0x10
                	str	x17, [x13]
-               	ldrsw	x13, [x14]
-               	sub	x14, x29, #0x8
-               	ldr	x15, [x14]
+               	ldrsw	x14, [x14]
+               	sub	x13, x29, #0x8
+               	ldr	x15, [x13]
                	add	x17, x15, #0x10
-               	str	x17, [x14]
-               	ldrsw	x14, [x15]
-               	sub	x15, x29, #0x8
-               	sxtw	x13, w13
-               	cmp	x13, #0x2a
+               	str	x17, [x13]
+               	ldrsw	x15, [x15]
+               	sub	x13, x29, #0x8
+               	sxtw	x14, w14
+               	cmp	x14, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x14, w14
-               	cmp	x14, #0x7
+               	sxtw	x15, w15
+               	cmp	x15, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

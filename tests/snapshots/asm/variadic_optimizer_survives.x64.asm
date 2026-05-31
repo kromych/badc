@@ -20,29 +20,29 @@ Disassembly of section .text:
                	movq	(%r8), %r9
                	leaq	0x10(%r9), %r11
                	movq	%r11, (%r8)
-               	movslq	(%r9), %r8
-               	leaq	-0x8(%rbp), %r9
-               	movq	(%r9), %r11
+               	movslq	(%r9), %r9
+               	leaq	-0x8(%rbp), %r8
+               	movq	(%r8), %r11
                	leaq	0x10(%r11), %r10
-               	movq	%r10, (%r9)
-               	movslq	(%r11), %r9
-               	leaq	-0x8(%rbp), %r11
-               	movslq	%r8d, %r8
-               	cmpq	$0x2a, %r8
+               	movq	%r10, (%r8)
+               	movslq	(%r11), %r11
+               	leaq	-0x8(%rbp), %r8
+               	movslq	%r9d, %r9
+               	cmpq	$0x2a, %r9
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movslq	%r9d, %r9
-               	cmpq	$0x7, %r9
+               	movslq	%r11d, %r11
+               	cmpq	$0x7, %r11
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r9, %r9
-               	movq	%r9, %rax
+               	xorq	%r11, %r11
+               	movq	%r11, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

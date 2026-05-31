@@ -25,7 +25,8 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
-               	ldrsw	x0, [x21]
+               	ldrsw	x21, [x21]
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]

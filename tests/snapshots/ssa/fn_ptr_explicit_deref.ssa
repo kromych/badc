@@ -27,7 +27,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     terminator Return(v6)   (exit_acc=v6)
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=8
-  spill_count=0 gpr_used=[20, 21, 22, 23, 24] fp_used=[]
+  spill_count=0 gpr_used=[20, 21, 22, 23] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=1)                                -> x15
@@ -63,13 +63,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=8
     terminator Return(v20)   (exit_acc=v20)
   block 6  start_pc=0
     v21  LoadLocal { off=-4, kind=I64 }                   -> x0
-    v22  Load { addr=v13, kind=I64 }                      -> x22
-    v23  Imm(40)                                          -> x24
+    v22  Load { addr=v13, kind=I64 }                      -> x20
+    v23  Imm(40)                                          -> x22
     v24  CallIndirect { target=v22, args=[v23] }          -> x0
     v25  BinopI { op=ne, lhs=v24, rhs_imm=41 }            -> x0
     terminator Bz { cond=v25, target=b8, fall=b7 }   (exit_acc=v25)
   block 7  start_pc=0
-    v26  Imm(4)                                           -> x24
+    v26  Imm(4)                                           -> x22
     terminator Return(v26)   (exit_acc=v26)
   block 8  start_pc=0
     v27  Imm(42)                                          -> x0

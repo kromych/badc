@@ -17,6 +17,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ret
                	add	x14, x14, #0x8
-               	ldr	x15, [x14]
-               	ldrb	w0, [x15]
+               	ldr	x14, [x14]
+               	ldrb	w0, [x14]
                	ret

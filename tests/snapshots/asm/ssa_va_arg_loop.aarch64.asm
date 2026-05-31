@@ -38,8 +38,8 @@ Disassembly of section .text:
                	ldr	x12, [x14]
                	add	x17, x12, #0x10
                	str	x17, [x14]
-               	ldr	x14, [x12]
-               	add	x15, x15, x14
+               	ldr	x12, [x12]
+               	add	x15, x15, x12
                	str	x15, [x13]
                	b	<addr>
                	sub	x15, x29, #0x8

@@ -58,10 +58,10 @@ Disassembly of section .text:
                	add	x14, x14, x12
                	sxtw	x14, w14
                	str	w14, [x13]
-               	ldrsw	x12, [x15]
-               	ldrsw	x15, [x13]
-               	add	x12, x12, x15
-               	sxtw	x0, w12
+               	ldrsw	x15, [x15]
+               	ldrsw	x13, [x13]
+               	add	x15, x15, x13
+               	sxtw	x0, w15
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -22,36 +22,36 @@ Disassembly of section .text:
                	ldr	x14, [x13]
                	add	x17, x14, #0x10
                	str	x17, [x13]
-               	ldrsw	x13, [x14]
-               	sub	x14, x29, #0x8
-               	ldr	x15, [x14]
+               	ldrsw	x14, [x14]
+               	sub	x13, x29, #0x8
+               	ldr	x15, [x13]
                	add	x17, x15, #0x10
-               	str	x17, [x14]
-               	ldrsw	x14, [x15]
-               	sub	x15, x29, #0x8
-               	ldr	x12, [x15]
+               	str	x17, [x13]
+               	ldrsw	x15, [x15]
+               	sub	x13, x29, #0x8
+               	ldr	x12, [x13]
                	add	x17, x12, #0x10
-               	str	x17, [x15]
-               	ldrsw	x15, [x12]
-               	sub	x12, x29, #0x8
+               	str	x17, [x13]
+               	ldrsw	x12, [x12]
+               	sub	x13, x29, #0x8
                	ldursw	x11, [x29, #0x10]
                	mov	x17, #0x3e8             // =1000
                	mul	x11, x11, x17
                	sxtw	x11, w11
-               	sxtw	x13, w13
-               	mov	x17, #0x64              // =100
-               	mul	x13, x13, x17
-               	sxtw	x13, w13
-               	add	x11, x11, x13
-               	sxtw	x11, w11
                	sxtw	x14, w14
-               	mov	x17, #0xa               // =10
+               	mov	x17, #0x64              // =100
                	mul	x14, x14, x17
                	sxtw	x14, w14
                	add	x11, x11, x14
                	sxtw	x11, w11
                	sxtw	x15, w15
+               	mov	x17, #0xa               // =10
+               	mul	x15, x15, x17
+               	sxtw	x15, w15
                	add	x11, x11, x15
+               	sxtw	x11, w11
+               	sxtw	x12, w12
+               	add	x11, x11, x12
                	sxtw	x0, w11
                	ldr	x19, [sp]
                	add	sp, sp, #0x30

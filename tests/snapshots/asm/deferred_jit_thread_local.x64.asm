@@ -28,19 +28,19 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%fs:0x0, %rax
                	subq	$0x10, %rax
-               	movslq	(%rax), %rbx
-               	cmpq	$0x7, %rbx
+               	movslq	(%rax), %rax
+               	cmpq	$0x7, %rax
                	je	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
+               	movl	$0x1, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%fs:0x0, %rbx
-               	subq	$0x8, %rbx
-               	movslq	(%rbx), %rax
+               	movq	%fs:0x0, %rax
+               	subq	$0x8, %rax
+               	movslq	(%rax), %rax
                	cmpq	$-0x3, %rax
                	je	<addr>
                	movl	$0x2, %ebx
@@ -54,20 +54,20 @@ Disassembly of section .text:
                	subq	$0x10, %rax
                	movq	%fs:0x0, %rbx
                	subq	$0x10, %rbx
-               	movslq	(%rbx), %r8
-               	movq	%fs:0x0, %rbx
-               	subq	$0x8, %rbx
-               	movslq	(%rbx), %rdi
-               	addq	%rdi, %r8
-               	movslq	%r8d, %r8
-               	movl	%r8d, (%rax)
-               	movq	%fs:0x0, %rdi
-               	subq	$0x10, %rdi
-               	movslq	(%rdi), %r8
+               	movslq	(%rbx), %rbx
+               	movq	%fs:0x0, %r8
+               	subq	$0x8, %r8
+               	movslq	(%r8), %r8
+               	addq	%r8, %rbx
+               	movslq	%ebx, %rbx
+               	movl	%ebx, (%rax)
+               	movq	%fs:0x0, %r8
+               	subq	$0x10, %r8
+               	movslq	(%r8), %r8
                	cmpq	$0x4, %r8
                	je	<addr>
-               	movl	$0x3, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x3, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
@@ -80,5 +80,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

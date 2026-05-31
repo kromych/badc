@@ -56,11 +56,11 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	movl	%ebx, -0x18(%rbp)
                	addq	$0x8, %rax
-               	movq	(%rax), %r9
-               	movq	%r9, -0x10(%rbp)
+               	movq	(%rax), %rax
+               	movq	%rax, -0x10(%rbp)
                	jmp	<addr>
-               	movslq	-0x18(%rbp), %r9
-               	movq	%r9, %rcx
+               	movslq	-0x18(%rbp), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x40, %rsp

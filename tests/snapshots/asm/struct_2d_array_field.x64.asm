@@ -93,8 +93,8 @@ Disassembly of section .text:
                	movslq	-0x40(%rbp), %rsi
                	shlq	$0x2, %rsi
                	addq	%rsi, %rdi
-               	movslq	(%rdi), %rsi
-               	addq	%rsi, %r11
+               	movslq	(%rdi), %rdi
+               	addq	%rdi, %r11
                	movl	%r11d, (%r8)
                	jmp	<addr>
                	jmp	<addr>

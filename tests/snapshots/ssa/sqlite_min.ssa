@@ -33,13 +33,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=36
     v12  Imm(0)                                           -> x13
     v13  Imm(24)                                          -> x13
     v14  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x13
-    v15  Load { addr=v14, kind=I64 }                      -> x10
-    v16  Imm(0)                                           -> x10
-    v17  Imm(32)                                          -> x10
-    v18  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x10
+    v15  Load { addr=v14, kind=I64 }                      -> x13
+    v16  Imm(0)                                           -> x13
+    v17  Imm(32)                                          -> x13
+    v18  BinopI { op=add, lhs=v1, rhs_imm=32 }            -> x13
     v19  Load { addr=v18, kind=I64 }                      -> x23
-    v20  Imm(0)                                           -> x10
-    v21  Imm(40)                                          -> x10
+    v20  Imm(0)                                           -> x13
+    v21  Imm(40)                                          -> x13
     v22  BinopI { op=add, lhs=v1, rhs_imm=40 }            -> x15
     v23  Load { addr=v22, kind=I64 }                      -> x24
     v24  Imm(0)                                           -> x15

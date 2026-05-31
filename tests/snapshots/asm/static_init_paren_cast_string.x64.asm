@@ -10,8 +10,8 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	leaq	<rip>, %r11
-               	movq	(%r11), %r9
-               	movzbq	(%r9), %r11
+               	movq	(%r11), %r11
+               	movzbq	(%r11), %r11
                	xorq	$0x5, %r11
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	andq	%r10, %r11
@@ -20,9 +20,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %r11
-               	movq	(%r11), %rax
-               	addq	$0x5, %rax
-               	movzbq	(%rax), %r11
+               	movq	(%r11), %r11
+               	addq	$0x5, %r11
+               	movzbq	(%r11), %r11
                	xorq	$0x1a, %r11
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	andq	%r10, %r11
@@ -32,8 +32,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %r11
                	addq	$0x8, %r11
-               	movq	(%r11), %rax
-               	movzbq	(%rax), %r11
+               	movq	(%r11), %r11
+               	movzbq	(%r11), %r11
                	xorq	$0x9, %r11
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	andq	%r10, %r11
@@ -43,9 +43,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %r11
                	addq	$0x8, %r11
-               	movq	(%r11), %rax
-               	addq	$0x9, %rax
-               	movzbq	(%rax), %r11
+               	movq	(%r11), %r11
+               	addq	$0x9, %r11
+               	movzbq	(%r11), %r11
                	xorq	$0x4, %r11
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	andq	%r10, %r11
@@ -55,9 +55,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %r11
                	addq	$0x10, %r11
-               	movq	(%r11), %rax
-               	addq	$0x9, %rax
-               	movzbq	(%rax), %r11
+               	movq	(%r11), %r11
+               	addq	$0x9, %r11
+               	movzbq	(%r11), %r11
                	xorq	$0x1, %r11
                	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
                	andq	%r10, %r11

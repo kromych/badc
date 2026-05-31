@@ -23,14 +23,14 @@ Disassembly of section .text:
                	mov	x14, x19
                	lsl	x13, x20, #3
                	add	x14, x14, x13
-               	ldr	x13, [x14]
-               	cbz	x13, <addr>
+               	ldr	x14, [x14]
+               	cbz	x14, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x100
-               	mov	x14, x19
-               	lsl	x13, x20, #3
-               	add	x14, x14, x13
-               	ldr	x13, [x14]
+               	mov	x13, x19
+               	lsl	x14, x20, #3
+               	add	x13, x13, x14
+               	ldr	x13, [x13]
                	mov	x0, x13
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -70,16 +70,15 @@ Disassembly of section .text:
                	mov	x22, x19
                	lsl	x21, x20, #3
                	add	x22, x22, x21
-               	ldr	x21, [x0]
-               	str	x21, [x22]
+               	ldr	x0, [x0]
+               	str	x0, [x22]
                	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x100
-               	mov	x21, x19
+               	mov	x0, x19
                	lsl	x20, x20, #3
-               	add	x21, x21, x20
-               	ldr	x20, [x21]
-               	mov	x0, x20
+               	add	x0, x0, x20
+               	ldr	x0, [x0]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -104,25 +103,25 @@ Disassembly of section .text:
                	mov	x15, #0xc8              // =200
                	strb	w15, [x12]
                	sub	x13, x29, #0x8
-               	ldrb	w15, [x13]
-               	scvtf	d7, x15
-               	sub	x15, x29, #0x10
+               	ldrb	w13, [x13]
+               	scvtf	d7, x13
+               	sub	x13, x29, #0x10
                	fcvt	s0, d7
-               	str	s0, [x15]
-               	sub	x15, x29, #0x8
-               	add	x15, x15, #0x1
-               	ldrb	w13, [x15]
+               	str	s0, [x13]
+               	sub	x13, x29, #0x8
+               	add	x13, x13, #0x1
+               	ldrb	w13, [x13]
                	scvtf	d6, x13
                	sub	x13, x29, #0x18
                	fcvt	s0, d6
                	str	s0, [x13]
                	sub	x13, x29, #0x8
                	add	x13, x13, #0x2
-               	ldrb	w15, [x13]
-               	scvtf	d7, x15
-               	sub	x15, x29, #0x20
+               	ldrb	w13, [x13]
+               	scvtf	d7, x13
+               	sub	x13, x29, #0x20
                	fcvt	s0, d7
-               	str	s0, [x15]
+               	str	s0, [x13]
                	sub	x16, x29, #0x10
                	ldr	s6, [x16]
                	fcvt	d6, s6
@@ -131,8 +130,8 @@ Disassembly of section .text:
                	fcvtzs	x14, d6
                	cmp	x14, #0x64
                	b.eq	<addr>
-               	mov	x15, #0x1               // =1
-               	mov	x0, x15
+               	mov	x13, #0x1               // =1
+               	mov	x0, x13
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x70
@@ -141,11 +140,11 @@ Disassembly of section .text:
                	sub	x16, x29, #0x18
                	ldr	s6, [x16]
                	fcvt	d6, s6
-               	mov	x15, #0xa               // =10
-               	scvtf	d7, x15
+               	mov	x13, #0xa               // =10
+               	scvtf	d7, x13
                	fmul	d6, d6, d7
-               	fcvtzs	x15, d6
-               	cmp	x15, #0x3e8
+               	fcvtzs	x13, d6
+               	cmp	x13, #0x3e8
                	b.eq	<addr>
                	mov	x14, #0x2               // =2
                	mov	x0, x14
@@ -163,17 +162,17 @@ Disassembly of section .text:
                	fcvtzs	x14, d6
                	cmp	x14, #0x7d0
                	b.eq	<addr>
-               	mov	x15, #0x3               // =3
-               	mov	x0, x15
+               	mov	x13, #0x3               // =3
+               	mov	x0, x13
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x14, x29, #0x28
-               	sub	x15, x29, #0x8
-               	add	x15, x15, #0x1
-               	ldrb	w13, [x15]
+               	sub	x13, x29, #0x8
+               	add	x13, x13, #0x1
+               	ldrb	w13, [x13]
                	scvtf	d6, x13
                	fcvt	s0, d6
                	str	s0, [x14]

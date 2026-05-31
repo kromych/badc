@@ -17,13 +17,13 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0xd0
                	mov	x15, x19
-               	ldr	x14, [x15]
-               	mov	x15, #0x4059000000000000 // =4636737291354636288
-               	fmov	d0, x14
-               	fmov	d1, x15
+               	ldr	x15, [x15]
+               	mov	x14, #0x4059000000000000 // =4636737291354636288
+               	fmov	d0, x15
+               	fmov	d1, x14
                	fcmp	d0, d1
-               	cset	x14, ne
-               	cbz	x14, <addr>
+               	cset	x15, ne
+               	cbz	x15, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
@@ -31,38 +31,37 @@ Disassembly of section .text:
                	ret
                	adrp	x19, <page>
                	add	x19, x19, #0xd8
-               	mov	x14, x19
-               	ldr	x0, [x14]
-               	mov	x14, #0x4014000000000000 // =4617315517961601024
-               	fmov	d0, x14
-               	fneg	d7, d0
+               	mov	x15, x19
+               	ldr	x15, [x15]
+               	mov	x0, #0x4014000000000000 // =4617315517961601024
                	fmov	d0, x0
+               	fneg	d7, d0
+               	fmov	d0, x15
                	fcmp	d0, d7
-               	cset	x0, ne
-               	cbz	x0, <addr>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	cset	x15, ne
+               	cbz	x15, <addr>
+               	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x19, <page>
                	add	x19, x19, #0xe0
-               	mov	x0, x19
-               	ldr	x14, [x0]
+               	mov	x15, x19
+               	ldr	x15, [x15]
                	mov	x0, #0x4014000000000000 // =4617315517961601024
-               	fmov	d0, x14
+               	fmov	d0, x15
                	fmov	d1, x0
                	fcmp	d0, d1
-               	cset	x14, ne
-               	cbz	x14, <addr>
+               	cset	x15, ne
+               	cbz	x15, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

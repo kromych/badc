@@ -79,11 +79,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %r11
-               	movq	(%r11), %rax
-               	cmpq	$0x1111, %rax           # imm = 0x1111
+               	movq	(%r11), %r11
+               	cmpq	$0x1111, %r11           # imm = 0x1111
                	je	<addr>
-               	movl	$0x2, %r11d
-               	movq	%r11, %rcx
+               	movl	$0x2, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %r12
                	movq	0x8(%rsp), %r14
                	movq	0x10(%rsp), %r15
@@ -91,9 +91,9 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x20(%rbp), %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %r11
+               	leaq	-0x20(%rbp), %r11
+               	addq	$0x8, %r11
+               	movq	(%r11), %r11
                	cmpq	$0x2222, %r11           # imm = 0x2222
                	je	<addr>
                	movl	$0x3, %eax
@@ -107,11 +107,11 @@ Disassembly of section .text:
                	retq
                	leaq	-0x20(%rbp), %r11
                	addq	$0x10, %r11
-               	movq	(%r11), %rax
-               	cmpq	$0x3333, %rax           # imm = 0x3333
+               	movq	(%r11), %r11
+               	cmpq	$0x3333, %r11           # imm = 0x3333
                	je	<addr>
-               	movl	$0x4, %r11d
-               	movq	%r11, %rcx
+               	movl	$0x4, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %r12
                	movq	0x8(%rsp), %r14
                	movq	0x10(%rsp), %r15
@@ -119,9 +119,9 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x20(%rbp), %rax
-               	addq	$0x18, %rax
-               	movq	(%rax), %r11
+               	leaq	-0x20(%rbp), %r11
+               	addq	$0x18, %r11
+               	movq	(%r11), %r11
                	cmpq	$0x4444, %r11           # imm = 0x4444
                	je	<addr>
                	movl	$0x5, %eax
@@ -142,4 +142,5 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

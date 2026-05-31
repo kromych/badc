@@ -31,14 +31,14 @@ Disassembly of section .text:
                	addq	$0x4, %rax
                	xorq	%rbx, %rbx
                	movb	%bl, (%rax)
-               	movzbq	(%r12), %r14
-               	xorq	$0x41, %r14
+               	movzbq	(%r12), %r12
+               	xorq	$0x41, %r12
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r14
-               	cmpq	$0x0, %r14
+               	andq	%r11, %r12
+               	cmpq	$0x0, %r12
                	jne	<addr>
-               	movl	$0x2a, %r12d
-               	movq	%r12, %rcx
+               	movl	$0x2a, %r14d
+               	movq	%r14, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -46,8 +46,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r14, %r14
-               	movq	%r14, %rcx
+               	xorq	%r12, %r12
+               	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

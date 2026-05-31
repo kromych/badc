@@ -47,24 +47,16 @@ Disassembly of section .text:
                	movq	%rbx, -0x20(%rbp)
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	movslq	(%rax), %r12
-               	cmpq	$0xa, %r12
-               	setne	%r12b
-               	movzbq	%r12b, %r12
-               	movq	%r12, -0x20(%rbp)
+               	movslq	(%rax), %rax
+               	cmpq	$0xa, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	movq	%rax, -0x20(%rbp)
                	jmp	<addr>
-               	movq	-0x20(%rbp), %r12
-               	cmpq	$0x0, %r12
+               	movq	-0x20(%rbp), %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
-               	movl	$0x2, %eax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x30, %rsp
-               	popq	%rbp
-               	retq
-               	xorq	%r12, %r12
+               	movl	$0x2, %r12d
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -72,4 +64,11 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	%rcx, %rax
+               	addq	$0x30, %rsp
+               	popq	%rbp
+               	retq

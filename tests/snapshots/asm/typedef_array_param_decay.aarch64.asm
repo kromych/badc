@@ -31,8 +31,8 @@ Disassembly of section .text:
                	lsl	x13, x13, #3
                	add	x11, x15, x13
                	add	x13, x14, x13
-               	ldr	x12, [x13]
-               	str	x12, [x11]
+               	ldr	x13, [x13]
+               	str	x13, [x11]
                	b	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	ldursw	x13, [x29, #-0x8]
                	lsl	x13, x13, #3
                	add	x13, x15, x13
-               	ldr	x11, [x13]
-               	add	x12, x12, x11
+               	ldr	x13, [x13]
+               	add	x12, x12, x13
                	str	x12, [x14]
                	b	<addr>
                	ldur	x0, [x29, #-0x10]
@@ -119,19 +119,20 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x100
-               	ldr	x22, [x0]
-               	cmp	x22, #0x1
+               	ldr	x0, [x0]
+               	cmp	x0, #0x1
                	b.eq	<addr>
-               	mov	x0, #0x2                // =2
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x22, x29, #0x100
-               	add	x22, x22, #0x78
-               	ldr	x0, [x22]
+               	sub	x0, x29, #0x100
+               	add	x0, x0, #0x78
+               	ldr	x0, [x0]
                	cmp	x0, #0x10
                	b.eq	<addr>
                	mov	x22, #0x3               // =3

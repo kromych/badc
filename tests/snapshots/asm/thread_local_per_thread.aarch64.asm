@@ -17,33 +17,31 @@ Disassembly of section .text:
                	mov	x15, x0
                	mrs	x15, TPIDR_EL0
                	add	x15, x15, #0x10
-               	ldrsw	x14, [x15]
-               	cmp	x14, #0x0
+               	ldrsw	x15, [x15]
+               	cmp	x15, #0x0
                	b.eq	<addr>
                	mov	x0, #0xbad1             // =47825
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x14, TPIDR_EL0
-               	add	x14, x14, #0x10
+               	mrs	x15, TPIDR_EL0
+               	add	x15, x15, #0x10
                	mov	x0, #0x63               // =99
-               	str	w0, [x14]
+               	str	w0, [x15]
                	mrs	x13, TPIDR_EL0
                	add	x13, x13, #0x10
-               	ldrsw	x0, [x13]
-               	cmp	x0, #0x63
+               	ldrsw	x13, [x13]
+               	cmp	x13, #0x63
                	b.eq	<addr>
-               	mov	x13, #0xbad2            // =47826
-               	mov	x0, x13
+               	mov	x0, #0xbad2             // =47826
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x0, TPIDR_EL0
-               	add	x0, x0, #0x10
-               	ldrsw	x13, [x0]
-               	mov	x0, x13
+               	mrs	x13, TPIDR_EL0
+               	add	x13, x13, #0x10
+               	ldrsw	x0, [x13]
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -125,10 +123,11 @@ Disassembly of section .text:
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x10
-               	ldrsw	x26, [x0]
-               	cmp	x26, #0x1
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x1
                	b.eq	<addr>
-               	mov	x0, #0x2                // =2
+               	mov	x26, #0x2               // =2
+               	mov	x0, x26
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -140,8 +139,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xa0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x26, #0x0               // =0
-               	mov	x0, x26
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

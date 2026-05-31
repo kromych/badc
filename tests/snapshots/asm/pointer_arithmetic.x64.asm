@@ -26,8 +26,8 @@ Disassembly of section .text:
                	movl	%ebx, (%r8)
                	movslq	(%rax), %rdi
                	addq	$0x4, %rax
-               	movslq	(%rax), %rbx
-               	addq	%rbx, %rdi
+               	movslq	(%rax), %rax
+               	addq	%rax, %rdi
                	movslq	%edi, %rdi
                	movq	%rdi, %rcx
                	movq	(%rsp), %rbx

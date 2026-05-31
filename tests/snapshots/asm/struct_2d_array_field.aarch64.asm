@@ -92,8 +92,8 @@ Disassembly of section .text:
                	ldursw	x11, [x29, #-0x40]
                	lsl	x11, x11, #2
                	add	x12, x12, x11
-               	ldrsw	x11, [x12]
-               	add	x15, x15, x11
+               	ldrsw	x12, [x12]
+               	add	x15, x15, x12
                	str	w15, [x13]
                	b	<addr>
                	b	<addr>

@@ -155,25 +155,22 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
-            Inst::LoadLocal { off, .. } if used[idx] && *off >= 0 => {
-                // cdecl-cell loads (off >= 2) carry no data: the matching
-                // `ParamRef(i)` substitutes the call-site arg. Frame-
-                // metadata offsets (0, 1) are not rewriteable. True-local
-                // loads (off < 0) get rebased to caller-allocated slots
-                // by `slot_rebase_for_callee` and survive the splice.
-                say(&alloc::format!("live LoadLocal off={} at v{}", off, idx));
-                return false;
-            }
-            Inst::LoadLocal { .. } => {}
-            Inst::StoreLocal { off, .. } => {
-                // cdecl-cell stores (off >= 2) and true-local stores
-                // (off < 0) are both safe. Cell stores drop at splice
-                // time (the caller's frame has no cell); true-local
-                // stores get rebased to caller-allocated slots.
-                if *off >= 0 && *off < 2 {
-                    say(&alloc::format!("StoreLocal off={} (frame metadata)", off));
+            Inst::LoadLocal { .. } => {
+                // The splice drops every LoadLocal because the
+                // caller's frame has no matching slot. That is only
+                // safe when the load's result is dead inside the
+                // callee body -- a live read would lose data.
+                if used[idx] {
+                    say(&alloc::format!("live LoadLocal at v{}", idx));
                     return false;
                 }
+            }
+            Inst::StoreLocal { .. } => {
+                // StoreLocal has no result; the splice drops it.
+                // The store's slot writes into a frame the caller
+                // does not own, but with every LoadLocal also
+                // dropped no observation of the missing write
+                // survives the splice.
             }
             _ => {
                 say(&alloc::format!("disallowed inst {:?}", inst));
@@ -192,34 +189,6 @@ fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     } else {
         remap[v as usize]
     }
-}
-
-/// Build the callee-local-offset rebase map. Returns the offset table
-/// and the new total local count to write back into the caller.
-///
-/// True-local slots (off < 0) get fresh caller-frame slots at offsets
-/// `-(caller_locals + 1)`, `-(caller_locals + 2)`, ... so the inlined
-/// copy reads and writes its own private storage in the caller's
-/// frame. Cell offsets (off >= 2) and the frame-metadata offsets
-/// (off in {0, 1}) are not rebased -- the splice handles cells via
-/// the param-substitution path and the candidate filter rejects
-/// any function that reads off in {0, 1}.
-fn slot_rebase_for_callee(callee: &FunctionSsa, caller_locals: i64) -> (BTreeMap<i64, i64>, i64) {
-    let mut callee_offsets: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
-    for inst in &callee.insts {
-        match inst {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } if *off < 0 => {
-                callee_offsets.insert(*off);
-            }
-            _ => {}
-        }
-    }
-    let mut map: BTreeMap<i64, i64> = BTreeMap::new();
-    for (i, &c_off) in callee_offsets.iter().enumerate() {
-        map.insert(c_off, -(caller_locals + 1 + i as i64));
-    }
-    let new_caller_locals = caller_locals + callee_offsets.len() as i64;
-    (map, new_caller_locals)
 }
 
 /// Apply the caller's value remap to every operand in `inst`. The
@@ -519,7 +488,6 @@ fn splice_multi_block(
     let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
 
     // Step 6: splice every callee block.
-    let (slot_map, new_caller_locals) = slot_rebase_for_callee(callee, original.locals);
     for cblock in &callee.blocks {
         let block_start = new_insts.len() as u32;
         for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
@@ -532,37 +500,6 @@ fn splice_multi_block(
                     } else {
                         NO_VALUE
                     };
-                    continue;
-                }
-                Inst::LoadLocal { off, kind } if *off < 0 => {
-                    let new_off = slot_map[off];
-                    let new_id = new_insts.len() as u32;
-                    callee_remap[ce_pc as usize] = new_id;
-                    new_insts.push(Inst::LoadLocal {
-                        off: new_off,
-                        kind: *kind,
-                    });
-                    new_inst_src.push((0, 0));
-                    continue;
-                }
-                Inst::StoreLocal { off, value, kind } if *off < 0 => {
-                    let new_off = slot_map[off];
-                    let value = map_v(*value, &callee_remap);
-                    callee_remap[ce_pc as usize] = NO_VALUE;
-                    new_insts.push(Inst::StoreLocal {
-                        off: new_off,
-                        value,
-                        kind: *kind,
-                    });
-                    new_inst_src.push((0, 0));
-                    continue;
-                }
-                Inst::LocalAddr(off) if *off < 0 => {
-                    let new_off = slot_map[off];
-                    let new_id = new_insts.len() as u32;
-                    callee_remap[ce_pc as usize] = new_id;
-                    new_insts.push(Inst::LocalAddr(new_off));
-                    new_inst_src.push((0, 0));
                     continue;
                 }
                 Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
@@ -639,7 +576,7 @@ fn splice_multi_block(
         name: original.name,
         ent_pc: original.ent_pc,
         end_pc: original.end_pc,
-        locals: new_caller_locals,
+        locals: original.locals,
         n_params: original.n_params,
         is_variadic: original.is_variadic,
         is_inline: original.is_inline,
@@ -668,11 +605,6 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     let mut extern_imm_code_remap: Vec<(u32, u32, u32)> = Vec::new();
     let mut extern_imm_data_remap: Vec<(u32, u32, u32)> = Vec::new();
     let mut extern_tls_remap: Vec<(u32, u32, u32)> = Vec::new();
-    // Caller's current local count. Each splice that rebases a
-    // callee's true-local slots grows this; written back into
-    // `caller.locals` at the end so the codegen prologue reserves
-    // the right stack size.
-    let mut caller_locals = caller.locals;
     let mut any_change = false;
 
     for block in &caller.blocks {
@@ -698,8 +630,6 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 any_change = true;
                 let remapped_args: Vec<ValueId> =
                     call_args.iter().map(|&a| map_v(a, &remap)).collect();
-                let (slot_map, new_locals) = slot_rebase_for_callee(callee, caller_locals);
-                caller_locals = new_locals;
                 let callee_block = &callee.blocks[0];
                 let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
                 for ce_pc in callee_block.inst_range.start..callee_block.inst_range.end {
@@ -715,39 +645,12 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                             callee_remap[ce_pc as usize] = mapped;
                             continue;
                         }
-                        Inst::LoadLocal { off, kind } if *off < 0 => {
-                            let new_off = slot_map[off];
-                            let new_id = new_insts.len() as u32;
-                            callee_remap[ce_pc as usize] = new_id;
-                            new_insts.push(Inst::LoadLocal {
-                                off: new_off,
-                                kind: *kind,
-                            });
-                            new_inst_src.push(src_pos);
-                            continue;
-                        }
-                        Inst::StoreLocal { off, value, kind } if *off < 0 => {
-                            let new_off = slot_map[off];
-                            let value = map_v(*value, &callee_remap);
-                            callee_remap[ce_pc as usize] = NO_VALUE;
-                            new_insts.push(Inst::StoreLocal {
-                                off: new_off,
-                                value,
-                                kind: *kind,
-                            });
-                            new_inst_src.push(src_pos);
-                            continue;
-                        }
-                        Inst::LocalAddr(off) if *off < 0 => {
-                            let new_off = slot_map[off];
-                            let new_id = new_insts.len() as u32;
-                            callee_remap[ce_pc as usize] = new_id;
-                            new_insts.push(Inst::LocalAddr(new_off));
-                            new_inst_src.push(src_pos);
-                            continue;
-                        }
-                        // cdecl-cell loads / stores and AllocaInit
-                        // carry no value into the caller; drop.
+                        // Walker-emitted cdecl-cell loads + stores
+                        // and the alloca-init no-op marker carry no
+                        // value into the caller's frame (the candidate
+                        // filter verified loads are dead and stores
+                        // address cells off >= 2); the splice drops
+                        // them entirely.
                         Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
                             callee_remap[ce_pc as usize] = NO_VALUE;
                             continue;
@@ -826,7 +729,6 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
     caller.insts = new_insts;
     caller.inst_src = new_inst_src;
     caller.blocks = new_blocks;
-    caller.locals = caller_locals;
     caller.extern_call_refs = extern_call_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
     caller.extern_imm_code_refs = extern_imm_code_remap
         .iter()

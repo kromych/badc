@@ -252,9 +252,8 @@ fn param_elidable_mask(
     let mut elidable = alloc::vec::Vec::with_capacity(n_reg);
     for i in 0..n_reg {
         let slot = (i as i64) + 2;
-        let ok = seeded.contains(&(i as u32))
-            && !addr_taken.contains(&slot)
-            && !needed.contains(&slot);
+        let ok =
+            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot);
         elidable.push(ok);
     }
     (elidable, n_reg, n_stack)

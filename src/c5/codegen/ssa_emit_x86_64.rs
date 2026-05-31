@@ -3694,8 +3694,22 @@ fn emit_tail_call(
     // (only callee-saved regs land there), so the epilogue's
     // restores below cannot clobber the marshalled values.
     let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
-    // No host-stack-overflow arg => no scratch frame to allocate.
-    debug_assert_eq!(plan.scratch_bytes, 0);
+    // `detect_tail_call` rejects arg counts above `int_arg_regs.len()`,
+    // so no `Stack(offset)` placements ever reach here. `scratch_bytes`
+    // may still be nonzero on Win64 (the 32-byte shadow space rides
+    // above the arg-reg window), but that area is already part of our
+    // caller's frame -- after the epilogue restores rsp the callee
+    // sees it exactly as a non-tail caller would have set it up.
+    if plan
+        .placements
+        .iter()
+        .any(|p| matches!(p, super::ArgPlacement::Stack(_)))
+    {
+        unreachable!(
+            "ICE: tail-call planner returned a Stack arg placement; \
+             detect_tail_call should have rejected arg_count > int_arg_regs"
+        );
+    }
     if !marshal_args(code, &plan, args, alloc, frame, "TailCall") {
         return false;
     }

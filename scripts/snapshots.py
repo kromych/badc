@@ -52,6 +52,12 @@ def ensure_badc(root: Path) -> Path:
 TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
 OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 
+# badc appends a `BADC\n\tv<version>...` marker to the tail of every
+# emitted `.text` section. The bytes after the marker bake in the
+# current git commit, so disassembling them would churn the snapshot
+# on every push. Truncate the objdump output at the marker.
+BUILD_INFO_MARKER = b"BADC\n\tv"
+
 
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
     with dst.open("wb") as ssa_out:
@@ -63,6 +69,48 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
     return proc.returncode == 0
 
 
+def build_info_stop_address(binary: Path) -> int | None:
+    """Return the .text virtual address at which the BUILD_INFO marker
+    begins, or None if either ELF parsing fails or the marker is
+    absent. The caller passes the result as `--stop-address` to
+    objdump so the trailing BUILD_INFO bytes (which embed the current
+    git commit and would churn the snapshot every push) don't reach
+    the disassembled output.
+    """
+    import struct
+
+    data = binary.read_bytes()
+    if data[:4] != b"\x7fELF":
+        return None
+    is_64 = data[4] == 2
+    is_le = data[5] == 1
+    if not is_64 or not is_le:
+        return None
+    e_shoff = struct.unpack_from("<Q", data, 0x28)[0]
+    e_shentsize = struct.unpack_from("<H", data, 0x3a)[0]
+    e_shnum = struct.unpack_from("<H", data, 0x3c)[0]
+    e_shstrndx = struct.unpack_from("<H", data, 0x3e)[0]
+    shstr_off = struct.unpack_from(
+        "<Q", data, e_shoff + e_shstrndx * e_shentsize + 0x18
+    )[0]
+    for i in range(e_shnum):
+        base = e_shoff + i * e_shentsize
+        sh_name = struct.unpack_from("<I", data, base)[0]
+        end = data.index(b"\x00", shstr_off + sh_name)
+        name = data[shstr_off + sh_name : end].decode("ascii", errors="replace")
+        if name != ".text":
+            continue
+        sh_addr = struct.unpack_from("<Q", data, base + 0x10)[0]
+        sh_offset = struct.unpack_from("<Q", data, base + 0x18)[0]
+        sh_size = struct.unpack_from("<Q", data, base + 0x20)[0]
+        section = data[sh_offset : sh_offset + sh_size]
+        idx = section.find(BUILD_INFO_MARKER)
+        if idx < 0:
+            return None
+        return sh_addr + idx
+    return None
+
+
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bool:
     proc = subprocess.run(
         [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin), str(src)],
@@ -71,8 +119,12 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bo
     )
     if proc.returncode != 0:
         return False
+    stop = build_info_stop_address(tmp_bin)
+    extra: list[str] = []
+    if stop is not None:
+        extra.append(f"--stop-address=0x{stop:x}")
     proc = subprocess.run(
-        ["objdump", *OBJDUMP_FLAGS, str(tmp_bin)],
+        ["objdump", *OBJDUMP_FLAGS, *extra, str(tmp_bin)],
         capture_output=True,
         check=False,
     )

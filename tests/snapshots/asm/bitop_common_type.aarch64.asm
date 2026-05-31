@@ -59,9 +59,8 @@ Disassembly of section .text:
                	movk	x13, #0x4006, lsl #16
                	movk	x13, #0x1, lsl #32
                	sub	x13, x13, #0x1
-               	mov	x0, #0xf                // =15
-               	sxtw	x0, w0
-               	orr	x13, x13, x0
+               	mov	x17, #0xf               // =15
+               	orr	x13, x13, x17
                	add	x13, x13, #0x1
                	mov	x17, #0xf010            // =61456
                	movk	x17, #0x4006, lsl #16

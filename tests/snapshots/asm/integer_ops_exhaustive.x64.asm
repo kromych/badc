@@ -1496,9 +1496,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1522,9 +1522,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1548,9 +1548,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1574,9 +1574,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1600,9 +1600,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1626,9 +1626,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1652,9 +1652,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14
@@ -1678,9 +1678,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movl	$0x1, %eax
+               	xorq	%rax, %rax
                	cmpq	$0x0, %rax
-               	jne	<addr>
+               	je	<addr>
                	jmp	<addr>
                	xorq	%r14, %r14
                	cmpq	$0x0, %r14

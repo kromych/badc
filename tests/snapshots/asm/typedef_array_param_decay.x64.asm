@@ -103,7 +103,6 @@ Disassembly of section .text:
                	movq	%r14, %rdi
                	callq	<addr>
                	movl	$0x110, %r14d           # imm = 0x110
-               	movslq	%r14d, %r14
                	movl	$0x2, %ebx
                	movq	%rbx, %r11
                	pushq	%rax
@@ -161,4 +160,4 @@ Disassembly of section .text:
                	addq	$0x140, %rsp            # imm = 0x140
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

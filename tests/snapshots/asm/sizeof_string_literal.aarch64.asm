@@ -34,10 +34,8 @@ Disassembly of section .text:
                	cbz	x15, <addr>
                	mov	x0, #0x10               // =16
                	ret
-               	mov	x15, #0x5               // =5
-               	sxtw	x15, w15
-               	cmp	x15, #0x5
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x11               // =17
                	ret
                	mov	x15, #0x0               // =0

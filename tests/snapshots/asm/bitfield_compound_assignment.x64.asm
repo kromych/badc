@@ -16,31 +16,21 @@ Disassembly of section .text:
                	movzwq	(%r11), %r9
                	andq	$-0x2, %r9
                	xorq	%r8, %r8
-               	movq	%r8, %rdi
-               	andq	$0x1, %rdi
-               	orq	%rdi, %r9
+               	orq	%r8, %r9
                	movw	%r9w, (%r11)
                	leaq	-0x8(%rbp), %rdi
                	movzwq	(%rdi), %r9
                	andq	$-0xf, %r9
-               	movq	%r8, %r11
-               	andq	$0x7, %r11
-               	shlq	$0x1, %r11
-               	orq	%r11, %r9
+               	orq	%r8, %r9
                	movw	%r9w, (%rdi)
                	leaq	-0x8(%rbp), %r11
                	movzwq	(%r11), %r9
                	andq	$-0xf1, %r9
-               	movq	%r8, %rdi
-               	andq	$0xf, %rdi
-               	shlq	$0x4, %rdi
-               	orq	%rdi, %r9
+               	orq	%r8, %r9
                	movw	%r9w, (%r11)
                	leaq	-0x8(%rbp), %rdi
                	movzwq	(%rdi), %r9
                	andq	$-0xff01, %r9           # imm = 0xFFFF00FF
-               	andq	$0xff, %r8
-               	shlq	$0x8, %r8
                	orq	%r8, %r9
                	movw	%r9w, (%rdi)
                	leaq	-0x8(%rbp), %r8
@@ -133,23 +123,18 @@ Disassembly of section .text:
                	movzwq	(%r8), %rax
                	andq	$-0x2, %rax
                	movl	$0x1, %edi
-               	andq	$0x1, %rdi
                	orq	%rdi, %rax
                	movw	%ax, (%r8)
                	leaq	-0x8(%rbp), %rdi
                	movzwq	(%rdi), %rax
                	andq	$-0xf1, %rax
-               	movl	$0xc, %r8d
-               	andq	$0xf, %r8
-               	shlq	$0x4, %r8
+               	movl	$0xc0, %r8d
                	orq	%r8, %rax
                	movw	%ax, (%rdi)
                	leaq	-0x8(%rbp), %r8
                	movzwq	(%r8), %rax
                	andq	$-0xff01, %rax          # imm = 0xFFFF00FF
-               	movl	$0xc8, %edi
-               	andq	$0xff, %rdi
-               	shlq	$0x8, %rdi
+               	movl	$0xc800, %edi           # imm = 0xC800
                	orq	%rdi, %rax
                	movw	%ax, (%r8)
                	leaq	-0x8(%rbp), %rdi
@@ -264,11 +249,7 @@ Disassembly of section .text:
                	sarq	$0x8, %rdi
                	andq	$0xff, %rdi
                	movl	$0x190, %eax            # imm = 0x190
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
                	movl	$0x100, %r8d            # imm = 0x100
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r8
                	movq	%r8, %r11
                	pushq	%rdx
                	xorq	%rdx, %rdx

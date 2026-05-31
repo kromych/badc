@@ -282,11 +282,7 @@ Disassembly of section .text:
                	movl	$0x5, %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movl	$0x471b20, %ebx         # imm = 0x471B20
-               	movslq	%ebx, %rbx
-               	addq	$0x5678, %rbx           # imm = 0x5678
-               	movslq	%ebx, %rbx
-               	cmpq	%rbx, %rax
+               	cmpq	$0x477198, %rax         # imm = 0x477198
                	je	<addr>
                	movl	$0x1, %ebx
                	movq	%rbx, %rcx
@@ -448,3 +444,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

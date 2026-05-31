@@ -205,9 +205,7 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x3, %r12d
-               	addq	$0x7, %r12
-               	movslq	%r12d, %r12
+               	movl	$0xa, %r12d
                	cmpq	$0xa, %r12
                	je	<addr>
                	movl	$0xf, %eax
@@ -230,3 +228,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

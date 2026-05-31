@@ -47,9 +47,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x14006f001, %r8       # imm = 0x14006F001
                	subq	$0x1, %r8
-               	movl	$0xf, %eax
-               	movslq	%eax, %rax
-               	orq	%rax, %r8
+               	orq	$0xf, %r8
                	addq	$0x1, %r8
                	movabsq	$0x14006f010, %r10      # imm = 0x14006F010
                	cmpq	%r10, %r8

@@ -169,9 +169,7 @@ Disassembly of section .text:
                	movzwq	(%r9), %r9
                	addq	%r9, %r11
                	movslq	%r11d, %r11
-               	movl	$0x1244, %r9d           # imm = 0x1244
-               	movslq	%r9d, %r9
-               	cmpq	%r9, %r11
+               	cmpq	$0x1244, %r11           # imm = 0x1244
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x4c0, %rsp            # imm = 0x4C0
@@ -311,3 +309,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

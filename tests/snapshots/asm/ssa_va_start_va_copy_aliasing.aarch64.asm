@@ -162,9 +162,8 @@ Disassembly of section .text:
                	bl	<addr>
                	add	sp, sp, #0x30
                	mov	x23, x0
-               	mov	x17, #0x55f0            // =22000
-               	add	x21, x21, x17
-               	cmp	x23, x21
+               	mov	x17, #0x55fb            // =22011
+               	cmp	x23, x17
                	b.eq	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x150
@@ -191,9 +190,7 @@ Disassembly of section .text:
                	bl	<addr>
                	add	sp, sp, #0x20
                	mov	x25, x0
-               	mov	x24, #0x77              // =119
-               	add	x24, x24, #0x7
-               	cmp	x25, x24
+               	cmp	x25, #0x7e
                	b.eq	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x172

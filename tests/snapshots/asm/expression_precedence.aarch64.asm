@@ -10,10 +10,5 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	mov	x15, #0xc               // =12
-               	sxtw	x15, w15
-               	add	x15, x15, #0x2
-               	sxtw	x15, w15
-               	cmp	x15, #0xe
-               	cset	x0, eq
+               	mov	x0, #0x1                // =1
                	ret

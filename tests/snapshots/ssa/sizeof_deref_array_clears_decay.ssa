@@ -66,32 +66,31 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(184)                                         -> x11
-    v2   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x11
-    v3   BinopI { op=shr, lhs=v2, rhs_imm=32 }            -> x11
-    v4   BinopI { op=ne, lhs=v3, rhs_imm=184 }            -> x11
-    terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
+    v2   Imm(790273982464)                                -> x11
+    v3   Imm(0)                                           -> x11
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
-    v5   Imm(1)                                           -> x0
-    terminator Return(v5)   (exit_acc=v5)
+    v4   Imm(1)                                           -> x0
+    terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
-    v6   Imm(8)                                           -> x11
-    v7   BinopI { op=ne, lhs=v6, rhs_imm=8 }              -> x11
-    terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
+    v5   Imm(8)                                           -> x11
+    v6   Imm(0)                                           -> x11
+    terminator Bz { cond=v6, target=b4, fall=b3 }   (exit_acc=v6)
   block 3  start_pc=0
-    v8   Imm(2)                                           -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v7   Imm(2)                                           -> x0
+    terminator Return(v7)   (exit_acc=v7)
   block 4  start_pc=0
-    v9   Imm(184)                                         -> x11
-    v10  Imm(8)                                           -> x0
-    v11  Binop { op=div, lhs=v9, rhs=v10 }                -> x11
-    v12  BinopI { op=ne, lhs=v11, rhs_imm=23 }            -> x11
-    terminator Bz { cond=v12, target=b6, fall=b5 }   (exit_acc=v12)
+    v8   Imm(184)                                         -> x11
+    v9   Imm(8)                                           -> x0
+    v10  Binop { op=div, lhs=v8, rhs=v9 }                 -> x11
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=23 }            -> x11
+    terminator Bz { cond=v11, target=b6, fall=b5 }   (exit_acc=v11)
   block 5  start_pc=0
-    v13  Imm(3)                                           -> x0
-    terminator Return(v13)   (exit_acc=v13)
+    v12  Imm(3)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
   block 6  start_pc=0
-    v14  Imm(0)                                           -> x11
-    terminator Return(v14)   (exit_acc=v14)
+    v13  Imm(0)                                           -> x11
+    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

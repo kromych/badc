@@ -86,15 +86,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0xb8              // =184
-               	sxtw	x15, w15
-               	cmp	x15, #0xb8
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mov	x15, #0x8               // =8
-               	cmp	x15, #0x8
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x15, #0xb8              // =184

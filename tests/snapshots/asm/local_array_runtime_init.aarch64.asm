@@ -312,13 +312,9 @@ Disassembly of section .text:
                	mov	x20, #0x5               // =5
                	mov	x0, x20
                	bl	<addr>
-               	mov	x20, #0x1b20            // =6944
-               	movk	x20, #0x47, lsl #16
-               	sxtw	x20, w20
-               	mov	x17, #0x5678            // =22136
-               	add	x20, x20, x17
-               	sxtw	x20, w20
-               	cmp	x0, x20
+               	mov	x17, #0x7198            // =29080
+               	movk	x17, #0x47, lsl #16
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x20, #0x1               // =1
                	mov	x0, x20

@@ -122,13 +122,7 @@ Disassembly of section .text:
                	ldrb	w15, [x15]
                	add	x14, x14, x15
                	sxtw	x14, w14
-               	mov	x15, #0x3               // =3
-               	sxtw	x15, w15
-               	add	x15, x15, #0x3
-               	sxtw	x15, w15
-               	add	x15, x15, #0x4
-               	sxtw	x15, w15
-               	cmp	x14, x15
+               	cmp	x14, #0xa
                	b.eq	<addr>
                	mov	x15, #0x1               // =1
                	mov	x0, x15
@@ -154,13 +148,7 @@ Disassembly of section .text:
                	ldrb	w14, [x14]
                	add	x15, x15, x14
                	sxtw	x15, w15
-               	mov	x14, #0x13              // =19
-               	sxtw	x14, w14
-               	add	x14, x14, #0xb
-               	sxtw	x14, w14
-               	add	x14, x14, #0xc
-               	sxtw	x14, w14
-               	cmp	x15, x14
+               	cmp	x15, #0x2a
                	b.eq	<addr>
                	mov	x14, #0x2               // =2
                	mov	x0, x14
@@ -186,13 +174,7 @@ Disassembly of section .text:
                	ldrb	w15, [x15]
                	add	x14, x14, x15
                	sxtw	x14, w14
-               	mov	x15, #0x23              // =35
-               	sxtw	x15, w15
-               	add	x15, x15, #0x13
-               	sxtw	x15, w15
-               	add	x15, x15, #0x14
-               	sxtw	x15, w15
-               	cmp	x14, x15
+               	cmp	x14, #0x4a
                	b.eq	<addr>
                	mov	x15, #0x3               // =3
                	mov	x0, x15

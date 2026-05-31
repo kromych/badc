@@ -20,12 +20,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x14, x14, x17
-               	mov	x13, #0xffff            // =65535
-               	movk	x13, #0xffff, lsl #16
-               	movk	x13, #0xffff, lsl #32
-               	movk	x13, #0xffff, lsl #48
-               	mov	x17, #0x3               // =3
-               	and	x13, x13, x17
+               	mov	x13, #0x3               // =3
                	orr	x14, x14, x13
                	strh	w14, [x15]
                	sub	x13, x29, #0x8
@@ -35,10 +30,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x14, x14, x17
-               	mov	x15, #0x1               // =1
-               	mov	x17, #0x3               // =3
-               	and	x15, x15, x17
-               	lsl	x15, x15, #2
+               	mov	x15, #0x4               // =4
                	orr	x14, x14, x15
                	strh	w14, [x13]
                	sub	x15, x29, #0x8
@@ -48,13 +40,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x14, x14, x17
-               	mov	x13, #0xf800            // =63488
-               	movk	x13, #0xffff, lsl #16
-               	movk	x13, #0xffff, lsl #32
-               	movk	x13, #0xffff, lsl #48
-               	mov	x17, #0xfff             // =4095
-               	and	x13, x13, x17
-               	lsl	x13, x13, #4
+               	mov	x13, #0x8000            // =32768
                	orr	x14, x14, x13
                	strh	w14, [x15]
                	sub	x13, x29, #0x8
@@ -124,12 +110,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	mov	x15, #0xfffc            // =65532
-               	movk	x15, #0xffff, lsl #16
-               	movk	x15, #0xffff, lsl #32
-               	movk	x15, #0xffff, lsl #48
-               	mov	x17, #0x7               // =7
-               	and	x15, x15, x17
+               	mov	x15, #0x4               // =4
                	orr	x0, x0, x15
                	str	w0, [x13]
                	sub	x15, x29, #0x10
@@ -139,13 +120,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	mov	x13, #0xff80            // =65408
-               	movk	x13, #0xffff, lsl #16
-               	movk	x13, #0xffff, lsl #32
-               	movk	x13, #0xffff, lsl #48
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
-               	lsl	x13, x13, #3
+               	mov	x13, #0x400             // =1024
                	orr	x0, x0, x13
                	str	w0, [x15]
                	sub	x13, x29, #0x10
@@ -154,14 +129,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	mov	x15, #0xffff            // =65535
+               	mov	x15, #0xf800            // =63488
                	movk	x15, #0xffff, lsl #16
-               	movk	x15, #0xffff, lsl #32
-               	movk	x15, #0xffff, lsl #48
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0x1f, lsl #16
-               	and	x15, x15, x17
-               	lsl	x15, x15, #11
                	orr	x0, x0, x15
                	str	w0, [x13]
                	sub	x15, x29, #0x10
@@ -248,8 +217,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
                	mov	x13, #0x7               // =7
-               	mov	x17, #0xfff             // =4095
-               	and	x13, x13, x17
                	orr	x0, x0, x13
                	str	w0, [x15]
                	sub	x13, x29, #0x18
@@ -260,12 +227,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	mov	x15, #0xffff            // =65535
-               	movk	x15, #0xffff, lsl #16
-               	movk	x15, #0xffff, lsl #32
-               	movk	x15, #0xffff, lsl #48
-               	mov	x17, #0x3               // =3
-               	and	x15, x15, x17
+               	mov	x15, #0x3               // =3
                	orr	x0, x0, x15
                	strh	w0, [x13]
                	sub	x15, x29, #0x18
@@ -276,10 +238,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x0, x0, x17
-               	mov	x13, #0x1               // =1
-               	mov	x17, #0x3               // =3
-               	and	x13, x13, x17
-               	lsl	x13, x13, #2
+               	mov	x13, #0x4               // =4
                	orr	x0, x0, x13
                	strh	w0, [x15]
                	sub	x13, x29, #0x18

@@ -152,8 +152,7 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x30, %rsp
                	movq	%rax, %r15
-               	addq	$0x55f0, %r12           # imm = 0x55F0
-               	cmpq	%r12, %r15
+               	cmpq	$0x55fb, %r15           # imm = 0x55FB
                	je	<addr>
                	leaq	<rip>, %rbx
                	movq	%rbx, %rdi
@@ -180,9 +179,7 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x20, %rsp
                	movq	%rax, %r12
-               	movl	$0x77, %ebx
-               	addq	$0x7, %rbx
-               	cmpq	%rbx, %r12
+               	cmpq	$0x7e, %r12
                	je	<addr>
                	leaq	<rip>, %r15
                	movq	%r15, %rdi
@@ -210,4 +207,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

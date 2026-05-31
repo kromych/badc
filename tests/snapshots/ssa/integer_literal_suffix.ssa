@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(68719476736)                                 -> x11
-    v2   BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x11
+    v2   Imm(68719476735)                                 -> x11
     v3   Imm(0)                                           -> x9
     v4   LoadLocal { off=-1, kind=I64 }                   -> x9
     v5   BinopI { op=ne, lhs=v2, rhs_imm=68719476735 }    -> x11

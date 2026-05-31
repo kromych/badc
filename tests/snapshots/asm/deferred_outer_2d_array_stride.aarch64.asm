@@ -90,25 +90,22 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	mov	x15, #0x30              // =48
-               	cmp	x15, #0x30
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x10              // =16
-               	cmp	x15, #0x10
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x10              // =16
-               	cmp	x15, #0x10
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
@@ -240,18 +237,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x30               // =48
-               	cmp	x0, #0x30
-               	b.eq	<addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x15, #0x9               // =9
                	mov	x0, x15
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xc                // =12
-               	cmp	x0, #0xc
-               	b.eq	<addr>
+               	mov	x0, #0x0                // =0
+               	cbz	x0, <addr>
                	mov	x15, #0xa               // =10
                	mov	x0, x15
                	ldr	x19, [sp]

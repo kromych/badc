@@ -72,9 +72,7 @@ Disassembly of section .text:
                	stur	w15, [x29, #-0x30]
                	b	<addr>
                	ldursw	x15, [x29, #-0x20]
-               	mov	x14, #0x84              // =132
-               	sxtw	x14, w14
-               	cmp	x15, x14
+               	cmp	x15, #0x84
                	b.eq	<addr>
                	ldursw	x14, [x29, #-0x30]
                	add	x14, x14, #0x4
@@ -82,9 +80,8 @@ Disassembly of section .text:
                	stur	w14, [x29, #-0x30]
                	b	<addr>
                	ldursw	x14, [x29, #-0x28]
-               	mov	x15, #0x69cf            // =27087
-               	sxtw	x15, w15
-               	cmp	x14, x15
+               	mov	x17, #0x69cf            // =27087
+               	cmp	x14, x17
                	b.eq	<addr>
                	ldursw	x15, [x29, #-0x30]
                	add	x15, x15, #0x8

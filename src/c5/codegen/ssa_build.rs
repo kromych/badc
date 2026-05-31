@@ -471,6 +471,17 @@ impl SsaBuilder {
     ///   `lhs` BinopI may become dead and the existing DCE pass
     ///   skips it.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
+        // Constant-fold `(Imm k1) op k2` directly to `Imm(k1 op k2)`.
+        // The 64-bit SSA value model uses wrapping arithmetic for
+        // Add/Sub/Mul and discards out-of-range Imm operands for
+        // Div / Mod (lhs's runtime evaluation can't be skipped, but
+        // for a known constant lhs the operation has a value too).
+        // Comparison ops collapse to the 0 / 1 boolean.
+        if let Some(k1) = self.peek_imm(lhs)
+            && let Some(folded) = fold_int_binop_imm(op, k1, rhs_imm)
+        {
+            return self.imm(folded);
+        }
         let identity = match op {
             BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => rhs_imm == 0,
             BinOp::Shl | BinOp::Shr | BinOp::Shru => rhs_imm == 0,
@@ -801,6 +812,42 @@ impl SsaBuilder {
         }
         self.func.blocks = blocks;
         self.func
+    }
+}
+
+/// Evaluate `(k1 op k2)` when both operands are known constants.
+/// Returns `Some(value)` for an integer-result op, or `None` for
+/// undefined / floating-point cases the caller must keep as a
+/// runtime instruction. Integer arithmetic wraps in 64 bits to
+/// mirror the SSA value model.
+fn fold_int_binop_imm(op: BinOp, k1: i64, k2: i64) -> Option<i64> {
+    use BinOp::*;
+    match op {
+        Add => Some(k1.wrapping_add(k2)),
+        Sub => Some(k1.wrapping_sub(k2)),
+        Mul => Some(k1.wrapping_mul(k2)),
+        And => Some(k1 & k2),
+        Or => Some(k1 | k2),
+        Xor => Some(k1 ^ k2),
+        Shl if (0..64).contains(&k2) => Some(((k1 as u64).wrapping_shl(k2 as u32)) as i64),
+        Shr if (0..64).contains(&k2) => Some(k1 >> k2),
+        Shru if (0..64).contains(&k2) => Some(((k1 as u64) >> k2) as i64),
+        Ror if (0..64).contains(&k2) => Some((k1 as u64).rotate_right(k2 as u32) as i64),
+        Eq => Some(if k1 == k2 { 1 } else { 0 }),
+        Ne => Some(if k1 != k2 { 1 } else { 0 }),
+        Lt => Some(if k1 < k2 { 1 } else { 0 }),
+        Gt => Some(if k1 > k2 { 1 } else { 0 }),
+        Le => Some(if k1 <= k2 { 1 } else { 0 }),
+        Ge => Some(if k1 >= k2 { 1 } else { 0 }),
+        Ult => Some(if (k1 as u64) < (k2 as u64) { 1 } else { 0 }),
+        Ugt => Some(if (k1 as u64) > (k2 as u64) { 1 } else { 0 }),
+        Ule => Some(if (k1 as u64) <= (k2 as u64) { 1 } else { 0 }),
+        Uge => Some(if (k1 as u64) >= (k2 as u64) { 1 } else { 0 }),
+        Div if k2 != 0 && !(k1 == i64::MIN && k2 == -1) => Some(k1 / k2),
+        Mod if k2 != 0 && !(k1 == i64::MIN && k2 == -1) => Some(k1 % k2),
+        Divu if k2 != 0 => Some(((k1 as u64) / (k2 as u64)) as i64),
+        Modu if k2 != 0 => Some(((k1 as u64) % (k2 as u64)) as i64),
+        _ => None,
     }
 }
 

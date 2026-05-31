@@ -39,13 +39,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x10, %eax
                	retq
-               	movl	$0x5, %r11d
-               	movslq	%r11d, %r11
-               	cmpq	$0x5, %r11
+               	xorq	%r11, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0x11, %eax
                	retq
                	xorq	%r11, %r11
                	movq	%r11, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

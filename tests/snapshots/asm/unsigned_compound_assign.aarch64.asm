@@ -183,10 +183,8 @@ Disassembly of section .text:
                	mov	x20, #0x41c             // =1052
                	stur	w20, [x29, #-0x18]
                	mov	x0, #0x19f              // =415
-               	sxtw	x0, w0
                	sub	x20, x29, #0x18
                	ldr	w21, [x20]
-               	sxtw	x0, w0
                	add	x21, x21, x0
                	str	w21, [x20]
                	ldur	w20, [x29, #-0x18]

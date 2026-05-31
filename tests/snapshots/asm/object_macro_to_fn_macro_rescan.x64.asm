@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cmpq	$0x7, %rbx
                	jne	<addr>
                	xorq	%r8, %r8
-               	andq	$0xff, %r8
                	movq	%r8, -0x28(%rbp)
                	jmp	<addr>
                	leaq	<rip>, %r12
@@ -68,7 +67,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rbx
                	jne	<addr>
                	xorq	%rax, %rax
-               	andq	$0xff, %rax
                	movq	%rax, -0x30(%rbp)
                	jmp	<addr>
                	leaq	<rip>, %r12
@@ -90,4 +88,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

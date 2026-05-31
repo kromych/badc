@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	x15, x15, #0x1
                	str	w15, [x14]
                	b	<addr>
-               	mov	x15, #0x10              // =16
-               	sxtw	x20, w15
+               	mov	x20, #0x10              // =16
                	mov	x0, x20
                	bl	<addr>
                	stur	x0, [x29, #-0x18]

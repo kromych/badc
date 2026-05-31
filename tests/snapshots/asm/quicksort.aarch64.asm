@@ -141,8 +141,7 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
-               	mov	x15, #0x14              // =20
-               	sxtw	x20, w15
+               	mov	x20, #0x14              // =20
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0

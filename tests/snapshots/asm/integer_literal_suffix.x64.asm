@@ -12,8 +12,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	movabsq	$0x1000000000, %r11     # imm = 0x1000000000
-               	subq	$0x1, %r11
+               	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
                	movabsq	$0xfffffffff, %r10      # imm = 0xFFFFFFFFF
                	cmpq	%r10, %r11
                	je	<addr>
@@ -87,4 +86,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -1025,7 +1025,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b212)
   block 216  start_pc=0
     v528 Imm(1)                                           -> x0
-    v529 BinopI { op=eq, lhs=v528, rhs_imm=0 }            -> x0
+    v529 Imm(0)                                           -> x0
     terminator Bz { cond=v529, target=b220, fall=b219 }   (exit_acc=v529)
   block 217  start_pc=0
     v534 Imm(0)                                           -> x14
@@ -1042,7 +1042,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b217)
   block 221  start_pc=0
     v535 Imm(1)                                           -> x0
-    v536 BinopI { op=eq, lhs=v535, rhs_imm=0 }            -> x0
+    v536 Imm(0)                                           -> x0
     terminator Bz { cond=v536, target=b225, fall=b224 }   (exit_acc=v536)
   block 222  start_pc=0
     v541 Imm(0)                                           -> x14
@@ -1059,7 +1059,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b222)
   block 226  start_pc=0
     v542 Imm(1)                                           -> x0
-    v543 BinopI { op=eq, lhs=v542, rhs_imm=0 }            -> x0
+    v543 Imm(0)                                           -> x0
     terminator Bz { cond=v543, target=b230, fall=b229 }   (exit_acc=v543)
   block 227  start_pc=0
     v548 Imm(0)                                           -> x14
@@ -1076,7 +1076,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b227)
   block 231  start_pc=0
     v549 Imm(1)                                           -> x0
-    v550 BinopI { op=eq, lhs=v549, rhs_imm=0 }            -> x0
+    v550 Imm(0)                                           -> x0
     terminator Bz { cond=v550, target=b235, fall=b234 }   (exit_acc=v550)
   block 232  start_pc=0
     v555 Imm(0)                                           -> x14
@@ -1093,7 +1093,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b232)
   block 236  start_pc=0
     v556 Imm(1)                                           -> x0
-    v557 BinopI { op=eq, lhs=v556, rhs_imm=0 }            -> x0
+    v557 Imm(0)                                           -> x0
     terminator Bz { cond=v557, target=b240, fall=b239 }   (exit_acc=v557)
   block 237  start_pc=0
     v562 Imm(0)                                           -> x14
@@ -1110,7 +1110,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b237)
   block 241  start_pc=0
     v563 Imm(1)                                           -> x0
-    v564 BinopI { op=eq, lhs=v563, rhs_imm=0 }            -> x0
+    v564 Imm(0)                                           -> x0
     terminator Bz { cond=v564, target=b245, fall=b244 }   (exit_acc=v564)
   block 242  start_pc=0
     v569 Imm(0)                                           -> x14
@@ -1127,7 +1127,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b242)
   block 246  start_pc=0
     v570 Imm(1)                                           -> x0
-    v571 BinopI { op=eq, lhs=v570, rhs_imm=0 }            -> x0
+    v571 Imm(0)                                           -> x0
     terminator Bz { cond=v571, target=b250, fall=b249 }   (exit_acc=v571)
   block 247  start_pc=0
     v576 Imm(0)                                           -> x14
@@ -1144,7 +1144,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=32
     terminator Jmp(b247)
   block 251  start_pc=0
     v577 Imm(1)                                           -> x0
-    v578 BinopI { op=eq, lhs=v577, rhs_imm=0 }            -> x0
+    v578 Imm(0)                                           -> x0
     terminator Bz { cond=v578, target=b255, fall=b254 }   (exit_acc=v578)
   block 252  start_pc=0
     v583 Imm(0)                                           -> x14

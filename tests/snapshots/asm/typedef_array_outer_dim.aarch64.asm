@@ -71,12 +71,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x230
                	str	x20, [sp]
-               	mov	x15, #0x40              // =64
-               	sxtw	x15, w15
-               	lsl	x15, x15, #3
-               	sxtw	x15, w15
-               	cmp	x15, #0x200
-               	b.eq	<addr>
+               	mov	x15, #0x0               // =0
+               	cbz	x15, <addr>
                	mov	x14, #0x1               // =1
                	mov	x0, x14
                	ldr	x20, [sp]
@@ -91,9 +87,7 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x16, x29, #0x210
                	ldrsw	x15, [x16]
-               	mov	x14, #0x40              // =64
-               	sxtw	x14, w14
-               	cmp	x15, x14
+               	cmp	x15, #0x40
                	b.ge	<addr>
                	b	<addr>
                	sub	x14, x29, #0x210

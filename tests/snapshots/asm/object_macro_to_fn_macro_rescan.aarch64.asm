@@ -55,8 +55,6 @@ Disassembly of section .text:
                	cmp	x20, #0x7
                	b.ne	<addr>
                	mov	x13, #0x0               // =0
-               	mov	x17, #0xff              // =255
-               	and	x13, x13, x17
                	stur	x13, [x29, #-0x28]
                	b	<addr>
                	adrp	x19, <page>
@@ -77,8 +75,6 @@ Disassembly of section .text:
                	cmp	x20, #0x8
                	b.ne	<addr>
                	mov	x0, #0x0                // =0
-               	mov	x17, #0xff              // =255
-               	and	x0, x0, x17
                	stur	x0, [x29, #-0x30]
                	b	<addr>
                	adrp	x19, <page>

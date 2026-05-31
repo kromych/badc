@@ -41,16 +41,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v12)   (exit_acc=v12)
   block 12  start_pc=0
     v13  Imm(5)                                           -> x11
-    v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x11
-    v15  BinopI { op=shr, lhs=v14, rhs_imm=32 }           -> x11
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=5 }             -> x11
-    terminator Bz { cond=v16, target=b14, fall=b13 }   (exit_acc=v16)
+    v14  Imm(21474836480)                                 -> x11
+    v15  Imm(0)                                           -> x11
+    terminator Bz { cond=v15, target=b14, fall=b13 }   (exit_acc=v15)
   block 13  start_pc=0
-    v17  Imm(17)                                          -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v16  Imm(17)                                          -> x0
+    terminator Return(v16)   (exit_acc=v16)
   block 14  start_pc=0
-    v18  Imm(0)                                           -> x11
-    terminator Return(v18)   (exit_acc=v18)
+    v17  Imm(0)                                           -> x11
+    terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

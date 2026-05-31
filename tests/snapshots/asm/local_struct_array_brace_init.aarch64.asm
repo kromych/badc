@@ -161,11 +161,7 @@ Disassembly of section .text:
                	mov	x0, x22
                	mov	x1, x23
                	bl	<addr>
-               	mov	x23, #0x30              // =48
-               	sxtw	x23, w23
-               	add	x23, x23, #0x8
-               	sxtw	x23, w23
-               	cmp	x0, x23
+               	cmp	x0, #0x38
                	b.eq	<addr>
                	mov	x23, #0x4               // =4
                	mov	x0, x23

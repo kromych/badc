@@ -27,8 +27,7 @@ Disassembly of section .text:
                	addq	$0x1, %r11
                	movl	%r11d, (%r9)
                	jmp	<addr>
-               	movl	$0x10, %r11d
-               	movslq	%r11d, %rbx
+               	movl	$0x10, %ebx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

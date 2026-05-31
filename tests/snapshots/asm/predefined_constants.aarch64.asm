@@ -51,8 +51,7 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	ret
                	mov	x15, #0x0               // =0
-               	cmp	x15, #0x0
-               	b.eq	<addr>
+               	cbz	x15, <addr>
                	mov	x0, #0xb                // =11
                	ret
                	mov	x15, #0x0               // =0

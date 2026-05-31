@@ -94,8 +94,7 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	sub	x20, x29, #0x8
-               	mov	x14, #0x40              // =64
-               	sxtw	x21, w14
+               	mov	x21, #0x40              // =64
                	mov	x0, x21
                	bl	<addr>
                	str	x0, [x20]

@@ -63,10 +63,7 @@ Disassembly of section .text:
                	mov	x21, x1
                	cmp	x20, #0x0
                	b.ne	<addr>
-               	mov	x12, #0x10              // =16
-               	sxtw	x12, w12
-               	add	x12, x12, #0x8
-               	sxtw	x22, w12
+               	mov	x22, #0x18              // =24
                	mov	x0, x22
                	bl	<addr>
                	mov	x22, #0x0               // =0

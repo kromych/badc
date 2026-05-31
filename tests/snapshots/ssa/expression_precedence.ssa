@@ -6,13 +6,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x11
     v2   Imm(12)                                          -> x11
-    v3   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x11
-    v4   BinopI { op=shr, lhs=v3, rhs_imm=32 }            -> x11
-    v5   BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x11
-    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x11
-    v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x11
-    v8   BinopI { op=eq, lhs=v7, rhs_imm=14 }             -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v3   Imm(51539607552)                                 -> x11
+    v4   Imm(14)                                          -> x11
+    v5   Imm(60129542144)                                 -> x11
+    v6   Imm(1)                                           -> x0
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

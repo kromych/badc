@@ -170,10 +170,8 @@ Disassembly of section .text:
                	movl	$0x41c, %ebx            # imm = 0x41C
                	movl	%ebx, -0x18(%rbp)
                	movl	$0x19f, %eax            # imm = 0x19F
-               	movslq	%eax, %rax
                	leaq	-0x18(%rbp), %rbx
                	movl	(%rbx), %r12d
-               	movslq	%eax, %rax
                	addq	%rax, %r12
                	movl	%r12d, (%rbx)
                	movl	-0x18(%rbp), %ebx
@@ -285,4 +283,3 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

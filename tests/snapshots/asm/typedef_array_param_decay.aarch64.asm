@@ -105,7 +105,6 @@ Disassembly of section .text:
                	mov	x0, x22
                	bl	<addr>
                	mov	x22, #0x110             // =272
-               	sxtw	x22, w22
                	mov	x20, #0x2               // =2
                	sdiv	x22, x22, x20
                	cmp	x0, x22

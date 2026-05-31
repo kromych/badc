@@ -121,9 +121,7 @@ Disassembly of section .text:
                	ret
                	add	x13, x13, #0xc
                	ldrsh	x13, [x13]
-               	mov	x15, #0x12              // =18
-               	sxth	x15, w15
-               	cmp	x13, x15
+               	cmp	x13, #0x12
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x50

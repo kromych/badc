@@ -150,8 +150,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	movl	$0x14, %r11d
-               	movslq	%r11d, %rbx
+               	movl	$0x14, %ebx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

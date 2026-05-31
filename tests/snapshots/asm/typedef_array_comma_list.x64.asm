@@ -81,21 +81,15 @@ Disassembly of section .text:
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	movl	$0x40, %r11d
-               	movslq	%r11d, %r11
-               	shlq	$0x3, %r11
-               	movslq	%r11d, %r11
-               	cmpq	$0x200, %r11            # imm = 0x200
+               	xorq	%r11, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0x9, %eax
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	movl	$0x40, %r11d
-               	movslq	%r11d, %r11
-               	shlq	$0x3, %r11
-               	movslq	%r11d, %r11
-               	cmpq	$0x200, %r11            # imm = 0x200
+               	xorq	%r11, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	movl	$0xa, %eax
                	addq	$0x210, %rsp            # imm = 0x210
@@ -154,13 +148,9 @@ Disassembly of section .text:
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	movl	$0x40, %edi
-               	shlq	$0x3, %rdi
-               	movslq	%edi, %rdi
-               	addq	$0x4, %rdi
-               	movslq	%edi, %rdi
-               	cmpq	$0x208, %rdi            # imm = 0x208
-               	jle	<addr>
+               	xorq	%rdi, %rdi
+               	cmpq	$0x0, %rdi
+               	je	<addr>
                	movl	$0x10, %eax
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
@@ -170,4 +160,4 @@ Disassembly of section .text:
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

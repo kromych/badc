@@ -61,10 +61,7 @@ Disassembly of section .text:
                	movq	%rsi, %r12
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	movl	$0x10, %edi
-               	movslq	%edi, %rdi
-               	addq	$0x8, %rdi
-               	movslq	%edi, %r14
+               	movl	$0x18, %r14d
                	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

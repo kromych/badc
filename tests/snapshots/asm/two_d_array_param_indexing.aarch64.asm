@@ -178,9 +178,8 @@ Disassembly of section .text:
                	ldrh	w14, [x14]
                	add	x15, x15, x14
                	sxtw	x15, w15
-               	mov	x14, #0x1244            // =4676
-               	sxtw	x14, w14
-               	cmp	x15, x14
+               	mov	x17, #0x1244            // =4676
+               	cmp	x15, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x4c0

@@ -106,36 +106,35 @@ fn ent_pc=14 n_params=0 variadic=false locals=10
     v27  BinopI { op=add, lhs=v19, rhs_imm=12 }           -> x8
     v28  Load { addr=v27, kind=I16 }                      -> x8
     v29  Imm(18)                                          -> x11
-    v30  BinopI { op=shl, lhs=v29, rhs_imm=48 }           -> x11
-    v31  BinopI { op=shr, lhs=v30, rhs_imm=48 }           -> x11
-    v32  Binop { op=ne, lhs=v28, rhs=v31 }                -> x8
-    terminator Bz { cond=v32, target=b8, fall=b7 }   (exit_acc=v32)
+    v30  Imm(5066549580791808)                            -> x11
+    v31  BinopI { op=ne, lhs=v28, rhs_imm=18 }            -> x8
+    terminator Bz { cond=v31, target=b8, fall=b7 }   (exit_acc=v31)
   block 7  start_pc=0
-    v33  Imm(2)                                           -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v32  Imm(2)                                           -> x0
+    terminator Return(v32)   (exit_acc=v32)
   block 8  start_pc=0
-    v34  LocalAddr(-6)                                    -> x8
-    v35  Imm(0)                                           -> x0
-    v36  LoadLocal { off=-9, kind=I64 }                   -> x0
-    v37  LocalAddr(-6)                                    -> x0
-    v38  Binop { op=ne, lhs=v34, rhs=v37 }                -> x8
-    terminator Bz { cond=v38, target=b10, fall=b9 }   (exit_acc=v38)
+    v33  LocalAddr(-6)                                    -> x8
+    v34  Imm(0)                                           -> x0
+    v35  LoadLocal { off=-9, kind=I64 }                   -> x0
+    v36  LocalAddr(-6)                                    -> x0
+    v37  Binop { op=ne, lhs=v33, rhs=v36 }                -> x8
+    terminator Bz { cond=v37, target=b10, fall=b9 }   (exit_acc=v37)
   block 9  start_pc=0
-    v39  Imm(3)                                           -> x0
-    terminator Return(v39)   (exit_acc=v39)
+    v38  Imm(3)                                           -> x0
+    terminator Return(v38)   (exit_acc=v38)
   block 10  start_pc=0
-    v40  LocalAddr(-6)                                    -> x8
-    v41  Imm(0)                                           -> x0
-    v42  LoadLocal { off=-10, kind=I64 }                  -> x0
-    v43  LocalAddr(-6)                                    -> x0
-    v44  Binop { op=ne, lhs=v40, rhs=v43 }                -> x8
-    terminator Bz { cond=v44, target=b12, fall=b11 }   (exit_acc=v44)
+    v39  LocalAddr(-6)                                    -> x8
+    v40  Imm(0)                                           -> x0
+    v41  LoadLocal { off=-10, kind=I64 }                  -> x0
+    v42  LocalAddr(-6)                                    -> x0
+    v43  Binop { op=ne, lhs=v39, rhs=v42 }                -> x8
+    terminator Bz { cond=v43, target=b12, fall=b11 }   (exit_acc=v43)
   block 11  start_pc=0
-    v45  Imm(4)                                           -> x0
-    terminator Return(v45)   (exit_acc=v45)
+    v44  Imm(4)                                           -> x0
+    terminator Return(v44)   (exit_acc=v44)
   block 12  start_pc=0
-    v46  Imm(0)                                           -> x8
-    terminator Return(v46)   (exit_acc=v46)
+    v45  Imm(0)                                           -> x8
+    terminator Return(v45)   (exit_acc=v45)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

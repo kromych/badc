@@ -1,0 +1,107 @@
+; name=main
+fn ent_pc=0 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(7)                                           -> x15
+    v2   Imm(0)                                           -> x14
+    v3   Imm(4)                                           -> x14
+    v4   Extend { value=v1, kind=I32 }                    -> x14
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=2 }             -> x13
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x14
+    v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x13
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=28 }             -> x14
+    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
+  block 1  start_pc=0
+    v9   Imm(1)                                           -> x0
+    terminator Return(v9)   (exit_acc=v9)
+  block 2  start_pc=0
+    v10  Imm(3)                                           -> x14
+    v11  Extend { value=v1, kind=I32 }                    -> x14
+    v12  BinopI { op=add, lhs=v11, rhs_imm=3 }            -> x0
+    v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x14
+    v14  BinopI { op=shr, lhs=v13, rhs_imm=32 }           -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=10 }            -> x14
+    terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
+  block 3  start_pc=0
+    v16  Imm(2)                                           -> x0
+    terminator Return(v16)   (exit_acc=v16)
+  block 4  start_pc=0
+    v17  Imm(240)                                         -> x14
+    v18  Extend { value=v1, kind=I32 }                    -> x14
+    v19  BinopI { op=and, lhs=v18, rhs_imm=240 }          -> x0
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x14
+    terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
+  block 5  start_pc=0
+    v21  Imm(3)                                           -> x0
+    terminator Return(v21)   (exit_acc=v21)
+  block 6  start_pc=0
+    v22  Imm(16)                                          -> x14
+    v23  Extend { value=v1, kind=I32 }                    -> x14
+    v24  BinopI { op=or, lhs=v23, rhs_imm=16 }            -> x0
+    v25  BinopI { op=ne, lhs=v24, rhs_imm=23 }            -> x14
+    terminator Bz { cond=v25, target=b8, fall=b7 }   (exit_acc=v25)
+  block 7  start_pc=0
+    v26  Imm(4)                                           -> x0
+    terminator Return(v26)   (exit_acc=v26)
+  block 8  start_pc=0
+    v27  Imm(255)                                         -> x14
+    v28  Extend { value=v1, kind=I32 }                    -> x14
+    v29  BinopI { op=xor, lhs=v28, rhs_imm=255 }          -> x0
+    v30  BinopI { op=ne, lhs=v29, rhs_imm=248 }           -> x14
+    terminator Bz { cond=v30, target=b10, fall=b9 }   (exit_acc=v30)
+  block 9  start_pc=0
+    v31  Imm(5)                                           -> x0
+    terminator Return(v31)   (exit_acc=v31)
+  block 10  start_pc=0
+    v32  Imm(1)                                           -> x14
+    v33  Extend { value=v1, kind=I32 }                    -> x14
+    v34  BinopI { op=eq, lhs=v33, rhs_imm=1 }             -> x0
+    v35  BinopI { op=ne, lhs=v34, rhs_imm=0 }             -> x14
+    terminator Bz { cond=v35, target=b12, fall=b11 }   (exit_acc=v35)
+  block 11  start_pc=0
+    v36  Imm(6)                                           -> x0
+    terminator Return(v36)   (exit_acc=v36)
+  block 12  start_pc=0
+    v37  Imm(1)                                           -> x14
+    v38  Extend { value=v1, kind=I32 }                    -> x14
+    v39  BinopI { op=ne, lhs=v38, rhs_imm=1 }             -> x0
+    v40  BinopI { op=ne, lhs=v39, rhs_imm=1 }             -> x14
+    terminator Bz { cond=v40, target=b14, fall=b13 }   (exit_acc=v40)
+  block 13  start_pc=0
+    v41  Imm(7)                                           -> x0
+    terminator Return(v41)   (exit_acc=v41)
+  block 14  start_pc=0
+    v42  Imm(10)                                          -> x14
+    v43  Extend { value=v1, kind=I32 }                    -> x0
+    v44  Binop { op=sub, lhs=v42, rhs=v43 }               -> x12
+    v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x0
+    v46  BinopI { op=shr, lhs=v45, rhs_imm=32 }           -> x12
+    v47  BinopI { op=ne, lhs=v46, rhs_imm=3 }             -> x0
+    terminator Bz { cond=v47, target=b16, fall=b15 }   (exit_acc=v47)
+  block 15  start_pc=0
+    v48  Imm(8)                                           -> x12
+    terminator Return(v48)   (exit_acc=v48)
+  block 16  start_pc=0
+    v49  Imm(8)                                           -> x0
+    v50  Extend { value=v1, kind=I32 }                    -> x0
+    v51  BinopI { op=lt, lhs=v50, rhs_imm=8 }             -> x15
+    v52  BinopI { op=eq, lhs=v51, rhs_imm=0 }             -> x0
+    terminator Bz { cond=v52, target=b18, fall=b17 }   (exit_acc=v52)
+  block 17  start_pc=0
+    v53  Imm(9)                                           -> x15
+    terminator Return(v53)   (exit_acc=v53)
+  block 18  start_pc=0
+    v54  Imm(0)                                           -> x0
+    terminator Return(v54)   (exit_acc=v54)
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[20] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x20
+    v2   Imm(0)                                           -> x14
+    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
+    v5   Imm(0)                                           -> x14
+    terminator Return(v5)   (exit_acc=v5)

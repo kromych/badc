@@ -1,0 +1,257 @@
+
+local_array_partial_init_zero.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	0x4003c8 <.text+0x1a8>
+               	adrp	x16, 0x410000
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0xb0
+               	mov	x15, x0
+               	mov	x14, #0x0               // =0
+               	stur	w14, [x29, #-0xa8]
+               	b	0x400254 <.text+0x34>
+               	ldursw	x14, [x29, #-0xa8]
+               	cmp	x14, #0x28
+               	b.ge	0x40029c <.text+0x7c>
+               	b	0x400278 <.text+0x58>
+               	sub	x14, x29, #0xa8
+               	ldrsw	x13, [x14]
+               	add	x12, x13, #0x1
+               	str	w12, [x14]
+               	b	0x400254 <.text+0x34>
+               	sub	x12, x29, #0xa0
+               	ldursw	x13, [x29, #-0xa8]
+               	lsl	x14, x13, #2
+               	add	x13, x12, x14
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x14, x15, x17
+               	str	w14, [x13]
+               	b	0x400264 <.text+0x44>
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x90
+               	str	x19, [sp]
+               	sub	x15, x29, #0x68
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0xd0
+               	mov	x14, x19
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x14]
+               	str	x10, [x15]
+               	ldr	x10, [x14, #0x8]
+               	str	x10, [x15, #0x8]
+               	ldr	x10, [x14, #0x10]
+               	str	x10, [x15, #0x10]
+               	ldr	x10, [x14, #0x18]
+               	str	x10, [x15, #0x18]
+               	ldr	x10, [x14, #0x20]
+               	str	x10, [x15, #0x20]
+               	ldr	x10, [x14, #0x28]
+               	str	x10, [x15, #0x28]
+               	ldr	x10, [x14, #0x30]
+               	str	x10, [x15, #0x30]
+               	ldr	x10, [x14, #0x38]
+               	str	x10, [x15, #0x38]
+               	ldr	x10, [x14, #0x40]
+               	str	x10, [x15, #0x40]
+               	ldr	x10, [x14, #0x48]
+               	str	x10, [x15, #0x48]
+               	ldr	x10, [x14, #0x50]
+               	str	x10, [x15, #0x50]
+               	ldr	x10, [x14, #0x58]
+               	str	x10, [x15, #0x58]
+               	ldrb	w10, [x14, #0x60]
+               	strb	w10, [x15, #0x60]
+               	ldrb	w10, [x14, #0x61]
+               	strb	w10, [x15, #0x61]
+               	ldrb	w10, [x14, #0x62]
+               	strb	w10, [x15, #0x62]
+               	ldrb	w10, [x14, #0x63]
+               	strb	w10, [x15, #0x63]
+               	ldr	x10, [sp], #0x10
+               	mov	x13, x15
+               	mov	x13, #0x0               // =0
+               	stur	w13, [x29, #-0x70]
+               	stur	w13, [x29, #-0x78]
+               	b	0x400368 <.text+0x148>
+               	ldursw	x13, [x29, #-0x78]
+               	cmp	x13, #0x19
+               	b.ge	0x4003b4 <.text+0x194>
+               	b	0x40038c <.text+0x16c>
+               	sub	x13, x29, #0x78
+               	ldrsw	x14, [x13]
+               	add	x15, x14, #0x1
+               	str	w15, [x13]
+               	b	0x400368 <.text+0x148>
+               	sub	x15, x29, #0x70
+               	ldr	w14, [x15]
+               	sub	x13, x29, #0x68
+               	ldursw	x12, [x29, #-0x78]
+               	lsl	x11, x12, #2
+               	add	x12, x13, x11
+               	ldr	w11, [x12]
+               	add	x12, x14, x11
+               	str	w12, [x15]
+               	b	0x400378 <.text+0x158>
+               	ldur	w0, [x29, #-0x70]
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x90
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
+               	str	x20, [sp]
+               	str	x21, [sp, #0x8]
+               	str	x22, [sp, #0x10]
+               	mov	x20, #0xbeef            // =48879
+               	movk	x20, #0xdead, lsl #16
+               	mov	x0, x20
+               	bl	0x400238 <.text+0x18>
+               	mov	x14, x0
+               	bl	0x4002ac <.text+0x8c>
+               	mov	x21, x0
+               	mov	x22, #0x5678            // =22136
+               	movk	x22, #0x1234, lsl #16
+               	mov	x0, x22
+               	bl	0x400238 <.text+0x18>
+               	mov	x13, x0
+               	bl	0x4002ac <.text+0x8c>
+               	mov	x13, x0
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x22, x21, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x21, x22, x17
+               	cmp	x21, #0x0
+               	b.eq	0x400458 <.text+0x238>
+               	mov	x21, #0x1               // =1
+               	mov	x0, x21
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x22, x13, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x21, x22, x17
+               	cmp	x21, #0x0
+               	b.eq	0x400498 <.text+0x278>
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x22, #0x0               // =0
+               	mov	x0, x22
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	<unknown>
+               	adr	x10, 0x4ec5dd
+               	ldsetb	w14, w14, [x1]
+               	mla	v10.8h, v8.8h, v3.h[6]
+               	<unknown>
+               	tbz	w0, #0x6, 0x406b10 <exit+0x6518>
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	tbz	w18, #0xc, 0x3f8ba0
+               	tbz	w21, #0x6, 0x3feb64
+               	<unknown>
+               	cbnz	w16, 0x46eb0c
+               	<unknown>
+               	adds	w3, w19, #0x84c, lsl #12 // =0x84c000
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	ands	w1, w19, #0x3800000
+               	<unknown>
+               	cbhs	w5, w8, 0x400118
+               	<unknown>
+               	ldpsw	x15, x11, [x25, #-0xc8]
+               	<unknown>
+               	ldp	d14, d24, [x25, #-0x110]
+               	umlsl2	v15.4s, v25.8h, v2.h[7]
+               	<unknown>
+               	<unknown>
+               	ldpsw	x3, x11, [x19, #-0xc8]
+               	udf	#0x74
+               	udf	#0x0
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
+               	str	x20, [sp]
+               	str	x19, [sp, #0x10]
+               	sxtw	x20, w0
+               	mov	x0, x20
+               	bl	0x4005f8 <exit>
+               	uxtb	w0, w0
+               	mov	x14, x0
+               	mov	x14, #0x0               // =0
+               	mov	x0, x14
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	<unknown>
+               	adr	x10, 0x4ec6a1
+               	ldsetb	w14, w14, [x1]
+               	mla	v10.8h, v8.8h, v3.h[6]
+               	<unknown>
+               	tbz	w0, #0x6, 0x406bd4 <exit+0x65dc>
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	tbz	w18, #0xc, 0x3f8c64
+               	tbz	w21, #0x6, 0x3fec28
+               	<unknown>
+               	cbnz	w16, 0x46ebd0
+               	<unknown>
+               	adds	w3, w19, #0x84c, lsl #12 // =0x84c000
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	<unknown>
+               	ands	w1, w19, #0x3800000
+               	<unknown>
+               	cbhs	w5, w8, 0x4001dc
+               	<unknown>
+               	ldpsw	x15, x11, [x25, #-0xc8]
+               	<unknown>
+               	ldp	d14, d24, [x25, #-0x110]
+               	umlsl2	v15.4s, v25.8h, v2.h[7]
+               	<unknown>
+               	<unknown>
+               	ldpsw	x3, x11, [x19, #-0xc8]
+               	udf	#0x74
+
+<exit>:
+               	adrp	x16, 0x410000
+               	ldr	x16, [x16, #0xc0]
+               	br	x16

@@ -1,17 +1,49 @@
-#!/usr/bin/env bash
-# Block a push when the working tree fails the same fmt + clippy
-# gates the CI's "fmt + clippy" job enforces. Both checks run from
-# the repository root regardless of the caller's cwd. Bypass with
-# `git push --no-verify` when shipping a WIP branch where the
-# strict gate isn't desired.
+#!/usr/bin/env python3
+"""Pre-push gate: enforce the same fmt + clippy CI job locally.
 
-set -euo pipefail
+`cargo fmt --check` and `cargo clippy --release --all-targets -- -D
+warnings` run here. A failure aborts the push so a rebase or fix can
+land first. Bypass with `git push --no-verify` when shipping a WIP
+branch where the strict gate isn't desired.
+"""
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-cd "$REPO_ROOT"
+from __future__ import annotations
 
-echo "[pre-push] cargo fmt --check"
-cargo fmt --check
+import subprocess
+import sys
+from pathlib import Path
 
-echo "[pre-push] cargo clippy --release --all-targets -- -D warnings"
-cargo clippy --release --all-targets -- -D warnings
+
+def run(label: str, cmd: list[str], cwd: Path) -> int:
+    print(f"[pre-push] {label}", flush=True)
+    return subprocess.run(cmd, cwd=cwd).returncode
+
+
+def main() -> int:
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    root = Path(out.stdout.strip())
+    rc = run("cargo fmt --check", ["cargo", "fmt", "--check"], root)
+    if rc != 0:
+        return rc
+    return run(
+        "cargo clippy --release --all-targets -- -D warnings",
+        [
+            "cargo",
+            "clippy",
+            "--release",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        root,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

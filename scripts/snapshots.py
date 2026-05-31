@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Regenerate the per-fixture SSA + asm snapshots under tests/snapshots/.
+
+For every `.c` file under `tests/fixtures/c/`, this writes three files:
+
+  tests/snapshots/ssa/<name>.ssa            -- target-independent SSA dump
+  tests/snapshots/asm/<name>.x64.asm        -- linux-x64 disassembly
+  tests/snapshots/asm/<name>.aarch64.asm    -- linux-aarch64 disassembly
+
+The asm is normalised through `objdump --disassemble --no-show-raw-insn
+--no-addresses` so per-emit byte-offset shifts don't churn the snapshot
+for cosmetic reasons. Cross-arch ELFs are produced via `badc
+--target=linux-{x64,aarch64}` and disassembled with the host objdump
+(llvm-objdump on macOS, GNU objdump on Linux, both handle either ELF
+class).
+
+Fixtures that fail to compile (missing headers in the stripped fixture
+form, etc.) are logged but don't fail the run.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def repo_root() -> Path:
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return Path(out.stdout.strip())
+
+
+def ensure_badc(root: Path) -> Path:
+    badc = root / "target" / "release" / "badc"
+    if not badc.is_file():
+        print("[snapshots] building badc release...", flush=True)
+        subprocess.run(
+            ["cargo", "build", "--release", "--quiet"],
+            cwd=root,
+            check=True,
+        )
+    return badc
+
+
+TARGETS = [("x64", "linux-x64"), ("aarch64", "linux-aarch64")]
+OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
+
+
+def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
+    with dst.open("wb") as ssa_out:
+        proc = subprocess.run(
+            [str(badc), "-q", "-O", "--dump-ssa", "-o", str(tmp_bin), str(src)],
+            stdout=subprocess.DEVNULL,
+            stderr=ssa_out,
+        )
+    return proc.returncode == 0
+
+
+def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bool:
+    proc = subprocess.run(
+        [str(badc), "-q", "-O", f"--target={target}", "-o", str(tmp_bin), str(src)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if proc.returncode != 0:
+        return False
+    proc = subprocess.run(
+        ["objdump", *OBJDUMP_FLAGS, str(tmp_bin)],
+        capture_output=True,
+        check=False,
+    )
+    # objdump's header line bakes in the binary path, which churns the
+    # snapshot every run because the temp dir name varies. Replace the
+    # path with the snapshot's stable name.
+    text = proc.stdout.decode("utf-8", errors="replace")
+    text = text.replace(str(tmp_bin), dst.stem)
+    dst.write_text(text)
+    return True
+
+
+def regenerate(root: Path, only: list[str] | None) -> int:
+    badc = ensure_badc(root)
+    fixtures_dir = root / "tests" / "fixtures" / "c"
+    snap_root = root / "tests" / "snapshots"
+    (snap_root / "ssa").mkdir(parents=True, exist_ok=True)
+    (snap_root / "asm").mkdir(parents=True, exist_ok=True)
+
+    sources = sorted(fixtures_dir.glob("*.c"))
+    if only:
+        wanted = {n if n.endswith(".c") else n + ".c" for n in only}
+        sources = [s for s in sources if s.name in wanted]
+
+    written = 0
+    skipped: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / "bin"
+        for src in sources:
+            name = src.stem
+            ssa_path = snap_root / "ssa" / f"{name}.ssa"
+            ok = emit_ssa(badc, src, ssa_path, tmp)
+            if not ok:
+                ssa_path.unlink(missing_ok=True)
+                for suffix, _ in TARGETS:
+                    (snap_root / "asm" / f"{name}.{suffix}.asm").unlink(missing_ok=True)
+                skipped.append(name)
+                continue
+            for suffix, target in TARGETS:
+                asm_path = snap_root / "asm" / f"{name}.{suffix}.asm"
+                if not emit_asm(badc, src, asm_path, tmp, target):
+                    asm_path.unlink(missing_ok=True)
+            written += 1
+
+    print(f"[snapshots] wrote {written} fixtures, skipped {len(skipped)}")
+    if skipped:
+        for s in skipped:
+            print(f"[snapshots] skip {s}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        "--only",
+        nargs="*",
+        help="restrict to the given fixture names (with or without .c)",
+    )
+    args = p.parse_args(argv)
+    return regenerate(repo_root(), args.only)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

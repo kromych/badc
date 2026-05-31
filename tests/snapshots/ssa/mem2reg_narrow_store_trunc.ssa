@@ -1,0 +1,44 @@
+; name=check
+fn ent_pc=0 n_params=1 variadic=false locals=2
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x15
+    v2   Imm(0)                                           -> x14
+    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v4   Imm(0)                                           -> x14
+    v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x14
+    v6   BinopI { op=xor, lhs=v5, rhs_imm=44 }            -> x15
+    v7   BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x14
+    v8   BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x15
+    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
+  block 1  start_pc=0
+    v9   Imm(0)                                           -> x14
+    v10  StoreLocal { off=-2, value=v9, kind=I64 }        -> -
+    terminator Jmp(b3)   (exit_acc=v10)
+  block 2  start_pc=0
+    v11  Imm(1)                                           -> x14
+    v12  StoreLocal { off=-2, value=v11, kind=I64 }       -> -
+    terminator Jmp(b3)   (exit_acc=v12)
+  block 3  start_pc=0
+    v13  LoadLocal { off=-2, kind=I64 }                   -> x0
+    terminator Return(v13)   (exit_acc=v13)
+; name=main
+fn ent_pc=1 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[20] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(300)                                         -> x20
+    v2   Call { target_pc=0, args=[v1] }                  -> x14
+    terminator Return(v2)   (exit_acc=v2)
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[20] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x20
+    v2   Imm(0)                                           -> x14
+    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
+    v5   Imm(0)                                           -> x14
+    terminator Return(v5)   (exit_acc=v5)

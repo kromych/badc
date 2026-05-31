@@ -1,0 +1,75 @@
+/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:2: warning: unused variable `x`
+/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:3: warning: unused variable `y`
+/Volumes/src/compilers/badc/tests/fixtures/c/sizeof_expr.c:4: warning: unused variable `c`
+; name=main
+fn ent_pc=0 n_params=0 variadic=false locals=6
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x15
+    terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v1)
+  block 1  start_pc=0
+    v2   Imm(1)                                           -> x0
+    terminator Return(v2)   (exit_acc=v2)
+  block 2  start_pc=0
+    v3   Imm(0)                                           -> x15
+    terminator Bz { cond=v3, target=b4, fall=b3 }   (exit_acc=v3)
+  block 3  start_pc=0
+    v4   Imm(2)                                           -> x0
+    terminator Return(v4)   (exit_acc=v4)
+  block 4  start_pc=0
+    v5   Imm(0)                                           -> x15
+    terminator Bz { cond=v5, target=b6, fall=b5 }   (exit_acc=v5)
+  block 5  start_pc=0
+    v6   Imm(3)                                           -> x0
+    terminator Return(v6)   (exit_acc=v6)
+  block 6  start_pc=0
+    v7   Imm(0)                                           -> x15
+    terminator Bz { cond=v7, target=b8, fall=b7 }   (exit_acc=v7)
+  block 7  start_pc=0
+    v8   Imm(4)                                           -> x0
+    terminator Return(v8)   (exit_acc=v8)
+  block 8  start_pc=0
+    v9   Imm(0)                                           -> x15
+    terminator Bz { cond=v9, target=b10, fall=b9 }   (exit_acc=v9)
+  block 9  start_pc=0
+    v10  Imm(5)                                           -> x0
+    terminator Return(v10)   (exit_acc=v10)
+  block 10  start_pc=0
+    v11  Imm(0)                                           -> x15
+    terminator Bz { cond=v11, target=b12, fall=b11 }   (exit_acc=v11)
+  block 11  start_pc=0
+    v12  Imm(6)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
+  block 12  start_pc=0
+    v13  Imm(0)                                           -> x15
+    terminator Bz { cond=v13, target=b14, fall=b13 }   (exit_acc=v13)
+  block 13  start_pc=0
+    v14  Imm(7)                                           -> x0
+    terminator Return(v14)   (exit_acc=v14)
+  block 14  start_pc=0
+    v15  Imm(0)                                           -> x15
+    terminator Bz { cond=v15, target=b16, fall=b15 }   (exit_acc=v15)
+  block 15  start_pc=0
+    v16  Imm(8)                                           -> x0
+    terminator Return(v16)   (exit_acc=v16)
+  block 16  start_pc=0
+    v17  Imm(0)                                           -> x15
+    terminator Bz { cond=v17, target=b18, fall=b17 }   (exit_acc=v17)
+  block 17  start_pc=0
+    v18  Imm(9)                                           -> x0
+    terminator Return(v18)   (exit_acc=v18)
+  block 18  start_pc=0
+    v19  Imm(0)                                           -> x15
+    terminator Return(v19)   (exit_acc=v19)
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[20] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x20
+    v2   Imm(0)                                           -> x14
+    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
+    v5   Imm(0)                                           -> x14
+    terminator Return(v5)   (exit_acc=v5)

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Block a push when the working tree fails the same fmt + clippy
+# gates the CI's "fmt + clippy" job enforces. Both checks run from
+# the repository root regardless of the caller's cwd. Bypass with
+# `git push --no-verify` when shipping a WIP branch where the
+# strict gate isn't desired.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "[pre-push] cargo fmt --check"
+cargo fmt --check
+
+echo "[pre-push] cargo clippy --release --all-targets -- -D warnings"
+cargo clippy --release --all-targets -- -D warnings

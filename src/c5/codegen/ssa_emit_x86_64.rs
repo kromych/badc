@@ -928,9 +928,7 @@ pub(super) fn emit_function(
         match block.terminator {
             Terminator::Return(v) => {
                 if let Some((_, target_pc, args)) = tail_call {
-                    if !emit_tail_call(
-                        code, target_pc, args, alloc, frame, abi, fixups, func,
-                    ) {
+                    if !emit_tail_call(code, target_pc, args, alloc, frame, abi, fixups, func) {
                         code.truncate(snapshot);
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -3667,11 +3665,7 @@ fn detect_tail_call<'a>(
     // callee will read it. Tearing down our frame before the `jmp`
     // would make that address dangle; the param cells in particular
     // get overwritten by the tail-callee's own prologue.
-    if func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::LocalAddr(_)))
-    {
+    if func.insts.iter().any(|i| matches!(i, Inst::LocalAddr(_))) {
         return None;
     }
     Some((v as usize, target_pc, args))

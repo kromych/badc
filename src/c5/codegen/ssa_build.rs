@@ -145,6 +145,7 @@ impl SsaBuilder {
             locals: 0,
             n_params,
             is_variadic,
+            is_inline: false,
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),

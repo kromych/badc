@@ -61,7 +61,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
         ));
         return false;
     }
-    if func.insts.len() > cap as usize {
+    // `inline` / `__attribute__((always_inline))`-marked functions
+    // bypass the body-size cap (gcc / clang -O2 policy). The other
+    // shape constraints (single block, no Call, no Phi, no live
+    // LoadLocal, no cdecl-cell-aliased StoreLocal) still apply.
+    if !func.is_inline && func.insts.len() > cap as usize {
         say(&alloc::format!(
             "{n} insts > cap {c}",
             n = func.insts.len(),
@@ -448,12 +452,31 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
 pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
     #[cfg(feature = "std")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
-    if cap == 0 || funcs.is_empty() {
+    // Env-var override for the `is_inline` attribute pending parser
+    // plumbing for the `inline` keyword: a comma-separated list of
+    // function names flips `is_inline = true` so the body-size cap
+    // is bypassed at candidate evaluation.
+    #[cfg(feature = "std")]
+    if let Ok(names) = std::env::var("BADC_FORCE_INLINE") {
+        let want: alloc::collections::BTreeSet<&str> = names
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        for f in funcs.iter_mut() {
+            if want.contains(f.name.as_str()) {
+                f.is_inline = true;
+            }
+        }
+    }
+    let any_marked = funcs.iter().any(|f| f.is_inline);
+    if funcs.is_empty() || (cap == 0 && !any_marked) {
         #[cfg(feature = "std")]
         if trace {
             eprintln!(
-                "[inline] short-circuit cap={cap} funcs={n}",
-                n = funcs.len()
+                "[inline] short-circuit cap={cap} funcs={n} any_marked={m}",
+                n = funcs.len(),
+                m = any_marked
             );
         }
         return;

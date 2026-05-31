@@ -922,6 +922,7 @@ mod tests {
             locals: 0,
             n_params: 0,
             is_variadic: false,
+            is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             insts,
             blocks,

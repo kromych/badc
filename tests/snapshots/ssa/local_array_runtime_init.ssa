@@ -246,10 +246,11 @@ fn ent_pc=17 n_params=1 variadic=false locals=3
     v44  Load { addr=v43, kind=U8 }                       -> x9
     v45  Binop { op=add, lhs=v40, rhs=v44 }               -> x8
     v46  Store { addr=v39, value=v45, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v46)
+    v47  Load { addr=v39, kind=I32 }                      -> x11
+    terminator Jmp(b2)   (exit_acc=v47)
   block 4  start_pc=0
-    v47  LoadLocal { off=-2, kind=I32 }                   -> x0
-    terminator Return(v47)   (exit_acc=v47)
+    v48  LoadLocal { off=-2, kind=I32 }                   -> x0
+    terminator Return(v48)   (exit_acc=v48)
 ; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=main
 fn ent_pc=18 n_params=0 variadic=false locals=5

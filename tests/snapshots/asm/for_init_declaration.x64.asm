@@ -182,23 +182,23 @@ Disassembly of section .text:
                	addq	%r9, %r8
                	movl	%r8d, (%r11)
                	jmp	<addr>
-               	movl	$0xa, %r8d
-               	movl	%r8d, -0x18(%rbp)
+               	movl	$0xa, %r9d
+               	movl	%r9d, -0x18(%rbp)
                	jmp	<addr>
-               	movslq	-0x18(%rbp), %r8
-               	cmpq	$0xd, %r8
+               	movslq	-0x18(%rbp), %r9
+               	cmpq	$0xd, %r9
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x18(%rbp), %r9
-               	movslq	(%r9), %r8
-               	addq	$0x1, %r8
-               	movl	%r8d, (%r9)
+               	leaq	-0x18(%rbp), %r11
+               	movslq	(%r11), %r9
+               	addq	$0x1, %r9
+               	movl	%r9d, (%r11)
                	jmp	<addr>
-               	leaq	-0x8(%rbp), %r8
-               	movslq	(%r8), %r11
-               	movslq	-0x18(%rbp), %r9
-               	addq	%r9, %r11
-               	movl	%r11d, (%r8)
+               	leaq	-0x8(%rbp), %r9
+               	movslq	(%r9), %r8
+               	movslq	-0x18(%rbp), %r11
+               	addq	%r11, %r8
+               	movl	%r8d, (%r9)
                	jmp	<addr>
                	movslq	-0x8(%rbp), %rax
                	addq	$0x20, %rsp

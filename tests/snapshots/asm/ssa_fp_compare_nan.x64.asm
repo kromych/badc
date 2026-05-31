@@ -115,32 +115,32 @@ Disassembly of section .text:
                	orq	$0x1, %r9
                	movl	%r9d, (%r11)
                	jmp	<addr>
-               	xorq	%r9, %r9
-               	movq	%r9, %xmm15
-               	ucomisd	%xmm15, %xmm7
-               	seta	%r8b
-               	movzbq	%r8b, %r8
-               	cmpq	$0x0, %r8
-               	je	<addr>
-               	leaq	-0x10(%rbp), %r9
-               	movslq	(%r9), %r8
-               	orq	$0x2, %r8
-               	movl	%r8d, (%r9)
-               	jmp	<addr>
                	xorq	%r8, %r8
                	movq	%r8, %xmm15
                	ucomisd	%xmm15, %xmm7
-               	setbe	%r11b
+               	seta	%r11b
                	movzbq	%r11b, %r11
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %r11
                	cmpq	$0x0, %r11
                	je	<addr>
                	leaq	-0x10(%rbp), %r8
                	movslq	(%r8), %r11
-               	orq	$0x4, %r11
+               	orq	$0x2, %r11
                	movl	%r11d, (%r8)
+               	jmp	<addr>
+               	xorq	%r9, %r9
+               	movq	%r9, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	setbe	%r8b
+               	movzbq	%r8b, %r8
+               	setnp	%r11b
+               	movzbq	%r11b, %r11
+               	andq	%r11, %r8
+               	cmpq	$0x0, %r8
+               	je	<addr>
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %r8
+               	orq	$0x4, %r8
+               	movl	%r8d, (%r9)
                	jmp	<addr>
                	xorq	%r11, %r11
                	movq	%r11, %xmm15
@@ -154,35 +154,35 @@ Disassembly of section .text:
                	orq	$0x8, %r9
                	movl	%r9d, (%r11)
                	jmp	<addr>
-               	xorq	%r9, %r9
-               	movq	%r9, %xmm15
-               	ucomisd	%xmm15, %xmm7
-               	sete	%r8b
-               	movzbq	%r8b, %r8
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %r8
-               	cmpq	$0x0, %r8
-               	je	<addr>
-               	leaq	-0x10(%rbp), %r9
-               	movslq	(%r9), %r8
-               	orq	$0x10, %r8
-               	movl	%r8d, (%r9)
-               	jmp	<addr>
                	xorq	%r8, %r8
                	movq	%r8, %xmm15
                	ucomisd	%xmm15, %xmm7
-               	setne	%r11b
+               	sete	%r11b
                	movzbq	%r11b, %r11
-               	setp	%r10b
+               	setnp	%r10b
                	movzbq	%r10b, %r10
-               	orq	%r10, %r11
+               	andq	%r10, %r11
                	cmpq	$0x0, %r11
-               	jne	<addr>
+               	je	<addr>
                	leaq	-0x10(%rbp), %r8
                	movslq	(%r8), %r11
-               	orq	$0x20, %r11
+               	orq	$0x10, %r11
                	movl	%r11d, (%r8)
+               	jmp	<addr>
+               	xorq	%r9, %r9
+               	movq	%r9, %xmm15
+               	ucomisd	%xmm15, %xmm7
+               	setne	%r8b
+               	movzbq	%r8b, %r8
+               	setp	%r11b
+               	movzbq	%r11b, %r11
+               	orq	%r11, %r8
+               	cmpq	$0x0, %r8
+               	jne	<addr>
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %r8
+               	orq	$0x20, %r8
+               	movl	%r8d, (%r9)
                	jmp	<addr>
                	ucomisd	%xmm7, %xmm7
                	setb	%r11b
@@ -198,17 +198,17 @@ Disassembly of section .text:
                	movl	%r11d, (%r9)
                	jmp	<addr>
                	ucomisd	%xmm7, %xmm7
-               	sete	%r11b
+               	sete	%r8b
+               	movzbq	%r8b, %r8
+               	setnp	%r11b
                	movzbq	%r11b, %r11
-               	setnp	%r10b
-               	movzbq	%r10b, %r10
-               	andq	%r10, %r11
-               	cmpq	$0x0, %r11
+               	andq	%r11, %r8
+               	cmpq	$0x0, %r8
                	je	<addr>
-               	leaq	-0x10(%rbp), %r8
-               	movslq	(%r8), %r11
-               	orq	$0x80, %r11
-               	movl	%r11d, (%r8)
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %r8
+               	orq	$0x80, %r8
+               	movl	%r8d, (%r9)
                	jmp	<addr>
                	movslq	-0x10(%rbp), %r11
                	cmpq	$0x0, %r11

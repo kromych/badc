@@ -71,11 +71,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v43  StoreLocal { off=-8, value=v42, kind=I32 }       -> -
     terminator Jmp(b13)   (exit_acc=v43)
   block 12  start_pc=0
-    v62  LoadLocal { off=-10, kind=I32 }                  -> x11
-    v63  BinopI { op=sub, lhs=v62, rhs_imm=111 }          -> x11
-    v64  BinopI { op=shl, lhs=v63, rhs_imm=32 }           -> x11
-    v65  BinopI { op=shr, lhs=v64, rhs_imm=32 }           -> x0
-    terminator Return(v65)   (exit_acc=v65)
+    v63  LoadLocal { off=-10, kind=I32 }                  -> x7
+    v64  BinopI { op=sub, lhs=v63, rhs_imm=111 }          -> x7
+    v65  BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x7
+    v66  BinopI { op=shr, lhs=v65, rhs_imm=32 }           -> x0
+    terminator Return(v66)   (exit_acc=v66)
   block 13  start_pc=0
     v44  LoadLocal { off=-8, kind=I32 }                   -> x8
     v45  BinopI { op=lt, lhs=v44, rhs_imm=4 }             -> x8
@@ -99,7 +99,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v59  Load { addr=v58, kind=I32 }                      -> x7
     v60  Binop { op=add, lhs=v51, rhs=v59 }               -> x11
     v61  Store { addr=v50, value=v60, kind=I32 }          -> -
-    terminator Jmp(b14)   (exit_acc=v61)
+    v62  Load { addr=v50, kind=I32 }                      -> x8
+    terminator Jmp(b14)   (exit_acc=v62)
   block 16  start_pc=0
     terminator Jmp(b10)
 ; --- SSA dump (ok=true) ent_pc=0 ---

@@ -1749,7 +1749,17 @@ impl<'a> Walker<'a> {
                     }
                 };
                 b.store(addr, new_val, store_kind);
-                Ok(new_val)
+                // C99 6.5.16.2p3: the value of `E1 op= E2` is the
+                // post-update value of E1 in E1's type. For a
+                // sub-64-bit lvalue the 64-bit binop result is not
+                // narrowed; reload through `load_kind` so the
+                // returned ValueId reflects what was actually
+                // stored (with the kind's sign / zero extension).
+                Ok(if matches!(load_kind, LoadKind::I64) {
+                    new_val
+                } else {
+                    b.load(addr, load_kind)
+                })
             }
             Expr::PreInc { lvalue, by, ty } => {
                 let addr = self.walk_expr_lvalue(b, *lvalue)?;
@@ -1758,7 +1768,17 @@ impl<'a> Walker<'a> {
                 let stepped = b.binop_imm(BinOp::Add, old, *by);
                 let store_kind = store_kind_for(*ty, self.target);
                 b.store(addr, stepped, store_kind);
-                Ok(stepped)
+                // C99 6.5.3.1p3 + 6.5.16.2: the value of `++E` is
+                // the post-update value of E in E's type. Reload
+                // through `kind` for sub-64-bit lvalues so a
+                // surrounding test like `(++p) == 0` sees the
+                // wrapped u8/u16/u32 value rather than the wider
+                // Add result that overflows past the storage width.
+                Ok(if matches!(kind, LoadKind::I64) {
+                    stepped
+                } else {
+                    b.load(addr, kind)
+                })
             }
             Expr::PostInc { lvalue, by, ty } => {
                 let addr = self.walk_expr_lvalue(b, *lvalue)?;

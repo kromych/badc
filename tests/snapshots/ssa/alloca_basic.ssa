@@ -168,10 +168,11 @@ fn ent_pc=15 n_params=1 variadic=false locals=1028
     v45  Load { addr=v44, kind=I32 }                      -> x11
     v46  Binop { op=add, lhs=v40, rhs=v45 }               -> x9
     v47  Store { addr=v39, value=v46, kind=I32 }          -> -
-    terminator Jmp(b6)   (exit_acc=v47)
+    v48  Load { addr=v39, kind=I32 }                      -> x8
+    terminator Jmp(b6)   (exit_acc=v48)
   block 8  start_pc=0
-    v48  LoadLocal { off=-3, kind=I32 }                   -> x0
-    terminator Return(v48)   (exit_acc=v48)
+    v49  LoadLocal { off=-3, kind=I32 }                   -> x0
+    terminator Return(v49)   (exit_acc=v49)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=distinct
 fn ent_pc=16 n_params=0 variadic=false locals=1032
@@ -288,10 +289,11 @@ fn ent_pc=17 n_params=1 variadic=false locals=1028
     v24  BinopI { op=shr, lhs=v23, rhs_imm=32 }           -> x9
     v25  Binop { op=add, lhs=v20, rhs=v24 }               -> x8
     v26  Store { addr=v19, value=v25, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v26)
+    v27  Load { addr=v19, kind=I32 }                      -> x11
+    terminator Jmp(b2)   (exit_acc=v27)
   block 4  start_pc=0
-    v27  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v27)   (exit_acc=v27)
+    v28  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=inner_alloca_disturbs_outer
 fn ent_pc=18 n_params=1 variadic=false locals=1029

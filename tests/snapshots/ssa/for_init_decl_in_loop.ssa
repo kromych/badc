@@ -85,8 +85,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v12  StoreLocal { off=-3, value=v11, kind=I32 }       -> -
     terminator Jmp(b5)   (exit_acc=v12)
   block 4  start_pc=0
-    v31  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v31)   (exit_acc=v31)
+    v32  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v32)   (exit_acc=v32)
   block 5  start_pc=0
     v13  LoadLocal { off=-3, kind=I32 }                   -> x9
     v14  BinopI { op=lt, lhs=v13, rhs_imm=16 }            -> x9
@@ -110,7 +110,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v28  BinopI { op=shr, lhs=v27, rhs_imm=32 }           -> x8
     v29  Binop { op=add, lhs=v20, rhs=v28 }               -> x11
     v30  Store { addr=v19, value=v29, kind=I32 }          -> -
-    terminator Jmp(b6)   (exit_acc=v30)
+    v31  Load { addr=v19, kind=I32 }                      -> x9
+    terminator Jmp(b6)   (exit_acc=v31)
   block 8  start_pc=0
     terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=15 ---

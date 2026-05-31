@@ -70,9 +70,9 @@ Disassembly of section .text:
                	xorq	%r8, %r8
                	movl	%r8d, -0x40(%rbp)
                	jmp	<addr>
-               	movslq	-0x50(%rbp), %r11
-               	subq	$0x6f, %r11
-               	movslq	%r11d, %rax
+               	movslq	-0x50(%rbp), %rdi
+               	subq	$0x6f, %rdi
+               	movslq	%edi, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq

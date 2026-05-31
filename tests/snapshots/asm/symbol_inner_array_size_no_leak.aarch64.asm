@@ -27,14 +27,14 @@ Disassembly of section .text:
                	add	x13, x13, #0x1
                	str	w13, [x12]
                	b	<addr>
-               	ldursw	x13, [x29, #-0x8]
-               	lsl	x11, x13, #1
-               	add	x11, x15, x11
+               	ldursw	x11, [x29, #-0x8]
+               	lsl	x12, x11, #1
+               	add	x12, x15, x12
                	mov	x17, #0x3               // =3
-               	mul	x13, x13, x17
-               	sxtw	x13, w13
-               	sxth	x13, w13
-               	strh	w13, [x11]
+               	mul	x11, x11, x17
+               	sxtw	x11, w11
+               	sxth	x11, w11
+               	strh	w11, [x12]
                	b	<addr>
                	sub	x14, x14, #0x1
                	sxtw	x14, w14

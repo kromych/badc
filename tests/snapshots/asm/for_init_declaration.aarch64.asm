@@ -194,23 +194,23 @@ Disassembly of section .text:
                	add	x13, x13, x14
                	str	w13, [x15]
                	b	<addr>
-               	mov	x13, #0xa               // =10
-               	stur	w13, [x29, #-0x18]
+               	mov	x14, #0xa               // =10
+               	stur	w14, [x29, #-0x18]
                	b	<addr>
-               	ldursw	x13, [x29, #-0x18]
-               	cmp	x13, #0xd
+               	ldursw	x14, [x29, #-0x18]
+               	cmp	x14, #0xd
                	b.ge	<addr>
                	b	<addr>
-               	sub	x14, x29, #0x18
-               	ldrsw	x13, [x14]
-               	add	x13, x13, #0x1
-               	str	w13, [x14]
+               	sub	x15, x29, #0x18
+               	ldrsw	x14, [x15]
+               	add	x14, x14, #0x1
+               	str	w14, [x15]
                	b	<addr>
-               	sub	x13, x29, #0x8
-               	ldrsw	x15, [x13]
-               	ldursw	x14, [x29, #-0x18]
-               	add	x15, x15, x14
-               	str	w15, [x13]
+               	sub	x14, x29, #0x8
+               	ldrsw	x13, [x14]
+               	ldursw	x15, [x29, #-0x18]
+               	add	x13, x13, x15
+               	str	w13, [x14]
                	b	<addr>
                	ldursw	x0, [x29, #-0x8]
                	add	sp, sp, #0x20

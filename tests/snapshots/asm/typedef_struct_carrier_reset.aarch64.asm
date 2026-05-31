@@ -52,9 +52,9 @@ Disassembly of section .text:
                	add	x12, x12, x11
                	str	w12, [x14]
                	b	<addr>
-               	add	x12, x15, #0xa0
-               	ldursw	x11, [x29, #-0x10]
-               	str	w11, [x12]
+               	add	x11, x15, #0xa0
+               	ldursw	x14, [x29, #-0x10]
+               	str	w14, [x11]
                	add	x15, x15, #0xa0
                	ldrsw	x0, [x15]
                	add	sp, sp, #0x10

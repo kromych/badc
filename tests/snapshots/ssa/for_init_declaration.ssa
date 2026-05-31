@@ -85,10 +85,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v12  LoadLocal { off=-2, kind=I32 }                   -> x9
     v13  Binop { op=add, lhs=v11, rhs=v12 }               -> x8
     v14  Store { addr=v10, value=v13, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v14)
+    v15  Load { addr=v10, kind=I32 }                      -> x11
+    terminator Jmp(b2)   (exit_acc=v15)
   block 4  start_pc=0
-    v15  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v15)   (exit_acc=v15)
+    v16  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=multi_decl
 fn ent_pc=15 n_params=0 variadic=false locals=3
@@ -125,10 +126,11 @@ fn ent_pc=15 n_params=0 variadic=false locals=3
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x8
     v23  Binop { op=add, lhs=v17, rhs=v22 }               -> x11
     v24  Store { addr=v16, value=v23, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v24)
+    v25  Load { addr=v16, kind=I32 }                      -> x9
+    terminator Jmp(b2)   (exit_acc=v25)
   block 4  start_pc=0
-    v25  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    v26  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v26)   (exit_acc=v26)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=shadowing
 fn ent_pc=16 n_params=0 variadic=false locals=2
@@ -181,31 +183,33 @@ fn ent_pc=17 n_params=0 variadic=false locals=3
     v12  LoadLocal { off=-2, kind=I32 }                   -> x9
     v13  Binop { op=add, lhs=v11, rhs=v12 }               -> x8
     v14  Store { addr=v10, value=v13, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v14)
+    v15  Load { addr=v10, kind=I32 }                      -> x11
+    terminator Jmp(b2)   (exit_acc=v15)
   block 4  start_pc=0
-    v15  Imm(10)                                          -> x8
-    v16  StoreLocal { off=-3, value=v15, kind=I32 }       -> -
-    terminator Jmp(b5)   (exit_acc=v16)
+    v16  Imm(10)                                          -> x9
+    v17  StoreLocal { off=-3, value=v16, kind=I32 }       -> -
+    terminator Jmp(b5)   (exit_acc=v17)
   block 5  start_pc=0
-    v17  LoadLocal { off=-3, kind=I32 }                   -> x8
-    v18  BinopI { op=lt, lhs=v17, rhs_imm=13 }            -> x8
-    terminator Bz { cond=v18, target=b8, fall=b7 }   (exit_acc=v18)
+    v18  LoadLocal { off=-3, kind=I32 }                   -> x9
+    v19  BinopI { op=lt, lhs=v18, rhs_imm=13 }            -> x9
+    terminator Bz { cond=v19, target=b8, fall=b7 }   (exit_acc=v19)
   block 6  start_pc=0
-    v19  LocalAddr(-3)                                    -> x9
-    v20  Load { addr=v19, kind=I32 }                      -> x8
-    v21  BinopI { op=add, lhs=v20, rhs_imm=1 }            -> x8
-    v22  Store { addr=v19, value=v21, kind=I32 }          -> -
-    terminator Jmp(b5)   (exit_acc=v22)
+    v20  LocalAddr(-3)                                    -> x11
+    v21  Load { addr=v20, kind=I32 }                      -> x9
+    v22  BinopI { op=add, lhs=v21, rhs_imm=1 }            -> x9
+    v23  Store { addr=v20, value=v22, kind=I32 }          -> -
+    terminator Jmp(b5)   (exit_acc=v23)
   block 7  start_pc=0
-    v23  LocalAddr(-1)                                    -> x8
-    v24  Load { addr=v23, kind=I32 }                      -> x11
-    v25  LoadLocal { off=-3, kind=I32 }                   -> x9
-    v26  Binop { op=add, lhs=v24, rhs=v25 }               -> x11
-    v27  Store { addr=v23, value=v26, kind=I32 }          -> -
-    terminator Jmp(b6)   (exit_acc=v27)
+    v24  LocalAddr(-1)                                    -> x9
+    v25  Load { addr=v24, kind=I32 }                      -> x8
+    v26  LoadLocal { off=-3, kind=I32 }                   -> x11
+    v27  Binop { op=add, lhs=v25, rhs=v26 }               -> x8
+    v28  Store { addr=v24, value=v27, kind=I32 }          -> -
+    v29  Load { addr=v24, kind=I32 }                      -> x9
+    terminator Jmp(b6)   (exit_acc=v29)
   block 8  start_pc=0
-    v28  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v28)   (exit_acc=v28)
+    v30  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=struct_ptr_init
 fn ent_pc=18 n_params=0 variadic=false locals=2
@@ -246,10 +250,11 @@ fn ent_pc=18 n_params=0 variadic=false locals=2
     v26  Load { addr=v25, kind=I32 }                      -> x6
     v27  Binop { op=add, lhs=v24, rhs=v26 }               -> x9
     v28  Store { addr=v23, value=v27, kind=I32 }          -> -
-    terminator Jmp(b2)   (exit_acc=v28)
+    v29  Load { addr=v23, kind=I32 }                      -> x11
+    terminator Jmp(b2)   (exit_acc=v29)
   block 4  start_pc=0
-    v29  LoadLocal { off=-1, kind=I32 }                   -> x0
-    terminator Return(v29)   (exit_acc=v29)
+    v30  LoadLocal { off=-1, kind=I32 }                   -> x0
+    terminator Return(v30)   (exit_acc=v30)
 ; --- SSA dump (ok=true) ent_pc=19 ---
 ; name=main
 fn ent_pc=19 n_params=0 variadic=false locals=2

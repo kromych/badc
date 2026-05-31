@@ -120,27 +120,27 @@ Disassembly of section .text:
                	orr	x14, x14, x17
                	str	w14, [x15]
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	fmov	d1, x14
-               	fcmp	d7, d1
-               	cset	x13, gt
-               	cbz	x13, <addr>
-               	sub	x14, x29, #0x10
-               	ldrsw	x13, [x14]
-               	mov	x17, #0x2               // =2
-               	orr	x13, x13, x17
-               	str	w13, [x14]
-               	b	<addr>
                	mov	x13, #0x0               // =0
                	fmov	d1, x13
                	fcmp	d7, d1
-               	cset	x15, ls
+               	cset	x15, gt
                	cbz	x15, <addr>
                	sub	x13, x29, #0x10
                	ldrsw	x15, [x13]
-               	mov	x17, #0x4               // =4
+               	mov	x17, #0x2               // =2
                	orr	x15, x15, x17
                	str	w15, [x13]
+               	b	<addr>
+               	mov	x14, #0x0               // =0
+               	fmov	d1, x14
+               	fcmp	d7, d1
+               	cset	x13, ls
+               	cbz	x13, <addr>
+               	sub	x14, x29, #0x10
+               	ldrsw	x13, [x14]
+               	mov	x17, #0x4               // =4
+               	orr	x13, x13, x17
+               	str	w13, [x14]
                	b	<addr>
                	mov	x15, #0x0               // =0
                	fmov	d1, x15
@@ -153,28 +153,28 @@ Disassembly of section .text:
                	orr	x14, x14, x17
                	str	w14, [x15]
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	fmov	d1, x14
-               	fcmp	d7, d1
-               	cset	x13, eq
-               	cbz	x13, <addr>
-               	sub	x14, x29, #0x10
-               	ldrsw	x13, [x14]
-               	mov	x17, #0x10              // =16
-               	orr	x13, x13, x17
-               	str	w13, [x14]
-               	b	<addr>
                	mov	x13, #0x0               // =0
                	fmov	d1, x13
                	fcmp	d7, d1
-               	cset	x15, ne
-               	cmp	x15, #0x0
-               	b.ne	<addr>
+               	cset	x15, eq
+               	cbz	x15, <addr>
                	sub	x13, x29, #0x10
                	ldrsw	x15, [x13]
-               	mov	x17, #0x20              // =32
+               	mov	x17, #0x10              // =16
                	orr	x15, x15, x17
                	str	w15, [x13]
+               	b	<addr>
+               	mov	x14, #0x0               // =0
+               	fmov	d1, x14
+               	fcmp	d7, d1
+               	cset	x13, ne
+               	cmp	x13, #0x0
+               	b.ne	<addr>
+               	sub	x14, x29, #0x10
+               	ldrsw	x13, [x14]
+               	mov	x17, #0x20              // =32
+               	orr	x13, x13, x17
+               	str	w13, [x14]
                	b	<addr>
                	fcmp	d7, d7
                	cset	x15, mi
@@ -186,13 +186,13 @@ Disassembly of section .text:
                	str	w15, [x14]
                	b	<addr>
                	fcmp	d7, d7
-               	cset	x15, eq
-               	cbz	x15, <addr>
-               	sub	x13, x29, #0x10
-               	ldrsw	x15, [x13]
+               	cset	x13, eq
+               	cbz	x13, <addr>
+               	sub	x14, x29, #0x10
+               	ldrsw	x13, [x14]
                	mov	x17, #0x80              // =128
-               	orr	x15, x15, x17
-               	str	w15, [x13]
+               	orr	x13, x13, x17
+               	str	w13, [x14]
                	b	<addr>
                	ldursw	x15, [x29, #-0x10]
                	cbz	x15, <addr>

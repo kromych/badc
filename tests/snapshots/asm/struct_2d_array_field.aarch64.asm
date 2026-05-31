@@ -69,9 +69,9 @@ Disassembly of section .text:
                	mov	x13, #0x0               // =0
                	stur	w13, [x29, #-0x40]
                	b	<addr>
-               	ldursw	x15, [x29, #-0x50]
-               	sub	x15, x15, #0x6f
-               	sxtw	x0, w15
+               	ldursw	x12, [x29, #-0x50]
+               	sub	x12, x12, #0x6f
+               	sxtw	x0, w12
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

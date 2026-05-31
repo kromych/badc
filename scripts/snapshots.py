@@ -99,21 +99,31 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
     # the dump target-independent; without --target the host's
     # default arch leaks into the snapshot register names, which
     # then diff between macOS aarch64 hosts and Linux x86_64 CI).
-    with dst.open("wb") as ssa_out:
-        proc = subprocess.run(
-            [
-                str(badc),
-                "-q",
-                "-O",
-                "--target=linux-x64",
-                "--dump-ssa",
-                "-o",
-                str(tmp_bin),
-                str(src),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=ssa_out,
-        )
+    proc = subprocess.run(
+        [
+            str(badc),
+            "-q",
+            "-O",
+            "--target=linux-x64",
+            "--dump-ssa",
+            "-o",
+            str(tmp_bin),
+            str(src),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    # `--target=<arch>` emits a cross-host advisory on stderr only
+    # when the target arch differs from the host arch. The line is
+    # host-conditional and would split snapshots by host; drop it.
+    text = proc.stderr.decode("utf-8", errors="replace")
+    text = "\n".join(
+        line for line in text.splitlines()
+        if not line.startswith("badc: produced a Linux/")
+    )
+    if text and not text.endswith("\n"):
+        text += "\n"
+    dst.write_text(text)
     return proc.returncode == 0
 
 

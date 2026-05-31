@@ -34,6 +34,7 @@ jobs:
   lint:
     name: fmt + clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -71,6 +72,7 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -737,6 +739,7 @@ jobs:
   features:
     name: feature combos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -758,6 +761,7 @@ jobs:
     name: snapshots clean
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -790,6 +794,7 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     # Don't gate CI on perf numbers -- a regression should surface in
     # the job summary but not block the merge. Hard failures from the
     # harness (no compilers found, fixture missing) still fail the job.

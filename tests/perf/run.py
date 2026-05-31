@@ -64,6 +64,11 @@ SQLITE_DEFINES = [
     # are inert for clang and tcc, which never take the MSVC paths.
     "-DSQLITE_DISABLE_INTRINSIC",
     "-DSQLITE_OMIT_SEH",
+    # glibc gates `mremap` + `MREMAP_MAYMOVE` behind `_GNU_SOURCE`; the
+    # sqlite amalgamation hard-references both on Linux. macOS / BSD
+    # headers ignore the macro, and badc + tcc never reach the system
+    # mremap declaration (msvc_compat.h shims it).
+    "-D_GNU_SOURCE",
 ]
 
 # Extra compile flags per fixture. The `-I` entries put each vendored

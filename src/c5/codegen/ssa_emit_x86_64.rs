@@ -3572,13 +3572,17 @@ fn emit_return(
 ) {
     // The integer return value may live in a callee-saved
     // register that the prologue saved and the epilogue is about
-    // to restore (e.g. rbx, r12). Stage it into rcx (caller-saved,
-    // never in `gpr_used`) before the restore loop overwrites the
-    // source register, then move rcx into rax after the restore.
-    // FP returns ride xmm0 directly; xmm0 is outside the GPR
-    // restore loop, but the integer mirror into rax happens after
-    // the restore so the bit pattern is available to int-shaped
-    // callers.
+    // to restore (e.g. rbx, r12). When the function has any such
+    // register the restore loop writes them, so stage the value
+    // through rcx (caller-saved, never in `gpr_used`) before the
+    // restore overwrites the source and move rcx into rax after.
+    // Functions with no callee-saved GPRs to restore (the common
+    // case after frame elision lands on leaf-shaped bodies) take
+    // the direct path: a single `mov rax, src` -- or nothing when
+    // src already lives in rax. FP returns ride xmm0 directly;
+    // xmm0 is outside the GPR restore loop, but the integer
+    // mirror into rax happens after the restore so the bit
+    // pattern is available to int-shaped callers.
     let return_place = if value != super::super::ir::NO_VALUE {
         alloc
             .places
@@ -3589,18 +3593,23 @@ fn emit_return(
         Place::None
     };
     let return_is_fp = matches!(return_place, Place::FpReg(_));
-    let staged_int = match return_place {
-        Place::IntReg(r) if r != Reg::RCX.0 => {
-            emit_mov_rr(code, Reg::RCX, Reg(r));
-            true
+    let needs_staging = !alloc.gpr_used.is_empty();
+    let staged_int = if needs_staging {
+        match return_place {
+            Place::IntReg(r) if r != Reg::RCX.0 => {
+                emit_mov_rr(code, Reg::RCX, Reg(r));
+                true
+            }
+            Place::IntReg(_) => true,
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+                true
+            }
+            _ => false,
         }
-        Place::IntReg(_) => true,
-        Place::Spill(slot) => {
-            let sp_off = spill_slot_sp_offset(frame, slot);
-            super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
-            true
-        }
-        _ => false,
+    } else {
+        false
     };
     if return_is_fp {
         // SCRATCH_XMM14 is outside the allocator's pool, so a
@@ -3619,7 +3628,22 @@ fn emit_return(
     }
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
-    } else if return_is_fp {
+    } else if !needs_staging {
+        // No callee-saved restore to navigate around; place the
+        // return value into rax directly. A source that already
+        // lives in rax needs no instruction.
+        match return_place {
+            Place::IntReg(r) if r != Reg::RAX.0 => {
+                emit_mov_rr(code, Reg::RAX, Reg(r));
+            }
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                super::x86_64::emit_mov_r_mem(code, Reg::RAX, Reg::RSP, sp_off);
+            }
+            _ => {}
+        }
+    }
+    if !staged_int && return_is_fp {
         super::x86_64::emit_movq_r_xmm(code, Reg::RAX, Reg::XMM0);
     }
     // Leaf-function elision: prologue emitted no save, so the

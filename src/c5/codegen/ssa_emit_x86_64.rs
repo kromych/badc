@@ -204,17 +204,28 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
     })
 }
 
-fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
-    if func.is_variadic {
-        return 0;
+/// Per-parameter elidability scan. Returns the `(elidable, n_reg,
+/// n_stack)` triple `emit_prologue` and `prologue_param_spill_bytes`
+/// both consume. `elidable[i]` is true when parameter `i` has a
+/// surviving `Inst::ParamRef`, no `LocalAddr`, and no live
+/// `Load/StoreLocal` against its c5-cdecl arg slot -- i.e. the body
+/// reads the value through the host arg register the SysV / Win64
+/// ABI placed it in, and the cell that the cdecl prologue would
+/// otherwise allocate at `[rbp + 16*(i+1)]` is unobserved.
+///
+/// Variadic and zero-parameter callees return an empty mask;
+/// host-stack overflow parameters (idx >= int_arg_regs.len()) are
+/// never elidable because the c5 emit always reads the cell.
+fn param_elidable_mask(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> (alloc::vec::Vec<bool>, usize, usize) {
+    if func.is_variadic || func.n_params == 0 {
+        return (alloc::vec::Vec::new(), 0, 0);
     }
-    let entry_spill = func.n_params;
-    if entry_spill == 0 {
-        return 0;
-    }
-    let n_reg = entry_spill.min(abi.int_arg_regs.len());
-    let n_stack = entry_spill - n_reg;
-
+    let n_reg = func.n_params.min(abi.int_arg_regs.len());
+    let n_stack = func.n_params - n_reg;
     let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
     let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
     let mut needed: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
@@ -238,15 +249,30 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
             _ => {}
         }
     }
-    let can_elide_reg = n_stack == 0
-        && (0..n_reg).all(|i| {
-            let slot = (i as i64) + 2;
-            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot)
-        });
-    let reg_bytes = if can_elide_reg {
-        0
-    } else {
+    let mut elidable = alloc::vec::Vec::with_capacity(n_reg);
+    for i in 0..n_reg {
+        let slot = (i as i64) + 2;
+        let ok = seeded.contains(&(i as u32))
+            && !addr_taken.contains(&slot)
+            && !needed.contains(&slot);
+        elidable.push(ok);
+    }
+    (elidable, n_reg, n_stack)
+}
+
+fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
+    let (elidable, n_reg, n_stack) = param_elidable_mask(func, alloc, abi);
+    // The reg-stripe stays allocated when any single parameter
+    // needs its cell (address-taken or LoadLocal-surviving), so the
+    // c5 cdecl offsets `[rbp + 16*(i+1)]` remain stable for the
+    // body. The mov store for each individually elidable parameter
+    // is skipped at emit time. Stack-overflow parameters always
+    // need their cell.
+    let any_reg_needed = elidable.iter().any(|e| !e);
+    let reg_bytes = if any_reg_needed || n_stack > 0 {
         (n_reg as u32) * 16
+    } else {
+        0
     };
     let overflow_bytes = (n_stack as u32) * 16;
     reg_bytes + overflow_bytes
@@ -1111,8 +1137,7 @@ fn emit_prologue(
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R10);
-        let n_reg = entry_spill.min(abi.int_arg_regs.len());
-        let n_stack = entry_spill - n_reg;
+        let (elidable, n_reg, n_stack) = param_elidable_mask(func, alloc, abi);
         if n_stack > 0 {
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_rsp_imm32(code, overflow_bytes);
@@ -1124,7 +1149,16 @@ fn emit_prologue(
         }
         for i in (0..n_reg).rev() {
             emit_sub_rsp_imm32(code, 16);
-            emit_mov_mem_r(code, Reg::RSP, 0, Reg(abi.int_arg_regs[i]));
+            // The cell at [rsp + 0] holds the value the body reads
+            // through `LoadLocal { off: i+2 }`. When mem2reg has
+            // promoted the parameter into a register (no LocalAddr,
+            // no live LoadLocal) the cell sits unobserved and the
+            // mov store is dead per C99 6.2.4p2; skip emitting it.
+            // The stack space is still reserved so the surviving
+            // non-elidable parameters keep their fixed offsets.
+            if !elidable.get(i).copied().unwrap_or(false) {
+                emit_mov_mem_r(code, Reg::RSP, 0, Reg(abi.int_arg_regs[i]));
+            }
         }
         emit_push_r(code, Reg::R10);
     }

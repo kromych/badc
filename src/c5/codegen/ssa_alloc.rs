@@ -1397,4 +1397,34 @@ mod tests {
             "Windows x86_64 TLS walks the TEB -- no call, no flag",
         );
     }
+
+    /// For commutative Binops (Add, Mul, And, Or, Xor) the in-loop
+    /// coalesce hint targets rhs when lhs lives past pc and rhs dies
+    /// at pc. The x86_64 emit's `rhs_aliases_rd && commutative` fast
+    /// path then folds the staging mov to `OP rd, lhs` directly.
+    #[test]
+    fn binop_rhs_coalesce_fires_when_lhs_outlives_rhs() {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::ir::StoreKind;
+
+        // v_lhs lives past the binop (consumed by the Store addr and
+        // also returned). v_rhs dies at the binop. The binop is Add
+        // (commutative). Return v_lhs (not v_sum) so the return hint
+        // does not steal the binop's slot.
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_lhs = b.imm(7);
+        let v_rhs = b.imm(11);
+        let v_sum = b.binop(super::super::super::ir::BinOp::Add, v_lhs, v_rhs);
+        b.store(v_lhs, v_sum, StoreKind::I64);
+        b.return_(v_lhs);
+        let func = b.finish();
+
+        let alloc = allocate(&func, Target::LinuxX64);
+        let rhs_place = alloc.places[v_rhs as usize];
+        let sum_place = alloc.places[v_sum as usize];
+        assert_eq!(
+            sum_place, rhs_place,
+            "v_sum should reuse v_rhs's freed register",
+        );
+    }
 }

@@ -23,19 +23,16 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	0x40046d <free>
                	movslq	%eax, %rax
-               	movq	%rax, %rbx
                	movq	%r12, %rdi
                	xorl	%eax, %eax
                	callq	0x40046d <free>
                	movslq	%eax, %rax
-               	movq	%rax, %rbx
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rcx
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

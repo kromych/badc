@@ -144,8 +144,6 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	0x400238 <.text+0x18>
                	add	sp, sp, #0x20
-               	mov	x6, x0
-               	mov	x0, x6
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

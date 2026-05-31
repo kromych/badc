@@ -37,8 +37,6 @@ Disassembly of section .text:
                	mov	x0, x22
                	mov	x1, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x21, x0
-               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

@@ -27,10 +27,9 @@ Disassembly of section .text:
                	mov	x2, x20
                	mov	x1, x22
                	bl	0x4004d4 <memset>
-               	mov	x12, x0
-               	add	x12, x21, #0x4
+               	add	x0, x21, #0x4
                	mov	x20, #0x0               // =0
-               	strb	w20, [x12]
+               	strb	w20, [x0]
                	ldrb	w22, [x21]
                	mov	x17, #0x41              // =65
                	eor	x21, x22, x17
@@ -38,7 +37,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x22, x21, x17
                	cmp	x22, #0x0
-               	b.ne	0x400360 <.text+0xb0>
+               	b.ne	0x40035c <.text+0xac>
                	mov	x22, #0x2a              // =42
                	mov	x0, x22
                	ldr	x20, [sp]

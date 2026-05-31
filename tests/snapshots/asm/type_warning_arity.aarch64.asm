@@ -25,7 +25,6 @@ Disassembly of section .text:
                	mov	x20, #0x1               // =1
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
                	mov	x21, #0x2               // =2
                	mov	x22, #0x3               // =3
                	mov	x23, #0x4               // =4
@@ -34,9 +33,7 @@ Disassembly of section .text:
                	mov	x2, x22
                	mov	x1, x21
                	bl	0x400238 <.text+0x18>
-               	mov	x11, x0
-               	mov	x11, #0x0               // =0
-               	mov	x0, x11
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

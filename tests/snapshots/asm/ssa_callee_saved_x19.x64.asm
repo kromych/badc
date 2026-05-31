@@ -32,7 +32,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	0x400457 <__cxa_atexit>
                	movslq	%eax, %rax
-               	movq	%rax, %r8
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -40,3 +39,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

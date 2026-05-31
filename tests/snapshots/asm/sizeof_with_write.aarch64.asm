@@ -36,7 +36,6 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	0x4004a4 <write>
                	sxtw	x0, w0
-               	mov	x12, x0
                	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400410 <.text+0x150>
+               	bl	0x400408 <.text+0x148>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xf0]
                	blr	x16
@@ -63,24 +63,22 @@ Disassembly of section .text:
                	ldr	x22, [x11]
                	mov	x0, x21
                	mov	x1, x22
-               	bl	0x4005e8 <dlsym>
-               	mov	x11, x0
-               	cbz	x11, 0x4003d8 <.text+0x118>
+               	bl	0x4005d8 <dlsym>
+               	cbz	x0, 0x4003d4 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x100
                	mov	x22, x19
                	lsl	x21, x20, #3
                	add	x12, x22, x21
-               	ldr	x21, [x11]
+               	ldr	x21, [x0]
                	str	x21, [x12]
-               	b	0x4003d8 <.text+0x118>
+               	b	0x4003d4 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x100
                	mov	x21, x19
-               	lsl	x11, x20, #3
-               	add	x20, x21, x11
-               	ldr	x11, [x20]
-               	mov	x0, x11
+               	lsl	x0, x20, #3
+               	add	x20, x21, x0
+               	ldr	x0, [x20]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -100,14 +98,14 @@ Disassembly of section .text:
                	mov	x21, #0x2               // =2
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4005f4 <dlopen>
+               	bl	0x4005e4 <dlopen>
                	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x150
                	mov	x23, x19
                	mov	x0, x22
                	mov	x1, x23
-               	bl	0x4005e8 <dlsym>
+               	bl	0x4005d8 <dlsym>
                	mov	x21, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x157
@@ -117,8 +115,6 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	mov	x22, x0
-               	mov	x0, x22
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

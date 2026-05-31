@@ -71,11 +71,9 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x10]!
                	bl	0x400238 <.text+0x18>
                	add	sp, sp, #0x50
-               	mov	x10, x0
-               	cmp	x10, #0x64
-               	b.eq	0x400360 <.text+0x140>
-               	mov	x10, #0xb               // =11
-               	mov	x0, x10
+               	cmp	x0, #0x64
+               	b.eq	0x400358 <.text+0x138>
+               	mov	x0, #0xb                // =11
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

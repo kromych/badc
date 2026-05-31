@@ -31,9 +31,8 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	0x40048d <memcpy>
-               	movq	%rax, %r14
-               	xorq	%r14, %r14
-               	movq	%r14, %rcx
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -42,4 +41,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

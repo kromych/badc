@@ -42,10 +42,9 @@ Disassembly of section .text:
                	mov	x22, #0x5               // =5
                	mov	x0, x22
                	bl	0x400248 <.text+0x28>
-               	mov	x13, x0
                	sxtw	x22, w21
                	cmp	x22, #0xb
-               	b.eq	0x4002e8 <.text+0xc8>
+               	b.eq	0x4002e4 <.text+0xc4>
                	mov	x22, #0x1               // =1
                	mov	x0, x22
                	ldr	x20, [sp]
@@ -54,17 +53,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x13, #0x0
+               	cmp	x0, #0x0
                	cset	x21, eq
                	stur	x21, [x29, #-0x20]
-               	cbnz	x21, 0x40030c <.text+0xec>
-               	ldrsw	x22, [x13]
+               	cbnz	x21, 0x400308 <.text+0xe8>
+               	ldrsw	x22, [x0]
                	cmp	x22, #0xa
-               	cset	x13, ne
-               	stur	x13, [x29, #-0x20]
-               	b	0x40030c <.text+0xec>
-               	ldur	x13, [x29, #-0x20]
-               	cbz	x13, 0x400334 <.text+0x114>
+               	cset	x0, ne
+               	stur	x0, [x29, #-0x20]
+               	b	0x400308 <.text+0xe8>
+               	ldur	x0, [x29, #-0x20]
+               	cbz	x0, 0x400330 <.text+0x110>
                	mov	x22, #0x2               // =2
                	mov	x0, x22
                	ldr	x20, [sp]
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

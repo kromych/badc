@@ -52,22 +52,20 @@ Disassembly of section .text:
                	ret
                	mov	x20, #0x8               // =8
                	mov	x0, x20
-               	bl	0x400528 <malloc>
+               	bl	0x400518 <malloc>
                	mov	x21, x0
                	mov	x22, #0x4               // =4
                	mov	x0, x22
-               	bl	0x400528 <malloc>
-               	mov	x14, x0
-               	str	x14, [x21]
+               	bl	0x400518 <malloc>
+               	str	x0, [x21]
                	ldr	x22, [x21]
-               	mov	x14, #0x7b              // =123
-               	str	w14, [x22]
+               	mov	x0, #0x7b               // =123
+               	str	w0, [x22]
                	ldr	x12, [x21]
-               	ldrsw	x14, [x12]
-               	cmp	x14, #0x7b
-               	b.eq	0x40038c <.text+0x11c>
-               	mov	x14, #0x3               // =3
-               	mov	x0, x14
+               	ldrsw	x0, [x12]
+               	cmp	x0, #0x7b
+               	b.eq	0x400384 <.text+0x114>
+               	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -78,7 +76,7 @@ Disassembly of section .text:
                	ldr	x12, [x21]
                	ldrsw	x21, [x12]
                	cmp	x21, #0x7b
-               	b.eq	0x4003c0 <.text+0x150>
+               	b.eq	0x4003b8 <.text+0x148>
                	mov	x21, #0x4               // =4
                	mov	x0, x21
                	ldr	x20, [sp]

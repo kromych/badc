@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   LoadLocal { off=2, kind=I64 }                    -> x13
     v6   LoadLocal { off=3, kind=I64 }                    -> x13
     v7   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x21
-    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x14
-    v9   Imm(0)                                           -> x14
+    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x0
+    v9   Imm(0)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=2
@@ -21,7 +21,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v1   Imm(8)                                           -> x15
     v2   BinopI { op=shl, lhs=v1, rhs_imm=32 }            -> x14
     v3   BinopI { op=shr, lhs=v2, rhs_imm=32 }            -> x20
-    v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x14
+    v4   CallExt { binding_idx=0, args=[v3], fp_arg_mask=0x0 } -> x0
     v5   Imm(0)                                           -> x20
     v6   LoadLocal { off=-1, kind=I64 }                   -> x20
     v7   Imm(1)                                           -> x20
@@ -34,9 +34,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v14  LoadLocal { off=-1, kind=I64 }                   -> x12
     v15  Load { addr=v4, kind=I32 }                       -> x12
     v16  BinopI { op=add, lhs=v4, rhs_imm=4 }             -> x20
-    v17  Load { addr=v16, kind=I32 }                      -> x14
+    v17  Load { addr=v16, kind=I32 }                      -> x0
     v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x20
-    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x14
+    v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x0
     v20  BinopI { op=shr, lhs=v19, rhs_imm=32 }           -> x20
     terminator Return(v20)   (exit_acc=v20)
 ; name=__c5_exit
@@ -47,6 +47,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x20
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
-    v5   Imm(0)                                           -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

@@ -23,16 +23,14 @@ Disassembly of section .text:
                	movq	%r14, %rdx
                	movq	%r12, %rsi
                	xorl	%eax, %eax
-               	callq	0x4004c7 <setenv>
+               	callq	0x4004b7 <setenv>
                	movslq	%eax, %rax
-               	movq	%rax, %rdi
-               	leaq	0xfded(%rip), %r15      # 0x410103
+               	leaq	0xfdf0(%rip), %r15      # 0x410103
                	movq	%r15, %rdi
                	xorl	%eax, %eax
-               	callq	0x4004cd <getenv>
-               	movq	%rax, %r14
-               	cmpq	$0x0, %r14
-               	jne	0x400358 <.text+0xa8>
+               	callq	0x4004bd <getenv>
+               	cmpq	$0x0, %rax
+               	jne	0x400352 <.text+0xa2>
                	movl	$0x1, %r12d
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
@@ -43,7 +41,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movzbq	(%r14), %r15
+               	movzbq	(%rax), %r15
                	movq	%r15, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -53,4 +51,5 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

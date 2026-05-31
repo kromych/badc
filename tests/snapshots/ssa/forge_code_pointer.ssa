@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v2   Imm(0)                                           -> x14
     v3   Imm(0)                                           -> x21
     v4   LoadLocal { off=-1, kind=I64 }                   -> x13
-    v5   CallIndirect { target=v1, args=[v3] }            -> x13
+    v5   CallIndirect { target=v1, args=[v3] }            -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
@@ -17,6 +17,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x20
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
-    v5   Imm(0)                                           -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

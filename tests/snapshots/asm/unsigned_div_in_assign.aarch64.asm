@@ -43,17 +43,15 @@ Disassembly of section .text:
                	sub	x20, x29, #0x8
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
-               	cmp	x14, #0x3ea
-               	b.ne	0x4002d4 <.text+0xb4>
-               	mov	x14, #0x0               // =0
-               	stur	x14, [x29, #-0x18]
-               	b	0x4002e0 <.text+0xc0>
-               	mov	x14, #0x1               // =1
-               	stur	x14, [x29, #-0x18]
-               	b	0x4002e0 <.text+0xc0>
-               	ldur	x14, [x29, #-0x18]
-               	mov	x0, x14
+               	cmp	x0, #0x3ea
+               	b.ne	0x4002d0 <.text+0xb0>
+               	mov	x0, #0x0                // =0
+               	stur	x0, [x29, #-0x18]
+               	b	0x4002dc <.text+0xbc>
+               	mov	x0, #0x1                // =1
+               	stur	x0, [x29, #-0x18]
+               	b	0x4002dc <.text+0xbc>
+               	ldur	x0, [x29, #-0x18]
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x40

@@ -120,16 +120,13 @@ Disassembly of section .text:
                	movk	x20, #0xdead, lsl #16
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
                	bl	0x4002ac <.text+0x8c>
                	mov	x21, x0
                	mov	x22, #0x5678            // =22136
                	movk	x22, #0x1234, lsl #16
                	mov	x0, x22
                	bl	0x400238 <.text+0x18>
-               	mov	x13, x0
                	bl	0x4002ac <.text+0x8c>
-               	mov	x13, x0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x22, x21, x17
@@ -137,7 +134,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x21, x22, x17
                	cmp	x21, #0x0
-               	b.eq	0x400458 <.text+0x238>
+               	b.eq	0x40044c <.text+0x22c>
                	mov	x21, #0x1               // =1
                	mov	x0, x21
                	ldr	x20, [sp]
@@ -148,12 +145,12 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x22, x13, x17
+               	and	x22, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x21, x22, x17
                	cmp	x21, #0x0
-               	b.eq	0x400498 <.text+0x278>
+               	b.eq	0x40048c <.text+0x26c>
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	ldr	x20, [sp]

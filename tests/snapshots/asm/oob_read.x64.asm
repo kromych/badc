@@ -17,15 +17,13 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	0x400407 <malloc>
-               	movq	%rax, %r9
-               	movq	%r9, %rbx
+               	movq	%rax, %rbx
                	addq	$0x190, %rbx            # imm = 0x190
-               	movslq	(%rbx), %r9
-               	movq	%r9, %rcx
+               	movslq	(%rbx), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

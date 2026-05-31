@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400450 <.text+0x150>
+               	bl	0x400448 <.text+0x148>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xf8]
                	blr	x16
@@ -63,24 +63,22 @@ Disassembly of section .text:
                	ldr	x22, [x11]
                	mov	x0, x21
                	mov	x1, x22
-               	bl	0x402408 <dlsym>
-               	mov	x11, x0
-               	cbz	x11, 0x400418 <.text+0x118>
+               	bl	0x402328 <dlsym>
+               	cbz	x0, 0x400414 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x108
                	mov	x22, x19
                	lsl	x21, x20, #3
                	add	x12, x22, x21
-               	ldr	x21, [x11]
+               	ldr	x21, [x0]
                	str	x21, [x12]
-               	b	0x400418 <.text+0x118>
+               	b	0x400414 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x108
                	mov	x21, x19
-               	lsl	x11, x20, #3
-               	add	x20, x21, x11
-               	ldr	x11, [x20]
-               	mov	x0, x11
+               	lsl	x0, x20, #3
+               	add	x20, x21, x0
+               	ldr	x0, [x20]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -100,14 +98,14 @@ Disassembly of section .text:
                	str	x26, [sp, #0x30]
                	str	x27, [sp, #0x38]
                	str	x19, [sp, #0x40]
-               	b	0x400484 <.text+0x184>
+               	b	0x40047c <.text+0x17c>
                	mov	x15, #0x1               // =1
                	cmp	x15, #0x0
-               	b.ne	0x4004f4 <.text+0x1f4>
-               	b	0x4004a0 <.text+0x1a0>
+               	b.ne	0x4004e8 <.text+0x1e8>
+               	b	0x400498 <.text+0x198>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x400484 <.text+0x184>
-               	b	0x4004f8 <.text+0x1f8>
+               	cbnz	x21, 0x40047c <.text+0x17c>
+               	b	0x4004ec <.text+0x1ec>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x15, x19
@@ -125,23 +123,22 @@ Disassembly of section .text:
                	mov	x3, x20
                	mov	x2, x21
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x11, x0
-               	b	0x4004f4 <.text+0x1f4>
-               	b	0x400494 <.text+0x194>
-               	mov	x11, #0x1               // =1
-               	cmp	x11, #0x0
-               	b.ne	0x400568 <.text+0x268>
-               	b	0x400514 <.text+0x214>
+               	b	0x4004e8 <.text+0x1e8>
+               	b	0x40048c <.text+0x18c>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x400558 <.text+0x258>
+               	b	0x400508 <.text+0x208>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x4004f8 <.text+0x1f8>
-               	b	0x40056c <.text+0x26c>
+               	cbnz	x21, 0x4004ec <.text+0x1ec>
+               	b	0x40055c <.text+0x25c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x11, x19
+               	mov	x0, x19
                	mov	x24, #0x65              // =101
-               	str	w24, [x11]
+               	str	w24, [x0]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
@@ -154,363 +151,352 @@ Disassembly of section .text:
                	mov	x3, x24
                	mov	x2, x21
                	mov	x1, x25
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x400568 <.text+0x268>
-               	b	0x400508 <.text+0x208>
-               	mov	x20, #0x1               // =1
-               	cmp	x20, #0x0
-               	b.ne	0x4005dc <.text+0x2dc>
-               	b	0x400588 <.text+0x288>
+               	b	0x400558 <.text+0x258>
+               	b	0x4004fc <.text+0x1fc>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x4005c8 <.text+0x2c8>
+               	b	0x400578 <.text+0x278>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x40056c <.text+0x26c>
-               	b	0x4005e0 <.text+0x2e0>
+               	cbnz	x21, 0x40055c <.text+0x25c>
+               	b	0x4005cc <.text+0x2cc>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x20, x19
-               	mov	x22, #0x66              // =102
-               	str	w22, [x20]
+               	mov	x0, x19
+               	mov	x20, #0x66              // =102
+               	str	w20, [x0]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
                	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x196
-               	mov	x20, x19
+               	mov	x22, x19
                	mov	x21, #0x38              // =56
                	mov	x0, x25
-               	mov	x3, x22
-               	mov	x2, x21
-               	mov	x1, x20
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x4005dc <.text+0x2dc>
-               	b	0x40057c <.text+0x27c>
-               	mov	x24, #0x1               // =1
-               	cmp	x24, #0x0
-               	b.ne	0x400650 <.text+0x350>
-               	b	0x4005fc <.text+0x2fc>
-               	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x4005e0 <.text+0x2e0>
-               	b	0x400654 <.text+0x354>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x23, #0x67              // =103
-               	str	w23, [x24]
-               	mov	x21, #0x2               // =2
-               	mov	x0, x21
-               	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x1b1
-               	mov	x24, x19
-               	mov	x21, #0x39              // =57
-               	mov	x0, x20
-               	mov	x3, x23
-               	mov	x2, x21
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x400650 <.text+0x350>
-               	b	0x4005f0 <.text+0x2f0>
-               	mov	x22, #0x1               // =1
-               	cmp	x22, #0x0
-               	b.ne	0x4006c4 <.text+0x3c4>
-               	b	0x400670 <.text+0x370>
-               	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x400654 <.text+0x354>
-               	b	0x4006c8 <.text+0x3c8>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x25, #0x68              // =104
-               	str	w25, [x22]
-               	mov	x21, #0x2               // =2
-               	mov	x0, x21
-               	bl	0x400318 <.text+0x18>
-               	mov	x24, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x1cc
-               	mov	x22, x19
-               	mov	x21, #0x3a              // =58
-               	mov	x0, x24
-               	mov	x3, x25
+               	mov	x3, x20
                	mov	x2, x21
                	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x4006c4 <.text+0x3c4>
-               	b	0x400664 <.text+0x364>
-               	mov	x23, #0x1               // =1
-               	cmp	x23, #0x0
-               	b.ne	0x400738 <.text+0x438>
-               	b	0x4006e4 <.text+0x3e4>
+               	b	0x4005c8 <.text+0x2c8>
+               	b	0x40056c <.text+0x26c>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x400638 <.text+0x338>
+               	b	0x4005e8 <.text+0x2e8>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x4006c8 <.text+0x3c8>
-               	b	0x40073c <.text+0x43c>
+               	cbnz	x21, 0x4005cc <.text+0x2cc>
+               	b	0x40063c <.text+0x33c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x23, x19
-               	mov	x20, #0x69              // =105
-               	str	w20, [x23]
+               	mov	x0, x19
+               	mov	x24, #0x67              // =103
+               	str	w24, [x0]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
                	mov	x22, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x1e7
+               	add	x19, x19, #0x1b1
                	mov	x23, x19
+               	mov	x21, #0x39              // =57
+               	mov	x0, x22
+               	mov	x3, x24
+               	mov	x2, x21
+               	mov	x1, x23
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x400638 <.text+0x338>
+               	b	0x4005dc <.text+0x2dc>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x4006a8 <.text+0x3a8>
+               	b	0x400658 <.text+0x358>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x40063c <.text+0x33c>
+               	b	0x4006ac <.text+0x3ac>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x0, x19
+               	mov	x20, #0x68              // =104
+               	str	w20, [x0]
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
+               	bl	0x400318 <.text+0x18>
+               	mov	x23, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x1cc
+               	mov	x25, x19
+               	mov	x21, #0x3a              // =58
+               	mov	x0, x23
+               	mov	x3, x20
+               	mov	x2, x21
+               	mov	x1, x25
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x4006a8 <.text+0x3a8>
+               	b	0x40064c <.text+0x34c>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x400718 <.text+0x418>
+               	b	0x4006c8 <.text+0x3c8>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x4006ac <.text+0x3ac>
+               	b	0x40071c <.text+0x41c>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x0, x19
+               	mov	x24, #0x69              // =105
+               	str	w24, [x0]
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
+               	bl	0x400318 <.text+0x18>
+               	mov	x25, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x1e7
+               	mov	x22, x19
                	mov	x21, #0x3b              // =59
+               	mov	x0, x25
+               	mov	x3, x24
+               	mov	x2, x21
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x400718 <.text+0x418>
+               	b	0x4006bc <.text+0x3bc>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x400788 <.text+0x488>
+               	b	0x400738 <.text+0x438>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x40071c <.text+0x41c>
+               	b	0x40078c <.text+0x48c>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x0, x19
+               	mov	x20, #0x6a              // =106
+               	str	w20, [x0]
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
+               	bl	0x400318 <.text+0x18>
+               	mov	x22, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x202
+               	mov	x23, x19
+               	mov	x21, #0x3c              // =60
                	mov	x0, x22
                	mov	x3, x20
                	mov	x2, x21
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x400738 <.text+0x438>
-               	b	0x4006d8 <.text+0x3d8>
-               	mov	x25, #0x1               // =1
-               	cmp	x25, #0x0
-               	b.ne	0x4007ac <.text+0x4ac>
-               	b	0x400758 <.text+0x458>
-               	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x40073c <.text+0x43c>
+               	b	0x400788 <.text+0x488>
+               	b	0x40072c <.text+0x42c>
+               	mov	x0, #0x1                // =1
+               	cmp	x0, #0x0
+               	b.ne	0x400800 <.text+0x500>
                	b	0x4007b0 <.text+0x4b0>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x40078c <.text+0x48c>
+               	mov	x0, #0xff               // =255
+               	sturb	w0, [x29, #-0x8]
+               	b	0x400804 <.text+0x504>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x25, x19
-               	mov	x24, #0x6a              // =106
-               	str	w24, [x25]
+               	mov	x0, x19
+               	mov	x24, #0x6b              // =107
+               	str	w24, [x0]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
                	mov	x23, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x202
+               	add	x19, x19, #0x21d
                	mov	x25, x19
-               	mov	x21, #0x3c              // =60
+               	mov	x21, #0x3d              // =61
                	mov	x0, x23
                	mov	x3, x24
                	mov	x2, x21
                	mov	x1, x25
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x4007ac <.text+0x4ac>
-               	b	0x40074c <.text+0x44c>
-               	mov	x20, #0x1               // =1
-               	cmp	x20, #0x0
-               	b.ne	0x400828 <.text+0x528>
-               	b	0x4007d4 <.text+0x4d4>
-               	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x4007b0 <.text+0x4b0>
-               	mov	x24, #0xff              // =255
-               	sturb	w24, [x29, #-0x8]
-               	b	0x40082c <.text+0x52c>
+               	b	0x400800 <.text+0x500>
+               	b	0x40079c <.text+0x49c>
+               	ldurb	w0, [x29, #-0x8]
+               	mov	x17, #0xff              // =255
+               	eor	x21, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x21, x17
+               	cmp	x0, #0x0
+               	cset	x21, eq
+               	cmp	x21, #0x0
+               	b.ne	0x40089c <.text+0x59c>
+               	b	0x40084c <.text+0x54c>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x400804 <.text+0x504>
+               	sub	x0, x29, #0x8
+               	ldrb	w22, [x0]
+               	add	x21, x22, #0x1
+               	strb	w21, [x0]
+               	b	0x4008a0 <.text+0x5a0>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x20, x19
-               	mov	x22, #0x6b              // =107
-               	str	w22, [x20]
-               	mov	x21, #0x2               // =2
-               	mov	x0, x21
+               	mov	x21, x19
+               	mov	x20, #0x6e              // =110
+               	str	w20, [x21]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
                	mov	x25, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x21d
-               	mov	x20, x19
-               	mov	x21, #0x3d              // =61
-               	mov	x0, x25
-               	mov	x3, x22
-               	mov	x2, x21
-               	mov	x1, x20
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x400828 <.text+0x528>
-               	b	0x4007c0 <.text+0x4c0>
-               	ldurb	w24, [x29, #-0x8]
-               	mov	x17, #0xff              // =255
-               	eor	x21, x24, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x24, x21, x17
-               	cmp	x24, #0x0
-               	cset	x21, eq
-               	cmp	x21, #0x0
-               	b.ne	0x4008c8 <.text+0x5c8>
-               	b	0x400874 <.text+0x574>
-               	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x40082c <.text+0x52c>
-               	sub	x22, x29, #0x8
-               	ldrb	w24, [x22]
-               	add	x21, x24, #0x1
-               	strb	w21, [x22]
-               	b	0x4008cc <.text+0x5cc>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x21, x19
-               	mov	x23, #0x6e              // =110
-               	str	w23, [x21]
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
-               	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
-               	adrp	x19, 0x410000
                	add	x19, x19, #0x238
                	mov	x21, x19
-               	mov	x24, #0x42              // =66
-               	mov	x0, x20
-               	mov	x3, x23
-               	mov	x2, x24
+               	mov	x22, #0x42              // =66
+               	mov	x0, x25
+               	mov	x3, x20
+               	mov	x2, x22
                	mov	x1, x21
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x4008c8 <.text+0x5c8>
-               	b	0x400858 <.text+0x558>
+               	b	0x40089c <.text+0x59c>
+               	b	0x400830 <.text+0x530>
                	ldurb	w21, [x29, #-0x8]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x24, x21, x17
-               	cmp	x24, #0x0
+               	and	x22, x21, x17
+               	cmp	x22, #0x0
                	cset	x21, eq
                	cmp	x21, #0x0
-               	b.ne	0x400970 <.text+0x670>
-               	b	0x40091c <.text+0x61c>
-               	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x4008cc <.text+0x5cc>
-               	sub	x23, x29, #0x8
-               	ldrb	w24, [x23]
+               	b.ne	0x400940 <.text+0x640>
+               	b	0x4008f0 <.text+0x5f0>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x4008a0 <.text+0x5a0>
+               	sub	x0, x29, #0x8
+               	ldrb	w22, [x0]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	add	x21, x24, x17
-               	strb	w21, [x23]
-               	b	0x400974 <.text+0x674>
+               	add	x21, x22, x17
+               	strb	w21, [x0]
+               	b	0x400944 <.text+0x644>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x21, x19
-               	mov	x25, #0x6f              // =111
-               	str	w25, [x21]
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
+               	mov	x24, #0x6f              // =111
+               	str	w24, [x21]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
-               	mov	x22, x0
+               	mov	x23, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x253
                	mov	x21, x19
-               	mov	x24, #0x44              // =68
-               	mov	x0, x22
-               	mov	x3, x25
-               	mov	x2, x24
+               	mov	x22, #0x44              // =68
+               	mov	x0, x23
+               	mov	x3, x24
+               	mov	x2, x22
                	mov	x1, x21
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x400970 <.text+0x670>
-               	b	0x4008f0 <.text+0x5f0>
+               	b	0x400940 <.text+0x640>
+               	b	0x4008c4 <.text+0x5c4>
                	ldurb	w21, [x29, #-0x8]
                	mov	x17, #0xff              // =255
-               	eor	x24, x21, x17
+               	eor	x22, x21, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x21, x24, x17
+               	and	x21, x22, x17
                	cmp	x21, #0x0
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x400a04 <.text+0x704>
-               	b	0x4009b0 <.text+0x6b0>
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x4009d0 <.text+0x6d0>
+               	b	0x400980 <.text+0x680>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x400974 <.text+0x674>
-               	mov	x22, #0x7f              // =127
-               	b	0x400a08 <.text+0x708>
+               	cbnz	x21, 0x400944 <.text+0x644>
+               	mov	x24, #0x7f              // =127
+               	b	0x4009d4 <.text+0x6d4>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x24, x19
+               	mov	x22, x19
                	mov	x20, #0x70              // =112
-               	str	w20, [x24]
+               	str	w20, [x22]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x26e
-               	mov	x24, x19
+               	mov	x22, x19
                	mov	x21, #0x46              // =70
-               	mov	x0, x23
+               	mov	x0, x25
                	mov	x3, x20
                	mov	x2, x21
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x400a04 <.text+0x704>
-               	b	0x4009a0 <.text+0x6a0>
-               	sxtb	x21, w22
+               	b	0x4009d0 <.text+0x6d0>
+               	b	0x400970 <.text+0x670>
+               	sxtb	x21, w24
                	cmp	x21, #0x7f
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x400a94 <.text+0x794>
-               	b	0x400a40 <.text+0x740>
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x400a5c <.text+0x75c>
+               	b	0x400a0c <.text+0x70c>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x400a08 <.text+0x708>
-               	mov	x10, #0xff80            // =65408
-               	movk	x10, #0xffff, lsl #16
-               	movk	x10, #0xffff, lsl #32
-               	movk	x10, #0xffff, lsl #48
-               	sturb	w10, [x29, #-0x18]
-               	b	0x400a98 <.text+0x798>
+               	cbnz	x21, 0x4009d4 <.text+0x6d4>
+               	mov	x0, #0xff80             // =65408
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	sturb	w0, [x29, #-0x18]
+               	b	0x400a60 <.text+0x760>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x25, #0x71              // =113
-               	str	w25, [x24]
+               	mov	x22, x19
+               	mov	x23, #0x71              // =113
+               	str	w23, [x22]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x289
-               	mov	x24, x19
+               	mov	x22, x19
                	mov	x21, #0x49              // =73
-               	mov	x0, x23
-               	mov	x3, x25
+               	mov	x0, x25
+               	mov	x3, x23
                	mov	x2, x21
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x10, x0
-               	b	0x400a94 <.text+0x794>
-               	b	0x400a20 <.text+0x720>
-               	ldursb	x10, [x29, #-0x18]
+               	b	0x400a5c <.text+0x75c>
+               	b	0x4009ec <.text+0x6ec>
+               	ldursb	x0, [x29, #-0x18]
                	mov	x17, #0xff80            // =65408
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x10, x17
+               	cmp	x0, x17
                	cset	x21, eq
                	cmp	x21, #0x0
-               	b.ne	0x400b40 <.text+0x840>
-               	b	0x400aec <.text+0x7ec>
+               	b.ne	0x400b04 <.text+0x804>
+               	b	0x400ab4 <.text+0x7b4>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x400a98 <.text+0x798>
-               	sub	x23, x29, #0x18
-               	ldrsb	x26, [x23]
+               	cbnz	x26, 0x400a60 <.text+0x760>
+               	sub	x0, x29, #0x18
+               	ldrsb	x26, [x0]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	add	x21, x26, x17
-               	strb	w21, [x23]
-               	b	0x400b44 <.text+0x844>
+               	strb	w21, [x0]
+               	b	0x400b08 <.text+0x808>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x21, x19
@@ -519,20 +505,19 @@ Disassembly of section .text:
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x22, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x2a4
                	mov	x21, x19
                	mov	x26, #0x4b              // =75
-               	mov	x0, x22
+               	mov	x0, x24
                	mov	x3, x20
                	mov	x2, x26
                	mov	x1, x21
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x400b40 <.text+0x840>
-               	b	0x400ac0 <.text+0x7c0>
+               	b	0x400b04 <.text+0x804>
+               	b	0x400a88 <.text+0x788>
                	ldursb	x21, [x29, #-0x18]
                	mov	x17, #0xff              // =255
                	and	x26, x21, x17
@@ -544,435 +529,424 @@ Disassembly of section .text:
                	cmp	x26, #0x0
                	cset	x21, eq
                	cmp	x21, #0x0
-               	b.ne	0x400be0 <.text+0x8e0>
-               	b	0x400b8c <.text+0x88c>
+               	b.ne	0x400ba0 <.text+0x8a0>
+               	b	0x400b50 <.text+0x850>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x400b44 <.text+0x844>
-               	mov	x20, #0xffff            // =65535
-               	sturh	w20, [x29, #-0x20]
-               	b	0x400be4 <.text+0x8e4>
+               	cbnz	x26, 0x400b08 <.text+0x808>
+               	mov	x0, #0xffff             // =65535
+               	sturh	w0, [x29, #-0x20]
+               	b	0x400ba4 <.text+0x8a4>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x21, x19
-               	mov	x24, #0x73              // =115
-               	str	w24, [x21]
+               	mov	x25, #0x73              // =115
+               	str	w25, [x21]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x2bf
                	mov	x21, x19
                	mov	x26, #0x4d              // =77
-               	mov	x0, x23
-               	mov	x3, x24
+               	mov	x0, x22
+               	mov	x3, x25
                	mov	x2, x26
                	mov	x1, x21
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x400be0 <.text+0x8e0>
-               	b	0x400b78 <.text+0x878>
-               	ldurh	w20, [x29, #-0x20]
+               	b	0x400ba0 <.text+0x8a0>
+               	b	0x400b3c <.text+0x83c>
+               	ldurh	w0, [x29, #-0x20]
                	mov	x17, #0xffff            // =65535
-               	eor	x26, x20, x17
+               	eor	x26, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x20, x26, x17
-               	cmp	x20, #0x0
+               	and	x0, x26, x17
+               	cmp	x0, #0x0
                	cset	x26, eq
                	cmp	x26, #0x0
-               	b.ne	0x400c80 <.text+0x980>
-               	b	0x400c2c <.text+0x92c>
-               	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x400be4 <.text+0x8e4>
-               	sub	x24, x29, #0x20
-               	ldrh	w20, [x24]
-               	add	x26, x20, #0x1
-               	strh	w26, [x24]
-               	b	0x400c84 <.text+0x984>
+               	b.ne	0x400c3c <.text+0x93c>
+               	b	0x400bec <.text+0x8ec>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x400ba4 <.text+0x8a4>
+               	sub	x0, x29, #0x20
+               	ldrh	w24, [x0]
+               	add	x26, x24, #0x1
+               	strh	w26, [x0]
+               	b	0x400c40 <.text+0x940>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x26, x19
-               	mov	x22, #0x78              // =120
-               	str	w22, [x26]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
+               	mov	x20, #0x78              // =120
+               	str	w20, [x26]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
                	bl	0x400318 <.text+0x18>
                	mov	x21, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x2da
                	mov	x26, x19
-               	mov	x20, #0x53              // =83
+               	mov	x24, #0x53              // =83
                	mov	x0, x21
-               	mov	x3, x22
-               	mov	x2, x20
+               	mov	x3, x20
+               	mov	x2, x24
                	mov	x1, x26
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x400c80 <.text+0x980>
-               	b	0x400c10 <.text+0x910>
+               	b	0x400c3c <.text+0x93c>
+               	b	0x400bd0 <.text+0x8d0>
                	ldurh	w26, [x29, #-0x20]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x20, x26, x17
-               	cmp	x20, #0x0
+               	and	x24, x26, x17
+               	cmp	x24, #0x0
                	cset	x26, eq
                	cmp	x26, #0x0
-               	b.ne	0x400d30 <.text+0xa30>
-               	b	0x400cdc <.text+0x9dc>
-               	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x400c84 <.text+0x984>
-               	mov	x22, #0x0               // =0
-               	sturh	w22, [x29, #-0x20]
-               	sub	x20, x29, #0x20
-               	ldrh	w22, [x20]
+               	b.ne	0x400ce8 <.text+0x9e8>
+               	b	0x400c98 <.text+0x998>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x400c40 <.text+0x940>
+               	mov	x0, #0x0                // =0
+               	sturh	w0, [x29, #-0x20]
+               	sub	x24, x29, #0x20
+               	ldrh	w0, [x24]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	add	x26, x22, x17
-               	strh	w26, [x20]
-               	b	0x400d34 <.text+0xa34>
+               	add	x26, x0, x17
+               	strh	w26, [x24]
+               	b	0x400cec <.text+0x9ec>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x26, x19
-               	mov	x23, #0x79              // =121
-               	str	w23, [x26]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
+               	mov	x25, #0x79              // =121
+               	str	w25, [x26]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
                	bl	0x400318 <.text+0x18>
-               	mov	x24, x0
+               	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x2f5
                	mov	x26, x19
-               	mov	x20, #0x55              // =85
-               	mov	x0, x24
-               	mov	x3, x23
-               	mov	x2, x20
+               	mov	x24, #0x55              // =85
+               	mov	x0, x22
+               	mov	x3, x25
+               	mov	x2, x24
                	mov	x1, x26
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x400d30 <.text+0xa30>
-               	b	0x400ca8 <.text+0x9a8>
+               	b	0x400ce8 <.text+0x9e8>
+               	b	0x400c64 <.text+0x964>
                	ldurh	w26, [x29, #-0x20]
                	mov	x17, #0xffff            // =65535
-               	eor	x22, x26, x17
+               	eor	x0, x26, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x26, x22, x17
+               	and	x26, x0, x17
                	cmp	x26, #0x0
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x400dc4 <.text+0xac4>
-               	b	0x400d70 <.text+0xa70>
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	b.ne	0x400d78 <.text+0xa78>
+               	b	0x400d28 <.text+0xa28>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x400d34 <.text+0xa34>
-               	mov	x24, #0x7fff            // =32767
-               	b	0x400dc8 <.text+0xac8>
+               	cbnz	x26, 0x400cec <.text+0x9ec>
+               	mov	x25, #0x7fff            // =32767
+               	b	0x400d7c <.text+0xa7c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x21, #0x7a              // =122
-               	str	w21, [x22]
+               	mov	x0, x19
+               	mov	x20, #0x7a              // =122
+               	str	w20, [x0]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x310
-               	mov	x22, x19
+               	mov	x21, x19
                	mov	x26, #0x58              // =88
-               	mov	x0, x20
-               	mov	x3, x21
+               	mov	x0, x24
+               	mov	x3, x20
                	mov	x2, x26
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	mov	x1, x21
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x400dc4 <.text+0xac4>
-               	b	0x400d60 <.text+0xa60>
-               	sxth	x26, w24
+               	b	0x400d78 <.text+0xa78>
+               	b	0x400d18 <.text+0xa18>
+               	sxth	x26, w25
                	mov	x17, #0x7fff            // =32767
                	cmp	x26, x17
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x400e54 <.text+0xb54>
-               	b	0x400e00 <.text+0xb00>
+               	cset	x21, eq
+               	cmp	x21, #0x0
+               	b.ne	0x400e04 <.text+0xb04>
+               	b	0x400db4 <.text+0xab4>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x400dc8 <.text+0xac8>
-               	mov	x21, #0x8000            // =32768
-               	movk	x21, #0xffff, lsl #16
-               	movk	x21, #0xffff, lsl #32
-               	movk	x21, #0xffff, lsl #48
-               	b	0x400e58 <.text+0xb58>
+               	cbnz	x26, 0x400d7c <.text+0xa7c>
+               	mov	x23, #0x8000            // =32768
+               	movk	x23, #0xffff, lsl #16
+               	movk	x23, #0xffff, lsl #32
+               	movk	x23, #0xffff, lsl #48
+               	b	0x400e08 <.text+0xb08>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x23, #0x7b              // =123
-               	str	w23, [x22]
+               	mov	x21, x19
+               	mov	x22, #0x7b              // =123
+               	str	w22, [x21]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x32b
-               	mov	x22, x19
+               	mov	x21, x19
                	mov	x26, #0x5b              // =91
-               	mov	x0, x20
-               	mov	x3, x23
+               	mov	x0, x24
+               	mov	x3, x22
                	mov	x2, x26
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	mov	x1, x21
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x400e54 <.text+0xb54>
-               	b	0x400de4 <.text+0xae4>
-               	sxth	x26, w21
+               	b	0x400e04 <.text+0xb04>
+               	b	0x400d98 <.text+0xa98>
+               	sxth	x26, w23
                	mov	x17, #0x8000            // =32768
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x26, x17
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x400eec <.text+0xbec>
-               	b	0x400e98 <.text+0xb98>
+               	cset	x25, eq
+               	cmp	x25, #0x0
+               	b.ne	0x400e98 <.text+0xb98>
+               	b	0x400e48 <.text+0xb48>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x400e58 <.text+0xb58>
-               	sxth	x23, w21
+               	cbnz	x26, 0x400e08 <.text+0xb08>
+               	sxth	x0, w23
                	mov	x17, #0xffff            // =65535
-               	and	x20, x23, x17
-               	b	0x400ef0 <.text+0xbf0>
+               	and	x22, x0, x17
+               	b	0x400e9c <.text+0xb9c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x25, #0x7c              // =124
-               	str	w25, [x24]
+               	mov	x25, x19
+               	mov	x20, #0x7c              // =124
+               	str	w20, [x25]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x22, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x346
-               	mov	x24, x19
-               	mov	x26, #0x5d              // =93
-               	mov	x0, x22
-               	mov	x3, x25
-               	mov	x2, x26
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x400eec <.text+0xbec>
-               	b	0x400e80 <.text+0xb80>
-               	mov	x17, #0xffff            // =65535
-               	and	x23, x20, x17
-               	mov	x17, #0x8000            // =32768
-               	eor	x21, x23, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x23, x21, x17
-               	cmp	x23, #0x0
-               	cset	x21, eq
-               	cmp	x21, #0x0
-               	b.ne	0x400f90 <.text+0xc90>
-               	b	0x400f3c <.text+0xc3c>
-               	mov	x23, #0x0               // =0
-               	cbnz	x23, 0x400ef0 <.text+0xbf0>
-               	mov	x25, #0x2345            // =9029
-               	movk	x25, #0x1, lsl #16
-               	sxtw	x23, w25
-               	sxth	x22, w23
-               	b	0x400f94 <.text+0xc94>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x21, x19
-               	mov	x26, #0x7d              // =125
-               	str	w26, [x21]
-               	mov	x23, #0x2               // =2
-               	mov	x0, x23
-               	bl	0x400318 <.text+0x18>
-               	mov	x24, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x361
-               	mov	x21, x19
-               	mov	x23, #0x5f              // =95
-               	mov	x0, x24
-               	mov	x3, x26
-               	mov	x2, x23
-               	mov	x1, x21
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x400f90 <.text+0xc90>
-               	b	0x400f20 <.text+0xc20>
-               	sxth	x25, w22
-               	mov	x17, #0x2345            // =9029
-               	cmp	x25, x17
-               	cset	x20, eq
-               	cmp	x20, #0x0
-               	b.ne	0x401024 <.text+0xd24>
-               	b	0x400fd0 <.text+0xcd0>
-               	mov	x25, #0x0               // =0
-               	cbnz	x25, 0x400f94 <.text+0xc94>
-               	mov	x26, #0xffd6            // =65494
-               	movk	x26, #0xffff, lsl #16
-               	movk	x26, #0xffff, lsl #32
-               	movk	x26, #0xffff, lsl #48
-               	sxth	x24, w26
-               	b	0x401028 <.text+0xd28>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x20, x19
-               	mov	x23, #0x7e              // =126
-               	str	w23, [x20]
-               	mov	x25, #0x2               // =2
-               	mov	x0, x25
-               	bl	0x400318 <.text+0x18>
                	mov	x21, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x37c
-               	mov	x20, x19
-               	mov	x25, #0x64              // =100
+               	add	x19, x19, #0x346
+               	mov	x25, x19
+               	mov	x26, #0x5d              // =93
                	mov	x0, x21
-               	mov	x3, x23
-               	mov	x2, x25
-               	mov	x1, x20
-               	bl	0x402414 <fprintf>
+               	mov	x3, x20
+               	mov	x2, x26
+               	mov	x1, x25
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x26, x0
-               	b	0x401024 <.text+0xd24>
-               	b	0x400fb0 <.text+0xcb0>
-               	sxtw	x26, w24
+               	b	0x400e98 <.text+0xb98>
+               	b	0x400e30 <.text+0xb30>
+               	mov	x17, #0xffff            // =65535
+               	and	x0, x22, x17
+               	mov	x17, #0x8000            // =32768
+               	eor	x23, x0, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x23, x17
+               	cmp	x0, #0x0
+               	cset	x23, eq
+               	cmp	x23, #0x0
+               	b.ne	0x400f38 <.text+0xc38>
+               	b	0x400ee8 <.text+0xbe8>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x400e9c <.text+0xb9c>
+               	mov	x0, #0x2345             // =9029
+               	movk	x0, #0x1, lsl #16
+               	sxtw	x24, w0
+               	sxth	x20, w24
+               	b	0x400f3c <.text+0xc3c>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x23, x19
+               	mov	x26, #0x7d              // =125
+               	str	w26, [x23]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
+               	bl	0x400318 <.text+0x18>
+               	mov	x25, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x361
+               	mov	x23, x19
+               	mov	x24, #0x5f              // =95
+               	mov	x0, x25
+               	mov	x3, x26
+               	mov	x2, x24
+               	mov	x1, x23
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x400f38 <.text+0xc38>
+               	b	0x400ecc <.text+0xbcc>
+               	sxth	x0, w20
+               	mov	x17, #0x2345            // =9029
+               	cmp	x0, x17
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x400fc8 <.text+0xcc8>
+               	b	0x400f78 <.text+0xc78>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x400f3c <.text+0xc3c>
+               	mov	x0, #0xffd6             // =65494
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	sxth	x26, w0
+               	b	0x400fcc <.text+0xccc>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x22, x19
+               	mov	x24, #0x7e              // =126
+               	str	w24, [x22]
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
+               	bl	0x400318 <.text+0x18>
+               	mov	x23, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x37c
+               	mov	x22, x19
+               	mov	x21, #0x64              // =100
+               	mov	x0, x23
+               	mov	x3, x24
+               	mov	x2, x21
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x400fc8 <.text+0xcc8>
+               	b	0x400f58 <.text+0xc58>
+               	sxtw	x0, w26
                	mov	x17, #0xffd6            // =65494
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x26, x17
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x4010bc <.text+0xdbc>
-               	b	0x401068 <.text+0xd68>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x401028 <.text+0xd28>
-               	mov	x21, #0xffff            // =65535
+               	cmp	x0, x17
+               	cset	x20, eq
+               	cmp	x20, #0x0
+               	b.ne	0x40105c <.text+0xd5c>
+               	b	0x40100c <.text+0xd0c>
+               	mov	x25, #0x0               // =0
+               	cbnz	x25, 0x400fcc <.text+0xccc>
+               	mov	x24, #0xffff            // =65535
                	mov	x17, #0xffff            // =65535
-               	and	x23, x21, x17
-               	b	0x4010c0 <.text+0xdc0>
+               	and	x23, x24, x17
+               	b	0x401060 <.text+0xd60>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x25, #0x7f              // =127
-               	str	w25, [x22]
+               	mov	x20, x19
+               	mov	x21, #0x7f              // =127
+               	str	w21, [x20]
+               	mov	x25, #0x2               // =2
+               	mov	x0, x25
+               	bl	0x400318 <.text+0x18>
+               	mov	x22, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x397
+               	mov	x20, x19
+               	mov	x25, #0x69              // =105
+               	mov	x0, x22
+               	mov	x3, x21
+               	mov	x2, x25
+               	mov	x1, x20
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x40105c <.text+0xd5c>
+               	b	0x400ff4 <.text+0xcf4>
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x26, x23, x17
+               	mov	x17, #0xffff            // =65535
+               	eor	x20, x26, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x26, x20, x17
+               	cmp	x26, #0x0
+               	cset	x20, eq
+               	cmp	x20, #0x0
+               	b.ne	0x4010f0 <.text+0xdf0>
+               	b	0x4010a0 <.text+0xda0>
+               	mov	x26, #0x0               // =0
+               	cbnz	x26, 0x401060 <.text+0xd60>
+               	b	0x4010f4 <.text+0xdf4>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x20, x19
+               	mov	x25, #0x80              // =128
+               	str	w25, [x20]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x397
-               	mov	x22, x19
-               	mov	x26, #0x69              // =105
-               	mov	x0, x20
-               	mov	x3, x25
-               	mov	x2, x26
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x4010bc <.text+0xdbc>
-               	b	0x401050 <.text+0xd50>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x24, x23, x17
-               	mov	x17, #0xffff            // =65535
-               	eor	x22, x24, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x24, x22, x17
-               	cmp	x24, #0x0
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x401154 <.text+0xe54>
-               	b	0x401100 <.text+0xe00>
-               	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x4010c0 <.text+0xdc0>
-               	b	0x401158 <.text+0xe58>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x26, #0x80              // =128
-               	str	w26, [x22]
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
-               	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
+               	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3b2
-               	mov	x22, x19
-               	mov	x24, #0x6e              // =110
-               	mov	x0, x20
-               	mov	x3, x26
-               	mov	x2, x24
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	mov	x20, x19
+               	mov	x26, #0x6e              // =110
+               	mov	x0, x22
+               	mov	x3, x25
+               	mov	x2, x26
+               	mov	x1, x20
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x9, x0
-               	b	0x401154 <.text+0xe54>
-               	b	0x4010f4 <.text+0xdf4>
+               	b	0x4010f0 <.text+0xdf0>
+               	b	0x401094 <.text+0xd94>
                	mov	x17, #0xffff            // =65535
-               	and	x9, x21, x17
+               	and	x0, x24, x17
                	mov	x17, #0xffff            // =65535
-               	cmp	x9, x17
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x4011e4 <.text+0xee4>
-               	b	0x401190 <.text+0xe90>
+               	cmp	x0, x17
+               	cset	x26, eq
+               	cmp	x26, #0x0
+               	b.ne	0x40117c <.text+0xe7c>
+               	b	0x40112c <.text+0xe2c>
                	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x401158 <.text+0xe58>
-               	mov	x20, #0xffff            // =65535
-               	movk	x20, #0xffff, lsl #16
-               	stur	w20, [x29, #-0x70]
-               	b	0x4011e8 <.text+0xee8>
+               	cbnz	x27, 0x4010f4 <.text+0xdf4>
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	stur	w0, [x29, #-0x70]
+               	b	0x401180 <.text+0xe80>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x25, #0x81              // =129
-               	str	w25, [x24]
+               	mov	x26, x19
+               	mov	x21, #0x81              // =129
+               	str	w21, [x26]
                	mov	x27, #0x2               // =2
                	mov	x0, x27
                	bl	0x400318 <.text+0x18>
                	mov	x23, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3cd
-               	mov	x24, x19
+               	mov	x26, x19
                	mov	x27, #0x70              // =112
                	mov	x0, x23
-               	mov	x3, x25
+               	mov	x3, x21
                	mov	x2, x27
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x4011e4 <.text+0xee4>
-               	b	0x401178 <.text+0xe78>
-               	ldur	w20, [x29, #-0x70]
+               	b	0x40117c <.text+0xe7c>
+               	b	0x401114 <.text+0xe14>
+               	ldur	w0, [x29, #-0x70]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x20, x17
+               	cmp	x0, x17
                	cset	x27, eq
                	cmp	x27, #0x0
-               	b.ne	0x401278 <.text+0xf78>
-               	b	0x401224 <.text+0xf24>
+               	b.ne	0x40120c <.text+0xf0c>
+               	b	0x4011bc <.text+0xebc>
                	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x4011e8 <.text+0xee8>
-               	sub	x23, x29, #0x70
-               	ldr	w20, [x23]
+               	cbnz	x20, 0x401180 <.text+0xe80>
+               	sub	x0, x29, #0x70
+               	ldr	w20, [x0]
                	add	x27, x20, #0x1
-               	str	w27, [x23]
-               	b	0x40127c <.text+0xf7c>
+               	str	w27, [x0]
+               	b	0x401210 <.text+0xf10>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x27, x19
@@ -981,20 +955,19 @@ Disassembly of section .text:
                	mov	x20, #0x2               // =2
                	mov	x0, x20
                	bl	0x400318 <.text+0x18>
-               	mov	x21, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3e8
                	mov	x27, x19
                	mov	x20, #0x76              // =118
-               	mov	x0, x21
+               	mov	x0, x24
                	mov	x3, x22
                	mov	x2, x20
                	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x401278 <.text+0xf78>
-               	b	0x401208 <.text+0xf08>
+               	b	0x40120c <.text+0xf0c>
+               	b	0x4011a0 <.text+0xea0>
                	ldur	w27, [x29, #-0x70]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -1002,115 +975,112 @@ Disassembly of section .text:
                	cmp	x20, #0x0
                	cset	x27, eq
                	cmp	x27, #0x0
-               	b.ne	0x401328 <.text+0x1028>
-               	b	0x4012d4 <.text+0xfd4>
+               	b.ne	0x4012b8 <.text+0xfb8>
+               	b	0x401268 <.text+0xf68>
                	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x40127c <.text+0xf7c>
-               	mov	x22, #0x0               // =0
-               	stur	w22, [x29, #-0x70]
+               	cbnz	x20, 0x401210 <.text+0xf10>
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x70]
                	sub	x20, x29, #0x70
-               	ldr	w22, [x20]
+               	ldr	w0, [x20]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	add	x27, x22, x17
+               	add	x27, x0, x17
                	str	w27, [x20]
-               	b	0x40132c <.text+0x102c>
+               	b	0x4012bc <.text+0xfbc>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x27, x19
-               	mov	x24, #0x83              // =131
-               	str	w24, [x27]
+               	mov	x23, #0x83              // =131
+               	str	w23, [x27]
                	mov	x20, #0x2               // =2
                	mov	x0, x20
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x26, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x403
                	mov	x27, x19
                	mov	x20, #0x78              // =120
-               	mov	x0, x23
-               	mov	x3, x24
+               	mov	x0, x26
+               	mov	x3, x23
                	mov	x2, x20
                	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x401328 <.text+0x1028>
-               	b	0x4012a0 <.text+0xfa0>
+               	b	0x4012b8 <.text+0xfb8>
+               	b	0x401234 <.text+0xf34>
                	ldur	w27, [x29, #-0x70]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x27, x17
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x4013b4 <.text+0x10b4>
-               	b	0x401360 <.text+0x1060>
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	b.ne	0x401340 <.text+0x1040>
+               	b	0x4012f0 <.text+0xff0>
                	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x40132c <.text+0x102c>
+               	cbnz	x27, 0x4012bc <.text+0xfbc>
                	mov	x23, #0xffff            // =65535
                	movk	x23, #0x7fff, lsl #16
-               	b	0x4013b8 <.text+0x10b8>
+               	b	0x401344 <.text+0x1044>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x21, #0x84              // =132
-               	str	w21, [x22]
+               	mov	x0, x19
+               	mov	x22, #0x84              // =132
+               	str	w22, [x0]
                	mov	x27, #0x2               // =2
                	mov	x0, x27
                	bl	0x400318 <.text+0x18>
                	mov	x20, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x41e
-               	mov	x22, x19
+               	mov	x24, x19
                	mov	x27, #0x7b              // =123
                	mov	x0, x20
-               	mov	x3, x21
+               	mov	x3, x22
                	mov	x2, x27
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	mov	x1, x24
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x4013b4 <.text+0x10b4>
-               	b	0x40134c <.text+0x104c>
+               	b	0x401340 <.text+0x1040>
+               	b	0x4012dc <.text+0xfdc>
                	sxtw	x27, w23
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0x7fff, lsl #16
                	cmp	x27, x17
-               	cset	x22, eq
-               	cmp	x22, #0x0
-               	b.ne	0x401448 <.text+0x1148>
-               	b	0x4013f4 <.text+0x10f4>
+               	cset	x24, eq
+               	cmp	x24, #0x0
+               	b.ne	0x4013d0 <.text+0x10d0>
+               	b	0x401380 <.text+0x1080>
                	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x4013b8 <.text+0x10b8>
-               	mov	x25, #0x80000000        // =2147483648
-               	movk	x25, #0xffff, lsl #32
-               	movk	x25, #0xffff, lsl #48
-               	sxtw	x21, w25
-               	b	0x40144c <.text+0x114c>
+               	cbnz	x27, 0x401344 <.text+0x1044>
+               	mov	x0, #0x80000000         // =2147483648
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	sxtw	x21, w0
+               	b	0x4013d4 <.text+0x10d4>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x22, x19
-               	mov	x24, #0x85              // =133
-               	str	w24, [x22]
+               	mov	x24, x19
+               	mov	x26, #0x85              // =133
+               	str	w26, [x24]
                	mov	x27, #0x2               // =2
                	mov	x0, x27
                	bl	0x400318 <.text+0x18>
                	mov	x20, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x439
-               	mov	x22, x19
+               	mov	x24, x19
                	mov	x27, #0x7e              // =126
                	mov	x0, x20
-               	mov	x3, x24
+               	mov	x3, x26
                	mov	x2, x27
-               	mov	x1, x22
-               	bl	0x402414 <fprintf>
+               	mov	x1, x24
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x401448 <.text+0x1148>
-               	b	0x4013d8 <.text+0x10d8>
+               	b	0x4013d0 <.text+0x10d0>
+               	b	0x401364 <.text+0x1064>
                	sxtw	x27, w21
                	mov	x17, #0x80000000        // =2147483648
                	movk	x17, #0xffff, lsl #32
@@ -1118,897 +1088,871 @@ Disassembly of section .text:
                	cmp	x27, x17
                	cset	x23, eq
                	cmp	x23, #0x0
-               	b.ne	0x4014d4 <.text+0x11d4>
-               	b	0x401480 <.text+0x1180>
+               	b.ne	0x401458 <.text+0x1158>
+               	b	0x401408 <.text+0x1108>
                	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x40144c <.text+0x114c>
-               	sxtw	x20, w21
-               	b	0x4014d8 <.text+0x11d8>
+               	cbnz	x27, 0x4013d4 <.text+0x10d4>
+               	sxtw	x26, w21
+               	b	0x40145c <.text+0x115c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x23, x19
-               	mov	x25, #0x86              // =134
-               	str	w25, [x23]
+               	mov	x22, #0x86              // =134
+               	str	w22, [x23]
                	mov	x27, #0x2               // =2
                	mov	x0, x27
                	bl	0x400318 <.text+0x18>
-               	mov	x22, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x454
                	mov	x23, x19
                	mov	x27, #0x80              // =128
-               	mov	x0, x22
-               	mov	x3, x25
+               	mov	x0, x24
+               	mov	x3, x22
                	mov	x2, x27
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x4014d4 <.text+0x11d4>
-               	b	0x401470 <.text+0x1170>
+               	b	0x401458 <.text+0x1158>
+               	b	0x4013f8 <.text+0x10f8>
                	mov	x17, #0x80000000        // =2147483648
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x20, x17
+               	cmp	x26, x17
                	cset	x27, eq
                	cmp	x27, #0x0
-               	b.ne	0x401568 <.text+0x1268>
-               	b	0x401514 <.text+0x1214>
+               	b.ne	0x4014e8 <.text+0x11e8>
+               	b	0x401498 <.text+0x1198>
                	mov	x23, #0x0               // =0
-               	cbnz	x23, 0x4014d8 <.text+0x11d8>
-               	sxtw	x26, w21
+               	cbnz	x23, 0x40145c <.text+0x115c>
+               	sxtw	x0, w21
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x25, x26, x17
-               	b	0x40156c <.text+0x126c>
+               	and	x25, x0, x17
+               	b	0x4014ec <.text+0x11ec>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x27, x19
-               	mov	x24, #0x87              // =135
-               	str	w24, [x27]
+               	mov	x20, #0x87              // =135
+               	str	w20, [x27]
                	mov	x23, #0x2               // =2
                	mov	x0, x23
                	bl	0x400318 <.text+0x18>
-               	mov	x22, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x46f
                	mov	x27, x19
                	mov	x23, #0x86              // =134
-               	mov	x0, x22
-               	mov	x3, x24
+               	mov	x0, x24
+               	mov	x3, x20
                	mov	x2, x23
                	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x26, x0
-               	b	0x401568 <.text+0x1268>
-               	b	0x4014f8 <.text+0x11f8>
+               	b	0x4014e8 <.text+0x11e8>
+               	b	0x40147c <.text+0x117c>
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x25, x17
-               	cset	x26, eq
-               	cmp	x26, #0x0
-               	b.ne	0x4015f4 <.text+0x12f4>
-               	b	0x4015a4 <.text+0x12a4>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x40156c <.text+0x126c>
-               	mov	x27, #0xffff            // =65535
-               	movk	x27, #0xffff, lsl #16
-               	movk	x27, #0xffff, lsl #32
-               	movk	x27, #0xffff, lsl #48
-               	stur	x27, [x29, #-0x98]
-               	b	0x4015f8 <.text+0x12f8>
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	b.ne	0x401570 <.text+0x1270>
+               	b	0x401524 <.text+0x1224>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x4014ec <.text+0x11ec>
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	stur	x0, [x29, #-0x98]
+               	b	0x401574 <.text+0x1274>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x26, x19
+               	mov	x0, x19
                	mov	x23, #0x88              // =136
-               	str	w23, [x26]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
+               	str	w23, [x0]
+               	mov	x26, #0x2               // =2
+               	mov	x0, x26
                	bl	0x400318 <.text+0x18>
                	mov	x21, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x48a
-               	mov	x26, x19
+               	mov	x22, x19
                	mov	x0, x21
                	mov	x3, x23
                	mov	x2, x23
-               	mov	x1, x26
-               	bl	0x402414 <fprintf>
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x27, x0
-               	b	0x4015f4 <.text+0x12f4>
-               	b	0x401584 <.text+0x1284>
-               	ldur	x27, [x29, #-0x98]
+               	b	0x401570 <.text+0x1270>
+               	b	0x401504 <.text+0x1204>
+               	ldur	x0, [x29, #-0x98]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x27, x17
-               	cset	x26, eq
-               	cmp	x26, #0x0
-               	b.ne	0x401690 <.text+0x1390>
-               	b	0x40163c <.text+0x133c>
-               	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x4015f8 <.text+0x12f8>
-               	sub	x23, x29, #0x98
-               	ldr	x27, [x23]
-               	add	x26, x27, #0x1
-               	str	x26, [x23]
-               	b	0x401694 <.text+0x1394>
+               	cmp	x0, x17
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x401608 <.text+0x1308>
+               	b	0x4015b8 <.text+0x12b8>
+               	mov	x26, #0x0               // =0
+               	cbnz	x26, 0x401574 <.text+0x1274>
+               	sub	x0, x29, #0x98
+               	ldr	x26, [x0]
+               	add	x22, x26, #0x1
+               	str	x22, [x0]
+               	b	0x40160c <.text+0x130c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x26, x19
-               	mov	x20, #0x8c              // =140
-               	str	w20, [x26]
-               	mov	x27, #0x2               // =2
-               	mov	x0, x27
+               	mov	x22, x19
+               	mov	x27, #0x8c              // =140
+               	str	w27, [x22]
+               	mov	x26, #0x2               // =2
+               	mov	x0, x26
                	bl	0x400318 <.text+0x18>
                	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x4a5
-               	mov	x26, x19
-               	mov	x27, #0x8e              // =142
+               	mov	x22, x19
+               	mov	x26, #0x8e              // =142
                	mov	x0, x25
-               	mov	x3, x20
-               	mov	x2, x27
-               	mov	x1, x26
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x23, x0
-               	b	0x401690 <.text+0x1390>
-               	b	0x401620 <.text+0x1320>
-               	ldur	x26, [x29, #-0x98]
-               	cmp	x26, #0x0
-               	cset	x27, eq
-               	cmp	x27, #0x0
-               	b.ne	0x40172c <.text+0x142c>
-               	b	0x4016d8 <.text+0x13d8>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x401694 <.text+0x1394>
-               	sub	x20, x29, #0x98
-               	ldr	x26, [x20]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	add	x27, x26, x17
-               	str	x27, [x20]
-               	b	0x401730 <.text+0x1430>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x27, x19
-               	mov	x21, #0x8d              // =141
-               	str	w21, [x27]
-               	mov	x26, #0x2               // =2
-               	mov	x0, x26
-               	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x4c0
-               	mov	x27, x19
-               	mov	x26, #0x90              // =144
-               	mov	x0, x23
-               	mov	x3, x21
+               	mov	x3, x27
                	mov	x2, x26
-               	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x40172c <.text+0x142c>
-               	b	0x4016ac <.text+0x13ac>
-               	ldur	x27, [x29, #-0x98]
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x27, x17
+               	b	0x401608 <.text+0x1308>
+               	b	0x40159c <.text+0x129c>
+               	ldur	x22, [x29, #-0x98]
+               	cmp	x22, #0x0
                	cset	x26, eq
                	cmp	x26, #0x0
-               	b.ne	0x4017c8 <.text+0x14c8>
-               	b	0x401774 <.text+0x1474>
-               	mov	x27, #0x0               // =0
-               	cbnz	x27, 0x401730 <.text+0x1430>
+               	b.ne	0x4016a0 <.text+0x13a0>
+               	b	0x401650 <.text+0x1350>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x40160c <.text+0x130c>
+               	sub	x0, x29, #0x98
+               	ldr	x22, [x0]
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	add	x26, x22, x17
+               	str	x26, [x0]
+               	b	0x4016a4 <.text+0x13a4>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x26, x19
+               	mov	x23, #0x8d              // =141
+               	str	w23, [x26]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
+               	bl	0x400318 <.text+0x18>
+               	mov	x21, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x4c0
+               	mov	x26, x19
+               	mov	x22, #0x90              // =144
+               	mov	x0, x21
+               	mov	x3, x23
+               	mov	x2, x22
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x4016a0 <.text+0x13a0>
+               	b	0x401624 <.text+0x1324>
+               	ldur	x26, [x29, #-0x98]
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x26, x17
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x401738 <.text+0x1438>
+               	b	0x4016e8 <.text+0x13e8>
+               	mov	x26, #0x0               // =0
+               	cbnz	x26, 0x4016a4 <.text+0x13a4>
                	mov	x23, #0xffff            // =65535
                	movk	x23, #0xffff, lsl #16
                	movk	x23, #0xffff, lsl #32
                	movk	x23, #0x7fff, lsl #48
-               	b	0x4017cc <.text+0x14cc>
+               	b	0x40173c <.text+0x143c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x26, x19
-               	mov	x25, #0x8e              // =142
-               	str	w25, [x26]
-               	mov	x27, #0x2               // =2
-               	mov	x0, x27
+               	mov	x22, x19
+               	mov	x27, #0x8e              // =142
+               	str	w27, [x22]
+               	mov	x26, #0x2               // =2
+               	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x4db
-               	mov	x26, x19
-               	mov	x27, #0x92              // =146
-               	mov	x0, x20
-               	mov	x3, x25
-               	mov	x2, x27
-               	mov	x1, x26
-               	bl	0x402414 <fprintf>
+               	mov	x22, x19
+               	mov	x26, #0x92              // =146
+               	mov	x0, x25
+               	mov	x3, x27
+               	mov	x2, x26
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x4017c8 <.text+0x14c8>
-               	b	0x401758 <.text+0x1458>
+               	b	0x401738 <.text+0x1438>
+               	b	0x4016cc <.text+0x13cc>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0x7fff, lsl #48
                	cmp	x23, x17
-               	cset	x27, eq
-               	cmp	x27, #0x0
-               	b.ne	0x401860 <.text+0x1560>
-               	b	0x40180c <.text+0x150c>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x4017cc <.text+0x14cc>
-               	mov	x25, #0xffff            // =65535
-               	movk	x25, #0xffff, lsl #16
-               	movk	x25, #0xffff, lsl #32
-               	movk	x25, #0xffff, lsl #48
-               	b	0x401864 <.text+0x1564>
+               	cset	x26, eq
+               	cmp	x26, #0x0
+               	b.ne	0x4017cc <.text+0x14cc>
+               	b	0x40177c <.text+0x147c>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x40173c <.text+0x143c>
+               	mov	x24, #0xffff            // =65535
+               	movk	x24, #0xffff, lsl #16
+               	movk	x24, #0xffff, lsl #32
+               	movk	x24, #0xffff, lsl #48
+               	b	0x4017d0 <.text+0x14d0>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x27, x19
+               	mov	x26, x19
                	mov	x21, #0x8f              // =143
-               	str	w21, [x27]
-               	mov	x26, #0x2               // =2
-               	mov	x0, x26
+               	str	w21, [x26]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
-               	mov	x20, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x4f6
-               	mov	x27, x19
-               	mov	x26, #0x95              // =149
-               	mov	x0, x20
+               	mov	x26, x19
+               	mov	x22, #0x95              // =149
+               	mov	x0, x25
                	mov	x3, x21
-               	mov	x2, x26
-               	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	mov	x2, x22
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x401860 <.text+0x1560>
-               	b	0x4017f0 <.text+0x14f0>
-               	asr	x26, x25, #1
+               	b	0x4017cc <.text+0x14cc>
+               	b	0x401760 <.text+0x1460>
+               	asr	x22, x24, #1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x26, x17
+               	cmp	x22, x17
                	cset	x23, eq
                	cmp	x23, #0x0
-               	b.ne	0x4018f0 <.text+0x15f0>
-               	b	0x40189c <.text+0x159c>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x401864 <.text+0x1564>
-               	mov	x20, #-0x8000000000000000 // =-9223372036854775808
-               	b	0x4018f4 <.text+0x15f4>
+               	b.ne	0x401858 <.text+0x1558>
+               	b	0x401808 <.text+0x1508>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x4017d0 <.text+0x14d0>
+               	mov	x21, #-0x8000000000000000 // =-9223372036854775808
+               	b	0x40185c <.text+0x155c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x23, x19
-               	mov	x22, #0x90              // =144
-               	str	w22, [x23]
-               	mov	x26, #0x2               // =2
-               	mov	x0, x26
+               	mov	x27, #0x90              // =144
+               	str	w27, [x23]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
-               	mov	x27, x0
+               	mov	x26, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x511
                	mov	x23, x19
-               	mov	x26, #0x9a              // =154
-               	mov	x0, x27
-               	mov	x3, x22
-               	mov	x2, x26
+               	mov	x22, #0x9a              // =154
+               	mov	x0, x26
+               	mov	x3, x27
+               	mov	x2, x22
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x4018f0 <.text+0x15f0>
-               	b	0x40188c <.text+0x158c>
-               	lsr	x26, x20, #1
+               	b	0x401858 <.text+0x1558>
+               	b	0x4017f8 <.text+0x14f8>
+               	lsr	x22, x21, #1
                	mov	x17, #0x4000000000000000 // =4611686018427387904
-               	cmp	x26, x17
-               	cset	x25, eq
-               	cmp	x25, #0x0
-               	b.ne	0x401980 <.text+0x1680>
-               	b	0x40192c <.text+0x162c>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x4018f4 <.text+0x15f4>
+               	cmp	x22, x17
+               	cset	x24, eq
+               	cmp	x24, #0x0
+               	b.ne	0x4018e4 <.text+0x15e4>
+               	b	0x401894 <.text+0x1594>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x40185c <.text+0x155c>
                	mov	x27, #0xffff            // =65535
                	movk	x27, #0xffff, lsl #16
                	movk	x27, #0xffff, lsl #32
                	movk	x27, #0xffff, lsl #48
-               	b	0x401984 <.text+0x1684>
+               	b	0x4018e8 <.text+0x15e8>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x25, x19
-               	mov	x21, #0x91              // =145
-               	str	w21, [x25]
-               	mov	x26, #0x2               // =2
-               	mov	x0, x26
+               	mov	x24, x19
+               	mov	x25, #0x91              // =145
+               	str	w25, [x24]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
                	mov	x23, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x52c
-               	mov	x25, x19
-               	mov	x26, #0x9d              // =157
+               	mov	x24, x19
+               	mov	x22, #0x9d              // =157
                	mov	x0, x23
-               	mov	x3, x21
-               	mov	x2, x26
-               	mov	x1, x25
-               	bl	0x402414 <fprintf>
+               	mov	x3, x25
+               	mov	x2, x22
+               	mov	x1, x24
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x22, x0
-               	b	0x401980 <.text+0x1680>
-               	b	0x401910 <.text+0x1610>
-               	lsr	x26, x27, #32
+               	b	0x4018e4 <.text+0x15e4>
+               	b	0x401878 <.text+0x1578>
+               	lsr	x22, x27, #32
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x26, x17
-               	cset	x20, eq
-               	cmp	x20, #0x0
-               	b.ne	0x401a1c <.text+0x171c>
-               	b	0x4019c8 <.text+0x16c8>
-               	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x401984 <.text+0x1684>
-               	mov	x23, #0xfed4            // =65236
-               	movk	x23, #0xffff, lsl #16
-               	movk	x23, #0xffff, lsl #32
-               	movk	x23, #0xffff, lsl #48
-               	sxtw	x26, w23
-               	sxtb	x21, w26
-               	b	0x401a20 <.text+0x1720>
+               	cmp	x22, x17
+               	cset	x21, eq
+               	cmp	x21, #0x0
+               	b.ne	0x40197c <.text+0x167c>
+               	b	0x40192c <.text+0x162c>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x4018e8 <.text+0x15e8>
+               	mov	x25, #0xfed4            // =65236
+               	movk	x25, #0xffff, lsl #16
+               	movk	x25, #0xffff, lsl #32
+               	movk	x25, #0xffff, lsl #48
+               	sxtw	x22, w25
+               	sxtb	x23, w22
+               	b	0x401980 <.text+0x1680>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x20, x19
-               	mov	x22, #0x92              // =146
-               	str	w22, [x20]
-               	mov	x26, #0x2               // =2
-               	mov	x0, x26
+               	mov	x21, x19
+               	mov	x26, #0x92              // =146
+               	str	w26, [x21]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
                	bl	0x400318 <.text+0x18>
-               	mov	x25, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x547
-               	mov	x20, x19
-               	mov	x26, #0xa0              // =160
-               	mov	x0, x25
-               	mov	x3, x22
-               	mov	x2, x26
-               	mov	x1, x20
-               	bl	0x402414 <fprintf>
+               	mov	x21, x19
+               	mov	x22, #0xa0              // =160
+               	mov	x0, x24
+               	mov	x3, x26
+               	mov	x2, x22
+               	mov	x1, x21
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x401a1c <.text+0x171c>
-               	b	0x4019a4 <.text+0x16a4>
-               	sxtb	x27, w21
-               	mov	x20, #0xd4              // =212
-               	sxtb	x20, w20
-               	cmp	x27, x20
-               	cset	x25, eq
-               	cmp	x25, #0x0
-               	b.ne	0x401aa0 <.text+0x17a0>
-               	b	0x401a4c <.text+0x174c>
-               	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x401a20 <.text+0x1720>
-               	b	0x401aa4 <.text+0x17a4>
+               	b	0x40197c <.text+0x167c>
+               	b	0x401908 <.text+0x1608>
+               	sxtb	x27, w23
+               	mov	x21, #0xd4              // =212
+               	sxtb	x21, w21
+               	cmp	x27, x21
+               	cset	x24, eq
+               	cmp	x24, #0x0
+               	b.ne	0x4019fc <.text+0x16fc>
+               	b	0x4019ac <.text+0x16ac>
+               	mov	x21, #0x0               // =0
+               	cbnz	x21, 0x401980 <.text+0x1680>
+               	b	0x401a00 <.text+0x1700>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x25, x19
-               	mov	x26, #0x96              // =150
-               	str	w26, [x25]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
+               	mov	x24, x19
+               	mov	x22, #0x96              // =150
+               	str	w22, [x24]
+               	mov	x21, #0x2               // =2
+               	mov	x0, x21
                	bl	0x400318 <.text+0x18>
                	mov	x27, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x562
-               	mov	x25, x19
-               	mov	x20, #0xa9              // =169
+               	mov	x24, x19
+               	mov	x21, #0xa9              // =169
                	mov	x0, x27
-               	mov	x3, x26
-               	mov	x2, x20
-               	mov	x1, x25
-               	bl	0x402414 <fprintf>
+               	mov	x3, x22
+               	mov	x2, x21
+               	mov	x1, x24
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x401aa0 <.text+0x17a0>
-               	b	0x401a40 <.text+0x1740>
-               	sxtb	x24, w21
+               	b	0x4019fc <.text+0x16fc>
+               	b	0x4019a0 <.text+0x16a0>
+               	sxtb	x0, w23
                	mov	x17, #0xffd4            // =65492
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x24, x17
-               	cset	x20, eq
-               	cmp	x20, #0x0
-               	b.ne	0x401b38 <.text+0x1838>
-               	b	0x401ae4 <.text+0x17e4>
-               	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x401aa4 <.text+0x17a4>
-               	sxtw	x26, w23
-               	mov	x17, #0xff              // =255
-               	and	x27, x26, x17
-               	b	0x401b3c <.text+0x183c>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x20, x19
-               	mov	x22, #0x97              // =151
-               	str	w22, [x20]
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
-               	bl	0x400318 <.text+0x18>
-               	mov	x25, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x57d
-               	mov	x20, x19
-               	mov	x24, #0xaa              // =170
-               	mov	x0, x25
-               	mov	x3, x22
-               	mov	x2, x24
-               	mov	x1, x20
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x26, x0
-               	b	0x401b38 <.text+0x1838>
-               	b	0x401acc <.text+0x17cc>
-               	mov	x17, #0xff              // =255
-               	and	x26, x27, x17
-               	mov	x17, #0xd4              // =212
-               	eor	x21, x26, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x26, x21, x17
-               	cmp	x26, #0x0
+               	cmp	x0, x17
                	cset	x21, eq
                	cmp	x21, #0x0
-               	b.ne	0x401bcc <.text+0x18cc>
-               	b	0x401b78 <.text+0x1878>
+               	b.ne	0x401a90 <.text+0x1790>
+               	b	0x401a40 <.text+0x1740>
                	mov	x26, #0x0               // =0
-               	cbnz	x26, 0x401b3c <.text+0x183c>
-               	b	0x401bd0 <.text+0x18d0>
+               	cbnz	x26, 0x401a00 <.text+0x1700>
+               	sxtw	x0, w25
+               	mov	x17, #0xff              // =255
+               	and	x22, x0, x17
+               	b	0x401a94 <.text+0x1794>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x21, x19
-               	mov	x24, #0x98              // =152
-               	str	w24, [x21]
+               	mov	x20, #0x97              // =151
+               	str	w20, [x21]
                	mov	x26, #0x2               // =2
                	mov	x0, x26
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x24, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x598
+               	add	x19, x19, #0x57d
                	mov	x21, x19
-               	mov	x26, #0xaf              // =175
-               	mov	x0, x23
-               	mov	x3, x24
+               	mov	x26, #0xaa              // =170
+               	mov	x0, x24
+               	mov	x3, x20
                	mov	x2, x26
                	mov	x1, x21
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x401bcc <.text+0x18cc>
-               	b	0x401b6c <.text+0x186c>
+               	b	0x401a90 <.text+0x1790>
+               	b	0x401a28 <.text+0x1728>
                	mov	x17, #0xff              // =255
-               	and	x25, x27, x17
-               	cmp	x25, #0xd4
-               	cset	x26, eq
-               	cmp	x26, #0x0
-               	b.ne	0x401c5c <.text+0x195c>
-               	b	0x401c08 <.text+0x1908>
-               	mov	x25, #0x0               // =0
-               	cbnz	x25, 0x401bd0 <.text+0x18d0>
-               	mov	x24, #0x2345            // =9029
-               	movk	x24, #0x1, lsl #16
-               	sxtw	x25, w24
-               	sxth	x23, w25
-               	b	0x401c60 <.text+0x1960>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x26, x19
-               	mov	x20, #0x99              // =153
-               	str	w20, [x26]
-               	mov	x25, #0x2               // =2
-               	mov	x0, x25
-               	bl	0x400318 <.text+0x18>
-               	mov	x21, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x5b3
-               	mov	x26, x19
-               	mov	x25, #0xb0              // =176
-               	mov	x0, x21
-               	mov	x3, x20
-               	mov	x2, x25
-               	mov	x1, x26
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x24, x0
-               	b	0x401c5c <.text+0x195c>
-               	b	0x401bec <.text+0x18ec>
-               	sxth	x24, w23
-               	mov	x17, #0x2345            // =9029
-               	cmp	x24, x17
-               	cset	x27, eq
-               	cmp	x27, #0x0
-               	b.ne	0x401cdc <.text+0x19dc>
-               	b	0x401c88 <.text+0x1988>
-               	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x401c60 <.text+0x1960>
-               	b	0x401ce0 <.text+0x19e0>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x27, x19
-               	mov	x25, #0x9a              // =154
-               	str	w25, [x27]
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
-               	bl	0x400318 <.text+0x18>
-               	mov	x26, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x5ce
-               	mov	x27, x19
-               	mov	x24, #0xb5              // =181
-               	mov	x0, x26
-               	mov	x3, x25
-               	mov	x2, x24
-               	mov	x1, x27
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x401cdc <.text+0x19dc>
-               	b	0x401c7c <.text+0x197c>
-               	sxth	x20, w23
-               	mov	x17, #0x2345            // =9029
-               	cmp	x20, x17
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x401d6c <.text+0x1a6c>
-               	b	0x401d18 <.text+0x1a18>
-               	mov	x20, #0x0               // =0
-               	cbnz	x20, 0x401ce0 <.text+0x19e0>
-               	mov	x25, #0xffff            // =65535
-               	movk	x25, #0x1, lsl #16
-               	sxtw	x20, w25
-               	sxth	x26, w20
-               	b	0x401d70 <.text+0x1a70>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x21, #0x9b              // =155
-               	str	w21, [x24]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
-               	bl	0x400318 <.text+0x18>
-               	mov	x27, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x5e9
-               	mov	x24, x19
-               	mov	x20, #0xb6              // =182
-               	mov	x0, x27
-               	mov	x3, x21
-               	mov	x2, x20
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x25, x0
-               	b	0x401d6c <.text+0x1a6c>
-               	b	0x401cfc <.text+0x19fc>
-               	sxth	x25, w26
+               	and	x0, x22, x17
+               	mov	x17, #0xd4              // =212
+               	eor	x23, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x25, x17
+               	and	x0, x23, x17
+               	cmp	x0, #0x0
                	cset	x23, eq
                	cmp	x23, #0x0
-               	b.ne	0x401df8 <.text+0x1af8>
-               	b	0x401da4 <.text+0x1aa4>
-               	mov	x25, #0x0               // =0
-               	cbnz	x25, 0x401d70 <.text+0x1a70>
-               	b	0x401dfc <.text+0x1afc>
+               	b.ne	0x401b20 <.text+0x1820>
+               	b	0x401ad0 <.text+0x17d0>
+               	mov	x27, #0x0               // =0
+               	cbnz	x27, 0x401a94 <.text+0x1794>
+               	b	0x401b24 <.text+0x1824>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x23, x19
-               	mov	x20, #0x9c              // =156
-               	str	w20, [x23]
-               	mov	x25, #0x2               // =2
-               	mov	x0, x25
+               	mov	x26, #0x98              // =152
+               	str	w26, [x23]
+               	mov	x27, #0x2               // =2
+               	mov	x0, x27
                	bl	0x400318 <.text+0x18>
-               	mov	x24, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x604
+               	add	x19, x19, #0x598
                	mov	x23, x19
-               	mov	x25, #0xba              // =186
-               	mov	x0, x24
-               	mov	x3, x20
-               	mov	x2, x25
+               	mov	x27, #0xaf              // =175
+               	mov	x0, x25
+               	mov	x3, x26
+               	mov	x2, x27
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x401df8 <.text+0x1af8>
-               	b	0x401d98 <.text+0x1a98>
-               	sxth	x21, w26
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
-               	cmp	x21, x17
-               	cset	x25, eq
-               	cmp	x25, #0x0
-               	b.ne	0x401e90 <.text+0x1b90>
-               	b	0x401e3c <.text+0x1b3c>
+               	b	0x401b20 <.text+0x1820>
+               	b	0x401ac4 <.text+0x17c4>
+               	mov	x17, #0xff              // =255
+               	and	x0, x22, x17
+               	cmp	x0, #0xd4
+               	cset	x27, eq
+               	cmp	x27, #0x0
+               	b.ne	0x401bac <.text+0x18ac>
+               	b	0x401b5c <.text+0x185c>
                	mov	x21, #0x0               // =0
-               	cbnz	x21, 0x401dfc <.text+0x1afc>
-               	mov	x24, #0xffff            // =65535
-               	movk	x24, #0xffff, lsl #16
-               	mov	x20, #0x1               // =1
-               	b	0x401e94 <.text+0x1b94>
+               	cbnz	x21, 0x401b24 <.text+0x1824>
+               	mov	x0, #0x2345             // =9029
+               	movk	x0, #0x1, lsl #16
+               	sxtw	x21, w0
+               	sxth	x26, w21
+               	b	0x401bb0 <.text+0x18b0>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x25, x19
-               	mov	x27, #0x9d              // =157
-               	str	w27, [x25]
+               	mov	x27, x19
+               	mov	x24, #0x99              // =153
+               	str	w24, [x27]
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	bl	0x400318 <.text+0x18>
                	mov	x23, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x61f
-               	mov	x25, x19
-               	mov	x21, #0xbb              // =187
+               	add	x19, x19, #0x5b3
+               	mov	x27, x19
+               	mov	x21, #0xb0              // =176
                	mov	x0, x23
-               	mov	x3, x27
+               	mov	x3, x24
                	mov	x2, x21
-               	mov	x1, x25
-               	bl	0x402414 <fprintf>
+               	mov	x1, x27
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x401e90 <.text+0x1b90>
-               	b	0x401e24 <.text+0x1b24>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x26, x24, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x25, x20, x17
-               	cmp	x26, x25
-               	cset	x23, hi
-               	cmp	x23, #0x0
-               	b.ne	0x401f40 <.text+0x1c40>
-               	b	0x401eec <.text+0x1bec>
+               	b	0x401bac <.text+0x18ac>
+               	b	0x401b40 <.text+0x1840>
+               	sxth	x0, w26
+               	mov	x17, #0x2345            // =9029
+               	cmp	x0, x17
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x401c28 <.text+0x1928>
+               	b	0x401bd8 <.text+0x18d8>
                	mov	x25, #0x0               // =0
-               	cbnz	x25, 0x401e94 <.text+0x1b94>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x22, x24, x17
-               	sxtw	x27, w22
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x25, x20, x17
-               	sxtw	x22, w25
-               	b	0x401f44 <.text+0x1c44>
+               	cbnz	x25, 0x401bb0 <.text+0x18b0>
+               	b	0x401c2c <.text+0x192c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x23, x19
-               	mov	x21, #0xa0              // =160
-               	str	w21, [x23]
+               	mov	x22, x19
+               	mov	x21, #0x9a              // =154
+               	str	w21, [x22]
                	mov	x25, #0x2               // =2
                	mov	x0, x25
                	bl	0x400318 <.text+0x18>
-               	mov	x26, x0
+               	mov	x27, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x63a
-               	mov	x23, x19
-               	mov	x25, #0xc2              // =194
-               	mov	x0, x26
+               	add	x19, x19, #0x5ce
+               	mov	x22, x19
+               	mov	x25, #0xb5              // =181
+               	mov	x0, x27
                	mov	x3, x21
                	mov	x2, x25
-               	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
+               	b	0x401c28 <.text+0x1928>
+               	b	0x401bcc <.text+0x18cc>
+               	sxth	x0, w26
+               	mov	x17, #0x2345            // =9029
+               	cmp	x0, x17
+               	cset	x25, eq
+               	cmp	x25, #0x0
+               	b.ne	0x401cb4 <.text+0x19b4>
+               	b	0x401c64 <.text+0x1964>
+               	mov	x23, #0x0               // =0
+               	cbnz	x23, 0x401c2c <.text+0x192c>
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0x1, lsl #16
+               	sxtw	x23, w0
+               	sxth	x21, w23
+               	b	0x401cb8 <.text+0x19b8>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x25, x19
+               	mov	x24, #0x9b              // =155
+               	str	w24, [x25]
+               	mov	x23, #0x2               // =2
+               	mov	x0, x23
+               	bl	0x400318 <.text+0x18>
                	mov	x22, x0
-               	b	0x401f40 <.text+0x1c40>
-               	b	0x401ec0 <.text+0x1bc0>
-               	sxtw	x20, w27
-               	sxtw	x24, w22
-               	cmp	x20, x24
-               	cset	x23, lt
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x5e9
+               	mov	x25, x19
+               	mov	x23, #0xb6              // =182
+               	mov	x0, x22
+               	mov	x3, x24
+               	mov	x2, x23
+               	mov	x1, x25
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x401cb4 <.text+0x19b4>
+               	b	0x401c48 <.text+0x1948>
+               	sxth	x0, w21
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	cset	x26, eq
+               	cmp	x26, #0x0
+               	b.ne	0x401d3c <.text+0x1a3c>
+               	b	0x401cec <.text+0x19ec>
+               	mov	x27, #0x0               // =0
+               	cbnz	x27, 0x401cb8 <.text+0x19b8>
+               	b	0x401d40 <.text+0x1a40>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x26, x19
+               	mov	x23, #0x9c              // =156
+               	str	w23, [x26]
+               	mov	x27, #0x2               // =2
+               	mov	x0, x27
+               	bl	0x400318 <.text+0x18>
+               	mov	x25, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x604
+               	mov	x26, x19
+               	mov	x27, #0xba              // =186
+               	mov	x0, x25
+               	mov	x3, x23
+               	mov	x2, x27
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x401d3c <.text+0x1a3c>
+               	b	0x401ce0 <.text+0x19e0>
+               	sxth	x0, w21
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	cmp	x0, x17
+               	cset	x27, eq
+               	cmp	x27, #0x0
+               	b.ne	0x401dd0 <.text+0x1ad0>
+               	b	0x401d80 <.text+0x1a80>
+               	mov	x22, #0x0               // =0
+               	cbnz	x22, 0x401d40 <.text+0x1a40>
+               	mov	x23, #0xffff            // =65535
+               	movk	x23, #0xffff, lsl #16
+               	mov	x25, #0x1               // =1
+               	b	0x401dd4 <.text+0x1ad4>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x27, x19
+               	mov	x24, #0x9d              // =157
+               	str	w24, [x27]
+               	mov	x22, #0x2               // =2
+               	mov	x0, x22
+               	bl	0x400318 <.text+0x18>
+               	mov	x26, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x61f
+               	mov	x27, x19
+               	mov	x22, #0xbb              // =187
+               	mov	x0, x26
+               	mov	x3, x24
+               	mov	x2, x22
+               	mov	x1, x27
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x401dd0 <.text+0x1ad0>
+               	b	0x401d68 <.text+0x1a68>
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x21, x23, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x27, x25, x17
+               	cmp	x21, x27
+               	cset	x26, hi
+               	cmp	x26, #0x0
+               	b.ne	0x401e7c <.text+0x1b7c>
+               	b	0x401e2c <.text+0x1b2c>
+               	mov	x27, #0x0               // =0
+               	cbnz	x27, 0x401dd4 <.text+0x1ad4>
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x0, x23, x17
+               	sxtw	x20, w0
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x27, x25, x17
+               	sxtw	x24, w27
+               	b	0x401e80 <.text+0x1b80>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x26, x19
+               	mov	x22, #0xa0              // =160
+               	str	w22, [x26]
+               	mov	x27, #0x2               // =2
+               	mov	x0, x27
+               	bl	0x400318 <.text+0x18>
+               	mov	x21, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x63a
+               	mov	x26, x19
+               	mov	x27, #0xc2              // =194
+               	mov	x0, x21
+               	mov	x3, x22
+               	mov	x2, x27
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x401e7c <.text+0x1b7c>
+               	b	0x401e00 <.text+0x1b00>
+               	sxtw	x25, w20
+               	sxtw	x23, w24
+               	cmp	x25, x23
+               	cset	x26, lt
+               	cmp	x26, #0x0
+               	b.ne	0x401efc <.text+0x1bfc>
+               	b	0x401eac <.text+0x1bac>
+               	mov	x23, #0x0               // =0
+               	cbnz	x23, 0x401e80 <.text+0x1b80>
+               	mov	x22, #0x1               // =1
+               	b	0x401f00 <.text+0x1c00>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x26, x19
+               	mov	x27, #0xa1              // =161
+               	str	w27, [x26]
+               	mov	x23, #0x2               // =2
+               	mov	x0, x23
+               	bl	0x400318 <.text+0x18>
+               	mov	x25, x0
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x655
+               	mov	x26, x19
+               	mov	x23, #0xc5              // =197
+               	mov	x0, x25
+               	mov	x3, x27
+               	mov	x2, x23
+               	mov	x1, x26
+               	bl	0x402334 <fprintf>
+               	sxtw	x0, w0
+               	b	0x401efc <.text+0x1bfc>
+               	b	0x401e9c <.text+0x1b9c>
+               	sxtw	x23, w22
+               	lsl	x24, x23, #30
+               	mov	x17, #0x40000000        // =1073741824
+               	cmp	x24, x17
+               	cset	x23, eq
                	cmp	x23, #0x0
-               	b.ne	0x401fc4 <.text+0x1cc4>
-               	b	0x401f70 <.text+0x1c70>
+               	b.ne	0x401f80 <.text+0x1c80>
+               	b	0x401f30 <.text+0x1c30>
                	mov	x24, #0x0               // =0
-               	cbnz	x24, 0x401f44 <.text+0x1c44>
-               	mov	x26, #0x1               // =1
-               	b	0x401fc8 <.text+0x1cc8>
+               	cbnz	x24, 0x401f00 <.text+0x1c00>
+               	mov	x25, #0x1               // =1
+               	b	0x401f84 <.text+0x1c84>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x23, x19
-               	mov	x25, #0xa1              // =161
-               	str	w25, [x23]
+               	mov	x21, #0xaa              // =170
+               	str	w21, [x23]
                	mov	x24, #0x2               // =2
                	mov	x0, x24
                	bl	0x400318 <.text+0x18>
                	mov	x20, x0
                	adrp	x19, 0x410000
-               	add	x19, x19, #0x655
+               	add	x19, x19, #0x670
                	mov	x23, x19
-               	mov	x24, #0xc5              // =197
+               	mov	x24, #0xcd              // =205
                	mov	x0, x20
-               	mov	x3, x25
+               	mov	x3, x21
                	mov	x2, x24
                	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x401fc4 <.text+0x1cc4>
-               	b	0x401f60 <.text+0x1c60>
-               	sxtw	x24, w26
-               	lsl	x22, x24, #30
-               	mov	x17, #0x40000000        // =1073741824
-               	cmp	x22, x17
-               	cset	x24, eq
-               	cmp	x24, #0x0
-               	b.ne	0x40204c <.text+0x1d4c>
-               	b	0x401ff8 <.text+0x1cf8>
-               	mov	x22, #0x0               // =0
-               	cbnz	x22, 0x401fc8 <.text+0x1cc8>
-               	mov	x23, #0x1               // =1
-               	b	0x402050 <.text+0x1d50>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x24, x19
-               	mov	x21, #0xaa              // =170
-               	str	w21, [x24]
-               	mov	x22, #0x2               // =2
-               	mov	x0, x22
-               	bl	0x400318 <.text+0x18>
-               	mov	x27, x0
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x670
-               	mov	x24, x19
-               	mov	x22, #0xcd              // =205
-               	mov	x0, x27
-               	mov	x3, x21
-               	mov	x2, x22
-               	mov	x1, x24
-               	bl	0x402414 <fprintf>
-               	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x40204c <.text+0x1d4c>
-               	b	0x401fe8 <.text+0x1ce8>
+               	b	0x401f80 <.text+0x1c80>
+               	b	0x401f20 <.text+0x1c20>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x22, x23, x17
-               	lsl	x26, x22, #31
+               	and	x24, x25, x17
+               	lsl	x22, x24, #31
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x22, x26, x17
+               	and	x24, x22, x17
                	mov	x17, #0x80000000        // =2147483648
-               	cmp	x22, x17
-               	cset	x26, eq
-               	cmp	x26, #0x0
-               	b.ne	0x4020f4 <.text+0x1df4>
-               	b	0x4020a0 <.text+0x1da0>
-               	mov	x22, #0x0               // =0
-               	cbnz	x22, 0x402050 <.text+0x1d50>
-               	mov	x27, #0xffff            // =65535
-               	movk	x27, #0xffff, lsl #16
-               	movk	x27, #0xffff, lsl #32
-               	movk	x27, #0xffff, lsl #48
-               	b	0x4020f8 <.text+0x1df8>
+               	cmp	x24, x17
+               	cset	x22, eq
+               	cmp	x22, #0x0
+               	b.ne	0x402024 <.text+0x1d24>
+               	b	0x401fd4 <.text+0x1cd4>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x401f84 <.text+0x1c84>
+               	mov	x21, #0xffff            // =65535
+               	movk	x21, #0xffff, lsl #16
+               	movk	x21, #0xffff, lsl #32
+               	movk	x21, #0xffff, lsl #48
+               	b	0x402028 <.text+0x1d28>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x26, x19
-               	mov	x20, #0xab              // =171
-               	str	w20, [x26]
-               	mov	x22, #0x2               // =2
-               	mov	x0, x22
+               	mov	x22, x19
+               	mov	x26, #0xab              // =171
+               	str	w26, [x22]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
                	bl	0x400318 <.text+0x18>
-               	mov	x24, x0
+               	mov	x23, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x68b
-               	mov	x26, x19
-               	mov	x22, #0xcf              // =207
-               	mov	x0, x24
-               	mov	x3, x20
-               	mov	x2, x22
-               	mov	x1, x26
-               	bl	0x402414 <fprintf>
+               	mov	x22, x19
+               	mov	x24, #0xcf              // =207
+               	mov	x0, x23
+               	mov	x3, x26
+               	mov	x2, x24
+               	mov	x1, x22
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x4020f4 <.text+0x1df4>
-               	b	0x402084 <.text+0x1d84>
-               	sxtw	x22, w27
+               	b	0x402024 <.text+0x1d24>
+               	b	0x401fb8 <.text+0x1cb8>
+               	sxtw	x24, w21
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x22, x17
-               	cset	x23, eq
-               	cmp	x23, #0x0
-               	b.ne	0x402188 <.text+0x1e88>
-               	b	0x402134 <.text+0x1e34>
-               	mov	x22, #0x0               // =0
-               	cbnz	x22, 0x4020f8 <.text+0x1df8>
-               	mov	x24, #0xffff            // =65535
-               	movk	x24, #0xffff, lsl #16
-               	b	0x40218c <.text+0x1e8c>
+               	cmp	x24, x17
+               	cset	x25, eq
+               	cmp	x25, #0x0
+               	b.ne	0x4020b4 <.text+0x1db4>
+               	b	0x402064 <.text+0x1d64>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x402028 <.text+0x1d28>
+               	mov	x26, #0xffff            // =65535
+               	movk	x26, #0xffff, lsl #16
+               	b	0x4020b8 <.text+0x1db8>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x23, x19
-               	mov	x21, #0xac              // =172
-               	str	w21, [x23]
-               	mov	x22, #0x2               // =2
-               	mov	x0, x22
+               	mov	x25, x19
+               	mov	x20, #0xac              // =172
+               	str	w20, [x25]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
                	bl	0x400318 <.text+0x18>
-               	mov	x26, x0
+               	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x6a6
-               	mov	x23, x19
-               	mov	x22, #0xd3              // =211
-               	mov	x0, x26
-               	mov	x3, x21
-               	mov	x2, x22
-               	mov	x1, x23
-               	bl	0x402414 <fprintf>
+               	mov	x25, x19
+               	mov	x24, #0xd3              // =211
+               	mov	x0, x22
+               	mov	x3, x20
+               	mov	x2, x24
+               	mov	x1, x25
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	b	0x402188 <.text+0x1e88>
-               	b	0x402120 <.text+0x1e20>
+               	b	0x4020b4 <.text+0x1db4>
+               	b	0x402050 <.text+0x1d50>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x22, x24, x17
+               	and	x24, x26, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x22, x17
-               	cset	x27, eq
-               	cmp	x27, #0x0
-               	b.ne	0x40222c <.text+0x1f2c>
-               	b	0x4021d8 <.text+0x1ed8>
-               	mov	x22, #0x0               // =0
-               	cbnz	x22, 0x40218c <.text+0x1e8c>
+               	cmp	x24, x17
+               	cset	x21, eq
+               	cmp	x21, #0x0
+               	b.ne	0x402154 <.text+0x1e54>
+               	b	0x402104 <.text+0x1e04>
+               	mov	x24, #0x0               // =0
+               	cbnz	x24, 0x4020b8 <.text+0x1db8>
+               	adrp	x19, 0x410000
+               	add	x19, x19, #0x158
+               	mov	x0, x19
+               	ldrsw	x24, [x0]
+               	cmp	x24, #0x0
+               	b.ne	0x4021a4 <.text+0x1ea4>
+               	b	0x402158 <.text+0x1e58>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
                	mov	x21, x19
-               	ldrsw	x22, [x21]
-               	cmp	x22, #0x0
-               	b.ne	0x402284 <.text+0x1f84>
-               	b	0x402230 <.text+0x1f30>
-               	adrp	x19, 0x410000
-               	add	x19, x19, #0x158
-               	mov	x27, x19
-               	mov	x20, #0xad              // =173
-               	str	w20, [x27]
-               	mov	x22, #0x2               // =2
-               	mov	x0, x22
+               	mov	x23, #0xad              // =173
+               	str	w23, [x21]
+               	mov	x24, #0x2               // =2
+               	mov	x0, x24
                	bl	0x400318 <.text+0x18>
-               	mov	x23, x0
+               	mov	x25, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x6c1
-               	mov	x27, x19
-               	mov	x22, #0xd5              // =213
-               	mov	x0, x23
-               	mov	x3, x20
-               	mov	x2, x22
-               	mov	x1, x27
-               	bl	0x402414 <fprintf>
+               	mov	x21, x19
+               	mov	x24, #0xd5              // =213
+               	mov	x0, x25
+               	mov	x3, x23
+               	mov	x2, x24
+               	mov	x1, x21
+               	bl	0x402334 <fprintf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	b	0x40222c <.text+0x1f2c>
-               	b	0x4021b4 <.text+0x1eb4>
+               	b	0x402154 <.text+0x1e54>
+               	b	0x4020e0 <.text+0x1de0>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x6dc
-               	mov	x26, x19
-               	mov	x0, x26
-               	bl	0x402420 <printf>
+               	mov	x20, x19
+               	mov	x0, x20
+               	bl	0x402340 <printf>
                	sxtw	x0, w0
-               	mov	x21, x0
-               	mov	x21, #0x0               // =0
-               	mov	x0, x21
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -2023,9 +1967,8 @@ Disassembly of section .text:
                	ret
                	adrp	x19, 0x410000
                	add	x19, x19, #0x158
-               	mov	x26, x19
-               	ldrsw	x21, [x26]
-               	mov	x0, x21
+               	mov	x20, x19
+               	ldrsw	x0, [x20]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

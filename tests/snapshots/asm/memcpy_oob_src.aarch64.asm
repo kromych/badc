@@ -29,9 +29,7 @@ Disassembly of section .text:
                	mov	x2, x22
                	mov	x1, x21
                	bl	0x400484 <memcpy>
-               	mov	x12, x0
-               	mov	x12, #0x0               // =0
-               	mov	x0, x12
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

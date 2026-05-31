@@ -65,21 +65,21 @@ Disassembly of section .text:
                	mov	x21, #0x2               // =2
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x400688 <dlopen>
+               	bl	0x400678 <dlopen>
                	mov	x22, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x108
                	mov	x23, x19
                	mov	x0, x22
                	mov	x1, x23
-               	bl	0x400694 <dlsym>
+               	bl	0x400684 <dlsym>
                	mov	x21, x0
                	adrp	x19, 0x410000
                	add	x19, x19, #0x117
                	mov	x24, x19
                	mov	x0, x22
                	mov	x1, x24
-               	bl	0x400694 <dlsym>
+               	bl	0x400684 <dlsym>
                	mov	x23, x0
                	sub	x25, x29, #0x20
                	adrp	x19, 0x400000
@@ -96,7 +96,6 @@ Disassembly of section .text:
                	ldr	x3, [sp, #0x30]
                	blr	x9
                	add	sp, sp, #0x40
-               	mov	x10, x0
                	ldur	x22, [x29, #-0x20]
                	sub	x26, x29, #0x28
                	mov	x9, x23
@@ -106,12 +105,10 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
-               	mov	x25, x0
-               	ldur	x25, [x29, #-0x28]
-               	cmp	x25, #0x63
-               	b.eq	0x4004cc <.text+0x1dc>
-               	mov	x25, #0x1               // =1
-               	mov	x0, x25
+               	ldur	x0, [x29, #-0x28]
+               	cmp	x0, #0x63
+               	b.eq	0x4004c0 <.text+0x1d0>
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -125,11 +122,10 @@ Disassembly of section .text:
                	ret
                	mrs	x26, TPIDR_EL0
                	add	x26, x26, #0x10
-               	ldrsw	x25, [x26]
-               	cmp	x25, #0x1
-               	b.eq	0x400514 <.text+0x224>
-               	mov	x25, #0x2               // =2
-               	mov	x0, x25
+               	ldrsw	x0, [x26]
+               	cmp	x0, #0x1
+               	b.eq	0x400504 <.text+0x214>
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

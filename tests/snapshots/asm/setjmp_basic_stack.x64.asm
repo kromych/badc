@@ -18,11 +18,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	0x4003f7 <setjmp>
                	movslq	%eax, %rax
-               	movq	%rax, %r9
-               	movslq	%r9d, %rbx
+               	movslq	%eax, %rbx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x220, %rsp            # imm = 0x220
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

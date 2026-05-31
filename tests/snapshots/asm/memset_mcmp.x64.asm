@@ -27,18 +27,17 @@ Disassembly of section .text:
                	movq	%r14, %rsi
                	xorl	%eax, %eax
                	callq	0x4004cd <memset>
-               	movq	%rax, %rdi
-               	movq	%r12, %rdi
-               	addq	$0x4, %rdi
+               	movq	%r12, %rax
+               	addq	$0x4, %rax
                	xorq	%rbx, %rbx
-               	movb	%bl, (%rdi)
+               	movb	%bl, (%rax)
                	movzbq	(%r12), %r14
                	movq	%r14, %r12
                	xorq	$0x41, %r12
                	movl	$0xffffffff, %r14d      # imm = 0xFFFFFFFF
                	andq	%r12, %r14
                	cmpq	$0x0, %r14
-               	jne	0x400368 <.text+0xb8>
+               	jne	0x400365 <.text+0xb5>
                	movl	$0x2a, %r14d
                	movq	%r14, %rcx
                	movq	(%rsp), %rbx
@@ -58,4 +57,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

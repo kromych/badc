@@ -18,10 +18,9 @@ Disassembly of section .text:
                	movq	(%r11), %rbx
                	movq	%rbx, %r11
                	callq	*%r11
-               	movq	%rax, %r11
-               	movslq	%r11d, %rbx
+               	movslq	%eax, %rbx
                	cmpq	$0x0, %rbx
-               	jg	0x40030b <.text+0x6b>
+               	jg	0x400308 <.text+0x68>
                	movl	$0x1, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -30,13 +29,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	0xfdde(%rip), %r11      # 0x4100f0
-               	movq	(%r11), %r12
+               	leaq	0xfde1(%rip), %rax      # 0x4100f0
+               	movq	(%rax), %r12
                	movq	%r12, %r11
                	callq	*%r11
-               	movq	%rax, %r11
-               	movl	$0x2a, %r11d
-               	movq	%r11, %rcx
+               	movl	$0x2a, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
@@ -46,20 +44,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	callq	0x4004a7 <geteuid>
+               	callq	0x400497 <geteuid>
                	movslq	%eax, %rax
-               	movq	%rax, %r11
-               	movq	%r11, %rax
                	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	callq	0x4004ad <getpid>
+               	callq	0x40049d <getpid>
                	movslq	%eax, %rax
-               	movq	%rax, %r11
-               	movq	%r11, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

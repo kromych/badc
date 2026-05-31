@@ -21,7 +21,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	movb	$0x0, %al
-               	callq	0x400577 <open>
+               	callq	0x400567 <open>
                	movslq	%eax, %rax
                	movq	%rax, %r14
                	movslq	%r14d, %r12
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movl	$0xa, %r15d
                	movq	%r15, %rdi
                	xorl	%eax, %eax
-               	callq	0x40057d <malloc>
+               	callq	0x40056d <malloc>
                	movq	%rax, %rbx
                	movslq	%r14d, %r12
                	movl	$0x9, %r15d
@@ -48,19 +48,17 @@ Disassembly of section .text:
                	movq	%r15, %rdx
                	movq	%rbx, %rsi
                	xorl	%eax, %eax
-               	callq	0x400583 <read>
+               	callq	0x400573 <read>
                	movslq	%eax, %rax
-               	movq	%rax, %rsi
-               	movq	%rbx, %rsi
-               	addq	$0x9, %rsi
+               	movq	%rbx, %rax
+               	addq	$0x9, %rax
                	xorq	%r12, %r12
-               	movb	%r12b, (%rsi)
+               	movb	%r12b, (%rax)
                	movslq	%r14d, %rbx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
-               	callq	0x400589 <close>
+               	callq	0x400579 <close>
                	movslq	%eax, %rax
-               	movq	%rax, %r14
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -70,4 +68,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -262,6 +262,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // call consumes them and there is no surviving live range to
     // protect.
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
+    populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -799,6 +800,45 @@ fn populate_call_arg_hints(
             if let Some(&r) = int_args.get(arg_pos) {
                 hints[vu] = Some(r);
             }
+        }
+    }
+}
+
+/// Hint each `Inst::Call*`'s defined value to the ABI return register
+/// so the post-call capture mov drops out when the result's interval
+/// is call-clobber-free. Guarded by `!calls_after_def[idx]` -- a
+/// caller-saved return register would be clobbered by any later call's
+/// prologue or arg setup.
+fn populate_call_result_hints(
+    func: &FunctionSsa,
+    target: Target,
+    calls_after_def: &[bool],
+    hints: &mut [Option<u8>],
+) {
+    let (ret_int, ret_fp) = match target {
+        Target::MacOSAarch64
+        | Target::LinuxAarch64
+        | Target::WindowsAarch64
+        | Target::LinuxX64
+        | Target::WindowsX64 => (0u8, 0u8),
+    };
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if !matches!(
+            inst,
+            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+        ) {
+            continue;
+        }
+        if idx >= hints.len() || hints[idx].is_some() {
+            continue;
+        }
+        if calls_after_def.get(idx).copied().unwrap_or(false) {
+            continue;
+        }
+        match result_kind(inst) {
+            ResultKind::Int => hints[idx] = Some(ret_int),
+            ResultKind::Fp => hints[idx] = Some(ret_fp),
+            ResultKind::None => {}
         }
     }
 }

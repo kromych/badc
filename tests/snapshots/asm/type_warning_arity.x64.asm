@@ -25,7 +25,6 @@ Disassembly of section .text:
                	movl	$0x1, %ebx
                	movq	%rbx, %rdi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r9
                	movl	$0x2, %r12d
                	movl	$0x3, %r14d
                	movl	$0x4, %r15d
@@ -34,9 +33,8 @@ Disassembly of section .text:
                	movq	%r14, %rdx
                	movq	%r12, %rsi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %rsi
-               	xorq	%rsi, %rsi
-               	movq	%rsi, %rcx
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -45,5 +43,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -48,28 +48,23 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
-               	str	x23, [sp, #0x18]
                	bl	0x400238 <.text+0x18>
                	mov	x20, x0
                	bl	0x400240 <.text+0x20>
-               	mov	x14, x0
-               	add	x13, x20, x14
+               	add	x13, x20, x0
                	sxtw	x21, w13
                	mov	x22, #0x1               // =1
                	mov	x0, x22
                	bl	0x400258 <.text+0x38>
-               	mov	x20, x0
-               	add	x22, x21, x20
-               	sxtw	x23, w22
+               	add	x22, x21, x0
+               	sxtw	x20, w22
                	bl	0x400290 <.text+0x70>
-               	mov	x20, x0
-               	add	x21, x23, x20
+               	add	x21, x20, x0
                	sxtw	x21, w21
                	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

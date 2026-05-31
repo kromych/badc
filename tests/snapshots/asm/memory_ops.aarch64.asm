@@ -23,38 +23,34 @@ Disassembly of section .text:
                	str	x19, [sp, #0x40]
                	mov	x20, #0xa               // =10
                	mov	x0, x20
-               	bl	0x4005c8 <malloc>
+               	bl	0x4005a8 <malloc>
                	mov	x21, x0
                	mov	x0, x20
-               	bl	0x4005c8 <malloc>
+               	bl	0x4005a8 <malloc>
                	mov	x22, x0
                	mov	x23, #0x41              // =65
                	mov	x24, #0x9               // =9
                	mov	x0, x21
                	mov	x2, x24
                	mov	x1, x23
-               	bl	0x4005d4 <memset>
-               	mov	x10, x0
-               	add	x10, x21, #0x9
+               	bl	0x4005b4 <memset>
+               	add	x0, x21, #0x9
                	mov	x25, #0x0               // =0
-               	strb	w25, [x10]
+               	strb	w25, [x0]
                	mov	x0, x22
                	mov	x2, x24
                	mov	x1, x23
-               	bl	0x4005d4 <memset>
-               	mov	x8, x0
-               	add	x8, x22, #0x9
-               	strb	w25, [x8]
+               	bl	0x4005b4 <memset>
+               	add	x0, x22, #0x9
+               	strb	w25, [x0]
                	mov	x0, x21
                	mov	x2, x20
                	mov	x1, x22
-               	bl	0x4005e0 <memcmp>
+               	bl	0x4005c0 <memcmp>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	cmp	x24, #0x0
-               	b.eq	0x4003e8 <.text+0xf8>
-               	mov	x24, #0x1               // =1
-               	mov	x0, x24
+               	cmp	x0, #0x0
+               	b.eq	0x4003d8 <.text+0xe8>
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -67,19 +63,17 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	add	x20, x22, #0x5
-               	mov	x24, #0x42              // =66
-               	strb	w24, [x20]
+               	mov	x0, #0x42               // =66
+               	strb	w0, [x20]
                	mov	x26, #0xa               // =10
                	mov	x0, x21
                	mov	x2, x26
                	mov	x1, x22
-               	bl	0x4005e0 <memcmp>
+               	bl	0x4005c0 <memcmp>
                	sxtw	x0, w0
-               	mov	x24, x0
-               	cmp	x24, #0x0
-               	b.ne	0x40044c <.text+0x15c>
-               	mov	x24, #0x2               // =2
-               	mov	x0, x24
+               	cmp	x0, #0x0
+               	b.ne	0x400434 <.text+0x144>
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

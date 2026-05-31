@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400317 <.text+0xf7>
+               	callq	0x400311 <.text+0xf1>
                	movq	%rax, %rdi
                	callq	*0xfe89(%rip)           # 0x4100c0
                	movq	%rdi, %r11
@@ -34,26 +34,24 @@ Disassembly of section .text:
                	jmp	0x400292 <.text+0x72>
                	movq	-0x18(%rbp), %r8
                	cmpq	%rbx, %r8
-               	jge	0x4002f1 <.text+0xd1>
+               	jge	0x4002eb <.text+0xcb>
                	movq	-0x10(%rbp), %r14
                	movq	-0x18(%rbp), %r15
                	movq	%r15, %rdi
                	callq	0x400245 <.text+0x25>
-               	movq	%rax, %rsi
                	movq	%r14, %r15
-               	addq	%rsi, %r15
+               	addq	%rax, %r15
                	movq	%r15, -0x10(%rbp)
                	movq	-0x10(%rbp), %r14
                	movq	-0x18(%rbp), %r15
                	movq	%r12, %r11
                	movq	%r15, %rdi
                	callq	*%r11
-               	movq	%rax, %rsi
                	movq	%r14, %r15
-               	addq	%rsi, %r15
+               	addq	%rax, %r15
                	movq	%r15, -0x10(%rbp)
-               	movq	-0x18(%rbp), %rsi
-               	movq	%rsi, %r15
+               	movq	-0x18(%rbp), %rax
+               	movq	%rax, %r15
                	addq	$0x1, %r15
                	movq	%r15, -0x18(%rbp)
                	jmp	0x400292 <.text+0x72>
@@ -74,8 +72,7 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	movq	%rbx, %rdi
                	callq	0x40025a <.text+0x3a>
-               	movq	%rax, %r9
-               	movq	%r9, %rbx
+               	movq	%rax, %rbx
                	andq	$0x7f, %rbx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -83,3 +80,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

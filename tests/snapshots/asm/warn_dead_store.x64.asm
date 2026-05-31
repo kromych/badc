@@ -49,33 +49,28 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	movq	%r15, 0x18(%rsp)
                	callq	0x400237 <.text+0x17>
                	movq	%rax, %rbx
                	callq	0x40023d <.text+0x1d>
-               	movq	%rax, %r9
                	movq	%rbx, %r8
-               	addq	%r9, %r8
+               	addq	%rax, %r8
                	movslq	%r8d, %r12
                	movl	$0x1, %r14d
                	movq	%r14, %rdi
                	callq	0x400257 <.text+0x37>
-               	movq	%rax, %rbx
                	movq	%r12, %r14
-               	addq	%rbx, %r14
-               	movslq	%r14d, %r15
+               	addq	%rax, %r14
+               	movslq	%r14d, %rbx
                	callq	0x400298 <.text+0x78>
-               	movq	%rax, %rbx
-               	movq	%r15, %r12
-               	addq	%rbx, %r12
+               	movq	%rbx, %r12
+               	addq	%rax, %r12
                	movslq	%r12d, %r12
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

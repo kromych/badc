@@ -45,7 +45,6 @@ Disassembly of section .text:
                	mov	x1, x21
                	bl	0x400488 <__cxa_atexit>
                	sxtw	x0, w0
-               	mov	x13, x0
                	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

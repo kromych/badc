@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x400588 <open>
+               	bl	0x400578 <open>
                	sxtw	x0, w0
                	mov	x22, x0
                	sxtw	x21, w22
@@ -44,24 +44,22 @@ Disassembly of section .text:
                	ret
                	mov	x23, #0xa               // =10
                	mov	x0, x23
-               	bl	0x400594 <malloc>
+               	bl	0x400584 <malloc>
                	mov	x20, x0
                	sxtw	x21, w22
                	mov	x23, #0x9               // =9
                	mov	x0, x21
                	mov	x2, x23
                	mov	x1, x20
-               	bl	0x4005a0 <read>
+               	bl	0x400590 <read>
                	sxtw	x0, w0
-               	mov	x11, x0
-               	add	x11, x20, #0x9
+               	add	x0, x20, #0x9
                	mov	x24, #0x0               // =0
-               	strb	w24, [x11]
+               	strb	w24, [x0]
                	sxtw	x20, w22
                	mov	x0, x20
-               	bl	0x4005ac <close>
+               	bl	0x40059c <close>
                	sxtw	x0, w0
-               	mov	x22, x0
                	mov	x0, x24
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

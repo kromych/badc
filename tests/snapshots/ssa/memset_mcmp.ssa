@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   LoadLocal { off=2, kind=I64 }                    -> x13
     v6   LoadLocal { off=3, kind=I64 }                    -> x13
     v7   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x21
-    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x14
-    v9   Imm(0)                                           -> x14
+    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x0
+    v9   Imm(0)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=4
@@ -24,9 +24,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v4   LoadLocal { off=-1, kind=I64 }                   -> x20
     v5   Imm(65)                                          -> x22
     v6   Imm(4)                                           -> x20
-    v7   CallExt { binding_idx=33, args=[v2, v5, v6], fp_arg_mask=0x0 } -> x12
-    v8   LoadLocal { off=-1, kind=I64 }                   -> x12
-    v9   BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x12
+    v7   CallExt { binding_idx=33, args=[v2, v5, v6], fp_arg_mask=0x0 } -> x0
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x0
+    v9   BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
     v10  Imm(0)                                           -> x20
     v11  Store { addr=v9, value=v10, kind=I8 }            -> -
     v12  LoadLocal { off=-1, kind=I64 }                   -> x22
@@ -49,6 +49,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x20
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
-    v5   Imm(0)                                           -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

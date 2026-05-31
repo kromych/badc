@@ -53,12 +53,10 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
-               	mov	x11, x0
                	sxtw	x22, w23
-               	sxtw	x23, w11
-               	mul	x11, x22, x23
-               	sxtw	x11, w11
-               	mov	x0, x11
+               	sxtw	x23, w0
+               	mul	x0, x22, x23
+               	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

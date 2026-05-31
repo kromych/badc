@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400410 <.text+0x150>
+               	bl	0x400408 <.text+0x148>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xf0]
                	blr	x16
@@ -63,24 +63,22 @@ Disassembly of section .text:
                	ldr	x22, [x11]
                	mov	x0, x21
                	mov	x1, x22
-               	bl	0x4007b8 <dlsym>
-               	mov	x11, x0
-               	cbz	x11, 0x4003d8 <.text+0x118>
+               	bl	0x400798 <dlsym>
+               	cbz	x0, 0x4003d4 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x100
                	mov	x22, x19
                	lsl	x21, x20, #3
                	add	x12, x22, x21
-               	ldr	x21, [x11]
+               	ldr	x21, [x0]
                	str	x21, [x12]
-               	b	0x4003d8 <.text+0x118>
+               	b	0x4003d4 <.text+0x114>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x100
                	mov	x21, x19
-               	lsl	x11, x20, #3
-               	add	x20, x21, x11
-               	ldr	x11, [x20]
-               	mov	x0, x11
+               	lsl	x0, x20, #3
+               	add	x20, x21, x0
+               	ldr	x0, [x20]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -103,7 +101,7 @@ Disassembly of section .text:
                	mov	x15, #0x4               // =4
                	sdiv	x13, x14, x15
                	cmp	x13, #0x8
-               	b.eq	0x400488 <.text+0x1c8>
+               	b.eq	0x40047c <.text+0x1bc>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x370
                	mov	x20, x19
@@ -112,55 +110,52 @@ Disassembly of section .text:
                	sdiv	x21, x15, x14
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4007c4 <printf>
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x14, x0
-               	mov	x14, #0x1               // =1
-               	stur	w14, [x29, #-0x8]
-               	b	0x400488 <.text+0x1c8>
-               	mov	x14, #0x18              // =24
+               	mov	x0, #0x1                // =1
+               	stur	w0, [x29, #-0x8]
+               	b	0x40047c <.text+0x1bc>
+               	mov	x0, #0x18               // =24
                	mov	x21, #0x4               // =4
-               	sdiv	x20, x14, x21
+               	sdiv	x20, x0, x21
                	cmp	x20, #0x6
-               	b.eq	0x4004d4 <.text+0x214>
+               	b.eq	0x4004c4 <.text+0x204>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x383
                	mov	x22, x19
                	mov	x21, #0x18              // =24
-               	mov	x14, #0x4               // =4
-               	sdiv	x20, x21, x14
+               	mov	x0, #0x4                // =4
+               	sdiv	x20, x21, x0
                	mov	x0, x22
                	mov	x1, x20
-               	bl	0x4007c4 <printf>
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x14, x0
-               	mov	x14, #0x2               // =2
-               	stur	w14, [x29, #-0x8]
-               	b	0x4004d4 <.text+0x214>
-               	mov	x14, #0x40              // =64
+               	mov	x0, #0x2                // =2
+               	stur	w0, [x29, #-0x8]
+               	b	0x4004c4 <.text+0x204>
+               	mov	x0, #0x40               // =64
                	mov	x20, #0x4               // =4
-               	sdiv	x22, x14, x20
+               	sdiv	x22, x0, x20
                	cmp	x22, #0x10
-               	b.eq	0x400520 <.text+0x260>
+               	b.eq	0x40050c <.text+0x24c>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x396
                	mov	x23, x19
                	mov	x20, #0x40              // =64
-               	mov	x14, #0x4               // =4
-               	sdiv	x22, x20, x14
+               	mov	x0, #0x4                // =4
+               	sdiv	x22, x20, x0
                	mov	x0, x23
                	mov	x1, x22
-               	bl	0x4007c4 <printf>
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x14, x0
-               	mov	x14, #0x3               // =3
-               	stur	w14, [x29, #-0x8]
-               	b	0x400520 <.text+0x260>
-               	mov	x14, #0x40              // =64
+               	mov	x0, #0x3                // =3
+               	stur	w0, [x29, #-0x8]
+               	b	0x40050c <.text+0x24c>
+               	mov	x0, #0x40               // =64
                	mov	x22, #0x4               // =4
-               	sdiv	x23, x14, x22
+               	sdiv	x23, x0, x22
                	cmp	x23, #0x10
-               	b.eq	0x400568 <.text+0x2a8>
+               	b.eq	0x400550 <.text+0x290>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3a9
                	mov	x21, x19
@@ -169,70 +164,65 @@ Disassembly of section .text:
                	sdiv	x24, x22, x23
                	mov	x0, x21
                	mov	x1, x24
-               	bl	0x4007c4 <printf>
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x22, x0
                	stur	w23, [x29, #-0x8]
-               	b	0x400568 <.text+0x2a8>
+               	b	0x400550 <.text+0x290>
                	mov	x23, #0x18              // =24
-               	mov	x22, #0x4               // =4
-               	sdiv	x24, x23, x22
+               	mov	x0, #0x4                // =4
+               	sdiv	x24, x23, x0
                	cmp	x24, #0x6
-               	b.eq	0x4005b4 <.text+0x2f4>
+               	b.eq	0x400598 <.text+0x2d8>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3bc
-               	mov	x20, x19
-               	mov	x22, #0x18              // =24
+               	mov	x22, x19
+               	mov	x0, #0x18               // =24
                	mov	x23, #0x4               // =4
-               	sdiv	x24, x22, x23
-               	mov	x0, x20
+               	sdiv	x24, x0, x23
+               	mov	x0, x22
                	mov	x1, x24
-               	bl	0x4007c4 <printf>
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	mov	x23, #0x5               // =5
-               	stur	w23, [x29, #-0x8]
-               	b	0x4005b4 <.text+0x2f4>
-               	mov	x23, #0x20              // =32
+               	mov	x0, #0x5                // =5
+               	stur	w0, [x29, #-0x8]
+               	b	0x400598 <.text+0x2d8>
+               	mov	x0, #0x20               // =32
                	mov	x24, #0x4               // =4
-               	sdiv	x20, x23, x24
-               	cmp	x20, #0x8
-               	b.eq	0x400600 <.text+0x340>
+               	sdiv	x22, x0, x24
+               	cmp	x22, #0x8
+               	b.eq	0x4005e0 <.text+0x320>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3cf
                	mov	x21, x19
                	mov	x24, #0x20              // =32
-               	mov	x23, #0x4               // =4
-               	sdiv	x20, x24, x23
+               	mov	x0, #0x4                // =4
+               	sdiv	x22, x24, x0
                	mov	x0, x21
-               	mov	x1, x20
-               	bl	0x4007c4 <printf>
+               	mov	x1, x22
+               	bl	0x4007a4 <printf>
                	sxtw	x0, w0
-               	mov	x23, x0
-               	mov	x23, #0x6               // =6
-               	stur	w23, [x29, #-0x8]
-               	b	0x400600 <.text+0x340>
-               	mov	x23, #0x18              // =24
-               	mov	x20, #0x4               // =4
-               	sdiv	x21, x23, x20
+               	mov	x0, #0x6                // =6
+               	stur	w0, [x29, #-0x8]
+               	b	0x4005e0 <.text+0x320>
+               	mov	x0, #0x18               // =24
+               	mov	x22, #0x4               // =4
+               	sdiv	x21, x0, x22
                	cmp	x21, #0x6
-               	b.eq	0x40064c <.text+0x38c>
+               	b.eq	0x400628 <.text+0x368>
                	adrp	x19, 0x410000
                	add	x19, x19, #0x3e6
-               	mov	x22, x19
-               	mov	x20, #0x18              // =24
-               	mov	x23, #0x4               // =4
-               	sdiv	x21, x20, x23
-               	mov	x0, x22
-               	mov	x1, x21
-               	bl	0x4007c4 <printf>
-               	sxtw	x0, w0
-               	mov	x23, x0
-               	mov	x23, #0x7               // =7
-               	stur	w23, [x29, #-0x8]
-               	b	0x40064c <.text+0x38c>
-               	ldursw	x23, [x29, #-0x8]
+               	mov	x23, x19
+               	mov	x22, #0x18              // =24
+               	mov	x0, #0x4                // =4
+               	sdiv	x21, x22, x0
                	mov	x0, x23
+               	mov	x1, x21
+               	bl	0x4007a4 <printf>
+               	sxtw	x0, w0
+               	mov	x0, #0x7                // =7
+               	stur	w0, [x29, #-0x8]
+               	b	0x400628 <.text+0x368>
+               	ldursw	x0, [x29, #-0x8]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

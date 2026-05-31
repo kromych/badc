@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x40032c <.text+0x10c>
+               	bl	0x400324 <.text+0x104>
                	adrp	x16, 0x410000
                	ldr	x16, [x16, #0xc0]
                	blr	x16
@@ -37,13 +37,12 @@ Disassembly of section .text:
                	b	0x40029c <.text+0x7c>
                	ldur	x13, [x29, #-0x18]
                	cmp	x13, x20
-               	b.ge	0x4002fc <.text+0xdc>
+               	b.ge	0x4002f4 <.text+0xd4>
                	ldur	x22, [x29, #-0x10]
                	ldur	x23, [x29, #-0x18]
                	mov	x0, x23
                	bl	0x400244 <.text+0x24>
-               	mov	x11, x0
-               	add	x23, x22, x11
+               	add	x23, x22, x0
                	stur	x23, [x29, #-0x10]
                	ldur	x24, [x29, #-0x10]
                	ldur	x25, [x29, #-0x18]
@@ -52,11 +51,10 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	mov	x22, x0
-               	add	x25, x24, x22
+               	add	x25, x24, x0
                	stur	x25, [x29, #-0x10]
-               	ldur	x22, [x29, #-0x18]
-               	add	x25, x22, #0x1
+               	ldur	x0, [x29, #-0x18]
+               	add	x25, x0, #0x1
                	stur	x25, [x29, #-0x18]
                	b	0x40029c <.text+0x7c>
                	ldur	x25, [x29, #-0x10]
@@ -78,9 +76,8 @@ Disassembly of section .text:
                	mov	x20, #0x3               // =3
                	mov	x0, x20
                	bl	0x400254 <.text+0x34>
-               	mov	x14, x0
                	mov	x17, #0x7f              // =127
-               	and	x20, x14, x17
+               	and	x20, x0, x17
                	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x10

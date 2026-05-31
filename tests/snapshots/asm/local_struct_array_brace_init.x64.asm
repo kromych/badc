@@ -74,11 +74,10 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r11
-               	cmpq	$0xc, %r11
-               	je	0x400362 <.text+0x142>
-               	movl	$0x1, %r11d
-               	movq	%r11, %rcx
+               	cmpq	$0xc, %rax
+               	je	0x40035e <.text+0x13e>
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -87,11 +86,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x30(%rbp), %r12
-               	movq	%r12, %r11
-               	addq	$0x8, %r11
-               	movq	(%r11), %r12
+               	movq	%r12, %rax
+               	addq	$0x8, %rax
+               	movq	(%rax), %r12
                	cmpq	$0x3, %r12
-               	je	0x4003a3 <.text+0x183>
+               	je	0x40039f <.text+0x17f>
                	movl	$0x2, %r12d
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
@@ -101,14 +100,14 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x30(%rbp), %r11
-               	movq	%r11, %r12
+               	leaq	-0x30(%rbp), %rax
+               	movq	%rax, %r12
                	addq	$0x28, %r12
-               	movq	(%r12), %r11
-               	cmpq	$0x5, %r11
-               	je	0x4003e5 <.text+0x1c5>
-               	movl	$0x3, %r11d
-               	movq	%r11, %rcx
+               	movq	(%r12), %rax
+               	cmpq	$0x5, %rax
+               	je	0x4003e0 <.text+0x1c0>
+               	movl	$0x3, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -117,63 +116,62 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x98(%rbp), %r12
-               	leaq	0xfd28(%rip), %r11      # 0x41011b
-               	pushq	%rax
-               	movq	(%r11), %rax
-               	movq	%rax, (%r12)
-               	movq	0x8(%r11), %rax
-               	movq	%rax, 0x8(%r12)
-               	movq	0x10(%r11), %rax
-               	movq	%rax, 0x10(%r12)
-               	movq	0x18(%r11), %rax
-               	movq	%rax, 0x18(%r12)
-               	movq	0x20(%r11), %rax
-               	movq	%rax, 0x20(%r12)
-               	movq	0x28(%r11), %rax
-               	movq	%rax, 0x28(%r12)
-               	popq	%rax
+               	leaq	0xfd2d(%rip), %rax      # 0x41011b
+               	pushq	%r11
+               	movq	(%rax), %r11
+               	movq	%r11, (%r12)
+               	movq	0x8(%rax), %r11
+               	movq	%r11, 0x8(%r12)
+               	movq	0x10(%rax), %r11
+               	movq	%r11, 0x10(%r12)
+               	movq	0x18(%rax), %r11
+               	movq	%r11, 0x18(%r12)
+               	movq	0x20(%rax), %r11
+               	movq	%r11, 0x20(%r12)
+               	movq	0x28(%rax), %r11
+               	movq	%r11, 0x28(%r12)
+               	popq	%r11
                	movq	%r12, %rbx
                	leaq	-0x40(%rbp), %rbx
-               	leaq	-0x98(%rbp), %r11
-               	movq	%rbx, (%r11)
+               	leaq	-0x98(%rbp), %rax
+               	movq	%rbx, (%rax)
                	movl	$0x10, %r12d
-               	leaq	-0x98(%rbp), %r11
-               	movq	%r11, %rbx
+               	leaq	-0x98(%rbp), %rax
+               	movq	%rax, %rbx
                	addq	$0x8, %rbx
                	movq	%r12, (%rbx)
-               	leaq	-0x60(%rbp), %r11
+               	leaq	-0x60(%rbp), %rax
                	leaq	-0x98(%rbp), %rbx
                	movq	%rbx, %r12
                	addq	$0x10, %r12
-               	movq	%r11, (%r12)
+               	movq	%rax, (%r12)
                	movl	$0x20, %ebx
                	leaq	-0x98(%rbp), %r12
-               	movq	%r12, %r11
-               	addq	$0x18, %r11
-               	movq	%rbx, (%r11)
+               	movq	%r12, %rax
+               	addq	$0x18, %rax
+               	movq	%rbx, (%rax)
                	leaq	-0x68(%rbp), %r12
-               	leaq	-0x98(%rbp), %r11
-               	movq	%r11, %rbx
+               	leaq	-0x98(%rbp), %rax
+               	movq	%rax, %rbx
                	addq	$0x20, %rbx
                	movq	%r12, (%rbx)
-               	movl	$0x8, %r11d
+               	movl	$0x8, %eax
                	leaq	-0x98(%rbp), %rbx
                	movq	%rbx, %r12
                	addq	$0x28, %r12
-               	movq	%r11, (%r12)
+               	movq	%rax, (%r12)
                	leaq	-0x98(%rbp), %r14
                	movl	$0x3, %ebx
                	movq	%r14, %rdi
                	movq	%rbx, %rsi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r11
                	movl	$0x30, %ebx
                	movslq	%ebx, %rbx
                	movq	%rbx, %r14
                	addq	$0x8, %r14
                	movslq	%r14d, %r14
-               	cmpq	%r14, %r11
-               	je	0x400514 <.text+0x2f4>
+               	cmpq	%r14, %rax
+               	je	0x40050d <.text+0x2ed>
                	movl	$0x4, %r14d
                	movq	%r14, %rcx
                	movq	(%rsp), %rbx
@@ -187,7 +185,7 @@ Disassembly of section .text:
                	movq	(%rbx), %r14
                	leaq	-0x40(%rbp), %rbx
                	cmpq	%rbx, %r14
-               	je	0x40054d <.text+0x32d>
+               	je	0x400546 <.text+0x326>
                	movl	$0x5, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -197,13 +195,13 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x98(%rbp), %r11
-               	movq	%r11, %rbx
+               	leaq	-0x98(%rbp), %rax
+               	movq	%rax, %rbx
                	addq	$0x10, %rbx
-               	movq	(%rbx), %r11
+               	movq	(%rbx), %rax
                	leaq	-0x60(%rbp), %rbx
-               	cmpq	%rbx, %r11
-               	je	0x400590 <.text+0x370>
+               	cmpq	%rbx, %rax
+               	je	0x400589 <.text+0x369>
                	movl	$0x6, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -219,7 +217,7 @@ Disassembly of section .text:
                	movq	(%rbx), %r14
                	leaq	-0x68(%rbp), %rbx
                	cmpq	%rbx, %r14
-               	je	0x4005d3 <.text+0x3b3>
+               	je	0x4005cc <.text+0x3ac>
                	movl	$0x7, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -229,14 +227,14 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x98(%rbp), %r11
-               	movq	%r11, %rbx
+               	leaq	-0x98(%rbp), %rax
+               	movq	%rax, %rbx
                	addq	$0x28, %rbx
-               	movq	(%rbx), %r11
-               	cmpq	$0x8, %r11
-               	je	0x400617 <.text+0x3f7>
-               	movl	$0x8, %r11d
-               	movq	%r11, %rcx
+               	movq	(%rbx), %rax
+               	cmpq	$0x8, %rax
+               	je	0x40060f <.text+0x3ef>
+               	movl	$0x8, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

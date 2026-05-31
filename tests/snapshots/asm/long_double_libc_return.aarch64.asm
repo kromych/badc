@@ -23,16 +23,15 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4005b8 <strtold>
-               	bl	0x4005c4 <__trunctfdf2>
+               	bl	0x4005a8 <strtold>
+               	bl	0x4005b4 <__trunctfdf2>
                	fmov	x0, d0
-               	mov	x13, x0
                	mov	x21, #0x45f0000000000000 // =5039527983027585024
-               	fmov	d0, x13
+               	fmov	d0, x0
                	fmov	d1, x21
                	fcmp	d0, d1
                	cset	x20, ne
-               	cbz	x20, 0x400398 <.text+0x98>
+               	cbz	x20, 0x400394 <.text+0x94>
                	mov	x21, #0xb               // =11
                	mov	x0, x21
                	ldr	x20, [sp]
@@ -48,16 +47,15 @@ Disassembly of section .text:
                	mov	x20, #0x0               // =0
                	mov	x0, x22
                	mov	x1, x20
-               	bl	0x4005b8 <strtold>
-               	bl	0x4005c4 <__trunctfdf2>
+               	bl	0x4005a8 <strtold>
+               	bl	0x4005b4 <__trunctfdf2>
                	fmov	x0, d0
-               	mov	x13, x0
                	mov	x20, #0x43f0000000000000 // =4895412794951729152
-               	fmov	d0, x13
+               	fmov	d0, x0
                	fmov	d1, x20
                	fcmp	d0, d1
                	cset	x22, ne
-               	cbz	x22, 0x4003fc <.text+0xfc>
+               	cbz	x22, 0x4003f4 <.text+0xf4>
                	mov	x20, #0xc               // =12
                	mov	x0, x20
                	ldr	x20, [sp]
@@ -71,15 +69,14 @@ Disassembly of section .text:
                	mov	x22, #0x35              // =53
                	fmov	d0, x21
                	mov	x0, x22
-               	bl	0x4005d0 <ldexp>
+               	bl	0x4005c0 <ldexp>
                	fmov	x0, d0
-               	mov	x13, x0
                	mov	x22, #0x4340000000000000 // =4845873199050653696
-               	fmov	d0, x13
+               	fmov	d0, x0
                	fmov	d1, x22
                	fcmp	d0, d1
                	cset	x21, ne
-               	cbz	x21, 0x400454 <.text+0x154>
+               	cbz	x21, 0x400448 <.text+0x148>
                	mov	x22, #0xd               // =13
                	mov	x0, x22
                	ldr	x20, [sp]

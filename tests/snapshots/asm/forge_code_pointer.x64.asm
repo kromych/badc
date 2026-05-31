@@ -19,11 +19,12 @@ Disassembly of section .text:
                	movq	%rbx, %r11
                	movq	%r12, %rdi
                	callq	*%r11
-               	movq	%rax, %r8
-               	movq	%r8, %rcx
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

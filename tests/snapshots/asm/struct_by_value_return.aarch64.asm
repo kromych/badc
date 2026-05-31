@@ -121,20 +121,18 @@ Disassembly of section .text:
                	mov	x2, x23
                	mov	x1, x22
                	bl	0x400238 <.text+0x18>
-               	mov	x11, x0
-               	sub	x11, x29, #0x90
+               	sub	x0, x29, #0x90
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x11]
+               	ldr	x10, [x0]
                	str	x10, [x20]
                	ldr	x10, [sp], #0x10
                	mov	x23, x20
                	mov	x24, #0x7               // =7
                	mov	x0, x24
                	bl	0x400298 <.text+0x78>
-               	mov	x11, x0
-               	sxtw	x24, w11
+               	sxtw	x24, w0
                	cmp	x24, #0x0
-               	b.ne	0x40045c <.text+0x23c>
+               	b.ne	0x400454 <.text+0x234>
                	mov	x24, #0x63              // =99
                	mov	x0, x24
                	ldr	x20, [sp]
@@ -147,10 +145,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x11, x29, #0x8
-               	ldrsw	x24, [x11]
+               	sub	x0, x29, #0x8
+               	ldrsw	x24, [x0]
                	cmp	x24, #0xb
-               	b.eq	0x40049c <.text+0x27c>
+               	b.eq	0x400494 <.text+0x274>
                	mov	x24, #0x1               // =1
                	mov	x0, x24
                	ldr	x20, [sp]
@@ -163,13 +161,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x11, x29, #0x8
-               	add	x24, x11, #0x4
-               	ldrsw	x11, [x24]
-               	cmp	x11, #0x16
-               	b.eq	0x4004e0 <.text+0x2c0>
-               	mov	x11, #0x2               // =2
-               	mov	x0, x11
+               	sub	x0, x29, #0x8
+               	add	x24, x0, #0x4
+               	ldrsw	x0, [x24]
+               	cmp	x0, #0x16
+               	b.eq	0x4004d4 <.text+0x2b4>
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -188,19 +185,17 @@ Disassembly of section .text:
                	mov	x2, x20
                	mov	x1, x25
                	bl	0x400238 <.text+0x18>
-               	mov	x21, x0
-               	sub	x21, x29, #0xa0
+               	sub	x0, x29, #0xa0
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x21]
+               	ldr	x10, [x0]
                	str	x10, [x23]
                	ldr	x10, [sp], #0x10
                	mov	x20, x23
                	sub	x20, x29, #0x20
-               	ldrsw	x21, [x20]
-               	cmp	x21, #0x3
-               	b.eq	0x40055c <.text+0x33c>
-               	mov	x21, #0x3               // =3
-               	mov	x0, x21
+               	ldrsw	x0, [x20]
+               	cmp	x0, #0x3
+               	b.eq	0x400548 <.text+0x328>
+               	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -212,10 +207,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0x20
-               	add	x21, x20, #0x4
-               	ldrsw	x20, [x21]
+               	add	x0, x20, #0x4
+               	ldrsw	x20, [x0]
                	cmp	x20, #0x4
-               	b.eq	0x4005a0 <.text+0x380>
+               	b.eq	0x40058c <.text+0x36c>
                	mov	x20, #0x4               // =4
                	mov	x0, x20
                	ldr	x20, [sp]
@@ -228,92 +223,131 @@ Disassembly of section .text:
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x22, x29, #0x30
-               	sub	x21, x29, #0xb0
+               	sub	x21, x29, #0x30
+               	sub	x22, x29, #0xb0
                	mov	x20, #0x64              // =100
                	mov	x23, #0xc8              // =200
-               	mov	x0, x21
+               	mov	x0, x22
                	mov	x2, x23
                	mov	x1, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x24, x0
-               	sub	x24, x29, #0xb0
+               	sub	x0, x29, #0xb0
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x24]
-               	str	x10, [x22]
+               	ldr	x10, [x0]
+               	str	x10, [x21]
                	ldr	x10, [sp], #0x10
-               	mov	x23, x22
-               	sub	x25, x29, #0x38
+               	mov	x23, x21
+               	sub	x24, x29, #0x38
                	sub	x23, x29, #0xc0
-               	mov	x24, #0x12c             // =300
-               	mov	x22, #0x190             // =400
+               	mov	x25, #0x12c             // =300
+               	mov	x21, #0x190             // =400
                	mov	x0, x23
-               	mov	x2, x22
+               	mov	x2, x21
+               	mov	x1, x25
+               	bl	0x400238 <.text+0x18>
+               	sub	x0, x29, #0xc0
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x0]
+               	str	x10, [x24]
+               	ldr	x10, [sp], #0x10
+               	mov	x21, x24
+               	sub	x21, x29, #0x30
+               	ldrsw	x0, [x21]
+               	cmp	x0, #0x64
+               	b.eq	0x400638 <.text+0x418>
+               	mov	x0, #0x5                // =5
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
+               	ldr	x26, [sp, #0x30]
+               	add	sp, sp, #0x140
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x21, x29, #0x30
+               	add	x0, x21, #0x4
+               	ldrsw	x21, [x0]
+               	cmp	x21, #0xc8
+               	b.eq	0x40067c <.text+0x45c>
+               	mov	x21, #0x6               // =6
+               	mov	x0, x21
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
+               	ldr	x26, [sp, #0x30]
+               	add	sp, sp, #0x140
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x38
+               	ldrsw	x21, [x0]
+               	cmp	x21, #0x12c
+               	b.eq	0x4006bc <.text+0x49c>
+               	mov	x21, #0x7               // =7
+               	mov	x0, x21
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
+               	ldr	x26, [sp, #0x30]
+               	add	sp, sp, #0x140
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x38
+               	add	x21, x0, #0x4
+               	ldrsw	x0, [x21]
+               	cmp	x0, #0x190
+               	b.eq	0x4006fc <.text+0x4dc>
+               	mov	x0, #0x8                // =8
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
+               	ldr	x26, [sp, #0x30]
+               	add	sp, sp, #0x140
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x22, x29, #0x50
+               	sub	x21, x29, #0xd0
+               	sub	x20, x29, #0xe0
+               	mov	x24, #0x1               // =1
+               	mov	x25, #0x2               // =2
+               	mov	x0, x20
+               	mov	x2, x25
                	mov	x1, x24
                	bl	0x400238 <.text+0x18>
-               	mov	x21, x0
-               	sub	x21, x29, #0xc0
+               	sub	x23, x29, #0xe0
+               	sub	x26, x29, #0xf0
+               	mov	x25, #0x3               // =3
+               	mov	x24, #0x4               // =4
+               	mov	x0, x26
+               	mov	x2, x24
+               	mov	x1, x25
+               	bl	0x400238 <.text+0x18>
+               	sub	x20, x29, #0xf0
+               	mov	x0, x21
+               	mov	x2, x20
+               	mov	x1, x23
+               	bl	0x4002e4 <.text+0xc4>
+               	sub	x0, x29, #0xd0
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x21]
-               	str	x10, [x25]
+               	ldr	x10, [x0]
+               	str	x10, [x22]
                	ldr	x10, [sp], #0x10
-               	mov	x22, x25
-               	sub	x22, x29, #0x30
-               	ldrsw	x21, [x22]
-               	cmp	x21, #0x64
-               	b.eq	0x400658 <.text+0x438>
-               	mov	x21, #0x5               // =5
-               	mov	x0, x21
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x140
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x22, x29, #0x30
-               	add	x21, x22, #0x4
-               	ldrsw	x22, [x21]
-               	cmp	x22, #0xc8
-               	b.eq	0x40069c <.text+0x47c>
-               	mov	x22, #0x6               // =6
-               	mov	x0, x22
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x140
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x21, x29, #0x38
-               	ldrsw	x22, [x21]
-               	cmp	x22, #0x12c
-               	b.eq	0x4006dc <.text+0x4bc>
-               	mov	x22, #0x7               // =7
-               	mov	x0, x22
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x140
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x21, x29, #0x38
-               	add	x22, x21, #0x4
-               	ldrsw	x21, [x22]
-               	cmp	x21, #0x190
-               	b.eq	0x400720 <.text+0x500>
-               	mov	x21, #0x8               // =8
-               	mov	x0, x21
+               	mov	x20, x22
+               	sub	x20, x29, #0x50
+               	ldrsw	x0, [x20]
+               	cmp	x0, #0x4
+               	b.eq	0x4007a8 <.text+0x588>
+               	mov	x0, #0x9                // =9
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -325,42 +359,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0x50
-               	sub	x22, x29, #0xd0
-               	sub	x21, x29, #0xe0
-               	mov	x25, #0x1               // =1
-               	mov	x24, #0x2               // =2
-               	mov	x0, x21
-               	mov	x2, x24
-               	mov	x1, x25
-               	bl	0x400238 <.text+0x18>
-               	mov	x10, x0
-               	sub	x23, x29, #0xe0
-               	sub	x26, x29, #0xf0
-               	mov	x24, #0x3               // =3
-               	mov	x25, #0x4               // =4
-               	mov	x0, x26
-               	mov	x2, x25
-               	mov	x1, x24
-               	bl	0x400238 <.text+0x18>
-               	mov	x9, x0
-               	sub	x21, x29, #0xf0
-               	mov	x0, x22
-               	mov	x2, x21
-               	mov	x1, x23
-               	bl	0x4002e4 <.text+0xc4>
-               	mov	x25, x0
-               	sub	x25, x29, #0xd0
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x25]
-               	str	x10, [x20]
-               	ldr	x10, [sp], #0x10
-               	mov	x21, x20
-               	sub	x21, x29, #0x50
-               	ldrsw	x25, [x21]
-               	cmp	x25, #0x4
-               	b.eq	0x4007dc <.text+0x5bc>
-               	mov	x25, #0x9               // =9
-               	mov	x0, x25
+               	add	x0, x20, #0x4
+               	ldrsw	x20, [x0]
+               	cmp	x20, #0x6
+               	b.eq	0x4007ec <.text+0x5cc>
+               	mov	x20, #0xa               // =10
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -371,25 +375,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x140
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x21, x29, #0x50
-               	add	x25, x21, #0x4
-               	ldrsw	x21, [x25]
-               	cmp	x21, #0x6
-               	b.eq	0x400820 <.text+0x600>
-               	mov	x21, #0xa               // =10
-               	mov	x0, x21
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x26, [sp, #0x30]
-               	add	sp, sp, #0x140
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x25, #0x0               // =0
-               	mov	x0, x25
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

@@ -20,19 +20,17 @@ Disassembly of section .text:
                	str	x19, [sp, #0x20]
                	mov	x20, #0x64              // =100
                	mov	x0, x20
-               	bl	0x400488 <malloc>
+               	bl	0x400478 <malloc>
                	mov	x21, x0
                	mov	x22, #0x8               // =8
                	mov	x0, x22
-               	bl	0x400488 <malloc>
+               	bl	0x400478 <malloc>
                	mov	x23, x0
                	mov	x0, x23
                	mov	x2, x20
                	mov	x1, x21
-               	bl	0x400494 <memcpy>
-               	mov	x22, x0
-               	mov	x22, #0x0               // =0
-               	mov	x0, x22
+               	bl	0x400484 <memcpy>
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

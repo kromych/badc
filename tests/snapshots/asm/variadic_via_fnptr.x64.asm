@@ -80,11 +80,10 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	callq	0x400237 <.text+0x17>
                	addq	$0x40, %rsp
-               	movq	%rax, %rsi
-               	cmpq	$0x23a3, %rsi           # imm = 0x23A3
-               	je	0x400387 <.text+0x167>
-               	movl	$0xb, %esi
-               	movq	%rsi, %rcx
+               	cmpq	$0x23a3, %rax           # imm = 0x23A3
+               	je	0x400384 <.text+0x164>
+               	movl	$0xb, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -93,7 +92,7 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x157(%rip), %rbx      # 0x400237 <.text+0x17>
+               	leaq	-0x154(%rip), %rbx      # 0x400237 <.text+0x17>
                	movl	$0x9, %r15d
                	movl	$0x1, %r12d
                	movl	$0x2, %r10d
@@ -105,9 +104,8 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	movq	0x28(%rsp), %rdx
                	callq	*%r11
-               	movq	%rax, %rsi
-               	cmpq	$0x23a3, %rsi           # imm = 0x23A3
-               	je	0x4003f6 <.text+0x1d6>
+               	cmpq	$0x23a3, %rax           # imm = 0x23A3
+               	je	0x4003f0 <.text+0x1d0>
                	movl	$0xc, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -119,24 +117,22 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	0x4002df <.text+0xbf>
-               	movq	%rax, %r14
-               	leaq	-0x1ce(%rip), %r15      # 0x400237 <.text+0x17>
-               	movl	$0x9, %r14d
+               	leaq	-0x1c5(%rip), %r14      # 0x400237 <.text+0x17>
+               	movl	$0x9, %r15d
                	movl	$0x1, %ebx
                	movl	$0x2, %r10d
                	movq	%r10, 0x20(%rsp)
                	movl	$0x3, %r12d
-               	movq	%r15, %r11
-               	movq	%r14, %rdi
+               	movq	%r14, %r11
+               	movq	%r15, %rdi
                	movq	%r12, %rcx
                	movq	%rbx, %rsi
                	movq	0x20(%rsp), %rdx
                	callq	*%r11
-               	movq	%rax, %rsi
-               	cmpq	$0x23a3, %rsi           # imm = 0x23A3
-               	je	0x40046c <.text+0x24c>
-               	movl	$0xd, %esi
-               	movq	%rsi, %rcx
+               	cmpq	$0x23a3, %rax           # imm = 0x23A3
+               	je	0x400460 <.text+0x240>
+               	movl	$0xd, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

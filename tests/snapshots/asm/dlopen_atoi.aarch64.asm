@@ -22,7 +22,7 @@ Disassembly of section .text:
                	mov	x21, #0x2               // =2
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x400578 <dlopen>
+               	bl	0x400568 <dlopen>
                	mov	x22, x0
                	cmp	x22, #0x0
                	b.ne	0x400380 <.text+0x80>
@@ -41,16 +41,14 @@ Disassembly of section .text:
                	mov	x23, x19
                	mov	x0, x22
                	mov	x1, x23
-               	bl	0x400584 <dlsym>
+               	bl	0x400574 <dlsym>
                	mov	x21, x0
                	cmp	x21, #0x0
-               	b.ne	0x4003dc <.text+0xdc>
+               	b.ne	0x4003d4 <.text+0xd4>
                	mov	x0, x22
-               	bl	0x400590 <dlclose>
+               	bl	0x400580 <dlclose>
                	sxtw	x0, w0
-               	mov	x12, x0
-               	mov	x12, #0x2               // =2
-               	mov	x0, x12
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -69,11 +67,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	mov	x23, x0
                	mov	x0, x22
-               	bl	0x400590 <dlclose>
+               	bl	0x400580 <dlclose>
                	sxtw	x0, w0
-               	mov	x20, x0
-               	sxtw	x20, w23
-               	mov	x0, x20
+               	sxtw	x0, w23
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

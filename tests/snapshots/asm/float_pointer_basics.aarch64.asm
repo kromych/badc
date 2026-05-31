@@ -51,13 +51,13 @@ Disassembly of section .text:
                	lsl	x14, x15, #2
                	sxtw	x21, w14
                	mov	x0, x21
-               	bl	0x400628 <malloc>
+               	bl	0x400618 <malloc>
                	mov	x22, x0
                	sxtw	x21, w20
                	lsl	x20, x21, #3
                	sxtw	x23, w20
                	mov	x0, x23
-               	bl	0x400628 <malloc>
+               	bl	0x400618 <malloc>
                	mov	x20, x0
                	mov	x23, #0x3f800000        // =1065353216
                	str	w23, [x22]
@@ -128,15 +128,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, x22
-               	bl	0x400634 <free>
+               	bl	0x400624 <free>
                	sxtw	x0, w0
-               	mov	x12, x0
                	mov	x0, x20
-               	bl	0x400634 <free>
+               	bl	0x400624 <free>
                	sxtw	x0, w0
-               	mov	x12, x0
-               	mov	x12, #0x0               // =0
-               	mov	x0, x12
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

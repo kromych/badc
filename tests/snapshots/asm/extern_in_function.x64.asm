@@ -31,11 +31,10 @@ Disassembly of section .text:
                	movabsq	$-0x5, %rbx
                	movq	%rbx, %rdi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r9
-               	cmpq	$0x5, %r9
-               	je	0x4002c3 <.text+0xa3>
-               	movl	$0xb, %r9d
-               	movq	%r9, %rcx
+               	cmpq	$0x5, %rax
+               	je	0x4002bf <.text+0x9f>
+               	movl	$0xb, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
@@ -45,11 +44,10 @@ Disassembly of section .text:
                	movl	$0x7, %r12d
                	movq	%r12, %rdi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r9
-               	cmpq	$-0x7, %r9
-               	je	0x4002ff <.text+0xdf>
-               	movl	$0xc, %r9d
-               	movq	%r9, %rcx
+               	cmpq	$-0x7, %rax
+               	je	0x4002f7 <.text+0xd7>
+               	movl	$0xc, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
@@ -59,11 +57,10 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	movq	%rbx, %rdi
                	callq	0x40025d <.text+0x3d>
-               	movq	%rax, %r9
-               	cmpq	$-0x3, %r9
-               	je	0x40033a <.text+0x11a>
-               	movl	$0xd, %r9d
-               	movq	%r9, %rcx
+               	cmpq	$-0x3, %rax
+               	je	0x40032e <.text+0x10e>
+               	movl	$0xd, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
@@ -76,11 +73,10 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	movq	%r12, %rdi
                	callq	0x40025d <.text+0x3d>
-               	movq	%rax, %r8
-               	cmpq	%r8, %rbx
-               	je	0x400381 <.text+0x161>
-               	movl	$0xe, %r8d
-               	movq	%r8, %rcx
+               	cmpq	%rax, %rbx
+               	je	0x400371 <.text+0x151>
+               	movl	$0xe, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax

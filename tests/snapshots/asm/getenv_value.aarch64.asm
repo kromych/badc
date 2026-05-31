@@ -20,9 +20,8 @@ Disassembly of section .text:
                	mov	x20, x19
                	mov	x0, x20
                	bl	0x400438 <getenv>
-               	mov	x14, x0
-               	cmp	x14, #0x0
-               	b.ne	0x4002d8 <.text+0x68>
+               	cmp	x0, #0x0
+               	b.ne	0x4002d4 <.text+0x64>
                	mov	x13, #0x1               // =1
                	mov	x0, x13
                	ldr	x20, [sp]
@@ -30,7 +29,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w20, [x14]
+               	ldrb	w20, [x0]
                	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

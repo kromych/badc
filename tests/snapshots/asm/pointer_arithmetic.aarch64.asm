@@ -18,17 +18,16 @@ Disassembly of section .text:
                	mov	x15, #0x8               // =8
                	sxtw	x20, w15
                	mov	x0, x20
-               	bl	0x400438 <malloc>
-               	mov	x14, x0
+               	bl	0x400428 <malloc>
                	mov	x20, #0x1               // =1
-               	str	w20, [x14]
-               	add	x13, x14, #0x4
+               	str	w20, [x0]
+               	add	x13, x0, #0x4
                	mov	x20, #0x2               // =2
                	str	w20, [x13]
-               	ldrsw	x12, [x14]
-               	add	x20, x14, #0x4
-               	ldrsw	x14, [x20]
-               	add	x20, x12, x14
+               	ldrsw	x12, [x0]
+               	add	x20, x0, #0x4
+               	ldrsw	x0, [x20]
+               	add	x20, x12, x0
                	sxtw	x20, w20
                	mov	x0, x20
                	ldr	x20, [sp]

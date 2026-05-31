@@ -63,8 +63,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	callq	0x400237 <.text+0x17>
                	addq	$0x30, %rsp
-               	movq	%rax, %rdi
-               	movq	%rdi, %rcx
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -73,4 +72,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

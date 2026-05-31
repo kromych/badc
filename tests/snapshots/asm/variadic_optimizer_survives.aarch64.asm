@@ -68,8 +68,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x10]!
                	bl	0x400238 <.text+0x18>
                	add	sp, sp, #0x30
-               	mov	x12, x0
-               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

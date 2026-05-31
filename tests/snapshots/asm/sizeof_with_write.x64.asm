@@ -36,7 +36,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	0x40049d <write>
                	movslq	%eax, %rax
-               	movq	%rax, %rdi
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -46,4 +45,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

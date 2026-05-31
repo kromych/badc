@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   LoadLocal { off=2, kind=I64 }                    -> x13
     v6   LoadLocal { off=3, kind=I64 }                    -> x13
     v7   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x21
-    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x14
-    v9   Imm(0)                                           -> x14
+    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x0
+    v9   Imm(0)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=5
@@ -20,7 +20,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x20
     v2   Imm(0)                                           -> x21
-    v3   CallExt { binding_idx=11, args=[v1, v2], fp_arg_mask=0x0 } -> x13
+    v3   CallExt { binding_idx=11, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     v4   Imm(0)                                           -> x21
     v5   LoadLocal { off=-1, kind=I64 }                   -> x21
     v6   Imm(5039527983027585024)                         -> x21
@@ -32,7 +32,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 2  start_pc=0
     v9   ImmData(40)                                      -> x22
     v10  Imm(0)                                           -> x20
-    v11  CallExt { binding_idx=11, args=[v9, v10], fp_arg_mask=0x0 } -> x13
+    v11  CallExt { binding_idx=11, args=[v9, v10], fp_arg_mask=0x0 } -> x0
     v12  Imm(0)                                           -> x20
     v13  LoadLocal { off=-2, kind=I64 }                   -> x20
     v14  Imm(4895412794951729152)                         -> x20
@@ -44,7 +44,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
   block 4  start_pc=0
     v17  Imm(4607182418800017408)                         -> x21
     v18  Imm(53)                                          -> x22
-    v19  CallExt { binding_idx=55, args=[v17, v18], fp_arg_mask=0x1 } -> x13
+    v19  CallExt { binding_idx=55, args=[v17, v18], fp_arg_mask=0x1 } -> x0
     v20  Imm(0)                                           -> x22
     v21  LoadLocal { off=-3, kind=I64 }                   -> x22
     v22  Imm(4845873199050653696)                         -> x22
@@ -64,6 +64,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x20
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
-    v5   Imm(0)                                           -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

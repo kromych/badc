@@ -54,17 +54,16 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rbx
                	movq	%rbx, %rdi
                	callq	0x400237 <.text+0x17>
-               	movq	%rax, %r9
-               	cmpq	$0x3ea, %r9             # imm = 0x3EA
-               	jne	0x4002d8 <.text+0xb8>
-               	xorq	%r9, %r9
-               	movq	%r9, -0x18(%rbp)
-               	jmp	0x4002e7 <.text+0xc7>
-               	movl	$0x1, %r9d
-               	movq	%r9, -0x18(%rbp)
-               	jmp	0x4002e7 <.text+0xc7>
-               	movq	-0x18(%rbp), %r9
-               	movq	%r9, %rcx
+               	cmpq	$0x3ea, %rax            # imm = 0x3EA
+               	jne	0x4002d5 <.text+0xb5>
+               	xorq	%rax, %rax
+               	movq	%rax, -0x18(%rbp)
+               	jmp	0x4002e3 <.text+0xc3>
+               	movl	$0x1, %eax
+               	movq	%rax, -0x18(%rbp)
+               	jmp	0x4002e3 <.text+0xc3>
+               	movq	-0x18(%rbp), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x30, %rsp

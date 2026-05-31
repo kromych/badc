@@ -59,7 +59,6 @@ Disassembly of section .text:
                	ldr	x3, [sp, #0x30]
                	blr	x9
                	add	sp, sp, #0x40
-               	mov	x10, x0
                	ldur	x22, [x29, #-0x20]
                	sub	x26, x29, #0x28
                	mov	x9, x23
@@ -69,9 +68,7 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
-               	mov	x25, x0
-               	ldur	x25, [x29, #-0x28]
-               	mov	x0, x25
+               	ldur	x0, [x29, #-0x28]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

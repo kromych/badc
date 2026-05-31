@@ -27,11 +27,12 @@ Disassembly of section .text:
                	movl	$0x28, %ebx
                	movq	%rbx, %rdi
                	callq	0x400247 <.text+0x17>
-               	movq	%rax, %r9
-               	movslq	%r9d, %rbx
+               	movslq	%eax, %rbx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

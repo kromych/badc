@@ -10,8 +10,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   LoadLocal { off=2, kind=I64 }                    -> x13
     v6   LoadLocal { off=3, kind=I64 }                    -> x13
     v7   Binop { op=sub, lhs=v3, rhs=v1 }                 -> x21
-    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x14
-    v9   Imm(0)                                           -> x14
+    v8   CallExt { binding_idx=32, args=[v1, v7], fp_arg_mask=0x0 } -> x0
+    v9   Imm(0)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=2
@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(8)                                           -> x20
-    v2   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
+    v2   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     v3   Imm(0)                                           -> x20
     v4   LoadLocal { off=-1, kind=I64 }                   -> x20
     v5   Imm(3)                                           -> x20
@@ -35,7 +35,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x20
     v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x13
     v17  BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x20
-    v18  Load { addr=v17, kind=I32 }                      -> x14
+    v18  Load { addr=v17, kind=I32 }                      -> x0
     v19  Load { addr=v17, kind=I32 }                      -> x12
     v20  Binop { op=mul, lhs=v18, rhs=v19 }               -> x20
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x12
@@ -52,6 +52,6 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v1   ParamRef(0, kind=I32)                            -> x20
     v2   Imm(0)                                           -> x14
     v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x14
-    v5   Imm(0)                                           -> x14
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)

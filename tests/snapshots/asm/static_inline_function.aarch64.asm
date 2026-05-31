@@ -53,11 +53,9 @@ Disassembly of section .text:
                	mov	x20, #0x2               // =2
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
-               	cmp	x14, #0x7
-               	b.eq	0x40030c <.text+0xec>
-               	mov	x14, #0x1               // =1
-               	mov	x0, x14
+               	cmp	x0, #0x7
+               	b.eq	0x400304 <.text+0xe4>
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10
@@ -69,15 +67,13 @@ Disassembly of section .text:
                	movk	x21, #0xffff, lsl #48
                	mov	x0, x21
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x14, x17
-               	b.eq	0x40035c <.text+0x13c>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	cmp	x0, x17
+               	b.eq	0x40034c <.text+0x12c>
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10
@@ -87,11 +83,9 @@ Disassembly of section .text:
                	movk	x20, #0xdead, lsl #16
                	mov	x0, x20
                	bl	0x400254 <.text+0x34>
-               	mov	x14, x0
-               	cmp	x14, #0x18
-               	b.eq	0x400394 <.text+0x174>
-               	mov	x14, #0x3               // =3
-               	mov	x0, x14
+               	cmp	x0, #0x18
+               	b.eq	0x40037c <.text+0x15c>
+               	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10
@@ -100,11 +94,9 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	mov	x0, x21
                	bl	0x400254 <.text+0x34>
-               	mov	x14, x0
-               	cmp	x14, #0x0
-               	b.eq	0x4003c8 <.text+0x1a8>
-               	mov	x14, #0x4               // =4
-               	mov	x0, x14
+               	cmp	x0, #0x0
+               	b.eq	0x4003a8 <.text+0x188>
+               	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10

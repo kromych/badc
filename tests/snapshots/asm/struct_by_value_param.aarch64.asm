@@ -90,33 +90,31 @@ Disassembly of section .text:
                	sub	x20, x29, #0x8
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x13, x0
-               	sxtw	x20, w13
+               	sxtw	x20, w0
                	cmp	x20, #0xa
-               	b.eq	0x4003a0 <.text+0x180>
+               	b.eq	0x40039c <.text+0x17c>
                	mov	x20, #0x1               // =1
                	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x13, x29, #0x8
-               	ldrsw	x20, [x13]
+               	sub	x0, x29, #0x8
+               	ldrsw	x20, [x0]
                	cmp	x20, #0x3
-               	b.eq	0x4003c8 <.text+0x1a8>
+               	b.eq	0x4003c4 <.text+0x1a4>
                	mov	x20, #0x2               // =2
                	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x13, x29, #0x8
-               	add	x20, x13, #0x4
-               	ldrsw	x13, [x20]
-               	cmp	x13, #0x7
-               	b.eq	0x4003f4 <.text+0x1d4>
-               	mov	x13, #0x3               // =3
-               	mov	x0, x13
+               	sub	x0, x29, #0x8
+               	add	x20, x0, #0x4
+               	ldrsw	x0, [x20]
+               	cmp	x0, #0x7
+               	b.eq	0x4003ec <.text+0x1cc>
+               	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

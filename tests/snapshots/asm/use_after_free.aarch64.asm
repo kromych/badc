@@ -25,9 +25,7 @@ Disassembly of section .text:
                	mov	x0, x21
                	bl	0x400474 <free>
                	sxtw	x0, w0
-               	mov	x13, x0
-               	ldrsw	x13, [x21]
-               	mov	x0, x13
+               	ldrsw	x0, [x21]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]

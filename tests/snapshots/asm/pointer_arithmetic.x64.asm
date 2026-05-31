@@ -18,19 +18,18 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	0x400437 <malloc>
-               	movq	%rax, %r9
                	movl	$0x1, %ebx
-               	movl	%ebx, (%r9)
-               	movq	%r9, %r8
+               	movl	%ebx, (%rax)
+               	movq	%rax, %r8
                	addq	$0x4, %r8
                	movl	$0x2, %ebx
                	movl	%ebx, (%r8)
-               	movslq	(%r9), %rdi
-               	movq	%r9, %rbx
+               	movslq	(%rax), %rdi
+               	movq	%rax, %rbx
                	addq	$0x4, %rbx
-               	movslq	(%rbx), %r9
+               	movslq	(%rbx), %rax
                	movq	%rdi, %rbx
-               	addq	%r9, %rbx
+               	addq	%rax, %rbx
                	movslq	%ebx, %rbx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx

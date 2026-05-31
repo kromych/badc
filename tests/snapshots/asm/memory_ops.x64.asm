@@ -19,12 +19,12 @@ Disassembly of section .text:
                	movl	$0xa, %ebx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
-               	callq	0x4005c7 <malloc>
+               	callq	0x4005b7 <malloc>
                	movq	%rax, %r10
                	movq	%r10, 0x20(%rsp)
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
-               	callq	0x4005c7 <malloc>
+               	callq	0x4005b7 <malloc>
                	movq	%rax, %r10
                	movq	%r10, 0x28(%rsp)
                	movl	$0x41, %r15d
@@ -33,32 +33,29 @@ Disassembly of section .text:
                	movq	%r14, %rdx
                	movq	0x20(%rsp), %rdi
                	xorl	%eax, %eax
-               	callq	0x4005cd <memset>
-               	movq	%rax, %rsi
-               	movq	0x20(%rsp), %rsi
-               	addq	$0x9, %rsi
+               	callq	0x4005bd <memset>
+               	movq	0x20(%rsp), %rax
+               	addq	$0x9, %rax
                	xorq	%r12, %r12
-               	movb	%r12b, (%rsi)
+               	movb	%r12b, (%rax)
                	movq	%r15, %rsi
                	movq	%r14, %rdx
                	movq	0x28(%rsp), %rdi
                	xorl	%eax, %eax
-               	callq	0x4005cd <memset>
-               	movq	%rax, %rdx
-               	movq	0x28(%rsp), %rdx
-               	addq	$0x9, %rdx
-               	movb	%r12b, (%rdx)
+               	callq	0x4005bd <memset>
+               	movq	0x28(%rsp), %rax
+               	addq	$0x9, %rax
+               	movb	%r12b, (%rax)
                	movq	%rbx, %rdx
                	movq	0x20(%rsp), %rdi
                	movq	0x28(%rsp), %rsi
                	xorl	%eax, %eax
-               	callq	0x4005d3 <memcmp>
+               	callq	0x4005c3 <memcmp>
                	movslq	%eax, %rax
-               	movq	%rax, %r14
-               	cmpq	$0x0, %r14
-               	je	0x4003f4 <.text+0x104>
-               	movl	$0x1, %r14d
-               	movq	%r14, %rcx
+               	cmpq	$0x0, %rax
+               	je	0x4003ea <.text+0xfa>
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -69,20 +66,19 @@ Disassembly of section .text:
                	retq
                	movq	0x28(%rsp), %rbx
                	addq	$0x5, %rbx
-               	movl	$0x42, %r14d
-               	movb	%r14b, (%rbx)
+               	movl	$0x42, %eax
+               	movb	%al, (%rbx)
                	movl	$0xa, %r15d
                	movq	%r15, %rdx
                	movq	0x20(%rsp), %rdi
                	movq	0x28(%rsp), %rsi
                	xorl	%eax, %eax
-               	callq	0x4005d3 <memcmp>
+               	callq	0x4005c3 <memcmp>
                	movslq	%eax, %rax
-               	movq	%rax, %r14
-               	cmpq	$0x0, %r14
-               	jne	0x40045e <.text+0x16e>
-               	movl	$0x2, %r14d
-               	movq	%r14, %rcx
+               	cmpq	$0x0, %rax
+               	jne	0x40044f <.text+0x15f>
+               	movl	$0x2, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -101,3 +97,5 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

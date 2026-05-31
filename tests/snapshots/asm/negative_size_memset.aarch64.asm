@@ -30,7 +30,6 @@ Disassembly of section .text:
                	mov	x2, x20
                	mov	x1, x22
                	bl	0x400484 <memset>
-               	mov	x12, x0
                	mov	x0, x22
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

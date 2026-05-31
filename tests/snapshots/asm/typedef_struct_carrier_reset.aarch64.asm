@@ -67,45 +67,42 @@ Disassembly of section .text:
                	sub	x20, x29, #0xa8
                	mov	x0, x20
                	bl	0x400238 <.text+0x18>
-               	mov	x14, x0
-               	sxtw	x20, w14
+               	sxtw	x20, w0
                	cmp	x20, #0x64
-               	b.eq	0x400344 <.text+0x124>
+               	b.eq	0x400340 <.text+0x120>
                	mov	x20, #0x1               // =1
                	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x14, x29, #0xa8
-               	add	x20, x14, #0x14
-               	ldrsw	x14, [x20]
-               	cmp	x14, #0x5
-               	b.eq	0x400370 <.text+0x150>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	sub	x0, x29, #0xa8
+               	add	x20, x0, #0x14
+               	ldrsw	x0, [x20]
+               	cmp	x0, #0x5
+               	b.eq	0x400368 <.text+0x148>
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x20, x29, #0xa8
-               	add	x14, x20, #0x3c
-               	ldrsw	x20, [x14]
+               	add	x0, x20, #0x3c
+               	ldrsw	x20, [x0]
                	cmp	x20, #0x6
-               	b.eq	0x40039c <.text+0x17c>
+               	b.eq	0x400394 <.text+0x174>
                	mov	x20, #0x3               // =3
                	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x14, x29, #0xa8
-               	add	x20, x14, #0xa0
-               	ldrsw	x14, [x20]
-               	cmp	x14, #0x64
-               	b.eq	0x4003c8 <.text+0x1a8>
-               	mov	x14, #0x4               // =4
-               	mov	x0, x14
+               	sub	x0, x29, #0xa8
+               	add	x20, x0, #0xa0
+               	ldrsw	x0, [x20]
+               	cmp	x0, #0x64
+               	b.eq	0x4003bc <.text+0x19c>
+               	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
                	add	sp, sp, #0xd0
                	ldp	x29, x30, [sp], #0x10

@@ -1225,6 +1225,11 @@ pub(super) fn lower(
                 }
             }
         });
+        // Inline after mem2reg; see x86_64.rs's matching block for
+        // the ordering rationale.
+        super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+        });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

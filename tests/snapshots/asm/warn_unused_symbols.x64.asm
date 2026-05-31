@@ -17,20 +17,17 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
+               	subq	$0x50, %rsp
                	movl	$0x5, %r11d
                	movslq	%r11d, %r11
                	addq	$0x1, %r11
                	movslq	%r11d, %r11
-               	movslq	%r11d, %rbx
-               	xorq	%r12, %r12
-               	movq	%rbx, %rdi
-               	movq	%r12, %rsi
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	addq	$0x60, %rsp
+               	movslq	%r11d, %r11
+               	shlq	$0x1, %r11
+               	movslq	%r11d, %r11
+               	movslq	%r11d, %rax
+               	addq	$0x50, %rsp
                	popq	%rbp
-               	jmp	<addr>
+               	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

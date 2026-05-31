@@ -20,30 +20,26 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
+               	sub	sp, sp, #0x10
                	sxtw	x15, w0
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x8]
                	b	<addr>
                	ldursw	x0, [x29, #-0x8]
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	bl	<addr>
-               	stur	w0, [x29, #-0x8]
+               	mov	x14, #0x64              // =100
+               	stur	w14, [x29, #-0x8]
                	b	<addr>
-               	bl	<addr>
-               	stur	w0, [x29, #-0x8]
+               	mov	x14, #0xc8              // =200
+               	stur	w14, [x29, #-0x8]
                	b	<addr>
-               	bl	<addr>
-               	stur	w0, [x29, #-0x8]
+               	mov	x14, #0x12c             // =300
+               	stur	w14, [x29, #-0x8]
                	b	<addr>
-               	bl	<addr>
-               	stur	w0, [x29, #-0x8]
+               	mov	x14, #0x190             // =400
+               	stur	w14, [x29, #-0x8]
                	b	<addr>
                	cmp	x15, #0x0
                	b.eq	<addr>

@@ -50,32 +50,38 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
-               	mov	x20, #0x2               // =2
-               	mov	x0, x20
-               	bl	<addr>
-               	cmp	x0, #0x7
+               	mov	x15, #0x2               // =2
+               	mov	x17, #0x3               // =3
+               	mul	x15, x15, x17
+               	sxtw	x15, w15
+               	add	x15, x15, #0x1
+               	sxtw	x15, w15
+               	cmp	x15, #0x7
                	b.eq	<addr>
-               	mov	x20, #0x1               // =1
-               	mov	x0, x20
+               	mov	x14, #0x1               // =1
+               	mov	x0, x14
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x21, #0xffff            // =65535
-               	movk	x21, #0xffff, lsl #16
-               	movk	x21, #0xffff, lsl #32
-               	movk	x21, #0xffff, lsl #48
-               	mov	x0, x21
-               	bl	<addr>
+               	mov	x15, #0xffff            // =65535
+               	movk	x15, #0xffff, lsl #16
+               	movk	x15, #0xffff, lsl #32
+               	movk	x15, #0xffff, lsl #48
+               	mov	x17, #0x3               // =3
+               	mul	x15, x15, x17
+               	sxtw	x15, w15
+               	add	x15, x15, #0x1
+               	sxtw	x15, w15
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x0, x17
+               	cmp	x15, x17
                	b.eq	<addr>
-               	mov	x21, #0x2               // =2
-               	mov	x0, x21
+               	mov	x14, #0x2               // =2
+               	mov	x0, x14
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10

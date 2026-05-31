@@ -47,11 +47,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
-               	bl	<addr>
-               	mov	x20, x0
-               	bl	<addr>
-               	add	x20, x20, x0
-               	sxtw	x20, w20
+               	mov	x15, #0x1               // =1
+               	mov	x14, #0x5               // =5
+               	sxtw	x14, w14
+               	add	x14, x14, #0x1
+               	sxtw	x14, w14
+               	sxtw	x14, w14
+               	add	x15, x15, x14
+               	sxtw	x20, w15
                	mov	x21, #0x1               // =1
                	mov	x0, x21
                	bl	<addr>

@@ -169,6 +169,7 @@ fn main() {
     let mut trace = false;
     let mut optimize_flag = false;
     let mut dump_ssa = false;
+    let mut inline_cap: u32 = 32;
     let mut emit_debug_info = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
@@ -231,6 +232,18 @@ fn main() {
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
             "--dump-ssa" => dump_ssa = true,
+            s if s.starts_with("--inline-cap=") => {
+                let body = &s["--inline-cap=".len()..];
+                match body.parse::<u32>() {
+                    Ok(n) => inline_cap = n,
+                    Err(_) => {
+                        eprint_diagnostic(
+                            "badc: error: --inline-cap=N requires a non-negative integer",
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
             "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--jit" => claim(&mut mode, Mode::Jit),
@@ -574,7 +587,7 @@ fn main() {
         }
         if mode == Mode::Jit {
             // The JIT lowers for the host; --target plays no part.
-            let mut jit_opts = NativeOptions::new();
+            let mut jit_opts = NativeOptions::new().with_inline_cap(inline_cap);
             if optimize_flag {
                 jit_opts = jit_opts.with_optimize();
             }
@@ -667,7 +680,9 @@ fn main() {
         let mut native_objs: Vec<badc::NativeObject> =
             Vec::with_capacity(sources.len() + objects.len() + archives.len());
 
-        let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -944,7 +959,9 @@ fn main() {
         // Relocatable `-c` builds do not require `main`; the linker
         // picks the entry once it merges every TU.
         use badc::{Compiler, OutputKind};
-        let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }
@@ -1045,7 +1062,9 @@ fn main() {
             std::process::exit(1);
         }
         use badc::{Compiler, OutputKind};
-        let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
         if optimize_flag {
             reloc_opts = reloc_opts.with_optimize();
         }

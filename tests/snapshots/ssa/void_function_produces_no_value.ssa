@@ -164,12 +164,23 @@ fn ent_pc=17 n_params=0 variadic=false locals=7
     v35  Imm(3)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
   block 6  start_pc=0
-    v36  Imm(2)                                           -> x21
-    v37  Imm(3)                                           -> x22
-    v38  Call { target_pc=15, args=[v36, v37] }           -> x0
+    v36  Imm(2)                                           -> x22
+    v37  Imm(3)                                           -> x0
+    v38  Imm(0)                                           -> x20
     v39  Imm(0)                                           -> x20
-    v40  Call { target_pc=16, args=[v39] }                -> x0
-    terminator Return(v39)   (exit_acc=v39)
+    v40  Binop { op=mul, lhs=v36, rhs=v37 }               -> x22
+    v41  BinopI { op=shl, lhs=v40, rhs_imm=32 }           -> x22
+    v42  BinopI { op=shr, lhs=v41, rhs_imm=32 }           -> x22
+    v43  BinopI { op=add, lhs=v42, rhs_imm=7 }            -> x22
+    v44  BinopI { op=shl, lhs=v43, rhs_imm=32 }           -> x22
+    v45  BinopI { op=shr, lhs=v44, rhs_imm=32 }           -> x22
+    v46  Imm(0)                                           -> x0
+    v47  Extend { value=v45, kind=I32 }                   -> x22
+    v48  BinopI { op=and, lhs=v47, rhs_imm=255 }          -> x22
+    v49  Imm(0)                                           -> x22
+    v50  Imm(0)                                           -> x21
+    v51  Call { target_pc=16, args=[v50] }                -> x0
+    terminator Return(v50)   (exit_acc=v50)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[20] fp_used=[]

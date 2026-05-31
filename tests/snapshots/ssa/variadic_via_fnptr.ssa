@@ -77,13 +77,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v16  BinopI { op=ne, lhs=v15, rhs_imm=9123 }          -> x0
     terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
-    v17  Imm(12)                                          -> x20
+    v17  Imm(12)                                          -> x21
     terminator Return(v17)   (exit_acc=v17)
   block 4  start_pc=0
-    v18  Call { target_pc=1, args=[] }                    -> x0
-    v19  ImmCode(ent_pc=0)                                -> x21
+    v18  Imm(0)                                           -> x0
+    v19  ImmCode(ent_pc=0)                                -> x20
     v20  Imm(9)                                           -> x26
-    v21  Imm(1)                                           -> x20
+    v21  Imm(1)                                           -> x21
     v22  Imm(2)                                           -> x22
     v23  Imm(3)                                           -> x23
     v24  CallIndirect { target=v19, args=[v20, v21, v22, v23] } -> x0

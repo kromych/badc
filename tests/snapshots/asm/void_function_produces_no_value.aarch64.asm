@@ -202,15 +202,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x21, #0x2               // =2
-               	mov	x22, #0x3               // =3
+               	mov	x22, #0x2               // =2
+               	mov	x0, #0x3                // =3
+               	mul	x22, x22, x0
+               	sxtw	x22, w22
+               	add	x22, x22, #0x7
+               	sxtw	x22, w22
+               	sxtw	x22, w22
+               	mov	x21, #0x0               // =0
                	mov	x0, x21
-               	mov	x1, x22
                	bl	<addr>
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
-               	bl	<addr>
-               	mov	x0, x20
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

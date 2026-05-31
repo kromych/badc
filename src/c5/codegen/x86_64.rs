@@ -1412,6 +1412,12 @@ pub(super) fn lower(
                 }
             }
         });
+        // Inline after mem2reg so the candidate filter sees the
+        // promoted form: dead cell loads / stores are gone and the
+        // callee's body reads its parameters via `ParamRef`.
+        super::ssa_emit_common::time_pass("ssa_inline::run (x86_64)", || {
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+        });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

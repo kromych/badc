@@ -10,29 +10,10 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	sxtw	x20, w0
-               	cmp	x20, #0x2
+               	sxtw	x0, w0
+               	cmp	x0, #0x2
                	b.ge	<addr>
-               	mov	x0, x20
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x13, x20, #0x1
-               	sxtw	x21, w13
-               	mov	x0, x21
-               	bl	<addr>
-               	mov	x0, x20
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x15, w0
                	add	x15, x15, #0x1

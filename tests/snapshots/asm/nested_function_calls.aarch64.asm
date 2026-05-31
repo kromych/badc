@@ -15,32 +15,14 @@ Disassembly of section .text:
                	add	x15, x15, x14
                	sxtw	x0, w15
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x23, [sp, #0x18]
-               	mov	x20, #0xa               // =10
-               	mov	x21, #0x14              // =20
-               	mov	x0, x20
-               	mov	x1, x21
-               	bl	<addr>
-               	mov	x22, x0
-               	mov	x23, #0x1e              // =30
-               	mov	x21, #0x28              // =40
-               	mov	x0, x23
-               	mov	x1, x21
-               	bl	<addr>
-               	mov	x20, x0
-               	mov	x0, x22
-               	mov	x1, x20
-               	bl	<addr>
-               	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x15, #0xa               // =10
+               	mov	x14, #0x14              // =20
+               	add	x15, x15, x14
+               	sxtw	x15, w15
+               	mov	x14, #0x1e              // =30
+               	mov	x13, #0x28              // =40
+               	add	x14, x14, x13
+               	sxtw	x14, w14
+               	add	x15, x15, x14
+               	sxtw	x0, w15
                	ret

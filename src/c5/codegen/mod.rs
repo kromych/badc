@@ -50,6 +50,7 @@ mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
+mod ssa_inline;
 pub(crate) mod ssa_mem2reg;
 mod ssa_native;
 pub(crate) mod ssa_shadow;
@@ -1264,6 +1265,12 @@ pub struct NativeOptions {
     /// before lowering. Same as `--dump-asm` for native code: a
     /// diagnostic emitted alongside the build. Off by default.
     pub dump_ssa: bool,
+    /// Upper bound (in SSA `Inst` count) on a leaf function body
+    /// that may be inlined at its call sites under `-O`. The
+    /// `--inline-cap=N` CLI flag drives this; 0 disables the pass.
+    /// Default 32, matching the typical small-helper threshold
+    /// `gcc` / `clang` use (`--param max-inline-insns-single=N`).
+    pub inline_cap: u32,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -1312,7 +1319,14 @@ impl NativeOptions {
             output_kind: OutputKind::Executable,
             debug_info: false,
             dump_ssa: false,
+            inline_cap: 32,
         }
+    }
+
+    /// Set [`Self::inline_cap`] and return self.
+    pub const fn with_inline_cap(mut self, cap: u32) -> Self {
+        self.inline_cap = cap;
+        self
     }
 
     /// Print the SSA IR + allocation for every function. Same

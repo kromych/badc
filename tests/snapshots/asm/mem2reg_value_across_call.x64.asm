@@ -34,19 +34,19 @@ Disassembly of section .text:
                	movq	-0x18(%rbp), %r8
                	cmpq	%rbx, %r8
                	jge	<addr>
+               	movq	-0x10(%rbp), %rdi
+               	movq	-0x18(%rbp), %r8
+               	shlq	$0x1, %r8
+               	addq	$0x1, %r8
+               	addq	%r8, %rdi
+               	movq	%rdi, -0x10(%rbp)
                	movq	-0x10(%rbp), %r14
                	movq	-0x18(%rbp), %r15
+               	movq	%r12, %r11
                	movq	%r15, %rdi
-               	callq	<addr>
+               	callq	*%r11
                	addq	%rax, %r14
                	movq	%r14, -0x10(%rbp)
-               	movq	-0x10(%rbp), %r15
-               	movq	-0x18(%rbp), %r14
-               	movq	%r12, %r11
-               	movq	%r14, %rdi
-               	callq	*%r11
-               	addq	%rax, %r15
-               	movq	%r15, -0x10(%rbp)
                	movq	-0x18(%rbp), %rax
                	addq	$0x1, %rax
                	movq	%rax, -0x18(%rbp)
@@ -75,3 +75,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

@@ -14,31 +14,14 @@ Disassembly of section .text:
                	addq	%r9, %r11
                	movslq	%r11d, %rax
                	retq
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movq	%r15, 0x18(%rsp)
-               	movl	$0xa, %ebx
-               	movl	$0x14, %r12d
-               	movq	%rbx, %rdi
-               	movq	%r12, %rsi
-               	callq	<addr>
-               	movq	%rax, %r14
-               	movl	$0x1e, %r15d
-               	movl	$0x28, %r12d
-               	movq	%r15, %rdi
-               	movq	%r12, %rsi
-               	callq	<addr>
-               	movq	%rax, %rbx
-               	movq	%r14, %rdi
-               	movq	%rbx, %rsi
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
-               	addq	$0x20, %rsp
-               	popq	%rbp
-               	jmp	<addr>
+               	movl	$0xa, %r11d
+               	movl	$0x14, %r9d
+               	addq	%r9, %r11
+               	movslq	%r11d, %r11
+               	movl	$0x1e, %r9d
+               	movl	$0x28, %r8d
+               	addq	%r8, %r9
+               	movslq	%r9d, %r9
+               	addq	%r9, %r11
+               	movslq	%r11d, %rax
+               	retq

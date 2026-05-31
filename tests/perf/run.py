@@ -95,7 +95,10 @@ FIXTURE_FLAGS: dict[str, list[str]] = {
 # MSVC intrinsics; its bundled msvc_compat.h supplies the shims. clang
 # and tcc use the real system headers and must not see this include.
 BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
-    "sqlite.c": ["-include", "msvc_compat.h"],
+    # Force HAVE_MREMAP=0: the SQLITE_DEFINES `-D_GNU_SOURCE` flips
+    # the amalgamation's default to 1 on Linux, but badc's libc
+    # bindings do not include mremap / MREMAP_MAYMOVE.
+    "sqlite.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
 }
 
 

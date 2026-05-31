@@ -94,9 +94,23 @@ def normalise_asm(text: str) -> str:
 
 
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
+    # Pin the cross-target so the SSA dump's register allocation is
+    # host-independent (the docstring at the top of this file calls
+    # the dump target-independent; without --target the host's
+    # default arch leaks into the snapshot register names, which
+    # then diff between macOS aarch64 hosts and Linux x86_64 CI).
     with dst.open("wb") as ssa_out:
         proc = subprocess.run(
-            [str(badc), "-q", "-O", "--dump-ssa", "-o", str(tmp_bin), str(src)],
+            [
+                str(badc),
+                "-q",
+                "-O",
+                "--target=linux-x64",
+                "--dump-ssa",
+                "-o",
+                str(tmp_bin),
+                str(src),
+            ],
             stdout=subprocess.DEVNULL,
             stderr=ssa_out,
         )

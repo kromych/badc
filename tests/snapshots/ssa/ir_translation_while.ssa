@@ -1,3 +1,4 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
@@ -5,22 +6,24 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     terminator Jmp(b1)   (exit_acc=v0)
   block 1  start_pc=0
-    v1   Imm(0)                                           -> x15
+    v1   Imm(0)                                           -> x11
     terminator Bz { cond=v1, target=b3, fall=b2 }   (exit_acc=v1)
   block 2  start_pc=0
     v2   Imm(1)                                           -> x0
     terminator Return(v2)   (exit_acc=v2)
   block 3  start_pc=0
-    v3   Imm(0)                                           -> x15
+    v3   Imm(0)                                           -> x11
     terminator Return(v3)   (exit_acc=v3)
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[20] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x20
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v1   ParamRef(0, kind=I32)                            -> x3
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
+badc: produced a Linux/x86_64 ELF on a different host; run it on a Linux/x64 box, or via Docker `--platform linux/amd64`.

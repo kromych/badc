@@ -1,23 +1,26 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x15
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=-1, kind=I64 }                   -> x14
-    v4   Imm(5)                                           -> x14
-    v5   BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x15
+    v1   ImmData(8)                                       -> x11
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=-1, kind=I64 }                   -> x9
+    v4   Imm(5)                                           -> x9
+    v5   BinopI { op=add, lhs=v1, rhs_imm=5 }             -> x11
     v6   Load { addr=v5, kind=U8 }                        -> x0
     terminator Return(v6)   (exit_acc=v6)
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[20] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x20
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v1   ParamRef(0, kind=I32)                            -> x3
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
+badc: produced a Linux/x86_64 ELF on a different host; run it on a Linux/x64 box, or via Docker `--platform linux/amd64`.

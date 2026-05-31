@@ -1,62 +1,66 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=add_one
 fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x15
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x15
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x15
+    v1   ParamRef(0, kind=I32)                            -> x11
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=2, kind=I32 }                    -> x9
+    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x11
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x11
     v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
     terminator Return(v6)   (exit_acc=v6)
+; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=advance
 fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x15
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=2, kind=I32 }                    -> x14
-    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x15
-    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x15
+    v1   ParamRef(0, kind=I32)                            -> x11
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=2, kind=I32 }                    -> x9
+    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x11
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x11
     v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
     terminator Return(v6)   (exit_acc=v6)
+; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=driver
 fn ent_pc=2 n_params=0 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x15
+    v1   Imm(0)                                           -> x11
     v2   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
     v3   StoreLocal { off=-2, value=v1, kind=I32 }        -> -
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
-    v4   LoadLocal { off=-2, kind=I32 }                   -> x15
-    v5   BinopI { op=lt, lhs=v4, rhs_imm=7 }              -> x15
+    v4   LoadLocal { off=-2, kind=I32 }                   -> x11
+    v5   BinopI { op=lt, lhs=v4, rhs_imm=7 }              -> x11
     terminator Bz { cond=v5, target=b4, fall=b3 }   (exit_acc=v5)
   block 2  start_pc=0
-    v6   LoadLocal { off=-2, kind=I32 }                   -> x14
-    v7   Imm(0)                                           -> x15
-    v8   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x14
-    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x14
-    v10  BinopI { op=shr, lhs=v9, rhs_imm=32 }            -> x14
+    v6   LoadLocal { off=-2, kind=I32 }                   -> x9
+    v7   Imm(0)                                           -> x11
+    v8   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x9
+    v9   BinopI { op=shl, lhs=v8, rhs_imm=32 }            -> x9
+    v10  BinopI { op=shr, lhs=v9, rhs_imm=32 }            -> x9
     v11  StoreLocal { off=-2, value=v10, kind=I32 }       -> -
     terminator Jmp(b1)   (exit_acc=v11)
   block 3  start_pc=0
-    v12  LoadLocal { off=-1, kind=I32 }                   -> x14
-    v13  Imm(0)                                           -> x15
-    v14  BinopI { op=add, lhs=v12, rhs_imm=1 }            -> x14
-    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x14
-    v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x14
+    v12  LoadLocal { off=-1, kind=I32 }                   -> x9
+    v13  Imm(0)                                           -> x11
+    v14  BinopI { op=add, lhs=v12, rhs_imm=1 }            -> x9
+    v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x9
+    v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x9
     v17  StoreLocal { off=-1, value=v16, kind=I32 }       -> -
     terminator Jmp(b2)   (exit_acc=v17)
   block 4  start_pc=0
-    v18  LoadLocal { off=-1, kind=I32 }                   -> x14
-    v19  BinopI { op=mul, lhs=v18, rhs_imm=6 }            -> x14
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x14
+    v18  LoadLocal { off=-1, kind=I32 }                   -> x9
+    v19  BinopI { op=mul, lhs=v18, rhs_imm=6 }            -> x9
+    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x9
     v21  BinopI { op=shr, lhs=v20, rhs_imm=32 }           -> x0
     terminator Return(v21)   (exit_acc=v21)
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
@@ -64,14 +68,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Call { target_pc=2, args=[] }                    -> x0
     terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[20] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x20
-    v2   Imm(0)                                           -> x14
-    v3   LoadLocal { off=2, kind=I32 }                    -> x14
+    v1   ParamRef(0, kind=I32)                            -> x3
+    v2   Imm(0)                                           -> x9
+    v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
+badc: produced a Linux/x86_64 ELF on a different host; run it on a Linux/x64 box, or via Docker `--platform linux/amd64`.

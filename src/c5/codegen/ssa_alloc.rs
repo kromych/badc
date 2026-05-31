@@ -1441,4 +1441,65 @@ mod tests {
             "v_sum should reuse v_rhs's freed register",
         );
     }
+
+    /// `Inst::Load { addr }` reads `addr` and writes the result into
+    /// the same bank. When `addr` dies at the load, the dst hint
+    /// targets its register so the x86_64 `mov rd, [rd]` and aarch64
+    /// `ldr rd, [rd]` shapes self-elide the staging mov. Returning a
+    /// constant rather than the load lets `populate_return_hints`
+    /// skip the load result so the in-loop coalesce gets the slot.
+    #[test]
+    fn load_addr_coalesce_fires_when_addr_dies_at_load() {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::ir::LoadKind;
+        use crate::c5::ir::StoreKind;
+
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_addr = b.imm(0x1000);
+        let v_load = b.load(v_addr, LoadKind::I64);
+        let v_zero = b.imm(0);
+        b.store(v_zero, v_load, StoreKind::I64);
+        b.return_(v_zero);
+        let func = b.finish();
+
+        let alloc = allocate(&func, Target::LinuxX64);
+        let addr_place = alloc.places[v_addr as usize];
+        let load_place = alloc.places[v_load as usize];
+        assert_eq!(
+            load_place, addr_place,
+            "v_load should reuse v_addr's freed register",
+        );
+    }
+
+    /// `Inst::Mcpy { dst, src, size }` returns its `dst` pointer.
+    /// When `dst` dies at the Mcpy, the result re-uses its register
+    /// so the final `mov result, dst` self-elides. `b.mcpy()`
+    /// discards push's ValueId so the test locates the Mcpy inst by
+    /// scanning the finished function. Return a constant so the
+    /// return-hint pass does not pre-empt the Mcpy result's slot.
+    #[test]
+    fn mcpy_dst_coalesce_fires_when_dst_dies_at_mcpy() {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+
+        let mut b = SsaBuilder::new(0, 0, false);
+        let v_dst = b.imm(0x2000);
+        let v_src = b.imm(0x3000);
+        b.mcpy(v_dst, v_src, 8);
+        let v_zero = b.imm(0);
+        b.return_(v_zero);
+        let func = b.finish();
+
+        let mcpy_idx = func
+            .insts
+            .iter()
+            .position(|i| matches!(i, Inst::Mcpy { .. }))
+            .expect("Mcpy inst");
+        let alloc = allocate(&func, Target::LinuxX64);
+        let dst_place = alloc.places[v_dst as usize];
+        let mcpy_place = alloc.places[mcpy_idx];
+        assert_eq!(
+            mcpy_place, dst_place,
+            "Mcpy result should reuse v_dst's freed register",
+        );
+    }
 }

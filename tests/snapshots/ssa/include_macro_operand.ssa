@@ -29,7 +29,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     v9   BinopI { op=eq, lhs=v6, rhs_imm=0 }              -> x22
     terminator Bz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
-    v10  Imm(1)                                           -> x0
+    v10  Imm(1)                                           -> x11
     terminator Return(v10)   (exit_acc=v10)
   block 2  start_pc=0
     v11  LoadLocal { off=-3, kind=I64 }                   -> x22

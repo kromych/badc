@@ -62,7 +62,8 @@ Disassembly of section .text:
                	sxtw	x20, w20
                	bl	<addr>
                	add	x20, x20, x0
-               	sxtw	x0, w20
+               	sxtw	x20, w20
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10

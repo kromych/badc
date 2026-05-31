@@ -67,7 +67,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v12  BinopI { op=ne, lhs=v11, rhs_imm=3 }             -> x15
     terminator Bz { cond=v12, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
-    v13  Imm(1)                                           -> x0
+    v13  Imm(1)                                           -> x13
     terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0
     v14  LoadLocal { off=-6, kind=I64 }                   -> x15
@@ -119,7 +119,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v40  BinopI { op=ne, lhs=v39, rhs_imm=0 }             -> x20
     terminator Bz { cond=v40, target=b14, fall=b13 }   (exit_acc=v40)
   block 13  start_pc=0
-    v41  Imm(7)                                           -> x0
+    v41  Imm(7)                                           -> x21
     terminator Return(v41)   (exit_acc=v41)
   block 14  start_pc=0
     v42  Imm(0)                                           -> x20

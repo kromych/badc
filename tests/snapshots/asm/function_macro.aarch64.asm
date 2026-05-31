@@ -240,8 +240,7 @@ Disassembly of section .text:
                	sxtw	x20, w0
                	cmp	x20, #0x0
                	b.eq	<addr>
-               	sxtw	x14, w0
-               	mov	x0, x14
+               	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]

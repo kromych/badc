@@ -225,8 +225,8 @@ Disassembly of section .text:
                	movslq	%eax, %rbx
                	cmpq	$0x0, %rbx
                	je	<addr>
-               	movslq	%eax, %r9
-               	movq	%r9, %rcx
+               	movslq	%eax, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax

@@ -38,7 +38,8 @@ Disassembly of section .text:
                	and	x22, x22, x17
                	cmp	x22, #0x0
                	b.ne	<addr>
-               	mov	x0, #0x2a               // =42
+               	mov	x21, #0x2a              // =42
+               	mov	x0, x21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

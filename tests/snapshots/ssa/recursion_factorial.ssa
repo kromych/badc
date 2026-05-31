@@ -9,7 +9,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v4   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x14
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
-    v5   Imm(1)                                           -> x0
+    v5   Imm(1)                                           -> x13
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v6   LoadLocal { off=2, kind=I32 }                    -> x14
@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v10  Call { target_pc=0, args=[v9] }                  -> x0
     v11  Binop { op=mul, lhs=v1, rhs=v10 }                -> x20
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x20
-    v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x0
+    v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x20
     terminator Return(v13)   (exit_acc=v13)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=1

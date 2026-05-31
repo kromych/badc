@@ -92,7 +92,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=5
     v56  LoadLocal { off=-2, kind=I32 }                   -> x0
     v57  BinopI { op=add, lhs=v56, rhs_imm=1 }            -> x0
     v58  BinopI { op=shl, lhs=v57, rhs_imm=32 }           -> x0
-    v59  BinopI { op=shr, lhs=v58, rhs_imm=32 }           -> x20
+    v59  BinopI { op=shr, lhs=v58, rhs_imm=32 }           -> x0
     terminator Return(v59)   (exit_acc=v59)
   block 5  start_pc=0
     v33  LocalAddr(-2)                                    -> x14
@@ -229,7 +229,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=5
     v57  BinopI { op=ne, lhs=v56, rhs_imm=15 }            -> x20
     terminator Bz { cond=v57, target=b10, fall=b9 }   (exit_acc=v57)
   block 9  start_pc=0
-    v58  Imm(5)                                           -> x0
+    v58  Imm(5)                                           -> x21
     terminator Return(v58)   (exit_acc=v58)
   block 10  start_pc=0
     v59  Imm(0)                                           -> x20

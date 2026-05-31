@@ -27,8 +27,8 @@ Disassembly of section .text:
                	movslq	%r14d, %r12
                	cmpq	$0x0, %r12
                	jge	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
+               	movl	$0x1, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

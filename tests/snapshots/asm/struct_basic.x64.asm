@@ -33,8 +33,8 @@ Disassembly of section .text:
                	imulq	%r8, %rbx
                	movslq	%ebx, %rbx
                	addq	%rbx, %rdi
-               	movslq	%edi, %rax
-               	movq	%rax, %rcx
+               	movslq	%edi, %rdi
+               	movq	%rdi, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x20, %rsp

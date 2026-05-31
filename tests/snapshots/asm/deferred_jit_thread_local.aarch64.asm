@@ -79,7 +79,8 @@ Disassembly of section .text:
                	ldrsw	x13, [x12]
                	cmp	x13, #0x4
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
+               	mov	x12, #0x3               // =3
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x20

@@ -88,24 +88,24 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v6   BinopI { op=eq, lhs=v1, rhs_imm=0 }              -> x13
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(0)                                           -> x0
+    v7   Imm(0)                                           -> x12
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   LoadLocal { off=2, kind=I64 }                    -> x13
     v9   Imm(0)                                           -> x13
     v10  Load { addr=v1, kind=I64 }                       -> x13
-    v11  LoadLocal { off=3, kind=I64 }                    -> x0
+    v11  LoadLocal { off=3, kind=I64 }                    -> x12
     v12  Binop { op=eq, lhs=v10, rhs=v3 }                 -> x13
     terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
-    v13  Imm(1)                                           -> x0
+    v13  Imm(1)                                           -> x12
     terminator Return(v13)   (exit_acc=v13)
   block 4  start_pc=0
     v14  LoadLocal { off=3, kind=I64 }                    -> x13
     v15  LoadLocal { off=2, kind=I64 }                    -> x13
     v16  Imm(0)                                           -> x13
     v17  Load { addr=v1, kind=I64 }                       -> x13
-    v18  Binop { op=lt, lhs=v3, rhs=v17 }                 -> x0
+    v18  Binop { op=lt, lhs=v3, rhs=v17 }                 -> x12
     terminator Bz { cond=v18, target=b6, fall=b5 }   (exit_acc=v18)
   block 5  start_pc=0
     v19  LoadLocal { off=2, kind=I64 }                    -> x13

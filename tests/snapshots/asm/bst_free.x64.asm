@@ -18,8 +18,8 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorq	%r8, %r8
+               	movq	%r8, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

@@ -88,7 +88,8 @@ Disassembly of section .text:
                	mov	x21, x1
                	cmp	x20, #0x0
                	b.ne	<addr>
-               	mov	x0, #0x0                // =0
+               	mov	x12, #0x0               // =0
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -99,7 +100,8 @@ Disassembly of section .text:
                	ldr	x13, [x20]
                	cmp	x13, x21
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x12, #0x1               // =1
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

@@ -118,34 +118,34 @@ fn ent_pc=1 n_params=0 variadic=false locals=11
     v62  Binop { op=lt, lhs=v59, rhs=v61 }                -> x21
     terminator Bz { cond=v62, target=b20, fall=b19 }   (exit_acc=v62)
   block 19  start_pc=0
-    v63  Imm(6)                                           -> x0
+    v63  Imm(6)                                           -> x22
     terminator Return(v63)   (exit_acc=v63)
   block 20  start_pc=0
     v64  LocalAddr(-4)                                    -> x21
-    v65  Load { addr=v64, kind=I64 }                      -> x0
+    v65  Load { addr=v64, kind=I64 }                      -> x22
     v66  LocalAddr(-2)                                    -> x21
-    v67  Load { addr=v66, kind=I64 }                      -> x22
-    v68  Binop { op=eq, lhs=v65, rhs=v67 }                -> x0
+    v67  Load { addr=v66, kind=I64 }                      -> x0
+    v68  Binop { op=eq, lhs=v65, rhs=v67 }                -> x22
     v69  StoreLocal { off=-11, value=v68, kind=I64 }      -> -
     terminator Bz { cond=v68, target=b22, fall=b21 }   (exit_acc=v68)
   block 21  start_pc=0
-    v70  LocalAddr(-4)                                    -> x22
-    v71  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x22
-    v72  Load { addr=v71, kind=I64 }                      -> x0
-    v73  LocalAddr(-2)                                    -> x22
-    v74  BinopI { op=add, lhs=v73, rhs_imm=8 }            -> x22
+    v70  LocalAddr(-4)                                    -> x0
+    v71  BinopI { op=add, lhs=v70, rhs_imm=8 }            -> x0
+    v72  Load { addr=v71, kind=I64 }                      -> x22
+    v73  LocalAddr(-2)                                    -> x0
+    v74  BinopI { op=add, lhs=v73, rhs_imm=8 }            -> x0
     v75  Load { addr=v74, kind=I64 }                      -> x21
-    v76  Binop { op=lt, lhs=v72, rhs=v75 }                -> x0
+    v76  Binop { op=lt, lhs=v72, rhs=v75 }                -> x22
     v77  StoreLocal { off=-11, value=v76, kind=I64 }      -> -
     terminator Jmp(b22)   (exit_acc=v77)
   block 22  start_pc=0
-    v78  LoadLocal { off=-11, kind=I64 }                  -> x0
+    v78  LoadLocal { off=-11, kind=I64 }                  -> x22
     terminator Bz { cond=v78, target=b24, fall=b23 }   (exit_acc=v78)
   block 23  start_pc=0
     v79  Imm(7)                                           -> x21
     terminator Return(v79)   (exit_acc=v79)
   block 24  start_pc=0
-    v80  Imm(0)                                           -> x0
+    v80  Imm(0)                                           -> x22
     terminator Return(v80)   (exit_acc=v80)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

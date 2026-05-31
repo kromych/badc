@@ -86,7 +86,8 @@ Disassembly of section .text:
                	sxtw	x21, w1
                	cmp	x21, #0x8
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x12, #0x1               // =1
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -103,10 +104,10 @@ Disassembly of section .text:
                	cmp	x13, #0x8
                	b.ge	<addr>
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
-               	add	x0, x0, #0x1
-               	sxtw	x0, w0
-               	stur	w0, [x29, #-0x10]
+               	ldursw	x12, [x29, #-0x10]
+               	add	x12, x12, #0x1
+               	sxtw	x12, w12
+               	stur	w12, [x29, #-0x10]
                	b	<addr>
                	ldursw	x22, [x29, #-0x10]
                	mov	x0, x20

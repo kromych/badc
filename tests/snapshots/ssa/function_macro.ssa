@@ -145,7 +145,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v9   BinopI { op=ne, lhs=v8, rhs_imm=0 }              -> x20
     terminator Bz { cond=v9, target=b4, fall=b3 }   (exit_acc=v9)
   block 3  start_pc=0
-    v10  Extend { value=v6, kind=I32 }                    -> x14
+    v10  Extend { value=v6, kind=I32 }                    -> x0
     terminator Return(v10)   (exit_acc=v10)
   block 4  start_pc=0
     v11  ImmData(96)                                      -> x21

@@ -30,7 +30,8 @@ Disassembly of section .text:
                	sxtw	x14, w14
                	cmp	x14, #0x0
                	b.ne	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x15, #0x1               // =1
+               	mov	x0, x15
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

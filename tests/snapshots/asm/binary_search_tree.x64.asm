@@ -83,8 +83,8 @@ Disassembly of section .text:
                	movq	%rsi, %r12
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -96,8 +96,8 @@ Disassembly of section .text:
                	movq	(%rbx), %r8
                	cmpq	%r12, %r8
                	jne	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
+               	movl	$0x1, %edi
+               	movq	%rdi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

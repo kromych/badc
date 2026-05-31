@@ -16,28 +16,28 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v9   LoadLocal { off=2, kind=I32 }                    -> x13
     v10  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x13
     v11  Binop { op=add, lhs=v8, rhs=v10 }                -> x14
-    v12  Load { addr=v11, kind=I64 }                      -> x0
+    v12  Load { addr=v11, kind=I64 }                      -> x13
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
     v13  LocalAddr(-3)                                    -> x14
-    v14  Imm(0)                                           -> x0
-    v15  ImmData(32)                                      -> x0
+    v14  Imm(0)                                           -> x13
+    v15  ImmData(32)                                      -> x13
     v16  Store { addr=v13, value=v15, kind=I64 }          -> -
     v17  LocalAddr(-3)                                    -> x12
-    v18  Imm(8)                                           -> x0
+    v18  Imm(8)                                           -> x13
     v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x12
-    v20  ImmData(41)                                      -> x0
+    v20  ImmData(41)                                      -> x13
     v21  Store { addr=v19, value=v20, kind=I64 }          -> -
     v22  LocalAddr(-3)                                    -> x14
-    v23  Imm(16)                                          -> x0
+    v23  Imm(16)                                          -> x13
     v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x14
-    v25  ImmData(51)                                      -> x0
+    v25  ImmData(51)                                      -> x13
     v26  Store { addr=v24, value=v25, kind=I64 }          -> -
     v27  Imm(-2)                                          -> x21
-    v28  LocalAddr(-3)                                    -> x0
+    v28  LocalAddr(-3)                                    -> x13
     v29  LoadLocal { off=2, kind=I32 }                    -> x14
     v30  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x14
-    v31  Binop { op=add, lhs=v28, rhs=v30 }               -> x0
+    v31  Binop { op=add, lhs=v28, rhs=v30 }               -> x13
     v32  Load { addr=v31, kind=I64 }                      -> x22
     v33  CallExt { binding_idx=37, args=[v27, v32], fp_arg_mask=0x0 } -> x0
     v34  Imm(0)                                           -> x22
@@ -57,7 +57,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v44  LoadLocal { off=2, kind=I32 }                    -> x0
     v45  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x20
     v46  Binop { op=add, lhs=v43, rhs=v45 }               -> x21
-    v47  Load { addr=v46, kind=I64 }                      -> x0
+    v47  Load { addr=v46, kind=I64 }                      -> x20
     terminator Return(v47)   (exit_acc=v47)
 ; name=__clear_cache
 fn ent_pc=1 n_params=2 variadic=false locals=2
@@ -82,96 +82,96 @@ fn ent_pc=15 n_params=0 variadic=false locals=9
     v1   Imm(0)                                           -> x15
     terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v1)
   block 1  start_pc=0
-    v2   Imm(1)                                           -> x0
+    v2   Imm(1)                                           -> x14
     terminator Return(v2)   (exit_acc=v2)
   block 2  start_pc=0
     v3   Imm(0)                                           -> x15
     terminator Bz { cond=v3, target=b4, fall=b3 }   (exit_acc=v3)
   block 3  start_pc=0
-    v4   Imm(2)                                           -> x0
+    v4   Imm(2)                                           -> x14
     terminator Return(v4)   (exit_acc=v4)
   block 4  start_pc=0
     v5   Imm(0)                                           -> x15
     terminator Bz { cond=v5, target=b6, fall=b5 }   (exit_acc=v5)
   block 5  start_pc=0
-    v6   Imm(3)                                           -> x0
+    v6   Imm(3)                                           -> x14
     terminator Return(v6)   (exit_acc=v6)
   block 6  start_pc=0
     v7   Imm(0)                                           -> x15
     terminator Bz { cond=v7, target=b8, fall=b7 }   (exit_acc=v7)
   block 7  start_pc=0
-    v8   Imm(4)                                           -> x0
+    v8   Imm(4)                                           -> x14
     terminator Return(v8)   (exit_acc=v8)
   block 8  start_pc=0
     v9   Imm(0)                                           -> x15
     terminator Bz { cond=v9, target=b10, fall=b9 }   (exit_acc=v9)
   block 9  start_pc=0
-    v10  Imm(5)                                           -> x0
+    v10  Imm(5)                                           -> x14
     terminator Return(v10)   (exit_acc=v10)
   block 10  start_pc=0
     v11  Imm(0)                                           -> x15
     terminator Bz { cond=v11, target=b12, fall=b11 }   (exit_acc=v11)
   block 11  start_pc=0
-    v12  Imm(6)                                           -> x0
+    v12  Imm(6)                                           -> x14
     terminator Return(v12)   (exit_acc=v12)
   block 12  start_pc=0
     v13  Imm(0)                                           -> x15
     terminator Bz { cond=v13, target=b14, fall=b13 }   (exit_acc=v13)
   block 13  start_pc=0
-    v14  Imm(11)                                          -> x0
+    v14  Imm(11)                                          -> x14
     terminator Return(v14)   (exit_acc=v14)
   block 14  start_pc=0
     v15  Imm(0)                                           -> x15
     terminator Bz { cond=v15, target=b16, fall=b15 }   (exit_acc=v15)
   block 15  start_pc=0
-    v16  Imm(12)                                          -> x0
+    v16  Imm(12)                                          -> x14
     terminator Return(v16)   (exit_acc=v16)
   block 16  start_pc=0
     v17  Imm(0)                                           -> x15
     terminator Bz { cond=v17, target=b18, fall=b17 }   (exit_acc=v17)
   block 17  start_pc=0
-    v18  Imm(13)                                          -> x0
+    v18  Imm(13)                                          -> x14
     terminator Return(v18)   (exit_acc=v18)
   block 18  start_pc=0
     v19  Imm(0)                                           -> x15
     terminator Bz { cond=v19, target=b20, fall=b19 }   (exit_acc=v19)
   block 19  start_pc=0
-    v20  Imm(14)                                          -> x0
+    v20  Imm(14)                                          -> x14
     terminator Return(v20)   (exit_acc=v20)
   block 20  start_pc=0
     v21  Imm(0)                                           -> x15
     terminator Bz { cond=v21, target=b22, fall=b21 }   (exit_acc=v21)
   block 21  start_pc=0
-    v22  Imm(15)                                          -> x0
+    v22  Imm(15)                                          -> x14
     terminator Return(v22)   (exit_acc=v22)
   block 22  start_pc=0
     v23  Imm(0)                                           -> x15
     terminator Bz { cond=v23, target=b24, fall=b23 }   (exit_acc=v23)
   block 23  start_pc=0
-    v24  Imm(16)                                          -> x0
+    v24  Imm(16)                                          -> x14
     terminator Return(v24)   (exit_acc=v24)
   block 24  start_pc=0
     v25  Imm(1234605616436508552)                         -> x15
-    v26  Imm(0)                                           -> x0
-    v27  LoadLocal { off=-1, kind=I64 }                   -> x0
+    v26  Imm(0)                                           -> x14
+    v27  LoadLocal { off=-1, kind=I64 }                   -> x14
     v28  BinopI { op=ne, lhs=v25, rhs_imm=1234605616436508552 } -> x15
     terminator Bz { cond=v28, target=b26, fall=b25 }   (exit_acc=v28)
   block 25  start_pc=0
-    v29  Imm(21)                                          -> x0
+    v29  Imm(21)                                          -> x14
     terminator Return(v29)   (exit_acc=v29)
   block 26  start_pc=0
     v30  Imm(-81985529216486896)                          -> x15
-    v31  Imm(0)                                           -> x0
-    v32  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v31  Imm(0)                                           -> x14
+    v32  LoadLocal { off=-2, kind=I64 }                   -> x14
     v33  BinopI { op=ne, lhs=v30, rhs_imm=-81985529216486896 } -> x15
     terminator Bz { cond=v33, target=b28, fall=b27 }   (exit_acc=v33)
   block 27  start_pc=0
-    v34  Imm(22)                                          -> x0
+    v34  Imm(22)                                          -> x14
     terminator Return(v34)   (exit_acc=v34)
   block 28  start_pc=0
     v35  Imm(42)                                          -> x15
     v36  StoreLocal { off=-3, value=v35, kind=I32 }       -> -
-    v37  LocalAddr(-3)                                    -> x0
+    v37  LocalAddr(-3)                                    -> x14
     v38  Imm(0)                                           -> x15
     v39  LoadLocal { off=-4, kind=I64 }                   -> x15
     v40  Imm(0)                                           -> x15
@@ -182,18 +182,18 @@ fn ent_pc=15 n_params=0 variadic=false locals=9
     v45  BinopI { op=ne, lhs=v44, rhs_imm=42 }            -> x15
     terminator Bz { cond=v45, target=b30, fall=b29 }   (exit_acc=v45)
   block 29  start_pc=0
-    v46  Imm(23)                                          -> x0
+    v46  Imm(23)                                          -> x14
     terminator Return(v46)   (exit_acc=v46)
   block 30  start_pc=0
     v47  Imm(-1)                                          -> x15
-    v48  Imm(0)                                           -> x0
+    v48  Imm(0)                                           -> x14
     v49  Extend { value=v47, kind=I16 }                   -> x15
-    v50  Imm(0)                                           -> x0
+    v50  Imm(0)                                           -> x14
     v51  Extend { value=v49, kind=I32 }                   -> x15
     v52  BinopI { op=ne, lhs=v51, rhs_imm=-1 }            -> x15
     terminator Bz { cond=v52, target=b32, fall=b31 }   (exit_acc=v52)
   block 31  start_pc=0
-    v53  Imm(24)                                          -> x0
+    v53  Imm(24)                                          -> x14
     terminator Return(v53)   (exit_acc=v53)
   block 32  start_pc=0
     v54  ImmData(85)                                      -> x20

@@ -27,8 +27,8 @@ Disassembly of section .text:
                	movq	%rbx, %r8
                	shlq	$0x3, %r8
                	addq	%r8, %r9
-               	movq	(%r9), %rax
-               	movq	%rax, %rcx
+               	movq	(%r9), %r8
+               	movq	%r8, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -69,8 +69,8 @@ Disassembly of section .text:
                	leaq	<rip>, %r12
                	shlq	$0x3, %rbx
                	addq	%rbx, %r12
-               	movq	(%r12), %rax
-               	movq	%rax, %rcx
+               	movq	(%r12), %rbx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -131,8 +131,8 @@ Disassembly of section .text:
                	andq	%r11, %r8
                	cmpq	$0x1, %r8
                	je	<addr>
-               	movl	$0x1, %eax
-               	movq	%rax, %rcx
+               	movl	$0x1, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
@@ -149,8 +149,8 @@ Disassembly of section .text:
                	andq	%r11, %r8
                	cmpq	$0x0, %r8
                	je	<addr>
-               	movl	$0x2, %eax
-               	movq	%rax, %rcx
+               	movl	$0x2, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
@@ -170,8 +170,8 @@ Disassembly of section .text:
                	andq	%r11, %r8
                	cmpq	$0x1, %r8
                	je	<addr>
-               	movl	$0x3, %eax
-               	movq	%rax, %rcx
+               	movl	$0x3, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
@@ -194,8 +194,8 @@ Disassembly of section .text:
                	andq	%r11, %r8
                	cmpq	$0x0, %r8
                	je	<addr>
-               	movl	$0x4, %eax
-               	movq	%rax, %rcx
+               	movl	$0x4, %r9d
+               	movq	%r9, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp

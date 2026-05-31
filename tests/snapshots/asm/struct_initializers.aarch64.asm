@@ -35,7 +35,8 @@ Disassembly of section .text:
                	ldrsw	x14, [x15]
                	cmp	x14, #0x1
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x15, #0x1               // =1
+               	mov	x0, x15
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

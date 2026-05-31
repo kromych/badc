@@ -5,14 +5,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x15
     v2   ImmData(150)                                     -> x14
-    v3   Mcpy { dst=v1, src=v2, size=6 }                  -> x13
-    v4   LocalAddr(-3)                                    -> x13
+    v3   Mcpy { dst=v1, src=v2, size=6 }                  -> x15
+    v4   LocalAddr(-3)                                    -> x15
     v5   ImmData(156)                                     -> x14
     v6   Mcpy { dst=v4, src=v5, size=12 }                 -> x15
     v7   LocalAddr(-4)                                    -> x15
     v8   ImmData(171)                                     -> x14
-    v9   Mcpy { dst=v7, src=v8, size=8 }                  -> x13
-    v10  LocalAddr(-7)                                    -> x13
+    v9   Mcpy { dst=v7, src=v8, size=8 }                  -> x15
+    v10  LocalAddr(-7)                                    -> x15
     v11  ImmData(179)                                     -> x14
     v12  Mcpy { dst=v10, src=v11, size=20 }               -> x15
     v13  ImmData(14)                                      -> x15

@@ -102,11 +102,10 @@ Disassembly of section .text:
                	ldr	x10, [x12, #0x8]
                	str	x10, [x13, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x11, x13
-               	sub	x11, x29, #0x10
-               	add	x11, x11, #0x8
-               	ldr	w11, [x11]
-               	cmp	x11, #0x7
+               	sub	x13, x29, #0x10
+               	add	x13, x13, #0x8
+               	ldr	w13, [x13]
+               	cmp	x13, #0x7
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10

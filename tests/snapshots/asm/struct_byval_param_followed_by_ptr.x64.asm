@@ -97,11 +97,10 @@ Disassembly of section .text:
                	movq	0x8(%rdi), %rax
                	movq	%rax, 0x8(%r8)
                	popq	%rax
-               	movq	%r8, %rsi
-               	leaq	-0x10(%rbp), %rsi
-               	addq	$0x8, %rsi
-               	movl	(%rsi), %esi
-               	cmpq	$0x7, %rsi
+               	leaq	-0x10(%rbp), %r8
+               	addq	$0x8, %r8
+               	movl	(%r8), %r8d
+               	cmpq	$0x7, %r8
                	je	<addr>
                	movl	$0xa, %eax
                	addq	$0x10, %rsp
@@ -225,3 +224,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

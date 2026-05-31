@@ -28,46 +28,42 @@ Disassembly of section .text:
                	movzbq	0x5(%r9), %rax
                	movb	%al, 0x5(%r11)
                	popq	%rax
-               	movq	%r11, %r8
-               	leaq	-0x18(%rbp), %r8
+               	leaq	-0x18(%rbp), %r11
                	leaq	<rip>, %r9
                	pushq	%rax
                	movq	(%r9), %rax
-               	movq	%rax, (%r8)
+               	movq	%rax, (%r11)
                	movzbq	0x8(%r9), %rax
-               	movb	%al, 0x8(%r8)
+               	movb	%al, 0x8(%r11)
                	movzbq	0x9(%r9), %rax
-               	movb	%al, 0x9(%r8)
+               	movb	%al, 0x9(%r11)
                	movzbq	0xa(%r9), %rax
-               	movb	%al, 0xa(%r8)
+               	movb	%al, 0xa(%r11)
                	movzbq	0xb(%r9), %rax
-               	movb	%al, 0xb(%r8)
+               	movb	%al, 0xb(%r11)
                	popq	%rax
-               	movq	%r8, %r11
                	leaq	-0x20(%rbp), %r11
                	leaq	<rip>, %r9
                	pushq	%rax
                	movq	(%r9), %rax
                	movq	%rax, (%r11)
                	popq	%rax
-               	movq	%r11, %r8
-               	leaq	-0x38(%rbp), %r8
+               	leaq	-0x38(%rbp), %r11
                	leaq	<rip>, %r9
                	pushq	%rax
                	movq	(%r9), %rax
-               	movq	%rax, (%r8)
+               	movq	%rax, (%r11)
                	movq	0x8(%r9), %rax
-               	movq	%rax, 0x8(%r8)
+               	movq	%rax, 0x8(%r11)
                	movzbq	0x10(%r9), %rax
-               	movb	%al, 0x10(%r8)
+               	movb	%al, 0x10(%r11)
                	movzbq	0x11(%r9), %rax
-               	movb	%al, 0x11(%r8)
+               	movb	%al, 0x11(%r11)
                	movzbq	0x12(%r9), %rax
-               	movb	%al, 0x12(%r8)
+               	movb	%al, 0x12(%r11)
                	movzbq	0x13(%r9), %rax
-               	movb	%al, 0x13(%r8)
+               	movb	%al, 0x13(%r11)
                	popq	%rax
-               	movq	%r8, %r11
                	leaq	<rip>, %r11
                	movzbq	(%r11), %r11
                	xorq	$0x68, %r11

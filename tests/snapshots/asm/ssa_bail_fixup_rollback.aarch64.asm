@@ -411,25 +411,24 @@ Disassembly of section .text:
                	ldr	x10, [x14]
                	str	x10, [x15]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
-               	mov	x13, #0x0               // =0
-               	stur	w13, [x29, #-0x70]
+               	mov	x15, #0x0               // =0
+               	stur	w15, [x29, #-0x70]
                	b	<addr>
-               	ldursw	x13, [x29, #-0x70]
-               	cmp	x13, #0x20
+               	ldursw	x15, [x29, #-0x70]
+               	cmp	x15, #0x20
                	b.ge	<addr>
                	b	<addr>
                	sub	x14, x29, #0x70
-               	ldrsw	x13, [x14]
-               	add	x13, x13, #0x1
-               	str	w13, [x14]
+               	ldrsw	x15, [x14]
+               	add	x15, x15, #0x1
+               	str	w15, [x14]
                	b	<addr>
-               	sub	x13, x29, #0x68
-               	ldursw	x15, [x29, #-0x70]
-               	add	x13, x13, x15
+               	sub	x15, x29, #0x68
+               	ldursw	x13, [x29, #-0x70]
+               	add	x15, x15, x13
                	mov	x17, #0xff              // =255
-               	and	x15, x15, x17
-               	strb	w15, [x13]
+               	and	x13, x13, x17
+               	strb	w13, [x15]
                	b	<addr>
                	sub	x20, x29, #0x40
                	mov	x21, #0x0               // =0

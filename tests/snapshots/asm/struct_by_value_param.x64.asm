@@ -22,20 +22,19 @@ Disassembly of section .text:
                	movq	(%r9), %rax
                	movq	%rax, (%r11)
                	popq	%rax
-               	movq	%r11, %r8
-               	leaq	-0x8(%rbp), %r8
-               	movslq	(%r8), %r8
+               	leaq	-0x8(%rbp), %r11
+               	movslq	(%r11), %r11
                	leaq	-0x8(%rbp), %r9
                	addq	$0x4, %r9
                	movslq	(%r9), %r9
-               	addq	%r9, %r8
-               	movslq	%r8d, %r8
+               	addq	%r9, %r11
+               	movslq	%r11d, %r11
                	leaq	-0x8(%rbp), %r9
-               	movabsq	$-0x1, %r11
-               	movl	%r11d, (%r9)
+               	movabsq	$-0x1, %r8
+               	movl	%r8d, (%r9)
                	leaq	-0x8(%rbp), %rdi
                	addq	$0x4, %rdi
-               	movl	%r11d, (%rdi)
+               	movl	%r8d, (%rdi)
                	leaq	-0x8(%rbp), %r9
                	movslq	(%r9), %r9
                	cmpq	$-0x1, %r9
@@ -59,7 +58,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	movslq	%r8d, %r9
+               	movslq	%r11d, %r9
                	movq	%r9, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -122,4 +121,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

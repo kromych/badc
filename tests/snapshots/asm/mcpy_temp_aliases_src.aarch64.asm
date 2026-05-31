@@ -66,7 +66,6 @@ Disassembly of section .text:
                	ldr	x10, [x7, #0x18]
                	str	x10, [x6, #0x18]
                	ldr	x10, [sp], #0x10
-               	mov	x8, x6
                	sxtw	x15, w15
                	cmp	x15, #0x37
                	b.eq	<addr>

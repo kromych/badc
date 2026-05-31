@@ -38,29 +38,28 @@ Disassembly of section .text:
                	ldr	x10, [x14]
                	str	x10, [x15]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
-               	sub	x13, x29, #0x8
-               	ldr	x14, [x13]
-               	mov	x15, #0x18              // =24
-               	udiv	x14, x14, x15
-               	ldr	x13, [x13]
-               	mov	x15, #0x7               // =7
-               	udiv	x17, x13, x15
-               	msub	x13, x17, x15, x13
+               	sub	x15, x29, #0x8
+               	ldr	x14, [x15]
+               	mov	x13, #0x18              // =24
+               	udiv	x14, x14, x13
+               	ldr	x15, [x15]
+               	mov	x13, #0x7               // =7
+               	udiv	x17, x15, x13
+               	msub	x15, x17, x13, x15
                	sxtw	x14, w14
                	mov	x17, #0x64              // =100
                	mul	x14, x14, x17
                	sxtw	x14, w14
-               	sxtw	x13, w13
-               	add	x14, x14, x13
+               	sxtw	x15, w15
+               	add	x14, x14, x15
                	sxtw	x14, w14
                	cmp	x14, #0x3ea
                	b.ne	<addr>
-               	mov	x13, #0x0               // =0
-               	stur	x13, [x29, #-0x18]
+               	mov	x15, #0x0               // =0
+               	stur	x15, [x29, #-0x18]
                	b	<addr>
-               	mov	x13, #0x1               // =1
-               	stur	x13, [x29, #-0x18]
+               	mov	x15, #0x1               // =1
+               	stur	x15, [x29, #-0x18]
                	b	<addr>
                	ldur	x0, [x29, #-0x18]
                	ldr	x19, [sp]

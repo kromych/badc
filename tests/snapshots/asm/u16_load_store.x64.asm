@@ -94,7 +94,6 @@ Disassembly of section .text:
                	movzbq	0x9(%r9), %rax
                	movb	%al, 0x9(%r11)
                	popq	%rax
-               	movq	%r11, %r8
                	leaq	-0x20(%rbp), %rbx
                	xorq	%r12, %r12
                	movl	$0xa, %r14d
@@ -217,4 +216,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

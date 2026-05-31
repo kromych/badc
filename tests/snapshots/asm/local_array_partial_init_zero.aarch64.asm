@@ -81,29 +81,28 @@ Disassembly of section .text:
                	ldrb	w10, [x14, #0x63]
                	strb	w10, [x15, #0x63]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
-               	mov	x13, #0x0               // =0
-               	stur	w13, [x29, #-0x70]
-               	stur	w13, [x29, #-0x78]
+               	mov	x15, #0x0               // =0
+               	stur	w15, [x29, #-0x70]
+               	stur	w15, [x29, #-0x78]
                	b	<addr>
-               	ldursw	x13, [x29, #-0x78]
-               	cmp	x13, #0x19
+               	ldursw	x15, [x29, #-0x78]
+               	cmp	x15, #0x19
                	b.ge	<addr>
                	b	<addr>
                	sub	x14, x29, #0x78
-               	ldrsw	x13, [x14]
-               	add	x13, x13, #0x1
-               	str	w13, [x14]
+               	ldrsw	x15, [x14]
+               	add	x15, x15, #0x1
+               	str	w15, [x14]
                	b	<addr>
-               	sub	x13, x29, #0x70
-               	ldr	w15, [x13]
+               	sub	x15, x29, #0x70
+               	ldr	w13, [x15]
                	sub	x14, x29, #0x68
                	ldursw	x12, [x29, #-0x78]
                	lsl	x12, x12, #2
                	add	x14, x14, x12
                	ldr	w14, [x14]
-               	add	x15, x15, x14
-               	str	w15, [x13]
+               	add	x13, x13, x14
+               	str	w13, [x15]
                	b	<addr>
                	ldur	w0, [x29, #-0x70]
                	ldr	x19, [sp]

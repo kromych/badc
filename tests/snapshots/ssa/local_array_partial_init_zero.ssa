@@ -47,30 +47,30 @@ fn ent_pc=1 n_params=0 variadic=false locals=15
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-13)                                   -> x15
     v2   ImmData(8)                                       -> x14
-    v3   Mcpy { dst=v1, src=v2, size=100 }                -> x13
-    v4   Imm(0)                                           -> x13
+    v3   Mcpy { dst=v1, src=v2, size=100 }                -> x15
+    v4   Imm(0)                                           -> x15
     v5   StoreLocal { off=-14, value=v4, kind=I32 }       -> -
     v6   StoreLocal { off=-15, value=v4, kind=I32 }       -> -
     terminator Jmp(b1)   (exit_acc=v6)
   block 1  start_pc=0
-    v7   LoadLocal { off=-15, kind=I32 }                  -> x13
-    v8   BinopI { op=lt, lhs=v7, rhs_imm=25 }             -> x13
+    v7   LoadLocal { off=-15, kind=I32 }                  -> x15
+    v8   BinopI { op=lt, lhs=v7, rhs_imm=25 }             -> x15
     terminator Bz { cond=v8, target=b4, fall=b3 }   (exit_acc=v8)
   block 2  start_pc=0
     v9   LocalAddr(-15)                                   -> x14
-    v10  Load { addr=v9, kind=I32 }                       -> x13
-    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x13
+    v10  Load { addr=v9, kind=I32 }                       -> x15
+    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x15
     v12  Store { addr=v9, value=v11, kind=I32 }           -> -
     terminator Jmp(b1)   (exit_acc=v12)
   block 3  start_pc=0
-    v13  LocalAddr(-14)                                   -> x13
-    v14  Load { addr=v13, kind=U32 }                      -> x15
+    v13  LocalAddr(-14)                                   -> x15
+    v14  Load { addr=v13, kind=U32 }                      -> x13
     v15  LocalAddr(-13)                                   -> x14
     v16  LoadLocal { off=-15, kind=I32 }                  -> x12
     v17  BinopI { op=shl, lhs=v16, rhs_imm=2 }            -> x12
     v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x14
     v19  Load { addr=v18, kind=U32 }                      -> x14
-    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x15
+    v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x13
     v21  Store { addr=v13, value=v20, kind=I32 }          -> -
     terminator Jmp(b2)   (exit_acc=v21)
   block 4  start_pc=0

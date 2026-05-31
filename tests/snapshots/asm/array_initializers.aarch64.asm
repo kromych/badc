@@ -32,24 +32,22 @@ Disassembly of section .text:
                	ldrb	w10, [x14, #0x5]
                	strb	w10, [x15, #0x5]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
-               	sub	x13, x29, #0x18
+               	sub	x15, x29, #0x18
                	adrp	x19, <page>
                	add	x19, x19, #0x164
                	mov	x14, x19
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x14]
-               	str	x10, [x13]
+               	str	x10, [x15]
                	ldrb	w10, [x14, #0x8]
-               	strb	w10, [x13, #0x8]
+               	strb	w10, [x15, #0x8]
                	ldrb	w10, [x14, #0x9]
-               	strb	w10, [x13, #0x9]
+               	strb	w10, [x15, #0x9]
                	ldrb	w10, [x14, #0xa]
-               	strb	w10, [x13, #0xa]
+               	strb	w10, [x15, #0xa]
                	ldrb	w10, [x14, #0xb]
-               	strb	w10, [x13, #0xb]
+               	strb	w10, [x15, #0xb]
                	ldr	x10, [sp], #0x10
-               	mov	x15, x13
                	sub	x15, x29, #0x20
                	adrp	x19, <page>
                	add	x19, x19, #0x173
@@ -58,26 +56,24 @@ Disassembly of section .text:
                	ldr	x10, [x14]
                	str	x10, [x15]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
-               	sub	x13, x29, #0x38
+               	sub	x15, x29, #0x38
                	adrp	x19, <page>
                	add	x19, x19, #0x17b
                	mov	x14, x19
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x14]
-               	str	x10, [x13]
+               	str	x10, [x15]
                	ldr	x10, [x14, #0x8]
-               	str	x10, [x13, #0x8]
+               	str	x10, [x15, #0x8]
                	ldrb	w10, [x14, #0x10]
-               	strb	w10, [x13, #0x10]
+               	strb	w10, [x15, #0x10]
                	ldrb	w10, [x14, #0x11]
-               	strb	w10, [x13, #0x11]
+               	strb	w10, [x15, #0x11]
                	ldrb	w10, [x14, #0x12]
-               	strb	w10, [x13, #0x12]
+               	strb	w10, [x15, #0x12]
                	ldrb	w10, [x14, #0x13]
-               	strb	w10, [x13, #0x13]
+               	strb	w10, [x15, #0x13]
                	ldr	x10, [sp], #0x10
-               	mov	x15, x13
                	adrp	x19, <page>
                	add	x19, x19, #0xd6
                	mov	x15, x19

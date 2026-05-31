@@ -340,6 +340,14 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 // `mov rd, [rd]` and aarch64 `ldr rd, [rd]` both read
                 // the operand before writing the result.
                 Inst::Load { addr, .. } => Some(*addr),
+                // Mcpy returns its `dst` pointer (memcpy contract).
+                // When the dst operand dies at the Mcpy, the result
+                // can reuse its register: the unrolled-copy loop
+                // reads dst_r as the store base but never overwrites
+                // it, so dst_r still carries the same pointer after
+                // the loop. The final `mov result_r, dst_r` then
+                // self-mov-elides.
+                Inst::Mcpy { dst: m_dst, .. } => Some(*m_dst),
                 _ => None,
             };
             if let Some(src) = coalesce_src

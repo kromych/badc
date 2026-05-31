@@ -105,7 +105,6 @@ Disassembly of section .text:
                	ldrb	w10, [x14, #0x9]
                	strb	w10, [x15, #0x9]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
                	sub	x20, x29, #0x20
                	mov	x21, #0x0               // =0
                	mov	x22, #0xa               // =10

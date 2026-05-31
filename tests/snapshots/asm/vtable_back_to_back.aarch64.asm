@@ -135,11 +135,10 @@ Disassembly of section .text:
                	ldr	x10, [x14, #0x8]
                	str	x10, [x15, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x13, x15
                	adrp	x19, <page>
                	add	x19, x19, #0x150
-               	mov	x13, x19
-               	ldr	x20, [x13]
+               	mov	x15, x19
+               	ldr	x20, [x15]
                	sub	x21, x29, #0x10
                	adrp	x19, <page>
                	add	x19, x19, #0x160

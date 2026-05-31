@@ -159,28 +159,27 @@ Disassembly of section .text:
                	movq	(%r8), %rax
                	movq	%rax, (%rsi)
                	popq	%rax
-               	movq	%rsi, %rax
-               	leaq	-0x68(%rbp), %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	leaq	-0x68(%rbp), %rsi
+               	movslq	(%rsi), %rsi
+               	cmpq	$0x0, %rsi
                	je	<addr>
-               	movl	$0xd, %esi
-               	movq	%rsi, %rax
+               	movl	$0xd, %eax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x68(%rbp), %rax
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	leaq	-0x68(%rbp), %rsi
+               	addq	$0x4, %rsi
+               	movslq	(%rsi), %rsi
+               	cmpq	$0x0, %rsi
                	je	<addr>
-               	movl	$0xe, %esi
+               	movl	$0xe, %eax
+               	addq	$0x70, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rsi, %rsi
                	movq	%rsi, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	addq	$0x70, %rsp
-               	popq	%rbp
-               	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

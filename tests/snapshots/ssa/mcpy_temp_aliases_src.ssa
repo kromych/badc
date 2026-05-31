@@ -63,7 +63,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v58  Imm(0)                                           -> x6
     v59  LocalAddr(-4)                                    -> x6
     v60  ImmData(8)                                       -> x7
-    v61  Mcpy { dst=v59, src=v60, size=32 }               -> x8
+    v61  Mcpy { dst=v59, src=v60, size=32 }               -> x6
     v62  Extend { value=v57, kind=I32 }                   -> x15
     v63  BinopI { op=ne, lhs=v62, rhs_imm=55 }            -> x15
     terminator Bz { cond=v63, target=b2, fall=b1 }   (exit_acc=v63)

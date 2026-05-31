@@ -185,25 +185,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     v111 Store { addr=v110, value=v107, kind=I32 }        -> -
     v112 LocalAddr(-12)                                   -> x13
     v113 LocalAddr(-13)                                   -> x11
-    v114 Mcpy { dst=v113, src=v112, size=8 }              -> x0
-    v115 LocalAddr(-13)                                   -> x0
-    v116 Load { addr=v115, kind=I32 }                     -> x0
-    v117 BinopI { op=ne, lhs=v116, rhs_imm=0 }            -> x0
+    v114 Mcpy { dst=v113, src=v112, size=8 }              -> x11
+    v115 LocalAddr(-13)                                   -> x11
+    v116 Load { addr=v115, kind=I32 }                     -> x11
+    v117 BinopI { op=ne, lhs=v116, rhs_imm=0 }            -> x11
     terminator Bz { cond=v117, target=b26, fall=b25 }   (exit_acc=v117)
   block 25  start_pc=0
-    v118 Imm(13)                                          -> x11
+    v118 Imm(13)                                          -> x0
     terminator Return(v118)   (exit_acc=v118)
   block 26  start_pc=0
-    v119 LocalAddr(-13)                                   -> x0
-    v120 BinopI { op=add, lhs=v119, rhs_imm=4 }           -> x0
-    v121 Load { addr=v120, kind=I32 }                     -> x0
-    v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> x0
+    v119 LocalAddr(-13)                                   -> x11
+    v120 BinopI { op=add, lhs=v119, rhs_imm=4 }           -> x11
+    v121 Load { addr=v120, kind=I32 }                     -> x11
+    v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> x11
     terminator Bz { cond=v122, target=b28, fall=b27 }   (exit_acc=v122)
   block 27  start_pc=0
-    v123 Imm(14)                                          -> x11
+    v123 Imm(14)                                          -> x0
     terminator Return(v123)   (exit_acc=v123)
   block 28  start_pc=0
-    v124 Imm(0)                                           -> x0
+    v124 Imm(0)                                           -> x11
     terminator Return(v124)   (exit_acc=v124)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

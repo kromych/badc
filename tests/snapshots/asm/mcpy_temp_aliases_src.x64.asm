@@ -65,7 +65,6 @@ Disassembly of section .text:
                	movq	0x18(%r15), %rax
                	movq	%rax, 0x18(%r14)
                	popq	%rax
-               	movq	%r14, %rax
                	movslq	%r11d, %r11
                	cmpq	$0x37, %r11
                	je	<addr>
@@ -143,4 +142,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

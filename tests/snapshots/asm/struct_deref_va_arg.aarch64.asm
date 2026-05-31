@@ -108,8 +108,7 @@ Disassembly of section .text:
                	ldr	x10, [x15, #0x8]
                	str	x10, [x13, #0x8]
                	ldr	x10, [sp], #0x10
-               	mov	x14, x13
-               	sub	x14, x29, #0x8
+               	sub	x13, x29, #0x8
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x20

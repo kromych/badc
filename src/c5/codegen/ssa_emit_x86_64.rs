@@ -3722,13 +3722,9 @@ fn emit_tail_call(
     // caller-saved arg-reg window is disjoint from `alloc.gpr_used`
     // (only callee-saved regs land there), so the epilogue's
     // restores below cannot clobber the marshalled values.
-    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    let mut plan = super::plan_call_args(args.len(), args.len(), 0, abi);
     // `detect_tail_call` rejects arg counts above `int_arg_regs.len()`,
-    // so no `Stack(offset)` placements ever reach here. `scratch_bytes`
-    // may still be nonzero on Win64 (the 32-byte shadow space rides
-    // above the arg-reg window), but that area is already part of our
-    // caller's frame -- after the epilogue restores rsp the callee
-    // sees it exactly as a non-tail caller would have set it up.
+    // so no `Stack(offset)` placements ever reach here.
     if plan
         .placements
         .iter()
@@ -3739,6 +3735,14 @@ fn emit_tail_call(
              detect_tail_call should have rejected arg_count > int_arg_regs"
         );
     }
+    // marshal_args adds plan.scratch_bytes to every spill-slot rsp
+    // offset because regular call sites do `sub rsp, scratch_bytes`
+    // ahead of the marshal to set up the Win64 shadow-space window.
+    // The tail-call path doesn't allocate that window (the callee
+    // inherits the slot from our caller's frame), so rsp has not
+    // moved -- any spill load must use the natural slot offset.
+    // Clear scratch_bytes to suppress the marshal's sp_shift add.
+    plan.scratch_bytes = 0;
     if !marshal_args(code, &plan, args, alloc, frame, "TailCall") {
         return false;
     }

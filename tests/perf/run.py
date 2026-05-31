@@ -281,7 +281,7 @@ def render_table(fixtures: list[str], results: list[Result]) -> str:
             r = rows.get(c)
             if r is None:
                 continue
-            ratio = "—"
+            ratio = "-"
             if baseline is not None and baseline.median_ms > 0:
                 ratio = f"{r.median_ms / baseline.median_ms:.2f}x"
             out.append(

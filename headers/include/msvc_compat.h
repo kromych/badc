@@ -103,7 +103,7 @@
 // for the unrecognised spelling, so sources retaining it
 // compile cleanly.
 
-// ── kernel32 / msvcrt bindings ────────────────────────────────
+// ---- kernel32 / msvcrt bindings -----------------------------
 //
 // Sources that declare imports as `__declspec(dllimport) X
 // f(...)` rely on a separate link step to wire the IAT.

@@ -754,8 +754,35 @@ jobs:
       - name: --all-features
         run: cargo build --locked --all-features --verbose
 
+  snapshots-clean:
+    name: snapshots clean
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: snapshots-clean
+      - name: build badc release
+        run: cargo build --release --locked
+      - name: regenerate snapshots
+        run: python3 scripts/snapshots.py
+      - name: verify no diff
+        run: |
+          if ! git diff --quiet tests/snapshots/; then
+            echo "::error::tests/snapshots/ drifted from the committed copy"
+            git --no-pager diff --stat tests/snapshots/
+            git --no-pager diff tests/snapshots/ | head -200
+            exit 1
+          fi
+
   perf-table:
     name: perf comparison (${{ matrix.os }})
+    needs: test
     strategy:
       fail-fast: false
       matrix:

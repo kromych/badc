@@ -65,8 +65,7 @@ Disassembly of section .text:
                	and	x15, x15, x17
                	cmp	x15, #0x3
                	b.eq	<addr>
-               	mov	x13, #0x1               // =1
-               	mov	x0, x13
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -145,8 +144,7 @@ Disassembly of section .text:
                	and	x20, x20, x17
                	cmp	x20, #0x0
                	b.eq	<addr>
-               	mov	x21, #0x7               // =7
-               	mov	x0, x21
+               	mov	x0, #0x7                // =7
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]

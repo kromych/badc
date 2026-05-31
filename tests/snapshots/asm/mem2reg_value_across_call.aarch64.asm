@@ -72,7 +72,8 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x17, #0x7f              // =127
-               	and	x0, x0, x17
+               	and	x20, x0, x17
+               	mov	x0, x20
                	ldr	x20, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

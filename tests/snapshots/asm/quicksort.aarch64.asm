@@ -67,7 +67,8 @@ Disassembly of section .text:
                	bl	<addr>
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
+               	sxtw	x20, w0
+               	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -219,8 +220,7 @@ Disassembly of section .text:
                	ldrsw	x20, [x21]
                	cmp	x20, #0xf
                	b.eq	<addr>
-               	mov	x21, #0x5               // =5
-               	mov	x0, x21
+               	mov	x0, #0x5                // =5
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

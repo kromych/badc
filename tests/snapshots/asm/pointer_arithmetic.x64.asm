@@ -28,8 +28,8 @@ Disassembly of section .text:
                	addq	$0x4, %rax
                	movslq	(%rax), %rbx
                	addq	%rbx, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, %rcx
+               	movslq	%edi, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x20, %rsp

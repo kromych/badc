@@ -18,6 +18,7 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x23, [sp, #0x18]
                	str	x24, [sp, #0x20]
+               	str	x25, [sp, #0x28]
                	str	x19, [sp, #0x30]
                	adrp	x19, <page>
                	add	x19, x19, #0x108
@@ -31,13 +32,13 @@ Disassembly of section .text:
                	sxtw	x21, w22
                	cmp	x21, #0x0
                	b.ge	<addr>
-               	mov	x20, #0x1               // =1
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
                	ldr	x19, [sp, #0x30]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
@@ -46,26 +47,27 @@ Disassembly of section .text:
                	mov	x0, x23
                	bl	<addr>
                	mov	x21, x0
-               	sxtw	x20, w22
+               	sxtw	x24, w22
                	mov	x23, #0x9               // =9
-               	mov	x0, x20
+               	mov	x0, x24
                	mov	x2, x23
                	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
                	add	x21, x21, #0x9
-               	mov	x24, #0x0               // =0
-               	strb	w24, [x21]
+               	mov	x25, #0x0               // =0
+               	strb	w25, [x21]
                	sxtw	x22, w22
                	mov	x0, x22
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, x24
+               	mov	x0, x25
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
+               	ldr	x25, [sp, #0x28]
                	ldr	x19, [sp, #0x30]
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

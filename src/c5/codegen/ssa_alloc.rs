@@ -231,7 +231,6 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
-    populate_return_hints(func, target, &mut hints);
     populate_param_ref_hints(func, target, &mut hints);
     populate_phi_hints(func, &mut hints);
     if n_insts == 0 {
@@ -252,15 +251,10 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     let banks = RegBanks::for_target(target);
     let last_use = compute_last_use(func);
     let calls_after_def = compute_calls_after_def(func, &last_use, target);
-    // Call-argument coalescing hints. Run after `last_use` and
-    // `calls_after_def` so the per-value safety guards can read them.
-    // The prior unconditional ABI-hint pass was reverted in commit
-    // 1609bbc after it sent a value to a caller-saved arg register
-    // even when the value's interval extended past the call --
-    // a later use then read the call-clobbered register. Restrict
-    // the hint to values whose last use is exactly this call so the
-    // call consumes them and there is no surviving live range to
-    // protect.
+    // Return / call-arg / call-result hints all gate on the
+    // per-value `calls_after_def` flag so they're staged after
+    // it is available.
+    populate_return_hints(func, target, &calls_after_def, &mut hints);
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
@@ -924,26 +918,22 @@ fn populate_call_result_hints(
 /// the return register. The pick-reg path honours each hint only when
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
-fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
-    // Hint the value feeding `Terminator::Return` to the ABI
-    // return register so a leaf function's exit move drops out.
-    // Scope restricted to leaf functions: the hint is unsafe
-    // when a call sits between the return value's def and the
-    // Return, because the allocator's must-be-callee filter
-    // checks the value's [def, last_use] interval, but the hint
-    // pre-commits the value to a caller-saved register before
-    // that interval ends -- under-reported back-edge live
-    // ranges then escape the must-be-callee guard. Leaf
-    // functions have no calls and so no clobber to worry about.
-    let has_call = func.insts.iter().any(|inst| {
-        matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        )
-    });
-    if has_call {
-        return;
-    }
+fn populate_return_hints(
+    func: &FunctionSsa,
+    target: Target,
+    calls_after_def: &[bool],
+    hints: &mut [Option<u8>],
+) {
+    // Hint each `Terminator::Return`'s value to the ABI return
+    // register so the exit move drops to a self-mov. The gate is
+    // per-value: when a call sits between v's def and the Return
+    // the must-be-callee guard would reject the caller-saved
+    // return-reg hint, but the hint pre-commits before the
+    // allocator's pick path sees the constraint -- under-reported
+    // back-edge live ranges then race the call-clobber. The
+    // `!calls_after_def[v]` filter is sufficient: a value with
+    // no intervening call between def and last_use is safe in
+    // any caller-saved register, including the return slot.
     let (ret_int, ret_fp) = match target {
         Target::MacOSAarch64
         | Target::LinuxAarch64
@@ -952,9 +942,12 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
         | Target::WindowsX64 => (0u8, 0u8),
     };
 
-    fn try_set(hints: &mut [Option<u8>], id: ValueId, reg: u8) {
+    fn try_set(hints: &mut [Option<u8>], calls_after_def: &[bool], id: ValueId, reg: u8) {
         let slot = id as usize;
-        if slot < hints.len() && hints[slot].is_none() {
+        if slot < hints.len()
+            && hints[slot].is_none()
+            && !calls_after_def.get(slot).copied().unwrap_or(true)
+        {
             hints[slot] = Some(reg);
         }
     }
@@ -965,8 +958,8 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
             && (v as usize) < func.insts.len()
         {
             match result_kind(&func.insts[v as usize]) {
-                ResultKind::Int => try_set(hints, v, ret_int),
-                ResultKind::Fp => try_set(hints, v, ret_fp),
+                ResultKind::Int => try_set(hints, calls_after_def, v, ret_int),
+                ResultKind::Fp => try_set(hints, calls_after_def, v, ret_fp),
                 ResultKind::None => {}
             }
         }

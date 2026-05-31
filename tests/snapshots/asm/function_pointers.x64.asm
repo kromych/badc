@@ -43,8 +43,8 @@ Disassembly of section .text:
                	movslq	%r15d, %r15
                	movslq	%eax, %rax
                	imulq	%rax, %r15
-               	movslq	%r15d, %r15
-               	movq	%r15, %rcx
+               	movslq	%r15d, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

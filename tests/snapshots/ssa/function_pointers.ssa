@@ -50,7 +50,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v15  Extend { value=v12, kind=I32 }                   -> x0
     v16  Binop { op=mul, lhs=v14, rhs=v15 }               -> x23
     v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x23
-    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x23
+    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x0
     terminator Return(v18)   (exit_acc=v18)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

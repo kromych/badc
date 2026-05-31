@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ldursw	x13, [x29, #-0x8]
                	cmp	x13, #0x2a
                	b.eq	<addr>
-               	mov	x15, #0x1               // =1
-               	mov	x0, x15
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -38,8 +37,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x13, [x29, #-0x10]
-               	ldrsw	x15, [x13]
-               	cmp	x15, #0x2a
+               	ldrsw	x0, [x13]
+               	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x13, #0x2               // =2
                	mov	x0, x13

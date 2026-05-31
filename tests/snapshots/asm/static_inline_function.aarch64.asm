@@ -58,8 +58,7 @@ Disassembly of section .text:
                	sxtw	x15, w15
                	cmp	x15, #0x7
                	b.eq	<addr>
-               	mov	x14, #0x1               // =1
-               	mov	x0, x14
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10
@@ -80,8 +79,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x15, x17
                	b.eq	<addr>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	add	sp, sp, #0x10

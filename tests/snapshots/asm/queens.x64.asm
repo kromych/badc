@@ -83,8 +83,8 @@ Disassembly of section .text:
                	movslq	%esi, %r12
                	cmpq	$0x8, %r12
                	jne	<addr>
-               	movl	$0x1, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -101,10 +101,10 @@ Disassembly of section .text:
                	cmpq	$0x8, %r8
                	jge	<addr>
                	jmp	<addr>
-               	movslq	-0x10(%rbp), %rdi
-               	addq	$0x1, %rdi
-               	movslq	%edi, %rdi
-               	movl	%edi, -0x10(%rbp)
+               	movslq	-0x10(%rbp), %rax
+               	addq	$0x1, %rax
+               	movslq	%eax, %rax
+               	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	movslq	-0x10(%rbp), %r14
                	movq	%rbx, %rdi

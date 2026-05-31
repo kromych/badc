@@ -68,11 +68,12 @@ Disassembly of section .text:
                	movl	$0x3, %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	andq	$0x7f, %rax
-               	movq	%rax, %rcx
+               	movq	%rax, %rbx
+               	andq	$0x7f, %rbx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

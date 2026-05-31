@@ -65,7 +65,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x20
     v2   Call { target_pc=2, args=[v1] }                  -> x0
-    v3   BinopI { op=and, lhs=v2, rhs_imm=127 }           -> x0
+    v3   BinopI { op=and, lhs=v2, rhs_imm=127 }           -> x20
     terminator Return(v3)   (exit_acc=v3)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

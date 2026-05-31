@@ -26,8 +26,8 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %r8
                	cmpq	$0x2a, %r8
                	je	<addr>
-               	movl	$0x1, %r11d
-               	movq	%r11, %rcx
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -36,8 +36,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	-0x10(%rbp), %r8
-               	movslq	(%r8), %r11
-               	cmpq	$0x2a, %r11
+               	movslq	(%r8), %rax
+               	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x2, %r8d
                	movq	%r8, %rcx
@@ -96,3 +96,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

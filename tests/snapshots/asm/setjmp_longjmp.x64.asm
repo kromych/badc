@@ -42,8 +42,8 @@ Disassembly of section .text:
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
                	je	<addr>
-               	movl	$0xb, %r9d
-               	movq	%r9, %rcx
+               	movl	$0xb, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -129,5 +129,3 @@ Disassembly of section .text:
                	addq	$0x250, %rsp            # imm = 0x250
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

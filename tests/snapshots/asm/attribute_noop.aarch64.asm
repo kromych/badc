@@ -30,8 +30,7 @@ Disassembly of section .text:
                	mov	x14, x19
                	lsl	x13, x20, #3
                	add	x14, x14, x13
-               	ldr	x13, [x14]
-               	mov	x0, x13
+               	ldr	x0, [x14]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -78,8 +77,7 @@ Disassembly of section .text:
                	mov	x21, x19
                	lsl	x20, x20, #3
                	add	x21, x21, x20
-               	ldr	x20, [x21]
-               	mov	x0, x20
+               	ldr	x0, [x21]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -107,8 +105,7 @@ Disassembly of section .text:
                	sxtw	x15, w15
                	cmp	x15, #0x5
                	b.eq	<addr>
-               	mov	x14, #0xb               // =11
-               	mov	x0, x14
+               	mov	x0, #0xb                // =11
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     terminator Return(v9)   (exit_acc=v9)
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=5
-  spill_count=0 gpr_used=[20, 21, 22, 23] fp_used=[]
+  spill_count=0 gpr_used=[20, 21, 22, 23, 24] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x20
@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v6   BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> x21
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(1)                                           -> x20
+    v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   LoadLocal { off=-1, kind=I64 }                   -> x21
@@ -42,13 +42,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v16  Imm(2)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
   block 4  start_pc=0
-    v17  ImmData(13)                                      -> x20
+    v17  ImmData(13)                                      -> x24
     v18  LoadLocal { off=-2, kind=I64 }                   -> x0
     v19  CallIndirect { target=v10, args=[v17] }          -> x23
-    v20  Imm(0)                                           -> x20
-    v21  LoadLocal { off=-1, kind=I64 }                   -> x20
+    v20  Imm(0)                                           -> x24
+    v21  LoadLocal { off=-1, kind=I64 }                   -> x24
     v22  CallExt { binding_idx=126, args=[v3], fp_arg_mask=0x0 } -> x0
-    v23  Extend { value=v19, kind=I32 }                   -> x23
+    v23  Extend { value=v19, kind=I32 }                   -> x0
     terminator Return(v23)   (exit_acc=v23)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

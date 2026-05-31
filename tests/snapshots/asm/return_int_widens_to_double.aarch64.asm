@@ -30,8 +30,7 @@ Disassembly of section .text:
                	mov	x14, x19
                	lsl	x13, x20, #3
                	add	x14, x14, x13
-               	ldr	x13, [x14]
-               	mov	x0, x13
+               	ldr	x0, [x14]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -78,8 +77,7 @@ Disassembly of section .text:
                	mov	x21, x19
                	lsl	x20, x20, #3
                	add	x21, x21, x20
-               	ldr	x20, [x21]
-               	mov	x0, x20
+               	ldr	x0, [x21]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -117,8 +115,7 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	cset	x15, ne
                	cbz	x15, <addr>
-               	mov	x14, #0x1               // =1
-               	mov	x0, x14
+               	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
@@ -127,25 +124,25 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	x15, [x29, #-0x8]
-               	mov	x14, #0x800000000000    // =140737488355328
-               	movk	x14, #0x407f, lsl #48
+               	mov	x0, #0x800000000000     // =140737488355328
+               	movk	x0, #0x407f, lsl #48
                	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x15, mi
                	stur	x15, [x29, #-0x38]
                	cbnz	x15, <addr>
-               	ldur	x14, [x29, #-0x8]
+               	ldur	x0, [x29, #-0x8]
                	mov	x15, #0xa00000000000    // =175921860444160
                	movk	x15, #0x407f, lsl #48
-               	fmov	d0, x14
+               	fmov	d0, x0
                	fmov	d1, x15
                	fcmp	d0, d1
-               	cset	x14, gt
-               	stur	x14, [x29, #-0x38]
+               	cset	x0, gt
+               	stur	x0, [x29, #-0x38]
                	b	<addr>
-               	ldur	x14, [x29, #-0x38]
-               	cbz	x14, <addr>
+               	ldur	x0, [x29, #-0x38]
+               	cbz	x0, <addr>
                	mov	x15, #0x2               // =2
                	mov	x0, x15
                	ldr	x20, [sp]
@@ -155,17 +152,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0xffff            // =65535
-               	movk	x14, #0xffff, lsl #16
-               	movk	x14, #0xffff, lsl #32
-               	movk	x14, #0xffff, lsl #48
-               	scvtf	d7, x14
-               	mov	x14, #0x3ff0000000000000 // =4607182418800017408
-               	fmov	d0, x14
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	scvtf	d7, x0
+               	mov	x0, #0x3ff0000000000000 // =4607182418800017408
+               	fmov	d0, x0
                	fneg	d6, d0
                	fcmp	d7, d6
-               	cset	x14, ne
-               	cbz	x14, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x15, #0x3               // =3
                	mov	x0, x15
                	ldr	x20, [sp]
@@ -175,14 +172,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0xffff            // =65535
-               	movk	x14, #0xffff, lsl #16
-               	movk	x14, #0xffff, lsl #32
-               	movk	x14, #0xffff, lsl #48
-               	scvtf	d6, x14
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	scvtf	d6, x0
                	fcmp	d7, d6
-               	cset	x14, ne
-               	cbz	x14, <addr>
+               	cset	x0, ne
+               	cbz	x0, <addr>
                	mov	x15, #0x4               // =4
                	mov	x0, x15
                	ldr	x20, [sp]

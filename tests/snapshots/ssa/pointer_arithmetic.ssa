@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v17  Load { addr=v16, kind=I32 }                      -> x20
     v18  Binop { op=add, lhs=v15, rhs=v17 }               -> x12
     v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x12
-    v20  BinopI { op=shr, lhs=v19, rhs_imm=32 }           -> x12
+    v20  BinopI { op=shr, lhs=v19, rhs_imm=32 }           -> x0
     terminator Return(v20)   (exit_acc=v20)
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

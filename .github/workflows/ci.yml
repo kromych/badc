@@ -740,6 +740,17 @@ jobs:
         run: cargo build --release --locked
       - name: fetch vendored tinycc sources
         run: python3 demos/tinycc/setup.py
+      - name: fetch vendored perf fixture sources
+        # tests/perf/{crypto,compress,stb,sqlite}.c each pull a
+        # header / amalgamation from a demos/* directory. Those
+        # sources are gitignored and only land after the matching
+        # setup.py runs; without this step the perf harness sees a
+        # `file not found` for every fixture beyond fib/qsort.
+        run: |
+          python3 demos/tweetnacl/setup.py
+          python3 demos/miniz/setup.py
+          python3 demos/stb/setup.py
+          python3 demos/sqlite3/setup.py
       - name: build tcc for the host
         run: bash tests/perf/build_tcc.sh
       - name: run perf harness + write to job summary

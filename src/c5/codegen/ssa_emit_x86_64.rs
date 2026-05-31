@@ -2372,6 +2372,22 @@ fn emit_binop(
     // load directly into rd to skip a redundant mov. When rhs is
     // a spill, materialise via SCRATCH_R10. The conflict case
     // (rd == r10 and rhs spilled) uses rcx as the rhs scratch.
+    let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
+        Reg::RCX
+    } else {
+        SCRATCH_R10
+    };
+    let rhs_aliases_rd = matches!(rhs_place, Place::IntReg(r) if r == rd.0);
+    // When the allocator places both rhs and dst in the same register
+    // and lhs is spilled, the lhs spill-load below writes rd before
+    // any rhs-staging mov runs, destroying the rhs value. Preserve
+    // rhs into the scratch first so the downstream
+    // rhs_aliases_rd / stage_rhs_to_scratch paths read the right
+    // operand.
+    let rhs_preserved_in_scratch = rhs_aliases_rd && matches!(lhs_place, Place::Spill(_));
+    if rhs_preserved_in_scratch {
+        emit_mov_rr(code, rhs_scratch, rd);
+    }
     let rn = match lhs_place {
         Place::IntReg(r) => Reg(r),
         Place::Spill(slot) => {
@@ -2391,11 +2407,6 @@ fn emit_binop(
     if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
         return emit_binop_divmod(code, op, v, dst, rd, rn, rhs_place, alloc, frame);
     }
-    let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
-        Reg::RCX
-    } else {
-        SCRATCH_R10
-    };
     // x86_64's two-operand op `OP rd, rm` mutates rd. The standard
     // sequence below stages LHS into rd then emits `OP rd, rm`.
     // When rhs is an IntReg whose register is rd, materialize_int
@@ -2409,7 +2420,6 @@ fn emit_binop(
     //
     // For non-commutative ops (Sub, Lt, Gt, ...) we must stage
     // rhs into the scratch before the `mov rd, rn` clobbers it.
-    let rhs_aliases_rd = matches!(rhs_place, Place::IntReg(r) if r == rd.0);
     let commutative = matches!(
         op,
         BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
@@ -2428,12 +2438,20 @@ fn emit_binop(
             | BinOp::Uge
     );
     if rhs_aliases_rd && commutative {
+        // When rhs was preserved into rhs_scratch above (lhs Spill case),
+        // rd now holds lhs from the spill load and the second operand
+        // is rhs_scratch; otherwise rd still holds rhs and rn holds lhs.
+        let other = if rhs_preserved_in_scratch {
+            rhs_scratch
+        } else {
+            rn
+        };
         match op {
-            BinOp::Add => emit_add_rr(code, rd, rn),
-            BinOp::Mul => emit_imul_rr(code, rd, rn),
-            BinOp::And => emit_and_rr(code, rd, rn),
-            BinOp::Or => emit_or_rr(code, rd, rn),
-            BinOp::Xor => emit_xor_rr(code, rd, rn),
+            BinOp::Add => emit_add_rr(code, rd, other),
+            BinOp::Mul => emit_imul_rr(code, rd, other),
+            BinOp::And => emit_and_rr(code, rd, other),
+            BinOp::Or => emit_or_rr(code, rd, other),
+            BinOp::Xor => emit_xor_rr(code, rd, other),
             _ => unreachable!(),
         }
         return true;
@@ -2445,7 +2463,9 @@ fn emit_binop(
     // still reads it before any write touches rd. Skip the stage
     // and the scratch-mov for cmp ops.
     let stage_rhs_to_scratch = rhs_aliases_rd && !is_cmp;
-    let Some(rm) = (if stage_rhs_to_scratch {
+    let Some(rm) = (if rhs_preserved_in_scratch {
+        Some(rhs_scratch)
+    } else if stage_rhs_to_scratch {
         emit_mov_rr(code, rhs_scratch, rd);
         Some(rhs_scratch)
     } else if let Place::IntReg(r) = rhs_place {

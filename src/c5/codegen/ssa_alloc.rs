@@ -1462,13 +1462,24 @@ mod tests {
         b.return_(v_zero);
         let func = b.finish();
 
-        let alloc = allocate(&func, Target::LinuxX64);
-        let addr_place = alloc.places[v_addr as usize];
-        let load_place = alloc.places[v_load as usize];
-        assert_eq!(
-            load_place, addr_place,
-            "v_load should reuse v_addr's freed register",
-        );
+        // x86_64 `mov rd, [rd]` and aarch64 `ldr rd, [rd]` both read
+        // the addr operand before writing the result, so the coalesce
+        // arm fires identically across targets.
+        for target in [
+            Target::MacOSAarch64,
+            Target::LinuxAarch64,
+            Target::WindowsAarch64,
+            Target::LinuxX64,
+            Target::WindowsX64,
+        ] {
+            let alloc = allocate(&func, target);
+            let addr_place = alloc.places[v_addr as usize];
+            let load_place = alloc.places[v_load as usize];
+            assert_eq!(
+                load_place, addr_place,
+                "v_load should reuse v_addr's freed register on {target:?}",
+            );
+        }
     }
 
     /// `Inst::Mcpy { dst, src, size }` returns its `dst` pointer.
@@ -1494,12 +1505,26 @@ mod tests {
             .iter()
             .position(|i| matches!(i, Inst::Mcpy { .. }))
             .expect("Mcpy inst");
-        let alloc = allocate(&func, Target::LinuxX64);
-        let dst_place = alloc.places[v_dst as usize];
-        let mcpy_place = alloc.places[mcpy_idx];
-        assert_eq!(
-            mcpy_place, dst_place,
-            "Mcpy result should reuse v_dst's freed register",
-        );
+        // The coalesce hint is target-independent: the Mcpy emit on
+        // every supported target reads the dst-pointer operand once
+        // and never overwrites it, so the result-reuse arm fires
+        // identically. Exercise every target so an arch-specific
+        // emit change that violates the no-overwrite invariant fails
+        // here at allocation time rather than later in a fixture.
+        for target in [
+            Target::MacOSAarch64,
+            Target::LinuxAarch64,
+            Target::WindowsAarch64,
+            Target::LinuxX64,
+            Target::WindowsX64,
+        ] {
+            let alloc = allocate(&func, target);
+            let dst_place = alloc.places[v_dst as usize];
+            let mcpy_place = alloc.places[mcpy_idx];
+            assert_eq!(
+                mcpy_place, dst_place,
+                "Mcpy result should reuse v_dst's freed register on {target:?}",
+            );
+        }
     }
 }

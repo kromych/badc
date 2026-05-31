@@ -1044,6 +1044,9 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
             let mut group_hint = hints[v];
             if group_hint.is_none() {
                 for (_, src) in incoming {
+                    if *src == NO_VALUE || (*src as usize) >= hints.len() {
+                        continue;
+                    }
                     if let Some(r) = hints[*src as usize] {
                         group_hint = Some(r);
                         break;
@@ -1056,6 +1059,9 @@ fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
                 changed = true;
             }
             for (_, src) in incoming {
+                if *src == NO_VALUE || (*src as usize) >= hints.len() {
+                    continue;
+                }
                 if hints[*src as usize].is_none() {
                     hints[*src as usize] = Some(r);
                     changed = true;

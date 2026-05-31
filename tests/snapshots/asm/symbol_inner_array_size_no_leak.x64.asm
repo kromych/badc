@@ -29,13 +29,12 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %r8
                	movq	%r8, %rsi
                	shlq	$0x1, %rsi
-               	movq	%r11, %rdi
-               	addq	%rsi, %rdi
+               	addq	%r11, %rsi
                	movl	$0x3, %r10d
                	imulq	%r10, %r8
                	movslq	%r8d, %r8
                	movswq	%r8w, %r8
-               	movw	%r8w, (%rdi)
+               	movw	%r8w, (%rsi)
                	jmp	<addr>
                	subq	$0x1, %r9
                	movslq	%r9d, %r9
@@ -118,4 +117,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

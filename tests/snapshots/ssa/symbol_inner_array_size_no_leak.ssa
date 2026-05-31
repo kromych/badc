@@ -25,7 +25,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
     v14  LoadLocal { off=2, kind=I64 }                    -> x13
     v15  LoadLocal { off=-1, kind=I32 }                   -> x13
     v16  BinopI { op=shl, lhs=v15, rhs_imm=1 }            -> x11
-    v17  Binop { op=add, lhs=v1, rhs=v16 }                -> x12
+    v17  Binop { op=add, lhs=v1, rhs=v16 }                -> x11
     v18  BinopI { op=mul, lhs=v15, rhs_imm=3 }            -> x13
     v19  BinopI { op=shl, lhs=v18, rhs_imm=32 }           -> x13
     v20  BinopI { op=shr, lhs=v19, rhs_imm=32 }           -> x13

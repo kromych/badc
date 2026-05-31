@@ -88,12 +88,12 @@ Disassembly of section .text:
                	ldrsw	x15, [x13]
                	ldursw	x12, [x29, #-0x38]
                	lsl	x12, x12, #4
-               	add	x11, x14, x12
-               	ldursw	x12, [x29, #-0x40]
-               	lsl	x12, x12, #2
-               	add	x11, x11, x12
-               	ldrsw	x12, [x11]
-               	add	x15, x15, x12
+               	add	x12, x14, x12
+               	ldursw	x11, [x29, #-0x40]
+               	lsl	x11, x11, #2
+               	add	x12, x12, x11
+               	ldrsw	x11, [x12]
+               	add	x15, x15, x11
                	str	w15, [x13]
                	b	<addr>
                	b	<addr>

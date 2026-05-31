@@ -27,16 +27,15 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x23, [sp, #0x18]
                	str	x24, [sp, #0x20]
-               	str	x25, [sp, #0x28]
                	mov	x20, x0
                	sxtw	x14, w1
                	sxtw	x21, w2
                	lsl	x12, x21, #2
-               	add	x11, x20, x12
-               	ldrsw	x22, [x11]
-               	sub	x11, x14, #0x1
-               	sxtw	x11, w11
-               	stur	w11, [x29, #-0x10]
+               	add	x12, x20, x12
+               	ldrsw	x22, [x12]
+               	sub	x12, x14, #0x1
+               	sxtw	x12, w12
+               	stur	w12, [x29, #-0x10]
                	stur	w14, [x29, #-0x18]
                	b	<addr>
                	ldursw	x14, [x29, #-0x18]
@@ -50,20 +49,20 @@ Disassembly of section .text:
                	b	<addr>
                	ldursw	x14, [x29, #-0x18]
                	lsl	x14, x14, #2
-               	add	x11, x20, x14
-               	ldrsw	x14, [x11]
-               	sxtw	x11, w22
-               	cmp	x14, x11
+               	add	x14, x20, x14
+               	ldrsw	x12, [x14]
+               	sxtw	x14, w22
+               	cmp	x12, x14
                	b.gt	<addr>
                	b	<addr>
                	ldursw	x24, [x29, #-0x10]
                	add	x24, x24, #0x1
                	sxtw	x24, w24
                	lsl	x24, x24, #2
-               	add	x25, x20, x24
+               	add	x24, x20, x24
                	lsl	x21, x21, #2
                	add	x20, x20, x21
-               	mov	x0, x25
+               	mov	x0, x24
                	mov	x1, x20
                	bl	<addr>
                	ldursw	x0, [x29, #-0x10]
@@ -74,14 +73,13 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x11, x29, #0x10
-               	ldrsw	x14, [x11]
-               	add	x14, x14, #0x1
-               	str	w14, [x11]
+               	sub	x14, x29, #0x10
+               	ldrsw	x12, [x14]
+               	add	x12, x12, #0x1
+               	str	w12, [x14]
                	ldursw	x10, [x29, #-0x10]
                	lsl	x10, x10, #2
                	add	x23, x20, x10

@@ -45,26 +45,26 @@ Disassembly of section .text:
                	b	<addr>
                	ldursw	x14, [x29, #-0x8]
                	lsl	x13, x14, #7
-               	add	x12, x15, x13
-               	ldursw	x13, [x29, #-0x10]
-               	lsl	x11, x13, #3
-               	add	x12, x12, x11
+               	add	x13, x15, x13
+               	ldursw	x12, [x29, #-0x10]
+               	lsl	x11, x12, #3
+               	add	x13, x13, x11
                	lsl	x14, x14, #4
                	sxtw	x14, w14
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	str	x14, [x12]
-               	sub	x13, x29, #0x18
-               	ldr	x14, [x13]
-               	ldursw	x12, [x29, #-0x8]
-               	lsl	x12, x12, #7
-               	add	x11, x15, x12
-               	ldursw	x12, [x29, #-0x10]
-               	lsl	x12, x12, #3
-               	add	x11, x11, x12
-               	ldr	x12, [x11]
                	add	x14, x14, x12
+               	sxtw	x14, w14
                	str	x14, [x13]
+               	sub	x12, x29, #0x18
+               	ldr	x14, [x12]
+               	ldursw	x13, [x29, #-0x8]
+               	lsl	x13, x13, #7
+               	add	x13, x15, x13
+               	ldursw	x11, [x29, #-0x10]
+               	lsl	x11, x11, #3
+               	add	x13, x13, x11
+               	ldr	x11, [x13]
+               	add	x14, x14, x11
+               	str	x14, [x12]
                	b	<addr>
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!

@@ -29,32 +29,32 @@ Disassembly of section .text:
                	b	<addr>
                	ldursw	x14, [x29, #-0x8]
                	lsl	x12, x14, #2
-               	add	x13, x15, x12
-               	str	w14, [x13]
-               	add	x12, x15, #0x28
-               	ldursw	x13, [x29, #-0x8]
-               	lsl	x14, x13, #2
-               	add	x12, x12, x14
-               	add	x13, x13, #0x1
-               	sxtw	x13, w13
-               	str	w13, [x12]
-               	sub	x14, x29, #0x10
-               	ldrsw	x13, [x14]
+               	add	x12, x15, x12
+               	str	w14, [x12]
+               	add	x13, x15, #0x28
                	ldursw	x12, [x29, #-0x8]
-               	lsl	x12, x12, #2
-               	add	x11, x15, x12
+               	lsl	x14, x12, #2
+               	add	x13, x13, x14
+               	add	x12, x12, #0x1
+               	sxtw	x12, w12
+               	str	w12, [x13]
+               	sub	x14, x29, #0x10
+               	ldrsw	x12, [x14]
+               	ldursw	x13, [x29, #-0x8]
+               	lsl	x13, x13, #2
+               	add	x11, x15, x13
                	ldrsw	x10, [x11]
                	add	x11, x15, #0x28
-               	add	x11, x11, x12
-               	ldrsw	x12, [x11]
-               	add	x10, x10, x12
+               	add	x11, x11, x13
+               	ldrsw	x13, [x11]
+               	add	x10, x10, x13
                	sxtw	x10, w10
-               	add	x13, x13, x10
-               	str	w13, [x14]
+               	add	x12, x12, x10
+               	str	w12, [x14]
                	b	<addr>
-               	add	x13, x15, #0xa0
+               	add	x12, x15, #0xa0
                	ldursw	x10, [x29, #-0x10]
-               	str	w10, [x13]
+               	str	w10, [x12]
                	add	x15, x15, #0xa0
                	ldrsw	x0, [x15]
                	add	sp, sp, #0x10

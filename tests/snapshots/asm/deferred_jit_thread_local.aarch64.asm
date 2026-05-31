@@ -19,8 +19,8 @@ Disassembly of section .text:
                	add	x19, x19, #0xe0
                	mov	x14, x19
                	lsl	x13, x15, #2
-               	add	x12, x14, x13
-               	str	w15, [x12]
+               	add	x13, x14, x13
+               	str	w15, [x13]
                	lsl	x15, x15, #2
                	add	x14, x14, x15
                	ldrsw	x0, [x14]

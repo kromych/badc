@@ -301,12 +301,37 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         // at this very pc, set the dst's hint to lhs's register so the
         // 2-operand fusion kicks in (x86_64 `add Rd, Rm` with Rd == lhs;
         // aarch64 `add Rd, Rn, Rm` with Rd == Rn drops the prior mov).
+        // For commutative Binops (Add, Mul, And, Or, Xor) also try rhs
+        // when lhs lives past pc but rhs dies -- x86_64's emit detects
+        // `rhs_aliases_rd && commutative` and folds the staging mov.
         // Apply only when the hint is still empty and the candidate reg
         // satisfies the must-be-callee constraint; an already-set hint
         // (call-result / phi / param-ref / call-arg) takes priority.
         if hints[idx].is_none() {
             let coalesce_src = match inst {
-                Inst::Binop { lhs, .. } | Inst::BinopI { lhs, .. } => Some(*lhs),
+                Inst::Binop { op, lhs, rhs } => {
+                    let lhs_dies =
+                        (*lhs as usize) < last_use.len() && last_use[*lhs as usize] == pc;
+                    let rhs_dies =
+                        (*rhs as usize) < last_use.len() && last_use[*rhs as usize] == pc;
+                    // Set matches the x86_64 emit's `rhs_aliases_rd
+                    // && commutative` fast path. Eq / Ne / Fadd /
+                    // Fmul are mathematically commutative but reach
+                    // the dst via different codegen paths that do
+                    // not collapse the staging mov when dst == rhs.
+                    let commutative = matches!(
+                        op,
+                        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
+                    );
+                    if lhs_dies {
+                        Some(*lhs)
+                    } else if rhs_dies && commutative {
+                        Some(*rhs)
+                    } else {
+                        None
+                    }
+                }
+                Inst::BinopI { lhs, .. } => Some(*lhs),
                 Inst::Extend { value, .. } => Some(*value),
                 Inst::Fneg(v) => Some(*v),
                 _ => None,

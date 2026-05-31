@@ -89,15 +89,13 @@ Disassembly of section .text:
                	movslq	(%r8), %r11
                	movslq	-0x38(%rbp), %rdi
                	shlq	$0x4, %rdi
-               	movq	%r9, %rsi
-               	addq	%rdi, %rsi
-               	movslq	-0x40(%rbp), %rdi
-               	shlq	$0x2, %rdi
-               	addq	%rdi, %rsi
-               	movslq	(%rsi), %rdi
-               	addq	%rdi, %r11
+               	addq	%r9, %rdi
+               	movslq	-0x40(%rbp), %rsi
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rdi
+               	movslq	(%rdi), %rsi
+               	addq	%rsi, %r11
                	movl	%r11d, (%r8)
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

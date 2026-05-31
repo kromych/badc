@@ -106,11 +106,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v52  LoadLocal { off=-9, kind=I64 }                   -> x12
     v53  LoadLocal { off=-7, kind=I32 }                   -> x12
     v54  BinopI { op=shl, lhs=v53, rhs_imm=4 }            -> x12
-    v55  Binop { op=add, lhs=v31, rhs=v54 }               -> x11
-    v56  LoadLocal { off=-8, kind=I32 }                   -> x12
-    v57  BinopI { op=shl, lhs=v56, rhs_imm=2 }            -> x12
-    v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x11
-    v59  Load { addr=v58, kind=I32 }                      -> x12
+    v55  Binop { op=add, lhs=v31, rhs=v54 }               -> x12
+    v56  LoadLocal { off=-8, kind=I32 }                   -> x11
+    v57  BinopI { op=shl, lhs=v56, rhs_imm=2 }            -> x11
+    v58  Binop { op=add, lhs=v55, rhs=v57 }               -> x12
+    v59  Load { addr=v58, kind=I32 }                      -> x11
     v60  Binop { op=add, lhs=v51, rhs=v59 }               -> x15
     v61  Store { addr=v50, value=v60, kind=I32 }          -> -
     terminator Jmp(b14)   (exit_acc=v61)

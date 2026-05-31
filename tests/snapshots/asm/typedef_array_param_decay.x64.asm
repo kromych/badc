@@ -30,10 +30,9 @@ Disassembly of section .text:
                	shlq	$0x3, %r8
                	movq	%r11, %rsi
                	addq	%r8, %rsi
-               	movq	%r9, %rdi
-               	addq	%r8, %rdi
-               	movq	(%rdi), %r8
-               	movq	%r8, (%rsi)
+               	addq	%r9, %r8
+               	movq	(%r8), %rdi
+               	movq	%rdi, (%rsi)
                	jmp	<addr>
                	xorq	%rax, %rax
                	addq	$0x10, %rsp
@@ -60,10 +59,9 @@ Disassembly of section .text:
                	movq	(%r9), %rdi
                	movslq	-0x8(%rbp), %r8
                	shlq	$0x3, %r8
-               	movq	%r11, %rsi
-               	addq	%r8, %rsi
-               	movq	(%rsi), %r8
-               	addq	%r8, %rdi
+               	addq	%r11, %r8
+               	movq	(%r8), %rsi
+               	addq	%rsi, %rdi
                	movq	%rdi, (%r9)
                	jmp	<addr>
                	movq	-0x10(%rbp), %rax
@@ -163,4 +161,5 @@ Disassembly of section .text:
                	addq	$0x140, %rsp            # imm = 0x140
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

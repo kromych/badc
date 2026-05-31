@@ -40,10 +40,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v20  LoadLocal { off=2, kind=I64 }                    -> x14
     v21  LoadLocal { off=-1, kind=I32 }                   -> x14
     v22  BinopI { op=shl, lhs=v21, rhs_imm=7 }            -> x13
-    v23  Binop { op=add, lhs=v1, rhs=v22 }                -> x12
-    v24  LoadLocal { off=-2, kind=I32 }                   -> x13
+    v23  Binop { op=add, lhs=v1, rhs=v22 }                -> x13
+    v24  LoadLocal { off=-2, kind=I32 }                   -> x12
     v25  BinopI { op=shl, lhs=v24, rhs_imm=3 }            -> x11
-    v26  Binop { op=add, lhs=v23, rhs=v25 }               -> x12
+    v26  Binop { op=add, lhs=v23, rhs=v25 }               -> x13
     v27  BinopI { op=shl, lhs=v21, rhs_imm=4 }            -> x14
     v28  BinopI { op=shl, lhs=v27, rhs_imm=32 }           -> x14
     v29  BinopI { op=shr, lhs=v28, rhs_imm=32 }           -> x14
@@ -51,16 +51,16 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x14
     v32  BinopI { op=shr, lhs=v31, rhs_imm=32 }           -> x14
     v33  Store { addr=v26, value=v32, kind=I64 }          -> -
-    v34  LocalAddr(-3)                                    -> x13
+    v34  LocalAddr(-3)                                    -> x12
     v35  Load { addr=v34, kind=I64 }                      -> x14
-    v36  LoadLocal { off=2, kind=I64 }                    -> x12
-    v37  LoadLocal { off=-1, kind=I32 }                   -> x12
-    v38  BinopI { op=shl, lhs=v37, rhs_imm=7 }            -> x12
-    v39  Binop { op=add, lhs=v1, rhs=v38 }                -> x11
-    v40  LoadLocal { off=-2, kind=I32 }                   -> x12
-    v41  BinopI { op=shl, lhs=v40, rhs_imm=3 }            -> x12
-    v42  Binop { op=add, lhs=v39, rhs=v41 }               -> x11
-    v43  Load { addr=v42, kind=I64 }                      -> x12
+    v36  LoadLocal { off=2, kind=I64 }                    -> x13
+    v37  LoadLocal { off=-1, kind=I32 }                   -> x13
+    v38  BinopI { op=shl, lhs=v37, rhs_imm=7 }            -> x13
+    v39  Binop { op=add, lhs=v1, rhs=v38 }                -> x13
+    v40  LoadLocal { off=-2, kind=I32 }                   -> x11
+    v41  BinopI { op=shl, lhs=v40, rhs_imm=3 }            -> x11
+    v42  Binop { op=add, lhs=v39, rhs=v41 }               -> x13
+    v43  Load { addr=v42, kind=I64 }                      -> x11
     v44  Binop { op=add, lhs=v35, rhs=v43 }               -> x14
     v45  Store { addr=v34, value=v44, kind=I64 }          -> -
     terminator Jmp(b6)   (exit_acc=v45)

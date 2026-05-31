@@ -31,13 +31,13 @@ Disassembly of section .text:
                	movslq	%edx, %r12
                	movq	%r12, %rdi
                	shlq	$0x2, %rdi
-               	movq	0x28(%rsp), %rsi
-               	addq	%rdi, %rsi
-               	movslq	(%rsi), %r14
-               	movq	%r9, %rsi
-               	subq	$0x1, %rsi
-               	movslq	%esi, %rsi
-               	movl	%esi, -0x10(%rbp)
+               	movq	0x28(%rsp), %rdi
+               	addq	%rdi, %rdi
+               	movslq	(%rdi), %r14
+               	movq	%r9, %rdi
+               	subq	$0x1, %rdi
+               	movslq	%edi, %rdi
+               	movl	%edi, -0x10(%rbp)
                	movl	%r9d, -0x18(%rbp)
                	jmp	<addr>
                	movslq	-0x18(%rbp), %r9
@@ -51,24 +51,24 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	-0x18(%rbp), %r9
                	shlq	$0x2, %r9
-               	movq	0x28(%rsp), %rsi
-               	addq	%r9, %rsi
-               	movslq	(%rsi), %r9
-               	movslq	%r14d, %rsi
-               	cmpq	%rsi, %r9
+               	movq	0x28(%rsp), %r9
+               	addq	%r9, %r9
+               	movslq	(%r9), %rdi
+               	movslq	%r14d, %r9
+               	cmpq	%r9, %rdi
                	jg	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rbx
                	addq	$0x1, %rbx
                	movslq	%ebx, %rbx
                	shlq	$0x2, %rbx
-               	movq	0x28(%rsp), %r15
-               	addq	%rbx, %r15
+               	movq	0x28(%rsp), %rbx
+               	addq	%rbx, %rbx
                	shlq	$0x2, %r12
-               	movq	0x28(%rsp), %r14
-               	addq	%r12, %r14
-               	movq	%r15, %rdi
-               	movq	%r14, %rsi
+               	movq	0x28(%rsp), %r15
+               	addq	%r12, %r15
+               	movq	%rbx, %rdi
+               	movq	%r15, %rsi
                	callq	<addr>
                	movslq	-0x10(%rbp), %rax
                	addq	$0x1, %rax
@@ -82,10 +82,10 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x10(%rbp), %rsi
-               	movslq	(%rsi), %r9
-               	addq	$0x1, %r9
-               	movl	%r9d, (%rsi)
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %rdi
+               	addq	$0x1, %rdi
+               	movl	%edi, (%r9)
                	movslq	-0x10(%rbp), %rdx
                	shlq	$0x2, %rdx
                	movq	0x28(%rsp), %r15

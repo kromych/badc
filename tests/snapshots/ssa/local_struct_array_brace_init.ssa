@@ -28,9 +28,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v17  LoadLocal { off=2, kind=I64 }                    -> x12
     v18  LoadLocal { off=-2, kind=I32 }                   -> x12
     v19  BinopI { op=shl, lhs=v18, rhs_imm=4 }            -> x12
-    v20  Binop { op=add, lhs=v1, rhs=v19 }                -> x10
-    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x10
-    v22  Load { addr=v21, kind=I64 }                      -> x12
+    v20  Binop { op=add, lhs=v1, rhs=v19 }                -> x12
+    v21  BinopI { op=add, lhs=v20, rhs_imm=8 }            -> x12
+    v22  Load { addr=v21, kind=I64 }                      -> x10
     v23  Binop { op=add, lhs=v16, rhs=v22 }               -> x11
     v24  Store { addr=v15, value=v23, kind=I64 }          -> -
     terminator Jmp(b2)   (exit_acc=v24)

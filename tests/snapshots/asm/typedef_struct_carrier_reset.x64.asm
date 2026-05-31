@@ -29,38 +29,37 @@ Disassembly of section .text:
                	movslq	-0x8(%rbp), %r9
                	movq	%r9, %rdi
                	shlq	$0x2, %rdi
+               	addq	%r11, %rdi
+               	movl	%r9d, (%rdi)
                	movq	%r11, %r8
-               	addq	%rdi, %r8
-               	movl	%r9d, (%r8)
-               	movq	%r11, %rdi
-               	addq	$0x28, %rdi
-               	movslq	-0x8(%rbp), %r8
-               	movq	%r8, %r9
-               	shlq	$0x2, %r9
-               	addq	%r9, %rdi
-               	addq	$0x1, %r8
-               	movslq	%r8d, %r8
-               	movl	%r8d, (%rdi)
-               	leaq	-0x10(%rbp), %r9
-               	movslq	(%r9), %r8
+               	addq	$0x28, %r8
                	movslq	-0x8(%rbp), %rdi
-               	shlq	$0x2, %rdi
+               	movq	%rdi, %r9
+               	shlq	$0x2, %r9
+               	addq	%r9, %r8
+               	addq	$0x1, %rdi
+               	movslq	%edi, %rdi
+               	movl	%edi, (%r8)
+               	leaq	-0x10(%rbp), %r9
+               	movslq	(%r9), %rdi
+               	movslq	-0x8(%rbp), %r8
+               	shlq	$0x2, %r8
                	movq	%r11, %rsi
-               	addq	%rdi, %rsi
+               	addq	%r8, %rsi
                	movslq	(%rsi), %rdx
                	movq	%r11, %rsi
                	addq	$0x28, %rsi
-               	addq	%rdi, %rsi
-               	movslq	(%rsi), %rdi
-               	addq	%rdi, %rdx
+               	addq	%r8, %rsi
+               	movslq	(%rsi), %r8
+               	addq	%r8, %rdx
                	movslq	%edx, %rdx
-               	addq	%rdx, %r8
-               	movl	%r8d, (%r9)
+               	addq	%rdx, %rdi
+               	movl	%edi, (%r9)
                	jmp	<addr>
-               	movq	%r11, %r8
-               	addq	$0xa0, %r8
+               	movq	%r11, %rdi
+               	addq	$0xa0, %rdi
                	movslq	-0x10(%rbp), %rdx
-               	movl	%edx, (%r8)
+               	movl	%edx, (%rdi)
                	addq	$0xa0, %r11
                	movslq	(%r11), %rax
                	addq	$0x10, %rsp

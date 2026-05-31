@@ -25,9 +25,9 @@ Disassembly of section .text:
                	ldursw	x12, [x29, #-0x8]
                	ldursw	x13, [x29, #-0x10]
                	lsl	x11, x13, #2
-               	add	x10, x15, x11
-               	ldrsw	x11, [x10]
-               	add	x12, x12, x11
+               	add	x11, x15, x11
+               	ldrsw	x10, [x11]
+               	add	x12, x12, x10
                	sxtw	x12, w12
                	stur	w12, [x29, #-0x8]
                	add	x13, x13, #0x1

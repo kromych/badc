@@ -32,10 +32,10 @@ Disassembly of section .text:
                	ldr	x11, [x13]
                	ldursw	x12, [x29, #-0x10]
                	lsl	x12, x12, #4
-               	add	x10, x15, x12
-               	add	x10, x10, #0x8
-               	ldr	x12, [x10]
-               	add	x11, x11, x12
+               	add	x12, x15, x12
+               	add	x12, x12, #0x8
+               	ldr	x10, [x12]
+               	add	x11, x11, x10
                	str	x11, [x13]
                	b	<addr>
                	ldur	x0, [x29, #-0x8]

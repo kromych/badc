@@ -354,7 +354,7 @@ pub(crate) struct Block {
 
 /// Per-function SSA program. Consumed by the allocator and the
 /// per-arch lowering.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct FunctionSsa {
     /// Source-level function name. Empty for SSA functions built
     /// outside the parser (test fixtures, archive-reloaded units

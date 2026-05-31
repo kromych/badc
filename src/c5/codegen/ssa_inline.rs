@@ -54,28 +54,38 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
         say("variadic");
         return false;
     }
-    if func.blocks.len() != 1 {
-        say(&alloc::format!(
-            "{n} blocks (need 1)",
-            n = func.blocks.len()
-        ));
+    // Multi-block callees are supported when exactly one block
+    // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
+    // FallThrough) drive intra-callee control flow; the splice
+    // rewrites the single Return to a `Jmp(postfix)`. Multi-Return
+    // shapes would need a postfix phi and stay rejected for now.
+    let mut return_blocks = 0usize;
+    for blk in &func.blocks {
+        match blk.terminator {
+            Terminator::Return(_) => return_blocks += 1,
+            Terminator::TailExt(_) => {
+                say("TailExt terminator");
+                return false;
+            }
+            Terminator::Jmp(_)
+            | Terminator::FallThrough(_)
+            | Terminator::Bz { .. }
+            | Terminator::Bnz { .. } => {}
+        }
+    }
+    if return_blocks != 1 {
+        say(&alloc::format!("{return_blocks} Return blocks (need 1)"));
         return false;
     }
     // `inline` / `__attribute__((always_inline))`-marked functions
     // bypass the body-size cap (gcc / clang -O2 policy). The other
-    // shape constraints (single block, no Call, no Phi, no live
-    // LoadLocal, no cdecl-cell-aliased StoreLocal) still apply.
+    // shape constraints still apply.
     if !func.is_inline && func.insts.len() > cap as usize {
         say(&alloc::format!(
             "{n} insts > cap {c}",
             n = func.insts.len(),
             c = cap
         ));
-        return false;
-    }
-    let block = &func.blocks[0];
-    if !matches!(block.terminator, Terminator::Return(_)) {
-        say(&alloc::format!("terminator {:?}", block.terminator));
         return false;
     }
     // Walker emits dead `LoadLocal { off >= 2 }` cells alongside the
@@ -109,8 +119,27 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             _ => {}
         }
     }
-    if let Terminator::Return(v) = &block.terminator {
-        mark(*v, &mut used);
+    // Each block contributes its terminator's value operand to the
+    // use mask: the Return's payload, a Bz / Bnz cond, and any
+    // block's exit_acc all live to the end of the block.
+    for blk in &func.blocks {
+        match blk.terminator {
+            Terminator::Return(v) => mark(v, &mut used),
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
+            _ => {}
+        }
+        if blk.exit_acc != NO_VALUE {
+            mark(blk.exit_acc, &mut used);
+        }
+    }
+    // Phi-incoming values are uses too; the splice has to translate
+    // each, but it must not drop a value the body relies on.
+    for inst in &func.insts {
+        if let Inst::Phi { incoming, .. } = inst {
+            for &(_, v) in incoming {
+                mark(v, &mut used);
+            }
+        }
     }
     for (idx, inst) in func.insts.iter().enumerate() {
         match inst {
@@ -296,6 +325,271 @@ fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     }
 }
 
+/// Splice a single multi-block callee into `caller` at the call site
+/// named by `(splice_block_idx, call_pc)`. The caller's block layout
+/// after the splice:
+///
+/// * caller blocks `0..splice_block_idx`: unchanged.
+/// * caller block `splice_block_idx`: rebuilt as the prefix --
+///   carries the original block's leading insts up to but not
+///   including the call; terminator becomes `Jmp(callee_entry)`.
+/// * a synthetic postfix block at `splice_block_idx + 1`: carries
+///   the original block's trailing insts plus the original
+///   terminator (with `FallThrough` lowered to `Jmp` since the
+///   layout no longer guarantees fall-through).
+/// * caller blocks `splice_block_idx + 1..` (original indices)
+///   shift up by 1.
+/// * callee blocks appended at the end, terminator block-ids offset
+///   by the new caller block count. The callee's `Return(v)`
+///   becomes `Jmp(postfix)`; `v` (in the post-remap caller space)
+///   feeds the call's old `ValueId` for every later use.
+fn splice_multi_block(
+    caller: &mut FunctionSsa,
+    callee: &FunctionSsa,
+    splice_block_idx: usize,
+    call_pc: u32,
+    call_args: &[ValueId],
+) {
+    let n_caller = caller.blocks.len();
+    let n_callee = callee.blocks.len();
+    let prefix_id = splice_block_idx as u32;
+    let postfix_id = (splice_block_idx + 1) as u32;
+    // Caller-block-id remap: blocks > splice shift by +1 to make room
+    // for the postfix.
+    let shift_caller_bid = |b: u32| -> u32 {
+        if b > splice_block_idx as u32 {
+            b + 1
+        } else {
+            b
+        }
+    };
+    let callee_block_base = (n_caller + 1) as u32;
+    let shift_callee_bid = |b: u32| -> u32 { b + callee_block_base };
+    let map_terminator_caller = |term: Terminator, remap: &[ValueId]| -> Terminator {
+        match term {
+            Terminator::Jmp(b) => Terminator::Jmp(shift_caller_bid(b)),
+            Terminator::FallThrough(b) => Terminator::FallThrough(shift_caller_bid(b)),
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => Terminator::Bz {
+                cond: map_v(cond, remap),
+                target: shift_caller_bid(target),
+                fall_through: shift_caller_bid(fall_through),
+            },
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => Terminator::Bnz {
+                cond: map_v(cond, remap),
+                target: shift_caller_bid(target),
+                fall_through: shift_caller_bid(fall_through),
+            },
+            Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
+            Terminator::TailExt(x) => Terminator::TailExt(x),
+        }
+    };
+
+    let original = core::mem::take(caller);
+    let splice_block = original.blocks[splice_block_idx].clone();
+
+    let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
+    let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(new_insts.capacity());
+    let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
+    let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
+    let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
+
+    let emit_caller_inst = |pc: u32,
+                            new_insts: &mut Vec<Inst>,
+                            new_inst_src: &mut Vec<(u32, u32)>,
+                            remap: &mut [ValueId],
+                            original: &FunctionSsa| {
+        let src = original
+            .inst_src
+            .get(pc as usize)
+            .copied()
+            .unwrap_or((0, 0));
+        let mut mapped = original.insts[pc as usize].clone();
+        remap_caller_inst(&mut mapped, remap);
+        let new_id = new_insts.len() as u32;
+        remap[pc as usize] = new_id;
+        new_insts.push(mapped);
+        new_inst_src.push(src);
+    };
+
+    // Step 1: caller blocks 0..splice_block_idx (unchanged).
+    for (b_idx, block) in original.blocks.iter().enumerate().take(splice_block_idx) {
+        let block_start = new_insts.len() as u32;
+        for pc in block.inst_range.start..block.inst_range.end {
+            emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+        }
+        let term = map_terminator_caller(block.terminator, &remap);
+        let exit_acc = map_v(block.exit_acc, &remap);
+        new_blocks.push(Block {
+            start_pc: block.start_pc,
+            inst_range: block_start..new_insts.len() as u32,
+            terminator: term,
+            exit_acc,
+        });
+        let _ = b_idx;
+    }
+
+    // Step 2: prefix (caller's splice block, insts up to call).
+    let prefix_start = new_insts.len() as u32;
+    for pc in splice_block.inst_range.start..call_pc {
+        emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+    }
+    let callee_entry_new_id = callee_block_base;
+    new_blocks.push(Block {
+        start_pc: splice_block.start_pc,
+        inst_range: prefix_start..new_insts.len() as u32,
+        terminator: Terminator::Jmp(callee_entry_new_id),
+        exit_acc: NO_VALUE,
+    });
+    let _ = prefix_id;
+
+    // Step 3: postfix block placeholder (filled after callee splices).
+    // We need its ID stable now so the callee's Return → Jmp(postfix)
+    // points to it; emit insts + terminator below after the callee.
+    let postfix_block_slot = new_blocks.len();
+    new_blocks.push(Block {
+        start_pc: 0,
+        inst_range: 0..0,
+        terminator: Terminator::Jmp(0),
+        exit_acc: NO_VALUE,
+    });
+    let _ = postfix_id;
+
+    // Step 4: caller blocks splice_block_idx+1..n_caller (shifted +1).
+    for (b_idx, block) in original
+        .blocks
+        .iter()
+        .enumerate()
+        .skip(splice_block_idx + 1)
+    {
+        let block_start = new_insts.len() as u32;
+        for pc in block.inst_range.start..block.inst_range.end {
+            emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+        }
+        let term = map_terminator_caller(block.terminator, &remap);
+        let exit_acc = map_v(block.exit_acc, &remap);
+        new_blocks.push(Block {
+            start_pc: block.start_pc,
+            inst_range: block_start..new_insts.len() as u32,
+            terminator: term,
+            exit_acc,
+        });
+        let _ = b_idx;
+    }
+
+    // Step 5: remap the call's args through the caller's now-built remap.
+    let remapped_args: Vec<ValueId> = call_args.iter().map(|&a| map_v(a, &remap)).collect();
+
+    // Step 6: splice every callee block.
+    for cblock in &callee.blocks {
+        let block_start = new_insts.len() as u32;
+        for ce_pc in cblock.inst_range.start..cblock.inst_range.end {
+            let cinst = &callee.insts[ce_pc as usize];
+            match cinst {
+                Inst::ParamRef { idx, .. } => {
+                    let i = *idx as usize;
+                    callee_remap[ce_pc as usize] = if i < remapped_args.len() {
+                        remapped_args[i]
+                    } else {
+                        NO_VALUE
+                    };
+                    continue;
+                }
+                Inst::LoadLocal { .. } | Inst::StoreLocal { .. } | Inst::AllocaInit(_) => {
+                    callee_remap[ce_pc as usize] = NO_VALUE;
+                    continue;
+                }
+                _ => {}
+            }
+            if let Some(translated) = rewrite_callee_inst(cinst, &remapped_args, &callee_remap) {
+                let new_id = new_insts.len() as u32;
+                callee_remap[ce_pc as usize] = new_id;
+                new_insts.push(translated);
+                new_inst_src.push((0, 0));
+            }
+        }
+        let new_term = match cblock.terminator {
+            Terminator::Jmp(b) => Terminator::Jmp(shift_callee_bid(b)),
+            Terminator::FallThrough(b) => Terminator::Jmp(shift_callee_bid(b)),
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => Terminator::Bz {
+                cond: map_v(cond, &callee_remap),
+                target: shift_callee_bid(target),
+                fall_through: shift_callee_bid(fall_through),
+            },
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => Terminator::Bnz {
+                cond: map_v(cond, &callee_remap),
+                target: shift_callee_bid(target),
+                fall_through: shift_callee_bid(fall_through),
+            },
+            Terminator::Return(v) => {
+                remap[call_pc as usize] = map_v(v, &callee_remap);
+                Terminator::Jmp(postfix_id)
+            }
+            Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
+        };
+        let exit_acc = if cblock.exit_acc != NO_VALUE {
+            map_v(cblock.exit_acc, &callee_remap)
+        } else {
+            NO_VALUE
+        };
+        new_blocks.push(Block {
+            start_pc: 0,
+            inst_range: block_start..new_insts.len() as u32,
+            terminator: new_term,
+            exit_acc,
+        });
+    }
+
+    // Step 7: fill the postfix slot now that the call's remap is set.
+    let postfix_start = new_insts.len() as u32;
+    for pc in (call_pc + 1)..splice_block.inst_range.end {
+        emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+    }
+    let postfix_term = match splice_block.terminator {
+        Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
+        other => map_terminator_caller(other, &remap),
+    };
+    let postfix_exit_acc = map_v(splice_block.exit_acc, &remap);
+    new_blocks[postfix_block_slot] = Block {
+        start_pc: 0,
+        inst_range: postfix_start..new_insts.len() as u32,
+        terminator: postfix_term,
+        exit_acc: postfix_exit_acc,
+    };
+
+    *caller = FunctionSsa {
+        name: original.name,
+        ent_pc: original.ent_pc,
+        end_pc: original.end_pc,
+        locals: original.locals,
+        n_params: original.n_params,
+        is_variadic: original.is_variadic,
+        is_inline: original.is_inline,
+        insts: new_insts,
+        inst_src: new_inst_src,
+        blocks: new_blocks,
+        extern_call_refs: Vec::new(),
+        extern_imm_code_refs: Vec::new(),
+        extern_imm_data_refs: Vec::new(),
+        extern_tls_refs: Vec::new(),
+    };
+}
+
 /// Splice eligible call sites in `caller` with the bodies named by
 /// `callees`. Modifies `caller` in place.
 fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSsa>) {
@@ -326,6 +620,12 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 Inst::Call { target_pc, args } => callees.get(target_pc).map(|c| (*c, args)),
                 _ => None,
             };
+            // Multi-block callees: handled by `splice_multi_block`
+            // after this block-walk pass exits via the early-return
+            // below. Skip the single-block inline path here and let
+            // the call survive the local walk; the multi-block
+            // pass runs once over the whole function.
+            let inlined = inlined.filter(|(c, _)| c.blocks.len() == 1);
             if let Some((callee, call_args)) = inlined {
                 any_change = true;
                 let remapped_args: Vec<ValueId> =
@@ -439,6 +739,33 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         .map(|(_, n, s)| (*n, *s))
         .collect();
     caller.extern_tls_refs = extern_tls_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
+
+    // Single-block flat splice complete. Now find any remaining
+    // multi-block inlinable Call sites and apply the multi-block
+    // splice one at a time. Each splice re-shapes the caller's
+    // blocks so the loop re-scans from scratch after every step.
+    // Bounded by a generous step cap to keep runaway expansion in
+    // check.
+    let mut steps = 0usize;
+    while steps < 64 {
+        let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;
+        'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
+            for pc in block.inst_range.start..block.inst_range.end {
+                if let Inst::Call { target_pc, args } = &caller.insts[pc as usize]
+                    && let Some(c) = callees.get(target_pc)
+                    && c.blocks.len() > 1
+                {
+                    hit = Some((b_idx, pc, *c, args.clone()));
+                    break 'find;
+                }
+            }
+        }
+        let Some((b_idx, pc, callee, args)) = hit else {
+            break;
+        };
+        splice_multi_block(caller, callee, b_idx, pc, &args);
+        steps += 1;
+    }
 }
 
 /// Inline eligible callees across every function in `funcs`. A

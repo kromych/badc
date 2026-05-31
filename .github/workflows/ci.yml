@@ -324,19 +324,10 @@ jobs:
         # coroutines, math, pattern, sort, string, table, utf8,
         # vararg, plus the `T`-driven api / gc / gengc / memerr
         # / tracegc) runs against the produced interpreter at
-        # both -O and noO.
-        #
-        # macOS / Linux x86_64 / Linux aarch64 gate strictly.
-        # The Windows lanes match the chibicc / tinycc skip-on-2
-        # convention: smoke.py exits 2 when the build is green
-        # but Microsoft msvcrt-specific test idiosyncrasies fire
-        # (`math.lua` ldexp/frexp, `cstack.lua` recursion limit,
-        # `constructs.lua` / `strings.lua` formatting on
-        # AArch64). The c5 build + setjmp / longjmp paths
-        # themselves are still strict: every cargo `native_pe_*`
-        # fixture parity test runs against real Windows.
+        # both -O and noO. Every main lane gates strictly; a
+        # smoke failure here fails the job.
         shell: bash
-        run: python demos/lua/smoke.py || test $? -eq 2
+        run: python demos/lua/smoke.py
       - name: probe Windows msvcrt setjmp + capture lua crash
         # Diagnostic for the Windows runtime gaps the lua smoke
         # surfaces. Runs only when the smoke fails. Two probes:
@@ -484,7 +475,7 @@ jobs:
         # open_memstream + strtold) and the bringup currently
         # targets POSIX hosts only.
         shell: bash
-        run: python demos/chibicc/smoke.py || test $? -eq 2
+        run: python demos/chibicc/smoke.py
       - name: chibicc self-host parity (Linux x86_64 only)
         # Builds chibicc twice (gcc + badc), compares the .s
         # output on a curated sample suite, and asserts the
@@ -492,7 +483,7 @@ jobs:
         # automatically on non-Linux-x86_64 runners (chibicc
         # emits SysV x86_64 GAS only).
         shell: bash
-        run: python demos/chibicc/self_host.py || test $? -eq 2
+        run: python demos/chibicc/self_host.py
       - name: tinycc bringup smoke
         # Vendored tinycc HEAD compiles + multi-TU links across
         # every supported runner: each lane's HOST_MATRIX entry

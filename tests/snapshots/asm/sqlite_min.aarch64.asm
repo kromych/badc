@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x4003c8 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0x100]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -23,7 +23,7 @@ Disassembly of section .text:
                	str	x27, [sp, #0x38]
                	str	x28, [sp, #0x40]
                	str	x19, [sp, #0x50]
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x118
                	mov	x15, x19
                	ldr	x20, [x15]
@@ -35,7 +35,7 @@ Disassembly of section .text:
                	ldr	x23, [x10]
                	add	x15, x15, #0x28
                	ldr	x24, [x15]
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x148
                	mov	x25, x19
                	mov	x26, #0x42              // =66
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	mov	x28, x0
                	sxtw	x27, w28
                	cmp	x27, #0x0
-               	b.ge	0x4004b0 <.text+0x100>
+               	b.ge	<addr>
                	mov	x26, #0x1               // =1
                	mov	x0, x26
                	ldr	x20, [sp]
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x20
                	cmp	x0, #0x0
-               	b.eq	0x400518 <.text+0x168>
+               	b.eq	<addr>
                	mov	x27, #0x2               // =2
                	mov	x0, x27
                	ldr	x20, [sp]
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x20
                	cmp	x0, #0x0
-               	b.eq	0x400580 <.text+0x1d0>
+               	b.eq	<addr>
                	mov	x26, #0x3               // =3
                	mov	x0, x26
                	ldr	x20, [sp]
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x30
                	cmp	x0, #0x0
-               	b.eq	0x4005f4 <.text+0x244>
+               	b.eq	<addr>
                	mov	x26, #0x4               // =4
                	mov	x0, x26
                	ldr	x20, [sp]
@@ -185,7 +185,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x2, x22
                	mov	x1, x21
-               	bl	0x400998 <open>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -203,7 +203,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	ldur	x20, [x29, #0x10]
                	mov	x0, x20
-               	bl	0x4009a4 <close>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
@@ -223,7 +223,7 @@ Disassembly of section .text:
                	ldur	x21, [x29, #0x20]
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4009b0 <ftruncate>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -248,7 +248,7 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x2, x22
                	mov	x1, x21
-               	bl	0x4009bc <fcntl>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -270,7 +270,7 @@ Disassembly of section .text:
                	ldur	x21, [x29, #0x20]
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4009c8 <stat>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -291,7 +291,7 @@ Disassembly of section .text:
                	ldur	x21, [x29, #0x20]
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x4009d4 <fstat>
+               	bl	<addr>
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

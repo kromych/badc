@@ -6,9 +6,9 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400244 <.text+0x24>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	movslq	%edi, %r11
                	movslq	%esi, %r9
                	addq	%r9, %r11
@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movq	%r15, 0x18(%rsp)
                	movl	$0x1, %ebx
                	movq	%rbx, %rdi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movl	$0x2, %r12d
                	movl	$0x3, %r14d
                	movl	$0x4, %r15d
@@ -31,7 +31,7 @@ Disassembly of section .text:
                	movq	%r15, %rcx
                	movq	%r14, %rdx
                	movq	%r12, %rsi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx

@@ -6,15 +6,15 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400238 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xd0
                	mov	x15, x19
                	ldr	x14, [x15]
@@ -23,13 +23,13 @@ Disassembly of section .text:
                	fmov	d1, x15
                	fcmp	d0, d1
                	cset	x14, ne
-               	cbz	x14, 0x400284 <.text+0x64>
+               	cbz	x14, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xd8
                	mov	x14, x19
                	ldr	x0, [x14]
@@ -39,14 +39,14 @@ Disassembly of section .text:
                	fmov	d0, x0
                	fcmp	d0, d7
                	cset	x0, ne
-               	cbz	x0, 0x4002c8 <.text+0xa8>
+               	cbz	x0, <addr>
                	mov	x14, #0x2               // =2
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xe0
                	mov	x0, x19
                	ldr	x14, [x0]
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	fmov	d1, x0
                	fcmp	d0, d1
                	cset	x14, ne
-               	cbz	x14, 0x400304 <.text+0xe4>
+               	cbz	x14, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

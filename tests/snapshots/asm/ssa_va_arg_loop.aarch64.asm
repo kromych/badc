@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400318 <.text+0xf8>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -21,17 +21,17 @@ Disassembly of section .text:
                	mov	x13, #0x0               // =0
                	stur	x13, [x29, #-0x10]
                	stur	w13, [x29, #-0x18]
-               	b	0x400268 <.text+0x48>
+               	b	<addr>
                	ldursw	x13, [x29, #-0x18]
                	ldursw	x14, [x29, #0x10]
                	cmp	x13, x14
-               	b.ge	0x4002b8 <.text+0x98>
-               	b	0x400290 <.text+0x70>
+               	b.ge	<addr>
+               	b	<addr>
                	sub	x14, x29, #0x18
                	ldrsw	x13, [x14]
                	add	x13, x13, #0x1
                	str	w13, [x14]
-               	b	0x400268 <.text+0x48>
+               	b	<addr>
                	sub	x13, x29, #0x10
                	ldr	x15, [x13]
                	sub	x14, x29, #0x8
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	ldr	x14, [x12]
                	add	x15, x15, x14
                	str	x15, [x13]
-               	b	0x40027c <.text+0x5c>
+               	b	<addr>
                	sub	x15, x29, #0x8
                	ldur	x0, [x29, #-0x10]
                	ldr	x19, [sp]
@@ -84,10 +84,10 @@ Disassembly of section .text:
                	str	x22, [sp, #-0x10]!
                	str	x21, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
-               	bl	0x400238 <.text+0x18>
+               	bl	<addr>
                	add	sp, sp, #0x40
                	cmp	x0, #0x3c
-               	b.eq	0x4003a0 <.text+0x180>
+               	b.eq	<addr>
                	mov	x23, #0x1               // =1
                	mov	x0, x23
                	ldr	x20, [sp]
@@ -111,10 +111,10 @@ Disassembly of section .text:
                	str	x23, [sp, #-0x10]!
                	str	x25, [sp, #-0x10]!
                	str	x24, [sp, #-0x10]!
-               	bl	0x400238 <.text+0x18>
+               	bl	<addr>
                	add	sp, sp, #0x60
                	cmp	x0, #0xf
-               	b.eq	0x40040c <.text+0x1ec>
+               	b.eq	<addr>
                	mov	x21, #0x2               // =2
                	mov	x0, x21
                	ldr	x20, [sp]
@@ -131,10 +131,10 @@ Disassembly of section .text:
                	mov	x26, #0x2a              // =42
                	str	x26, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
-               	bl	0x4002d0 <.text+0xb0>
+               	bl	<addr>
                	add	sp, sp, #0x20
                	cmp	x0, #0x2a
-               	b.eq	0x40045c <.text+0x23c>
+               	b.eq	<addr>
                	mov	x26, #0x3               // =3
                	mov	x0, x26
                	ldr	x20, [sp]

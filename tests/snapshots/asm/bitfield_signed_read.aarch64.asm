@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400238 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x14, x17
-               	b.eq	0x400334 <.text+0x114>
+               	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	lsl	x0, x0, #62
                	asr	x0, x0, #62
                	cmp	x0, #0x1
-               	b.eq	0x40036c <.text+0x14c>
+               	b.eq	<addr>
                	mov	x14, #0xc               // =12
                	mov	x0, x14
                	add	sp, sp, #0x20
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x14, x17
-               	b.eq	0x4003b0 <.text+0x190>
+               	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x2
                	sxtw	x0, w0
                	cmp	x0, #0x1
-               	b.eq	0x4003ec <.text+0x1cc>
+               	b.eq	<addr>
                	mov	x14, #0xe               // =14
                	mov	x0, x14
                	add	sp, sp, #0x20
@@ -177,7 +177,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x14, x17
-               	b.eq	0x4004e8 <.text+0x2c8>
+               	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -193,7 +193,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	b.eq	0x40052c <.text+0x30c>
+               	b.eq	<addr>
                	mov	x14, #0x16              // =22
                	mov	x0, x14
                	add	sp, sp, #0x20
@@ -212,7 +212,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x14, x17
-               	b.eq	0x400574 <.text+0x354>
+               	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -224,7 +224,7 @@ Disassembly of section .text:
                	lsl	x0, x0, #61
                	asr	x0, x0, #61
                	cmp	x0, #0x0
-               	b.le	0x4005a8 <.text+0x388>
+               	b.le	<addr>
                	mov	x14, #0x18              // =24
                	mov	x0, x14
                	add	sp, sp, #0x20
@@ -239,7 +239,7 @@ Disassembly of section .text:
                	lsl	x14, x14, #43
                	asr	x14, x14, #43
                	cmp	x14, #0x0
-               	b.lt	0x4005e0 <.text+0x3c0>
+               	b.lt	<addr>
                	mov	x0, #0x19               // =25
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -291,7 +291,7 @@ Disassembly of section .text:
                	mov	x17, #0xfff             // =4095
                	and	x0, x0, x17
                	cmp	x0, #0x7
-               	b.eq	0x4006b4 <.text+0x494>
+               	b.eq	<addr>
                	mov	x15, #0x1f              // =31
                	mov	x0, x15
                	add	sp, sp, #0x20
@@ -309,7 +309,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x15, x17
-               	b.eq	0x4006f8 <.text+0x4d8>
+               	b.eq	<addr>
                	mov	x0, #0x20               // =32
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -323,7 +323,7 @@ Disassembly of section .text:
                	lsl	x0, x0, #62
                	asr	x0, x0, #62
                	cmp	x0, #0x1
-               	b.eq	0x400734 <.text+0x514>
+               	b.eq	<addr>
                	mov	x15, #0x21              // =33
                	mov	x0, x15
                	add	sp, sp, #0x20
@@ -341,7 +341,7 @@ Disassembly of section .text:
                	add	x14, x14, x0
                	sxtw	x14, w14
                	cmp	x14, #0x5
-               	b.eq	0x400778 <.text+0x558>
+               	b.eq	<addr>
                	mov	x0, #0x22               // =34
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x4002fc <.text+0xdc>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -78,11 +78,11 @@ Disassembly of section .text:
                	str	x22, [sp, #-0x10]!
                	str	x21, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
-               	bl	0x400238 <.text+0x18>
+               	bl	<addr>
                	add	sp, sp, #0x40
                	mov	x17, #0x23a3            // =9123
                	cmp	x0, x17
-               	b.eq	0x400390 <.text+0x170>
+               	b.eq	<addr>
                	mov	x23, #0xb               // =11
                	mov	x0, x23
                	ldr	x20, [sp]
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, 0x400000
+               	adrp	x19, <page>
                	add	x19, x19, #0x238
                	mov	x24, x19
                	mov	x25, #0x9               // =9
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	mov	x17, #0x23a3            // =9123
                	cmp	x0, x17
-               	b.eq	0x400418 <.text+0x1f8>
+               	b.eq	<addr>
                	mov	x20, #0xc               // =12
                	mov	x0, x20
                	ldr	x20, [sp]
@@ -130,8 +130,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	bl	0x4002f4 <.text+0xd4>
-               	adrp	x19, 0x400000
+               	bl	<addr>
+               	adrp	x19, <page>
                	add	x19, x19, #0x238
                	mov	x21, x19
                	mov	x26, #0x9               // =9
@@ -151,7 +151,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	mov	x17, #0x23a3            // =9123
                	cmp	x0, x17
-               	b.eq	0x4004a4 <.text+0x284>
+               	b.eq	<addr>
                	mov	x23, #0xd               // =13
                	mov	x0, x23
                	ldr	x20, [sp]

@@ -6,31 +6,31 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	movl	$0x200, %r11d           # imm = 0x200
                	movslq	%r11d, %r11
                	cmpq	$0x200, %r11            # imm = 0x200
-               	je	0x400253 <.text+0x33>
+               	je	<addr>
                	movl	$0xb, %eax
                	retq
                	movl	$0x200, %r11d           # imm = 0x200
                	movslq	%r11d, %r11
                	cmpq	$0x200, %r11            # imm = 0x200
-               	je	0x40026f <.text+0x4f>
+               	je	<addr>
                	movl	$0xc, %eax
                	retq
                	movl	$0x200, %r11d           # imm = 0x200
                	movslq	%r11d, %r11
                	cmpq	$0x200, %r11            # imm = 0x200
-               	je	0x40028b <.text+0x6b>
+               	je	<addr>
                	movl	$0xd, %eax
                	retq
                	movl	$0x200, %r11d           # imm = 0x200
                	movslq	%r11d, %r11
                	cmpq	$0x200, %r11            # imm = 0x200
-               	je	0x4002a7 <.text+0x87>
+               	je	<addr>
                	movl	$0xe, %eax
                	retq
                	xorq	%r11, %r11

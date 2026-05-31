@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400238 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	add	x15, x15, x6
                	sxtw	x15, w15
                	sub	x6, x29, #0x20
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xd0
                	mov	x7, x19
                	str	x10, [sp, #-0x10]!
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	mov	x8, x6
                	sxtw	x15, w15
                	cmp	x15, #0x37
-               	b.eq	0x40033c <.text+0x11c>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldr	x19, [sp]
                	add	sp, sp, #0x90
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	ldr	x0, [x15]
                	mov	x17, #0x1111            // =4369
                	cmp	x0, x17
-               	b.eq	0x400368 <.text+0x148>
+               	b.eq	<addr>
                	mov	x15, #0x2               // =2
                	mov	x0, x15
                	ldr	x19, [sp]
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	ldr	x15, [x0]
                	mov	x17, #0x2222            // =8738
                	cmp	x15, x17
-               	b.eq	0x400394 <.text+0x174>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldr	x19, [sp]
                	add	sp, sp, #0x90
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	ldr	x0, [x15]
                	mov	x17, #0x3333            // =13107
                	cmp	x0, x17
-               	b.eq	0x4003c4 <.text+0x1a4>
+               	b.eq	<addr>
                	mov	x15, #0x4               // =4
                	mov	x0, x15
                	ldr	x19, [sp]
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	ldr	x15, [x0]
                	mov	x17, #0x4444            // =17476
                	cmp	x15, x17
-               	b.eq	0x4003f0 <.text+0x1d0>
+               	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldr	x19, [sp]
                	add	sp, sp, #0x90

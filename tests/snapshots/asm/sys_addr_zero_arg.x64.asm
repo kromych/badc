@@ -6,21 +6,21 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x4002b7 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe19(%rip)           # 0x4100d0
+               	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	leaq	0xfe16(%rip), %r11      # 0x4100e8
+               	leaq	<rip>, %r11
                	movq	(%r11), %rbx
                	movq	%rbx, %r11
                	callq	*%r11
                	movslq	%eax, %rax
                	cmpq	$0x0, %rax
-               	jg	0x400308 <.text+0x68>
+               	jg	<addr>
                	movl	$0x1, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -29,7 +29,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	0xfde1(%rip), %rax      # 0x4100f0
+               	leaq	<rip>, %rax
                	movq	(%rax), %r12
                	movq	%r12, %r11
                	callq	*%r11
@@ -44,14 +44,14 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	callq	0x400497 <geteuid>
+               	callq	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	callq	0x40049d <getpid>
+               	callq	<addr>
                	movslq	%eax, %rax
                	popq	%rbp
                	retq

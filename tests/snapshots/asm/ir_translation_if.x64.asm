@@ -6,12 +6,12 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	movl	$0x1, %r11d
                	cmpq	$0x0, %r11
-               	je	0x400254 <.text+0x34>
+               	je	<addr>
                	movl	$0x2, %eax
                	retq
                	xorq	%rax, %rax

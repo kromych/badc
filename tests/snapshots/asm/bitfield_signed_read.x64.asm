@@ -6,9 +6,9 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	shlq	$0x3e, %r9
                	sarq	$0x3e, %r9
                	cmpq	$-0x1, %r9
-               	je	0x4002ed <.text+0xcd>
+               	je	<addr>
                	movl	$0xb, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
                	cmpq	$0x1, %rax
-               	je	0x400327 <.text+0x107>
+               	je	<addr>
                	movl	$0xc, %r9d
                	movq	%r9, %rax
                	addq	$0x20, %rsp
@@ -66,7 +66,7 @@ Disassembly of section .text:
                	shlq	$0x34, %r9
                	sarq	$0x34, %r9
                	cmpq	$-0x800, %r9            # imm = 0xF800
-               	je	0x40035d <.text+0x13d>
+               	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	addq	$0x2, %rax
                	movslq	%eax, %rax
                	cmpq	$0x1, %rax
-               	je	0x40039d <.text+0x17d>
+               	je	<addr>
                	movl	$0xe, %r9d
                	movq	%r9, %rax
                	addq	$0x20, %rsp
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	shlq	$0x3d, %r9
                	sarq	$0x3d, %r9
                	cmpq	$-0x4, %r9
-               	je	0x40044b <.text+0x22b>
+               	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movsbq	%al, %rax
                	cmpq	$-0x80, %rax
-               	je	0x400480 <.text+0x260>
+               	je	<addr>
                	movl	$0x16, %r9d
                	movq	%r9, %rax
                	addq	$0x20, %rsp
@@ -139,7 +139,7 @@ Disassembly of section .text:
                	shlq	$0x2b, %r9
                	sarq	$0x2b, %r9
                	cmpq	$-0x1, %r9
-               	je	0x4004b5 <.text+0x295>
+               	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	shlq	$0x3d, %rax
                	sarq	$0x3d, %rax
                	cmpq	$0x0, %rax
-               	jle	0x4004ea <.text+0x2ca>
+               	jle	<addr>
                	movl	$0x18, %r9d
                	movq	%r9, %rax
                	addq	$0x20, %rsp
@@ -163,7 +163,7 @@ Disassembly of section .text:
                	shlq	$0x2b, %r9
                	sarq	$0x2b, %r9
                	cmpq	$0x0, %r9
-               	jl	0x40051f <.text+0x2ff>
+               	jl	<addr>
                	movl	$0x19, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -196,7 +196,7 @@ Disassembly of section .text:
                	movl	(%r11), %eax
                	andq	$0xfff, %rax            # imm = 0xFFF
                	cmpq	$0x7, %rax
-               	je	0x4005c9 <.text+0x3a9>
+               	je	<addr>
                	movl	$0x1f, %r11d
                	movq	%r11, %rax
                	addq	$0x20, %rsp
@@ -209,7 +209,7 @@ Disassembly of section .text:
                	shlq	$0x3e, %r11
                	sarq	$0x3e, %r11
                	cmpq	$-0x1, %r11
-               	je	0x400602 <.text+0x3e2>
+               	je	<addr>
                	movl	$0x20, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -222,7 +222,7 @@ Disassembly of section .text:
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
                	cmpq	$0x1, %rax
-               	je	0x400643 <.text+0x423>
+               	je	<addr>
                	movl	$0x21, %r11d
                	movq	%r11, %rax
                	addq	$0x20, %rsp
@@ -239,7 +239,7 @@ Disassembly of section .text:
                	addq	%rax, %r9
                	movslq	%r9d, %r9
                	cmpq	$0x5, %r9
-               	je	0x40068a <.text+0x46a>
+               	je	<addr>
                	movl	$0x22, %eax
                	addq	$0x20, %rsp
                	popq	%rbp

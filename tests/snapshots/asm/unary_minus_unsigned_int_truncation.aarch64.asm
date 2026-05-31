@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400238 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	mov	x15, #0x1               // =1
@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x14, x17
-               	b.eq	0x400280 <.text+0x60>
+               	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x17, #0xffff            // =65535
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x14, x17
-               	b.eq	0x4002c8 <.text+0xa8>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x17, #0xffff            // =65535
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	orr	x14, x14, x0
                	lsr	x14, x14, #31
                	cmp	x14, #0x1
-               	b.eq	0x40030c <.text+0xec>
+               	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
                	mov	x14, #0x0               // =0
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	orr	x14, x14, x0
                	lsr	x14, x14, #31
                	cmp	x14, #0x0
-               	b.eq	0x400354 <.text+0x134>
+               	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
                	mov	x17, #0xffff            // =65535
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x14, x17
-               	b.eq	0x4003ac <.text+0x18c>
+               	b.eq	<addr>
                	mov	x12, #0x5               // =5
                	mov	x0, x12
                	ret
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	orr	x15, x15, x0
                	lsr	x15, x15, #31
                	cmp	x15, #0x1
-               	b.eq	0x4003dc <.text+0x1bc>
+               	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	ret
                	mov	x15, #0x1               // =1
@@ -143,7 +143,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x15, x15, x17
                	cmp	x15, #0x0
-               	b.eq	0x400458 <.text+0x238>
+               	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	ret
                	mov	x15, #0x5               // =5
@@ -173,7 +173,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x0, x0, x17
                	cmp	x0, #0x1
-               	b.eq	0x4004d4 <.text+0x2b4>
+               	b.eq	<addr>
                	mov	x15, #0x8               // =8
                	mov	x0, x15
                	ret

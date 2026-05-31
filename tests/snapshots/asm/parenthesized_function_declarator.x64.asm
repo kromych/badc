@@ -6,15 +6,15 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x40025a <.text+0x3a>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	movslq	%edi, %r11
                	addq	$0x1, %r11
                	movslq	%r11d, %rax
                	retq
                	movslq	%edi, %r11
-               	leaq	0xfe81(%rip), %rax      # 0x4100d0
+               	leaq	<rip>, %rax
                	shlq	$0x1, %r11
                	movslq	%r11d, %r11
                	movl	%r11d, (%rax)
@@ -27,14 +27,14 @@ Disassembly of section .text:
                	movq	%r14, 0x10(%rsp)
                	movl	$0xa, %ebx
                	movq	%rbx, %rdi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %r12
                	movl	$0x5, %r14d
                	movq	%r14, %rdi
-               	callq	0x400245 <.text+0x25>
+               	callq	<addr>
                	movslq	%r12d, %r12
                	cmpq	$0xb, %r12
-               	je	0x4002c4 <.text+0xa4>
+               	je	<addr>
                	movl	$0x1, %r14d
                	movq	%r14, %rcx
                	movq	(%rsp), %rbx
@@ -49,16 +49,16 @@ Disassembly of section .text:
                	movzbq	%r12b, %r12
                	movq	%r12, -0x20(%rbp)
                	cmpq	$0x0, %r12
-               	jne	0x4002ff <.text+0xdf>
+               	jne	<addr>
                	movslq	(%rax), %r14
                	cmpq	$0xa, %r14
                	setne	%r14b
                	movzbq	%r14b, %r14
                	movq	%r14, -0x20(%rbp)
-               	jmp	0x4002ff <.text+0xdf>
+               	jmp	<addr>
                	movq	-0x20(%rbp), %r14
                	cmpq	$0x0, %r14
-               	je	0x400332 <.text+0x112>
+               	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx

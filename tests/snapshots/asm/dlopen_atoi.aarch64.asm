@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400318 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xf8]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -22,10 +22,10 @@ Disassembly of section .text:
                	mov	x21, #0x2               // =2
                	mov	x0, x20
                	mov	x1, x21
-               	bl	0x400568 <dlopen>
+               	bl	<addr>
                	mov	x22, x0
                	cmp	x22, #0x0
-               	b.ne	0x400380 <.text+0x80>
+               	b.ne	<addr>
                	mov	x20, #0x1               // =1
                	mov	x0, x20
                	ldr	x20, [sp]
@@ -36,17 +36,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x110
                	mov	x23, x19
                	mov	x0, x22
                	mov	x1, x23
-               	bl	0x400574 <dlsym>
+               	bl	<addr>
                	mov	x21, x0
                	cmp	x21, #0x0
-               	b.ne	0x4003d4 <.text+0xd4>
+               	b.ne	<addr>
                	mov	x0, x22
-               	bl	0x400580 <dlclose>
+               	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x115
                	mov	x20, x19
                	mov	x9, x21
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	mov	x23, x0
                	mov	x0, x22
-               	bl	0x400580 <dlclose>
+               	bl	<addr>
                	sxtw	x0, w0
                	sxtw	x23, w23
                	mov	x0, x23

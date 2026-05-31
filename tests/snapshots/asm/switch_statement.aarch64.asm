@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400238 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -17,29 +17,29 @@ Disassembly of section .text:
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x10]
                	sxtw	x15, w15
-               	b	0x4002a0 <.text+0x80>
+               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x14, #0xa               // =10
                	stur	w14, [x29, #-0x10]
-               	b	0x400258 <.text+0x38>
+               	b	<addr>
                	mov	x14, #0x14              // =20
                	stur	w14, [x29, #-0x10]
-               	b	0x400280 <.text+0x60>
+               	b	<addr>
                	ldursw	x14, [x29, #-0x10]
                	add	x14, x14, #0x5
                	sxtw	x14, w14
                	stur	w14, [x29, #-0x10]
-               	b	0x400258 <.text+0x38>
+               	b	<addr>
                	mov	x14, #0x64              // =100
                	stur	w14, [x29, #-0x10]
-               	b	0x400258 <.text+0x38>
+               	b	<addr>
                	cmp	x15, #0x1
-               	b.eq	0x400268 <.text+0x48>
+               	b.eq	<addr>
                	cmp	x15, #0x2
-               	b.eq	0x400274 <.text+0x54>
+               	b.eq	<addr>
                	cmp	x15, #0x3
-               	b.eq	0x400280 <.text+0x60>
-               	b	0x400294 <.text+0x74>
+               	b.eq	<addr>
+               	b	<addr>

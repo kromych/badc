@@ -6,72 +6,72 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400247 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100d0
+               	callq	*<rip>
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40025d <.text+0x2d>
+               	je	<addr>
                	movl	$0x1, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400273 <.text+0x43>
+               	je	<addr>
                	movl	$0x2, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400289 <.text+0x59>
+               	je	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40029f <.text+0x6f>
+               	je	<addr>
                	movl	$0x4, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002b5 <.text+0x85>
+               	je	<addr>
                	movl	$0x5, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002cb <.text+0x9b>
+               	je	<addr>
                	movl	$0x6, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002e1 <.text+0xb1>
+               	je	<addr>
                	movl	$0x7, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002f7 <.text+0xc7>
+               	je	<addr>
                	movl	$0x8, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40030d <.text+0xdd>
+               	je	<addr>
                	movl	$0x9, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400323 <.text+0xf3>
+               	je	<addr>
                	movl	$0xa, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400339 <.text+0x109>
+               	je	<addr>
                	movl	$0xb, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40034f <.text+0x11f>
+               	je	<addr>
                	movl	$0xc, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400365 <.text+0x135>
+               	je	<addr>
                	movl	$0xd, %eax
                	retq
                	xorq	%r11, %r11

@@ -21,6 +21,7 @@ form, etc.) are logged but don't fail the run.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,38 @@ OBJDUMP_FLAGS = ["--disassemble", "--no-show-raw-insn", "--no-addresses"]
 # current git commit, so disassembling them would churn the snapshot
 # on every push. Truncate the objdump output at the marker.
 BUILD_INFO_MARKER = b"BADC\n\tv"
+
+# objdump's disassembly bakes in several forms of absolute addresses
+# that shift on any earlier-code reflow even when the local emit is
+# unchanged. Each regex below rewrites one form to a stable token so a
+# diff line surfaces only when the actual mnemonic / operand mix
+# changes.
+ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
+    # `callq 0x4002dc <.text+0xbc>` and similar: branch / call operand
+    # followed by an `<symbol+offset>` annotation. Both halves shift in
+    # lock-step on any earlier reflow.
+    (re.compile(r"0x[0-9a-fA-F]+\s+<[^>]+>"), "<addr>"),
+    # `callq *0xfe89(%rip)           # 0x4100c0`: trailing absolute
+    # annotation appended after a RIP-relative computation. objdump
+    # tab-aligns the `#` past column 40, so 4-plus whitespace before
+    # `#` distinguishes the x86_64 comment form from aarch64's
+    # `, #0x8` immediate syntax.
+    (re.compile(r"\s{4,}#\s*0x[0-9a-fA-F]+\s*$", re.MULTILINE), ""),
+    # `0xfe89(%rip)`: x86_64 RIP-relative addressing. The offset is
+    # measured from the next instruction's address and shifts whenever
+    # any earlier code or .rodata moves.
+    (re.compile(r"0x[0-9a-fA-F]+\(%rip\)"), "<rip>"),
+    # aarch64 ADRP / load-symbol pairs: `adrp x16, 0x410000` then
+    # `ldr x16, [x16, #0xc0]`. The page address + offset together name
+    # a fixed symbol; treat the pair as a single placeholder.
+    (re.compile(r"adrp(\s+\w+,)\s+0x[0-9a-fA-F]+"), r"adrp\1 <page>"),
+)
+
+
+def normalise_asm(text: str) -> str:
+    for pattern, replacement in ASM_NORMALISATION_RULES:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
@@ -133,6 +166,7 @@ def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str) -> bo
     # path with the snapshot's stable name.
     text = proc.stdout.decode("utf-8", errors="replace")
     text = text.replace(str(tmp_bin), dst.stem)
+    text = normalise_asm(text)
     dst.write_text(text)
     return True
 

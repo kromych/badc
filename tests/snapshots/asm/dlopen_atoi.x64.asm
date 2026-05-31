@@ -6,9 +6,9 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400317 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfde1(%rip)           # 0x4100f8
+               	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
@@ -21,10 +21,10 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	xorl	%eax, %eax
-               	callq	0x400567 <dlopen>
+               	callq	<addr>
                	movq	%rax, %r14
                	cmpq	$0x0, %r14
-               	jne	0x400382 <.text+0x82>
+               	jne	<addr>
                	movl	$0x1, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -35,17 +35,17 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	0xfd87(%rip), %r15      # 0x410110
+               	leaq	<rip>, %r15
                	movq	%r14, %rdi
                	movq	%r15, %rsi
                	xorl	%eax, %eax
-               	callq	0x40056d <dlsym>
+               	callq	<addr>
                	movq	%rax, %r12
                	cmpq	$0x0, %r12
-               	jne	0x4003da <.text+0xda>
+               	jne	<addr>
                	movq	%r14, %rdi
                	xorl	%eax, %eax
-               	callq	0x400573 <dlclose>
+               	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -57,14 +57,14 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	0xfd34(%rip), %rbx      # 0x410115
+               	leaq	<rip>, %rbx
                	movq	%r12, %r11
                	movq	%rbx, %rdi
                	callq	*%r11
                	movq	%rax, %r15
                	movq	%r14, %rdi
                	xorl	%eax, %eax
-               	callq	0x400573 <dlclose>
+               	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%r15d, %r15
                	movq	%r15, %rcx

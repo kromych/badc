@@ -6,42 +6,42 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400237 <.text+0x17>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40024d <.text+0x2d>
+               	je	<addr>
                	movl	$0x1, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400263 <.text+0x43>
+               	je	<addr>
                	movl	$0x2, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x400279 <.text+0x59>
+               	je	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x40028f <.text+0x6f>
+               	je	<addr>
                	movl	$0x4, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002a5 <.text+0x85>
+               	je	<addr>
                	movl	$0x5, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002bb <.text+0x9b>
+               	je	<addr>
                	movl	$0x6, %eax
                	retq
                	xorq	%r11, %r11
                	cmpq	$0x0, %r11
-               	je	0x4002d1 <.text+0xb1>
+               	je	<addr>
                	movl	$0x7, %eax
                	retq
                	xorq	%r11, %r11

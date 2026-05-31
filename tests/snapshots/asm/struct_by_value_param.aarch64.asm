@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400340 <.text+0x120>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	str	x0, [sp, #-0x10]!
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x12, x17
-               	b.eq	0x4002e4 <.text+0xc4>
+               	b.eq	<addr>
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	b.eq	0x40032c <.text+0x10c>
+               	b.eq	<addr>
                	mov	x12, #0xfffe            // =65534
                	movk	x12, #0xffff, lsl #16
                	movk	x12, #0xffff, lsl #32
@@ -89,10 +89,10 @@ Disassembly of section .text:
                	str	w14, [x13]
                	sub	x20, x29, #0x8
                	mov	x0, x20
-               	bl	0x400238 <.text+0x18>
+               	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0xa
-               	b.eq	0x40039c <.text+0x17c>
+               	b.eq	<addr>
                	mov	x20, #0x1               // =1
                	mov	x0, x20
                	ldr	x20, [sp]
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	ldrsw	x20, [x0]
                	cmp	x20, #0x3
-               	b.eq	0x4003c0 <.text+0x1a0>
+               	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	add	x20, x20, #0x4
                	ldrsw	x0, [x20]
                	cmp	x0, #0x7
-               	b.eq	0x4003ec <.text+0x1cc>
+               	b.eq	<addr>
                	mov	x20, #0x3               // =3
                	mov	x0, x20
                	ldr	x20, [sp]

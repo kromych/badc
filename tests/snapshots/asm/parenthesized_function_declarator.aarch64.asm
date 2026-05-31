@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400284 <.text+0x64>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	sxtw	x15, w0
@@ -19,7 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	sxtw	x15, w0
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xd0
                	mov	x0, x19
                	lsl	x15, x15, #1
@@ -37,14 +37,14 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	mov	x20, #0xa               // =10
                	mov	x0, x20
-               	bl	0x400238 <.text+0x18>
+               	bl	<addr>
                	mov	x21, x0
                	mov	x22, #0x5               // =5
                	mov	x0, x22
-               	bl	0x400248 <.text+0x28>
+               	bl	<addr>
                	sxtw	x21, w21
                	cmp	x21, #0xb
-               	b.eq	0x4002e4 <.text+0xc4>
+               	b.eq	<addr>
                	mov	x22, #0x1               // =1
                	mov	x0, x22
                	ldr	x20, [sp]
@@ -56,14 +56,14 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x21, eq
                	stur	x21, [x29, #-0x20]
-               	cbnz	x21, 0x400308 <.text+0xe8>
+               	cbnz	x21, <addr>
                	ldrsw	x22, [x0]
                	cmp	x22, #0xa
                	cset	x22, ne
                	stur	x22, [x29, #-0x20]
-               	b	0x400308 <.text+0xe8>
+               	b	<addr>
                	ldur	x22, [x29, #-0x20]
-               	cbz	x22, 0x40032c <.text+0x10c>
+               	cbz	x22, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

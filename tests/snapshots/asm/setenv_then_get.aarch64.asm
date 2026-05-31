@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x4002c8 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xe0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -18,25 +18,25 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x23, [sp, #0x18]
                	str	x19, [sp, #0x20]
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0xf0
                	mov	x20, x19
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x101
                	mov	x21, x19
                	mov	x22, #0x1               // =1
                	mov	x0, x20
                	mov	x2, x22
                	mov	x1, x21
-               	bl	0x4004c8 <setenv>
+               	bl	<addr>
                	sxtw	x0, w0
-               	adrp	x19, 0x410000
+               	adrp	x19, <page>
                	add	x19, x19, #0x103
                	mov	x23, x19
                	mov	x0, x23
-               	bl	0x4004d4 <getenv>
+               	bl	<addr>
                	cmp	x0, #0x0
-               	b.ne	0x40035c <.text+0xac>
+               	b.ne	<addr>
                	mov	x21, #0x1               // =1
                	mov	x0, x21
                	ldr	x20, [sp]

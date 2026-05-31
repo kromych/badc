@@ -6,9 +6,9 @@ Disassembly of section .text:
 <.text>:
                	movq	(%rsp), %rdi
                	leaq	0x8(%rsp), %rsi
-               	callq	0x400245 <.text+0x25>
+               	callq	<addr>
                	movq	%rax, %rdi
-               	callq	*0xfe89(%rip)           # 0x4100c0
+               	callq	*<rip>
                	movslq	%edi, %r11
                	movslq	%esi, %r9
                	imulq	%r9, %r11
@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movq	%r14, 0x10(%rsp)
                	movq	%r15, 0x18(%rsp)
                	leaq	-0x10(%rbp), %r11
-               	leaq	-0x37(%rip), %r9        # 0x400237 <.text+0x17>
+               	leaq	-<rip>, %r9        # <addr>
                	movq	%r9, (%r11)
                	leaq	-0x10(%rbp), %r8
                	addq	$0x8, %r8
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%r15, %rsi
                	callq	*%r11
                	cmpq	$0x15, %rax
-               	je	0x4002d6 <.text+0xb6>
+               	je	<addr>
                	movl	$0x1, %r15d
                	movq	%r15, %rcx
                	movq	(%rsp), %rbx
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	callq	*%r11
                	cmpq	$0x14, %rax
-               	je	0x400324 <.text+0x104>
+               	je	<addr>
                	movl	$0x2, %ebx
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	callq	*%r11
                	cmpq	$0x12, %rax
-               	je	0x400377 <.text+0x157>
+               	je	<addr>
                	movl	$0x3, %r12d
                	movq	%r12, %rcx
                	movq	(%rsp), %rbx
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	movq	%r15, %rsi
                	callq	*%r11
                	cmpq	$0x18, %rax
-               	je	0x4003cb <.text+0x1ab>
+               	je	<addr>
                	movl	$0x4, %r15d
                	movq	%r15, %rcx
                	movq	(%rsp), %rbx

@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400288 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xd8]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -18,7 +18,7 @@ Disassembly of section .text:
                	mov	x15, #0x8               // =8
                	sxtw	x20, w15
                	mov	x0, x20
-               	bl	0x400428 <malloc>
+               	bl	<addr>
                	mov	x20, #0x1               // =1
                	str	w20, [x0]
                	add	x13, x0, #0x4

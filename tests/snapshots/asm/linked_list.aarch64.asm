@@ -6,8 +6,8 @@ Disassembly of section .text:
 <.text>:
                	ldr	x0, [sp]
                	add	x1, sp, #0x8
-               	bl	0x400288 <.text+0x18>
-               	adrp	x16, 0x410000
+               	bl	<addr>
+               	adrp	x16, <page>
                	ldr	x16, [x16, #0xd8]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
@@ -19,20 +19,20 @@ Disassembly of section .text:
                	stur	x15, [x29, #-0x8]
                	stur	w15, [x29, #-0x20]
                	stur	w15, [x29, #-0x28]
-               	b	0x4002b0 <.text+0x40>
+               	b	<addr>
                	ldursw	x15, [x29, #-0x28]
                	cmp	x15, #0x5
-               	b.ge	0x400310 <.text+0xa0>
-               	b	0x4002d4 <.text+0x64>
+               	b.ge	<addr>
+               	b	<addr>
                	sub	x14, x29, #0x28
                	ldrsw	x15, [x14]
                	add	x15, x15, #0x1
                	str	w15, [x14]
-               	b	0x4002b0 <.text+0x40>
+               	b	<addr>
                	mov	x15, #0x10              // =16
                	sxtw	x20, w15
                	mov	x0, x20
-               	bl	0x4004a8 <malloc>
+               	bl	<addr>
                	stur	x0, [x29, #-0x18]
                	ldur	x20, [x29, #-0x18]
                	ldursw	x0, [x29, #-0x28]
@@ -43,13 +43,13 @@ Disassembly of section .text:
                	str	x0, [x14]
                	ldur	x20, [x29, #-0x18]
                	stur	x20, [x29, #-0x8]
-               	b	0x4002c0 <.text+0x50>
+               	b	<addr>
                	ldur	x20, [x29, #-0x8]
                	stur	x20, [x29, #-0x10]
-               	b	0x40031c <.text+0xac>
+               	b	<addr>
                	ldur	x20, [x29, #-0x10]
                	cmp	x20, #0x0
-               	b.eq	0x40034c <.text+0xdc>
+               	b.eq	<addr>
                	ldursw	x0, [x29, #-0x20]
                	ldur	x20, [x29, #-0x10]
                	ldr	x14, [x20]
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	add	x20, x20, #0x8
                	ldr	x14, [x20]
                	stur	x14, [x29, #-0x10]
-               	b	0x40031c <.text+0xac>
+               	b	<addr>
                	ldursw	x14, [x29, #-0x20]
                	mov	x0, x14
                	ldr	x20, [sp]

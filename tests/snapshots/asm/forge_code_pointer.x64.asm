@@ -11,20 +11,10 @@ Disassembly of section .text:
                	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movl	$0x2a, %ebx
-               	xorq	%r12, %r12
-               	movq	%rbx, %r11
-               	movq	%r12, %rdi
+               	subq	$0x10, %rsp
+               	movl	$0x2a, %r11d
+               	xorq	%rdi, %rdi
                	callq	*%r11
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

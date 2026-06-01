@@ -12,31 +12,29 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x20, [sp]
-               	str	x19, [sp, #0x10]
-               	mov	x20, #0x8               // =8
-               	mov	x0, x20
+               	sub	sp, sp, #0x20
+               	str	x19, [sp]
+               	mov	x0, #0x8                // =8
                	bl	<addr>
-               	mov	x20, #0x3               // =3
-               	str	w20, [x0]
-               	add	x13, x0, #0x4
-               	mov	x20, #0x4               // =4
-               	str	w20, [x13]
-               	ldrsw	x12, [x0]
-               	ldrsw	x20, [x0]
-               	mul	x12, x12, x20
+               	mov	x14, x0
+               	mov	x0, #0x3                // =3
+               	str	w0, [x14]
+               	add	x13, x14, #0x4
+               	mov	x0, #0x4                // =4
+               	str	w0, [x13]
+               	ldrsw	x12, [x14]
+               	ldrsw	x0, [x14]
+               	mul	x12, x12, x0
                	sxtw	x12, w12
-               	add	x0, x0, #0x4
-               	ldrsw	x20, [x0]
-               	ldrsw	x0, [x0]
-               	mul	x20, x20, x0
-               	sxtw	x20, w20
-               	add	x12, x12, x20
+               	add	x14, x14, #0x4
+               	ldrsw	x0, [x14]
+               	ldrsw	x14, [x14]
+               	mul	x0, x0, x14
+               	sxtw	x0, w0
+               	add	x12, x12, x0
                	sxtw	x12, w12
                	mov	x0, x12
-               	ldr	x20, [sp]
-               	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x30
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

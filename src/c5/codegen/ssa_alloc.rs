@@ -1267,16 +1267,19 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     call_pcs.sort_unstable();
-    // Per-function relaxation gate. Off by default (env var unset)
-    // -> closed upper bound `first <= end`, which is conservative
-    // and preserves shipped behavior. When BADC_RELAX_FN_NAME
-    // matches func.name (or BADC_RELAX_ALL is set), the bound
-    // opens to `first < end`, exposing the call-at-last-use shape
-    // for QBE-style coalescing. The opening is a debugging probe:
-    // it surfaces the under-reported-liveness hazard in
-    // sqlite3BtreeInsert that has so far blocked an unconditional
-    // relaxation.
-    let strict_upper = relax_calls_after_def_for(&func.name);
+    // QBE-style call-arg coalescing: open the upper bound from
+    // `first <= end` to `first < end` on the targets where the
+    // pre-conditions hold. A call at exactly `last_use` is the
+    // value's consumer; its arg marshal reads the value before
+    // the callee runs, so the value lives in a caller-saved
+    // arg-register and `populate_call_arg_hints` can hint it to
+    // the matching slot. The three emit-layer pre-conditions are
+    // the ParamRef ordering guard, the x86_64 CallIndirect
+    // target-scratch picker, and the aarch64 mirror -- all in
+    // tree. Windows x64 stays on the conservative bound until
+    // separately validated; the `kromyrzen.local` box hasn't
+    // been verified under BADC_RELAX_ALL=1 in this branch.
+    let strict_upper = relax_calls_after_def_for(&func.name) || target_enables_relaxation(target);
     let mut out = vec![false; n];
     for (idx, &end) in last_use.iter().enumerate() {
         let def = idx as u32;
@@ -1293,6 +1296,18 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     out
+}
+
+/// Whether the target has the emit-layer fixes that make the
+/// `calls_after_def` relaxation safe. The Win64 path uses the
+/// same x86_64 CallIndirect picker as Linux x64 but its full
+/// demo gate hasn't been run under BADC_RELAX_ALL=1, so keep it
+/// on the conservative bound until that gate is satisfied.
+fn target_enables_relaxation(target: Target) -> bool {
+    matches!(
+        target,
+        Target::LinuxX64 | Target::LinuxAarch64 | Target::MacOSAarch64
+    )
 }
 
 /// Whether the calls_after_def upper bound should open from

@@ -11,29 +11,22 @@ Disassembly of section .text:
                	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
-               	movl	$0x8, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %r12
-               	xorq	%r14, %r14
-               	movabsq	$-0x1, %rbx
-               	movq	%r12, %rdi
-               	movq	%rbx, %rdx
-               	movq	%r14, %rsi
+               	movq	%rax, %r9
+               	xorq	%rbx, %rbx
+               	movabsq	$-0x1, %rdx
+               	movq	%r9, %rdi
+               	movq	%rbx, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%r14, %rcx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x40, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

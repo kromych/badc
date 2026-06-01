@@ -12,9 +12,8 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	str	x20, [sp]
-               	str	x19, [sp, #0x10]
+               	sub	sp, sp, #0x40
+               	str	x19, [sp]
                	mov	x15, #0x0               // =0
                	stur	x15, [x29, #-0x8]
                	stur	w15, [x29, #-0x20]
@@ -29,39 +28,37 @@ Disassembly of section .text:
                	add	x15, x15, #0x1
                	str	w15, [x14]
                	b	<addr>
-               	mov	x20, #0x10              // =16
-               	mov	x0, x20
+               	mov	x0, #0x10               // =16
                	bl	<addr>
-               	stur	x0, [x29, #-0x18]
-               	ldur	x20, [x29, #-0x18]
-               	ldursw	x0, [x29, #-0x28]
-               	str	x0, [x20]
+               	mov	x13, x0
+               	stur	x13, [x29, #-0x18]
+               	ldur	x0, [x29, #-0x18]
+               	ldursw	x13, [x29, #-0x28]
+               	str	x13, [x0]
                	ldur	x14, [x29, #-0x18]
                	add	x14, x14, #0x8
+               	ldur	x13, [x29, #-0x8]
+               	str	x13, [x14]
+               	ldur	x0, [x29, #-0x18]
+               	stur	x0, [x29, #-0x8]
+               	b	<addr>
                	ldur	x0, [x29, #-0x8]
-               	str	x0, [x14]
-               	ldur	x20, [x29, #-0x18]
-               	stur	x20, [x29, #-0x8]
+               	stur	x0, [x29, #-0x10]
                	b	<addr>
-               	ldur	x20, [x29, #-0x8]
-               	stur	x20, [x29, #-0x10]
-               	b	<addr>
-               	ldur	x20, [x29, #-0x10]
-               	cmp	x20, #0x0
+               	ldur	x0, [x29, #-0x10]
+               	cmp	x0, #0x0
                	b.eq	<addr>
-               	ldursw	x0, [x29, #-0x20]
-               	ldur	x20, [x29, #-0x10]
-               	ldr	x14, [x20]
-               	add	x0, x0, x14
-               	stur	w0, [x29, #-0x20]
-               	add	x20, x20, #0x8
-               	ldr	x20, [x20]
-               	stur	x20, [x29, #-0x10]
+               	ldursw	x13, [x29, #-0x20]
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x14, [x0]
+               	add	x13, x13, x14
+               	stur	w13, [x29, #-0x20]
+               	add	x0, x0, #0x8
+               	ldr	x0, [x0]
+               	stur	x0, [x29, #-0x10]
                	b	<addr>
-               	ldursw	x20, [x29, #-0x20]
-               	mov	x0, x20
-               	ldr	x20, [sp]
-               	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x50
+               	ldursw	x0, [x29, #-0x20]
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

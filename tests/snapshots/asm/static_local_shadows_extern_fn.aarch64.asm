@@ -53,12 +53,9 @@ Disassembly of section .text:
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x20, [sp]
-               	mov	x20, #0x1               // =1
-               	mov	x0, x20
+               	mov	x0, #0x1                // =1
                	bl	<addr>
-               	ldr	x20, [sp]
-               	add	sp, sp, #0x10
+               	mov	x14, x0
+               	mov	x0, x14
                	ldp	x29, x30, [sp], #0x10
                	ret

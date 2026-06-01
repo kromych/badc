@@ -21,21 +21,15 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rdi
+               	xorq	%rdi, %rdi
                	callq	<addr>
                	movq	%fs:0x0, %rax
                	subq	$0x10, %rax
                	movslq	(%rax), %rax
                	cmpq	$0x7, %rax
                	je	<addr>
-               	movl	$0x1, %ebx
-               	movq	%rbx, %rcx
-               	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movl	$0x1, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
@@ -43,40 +37,32 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	cmpq	$-0x3, %rax
                	je	<addr>
-               	movl	$0x2, %ebx
-               	movq	%rbx, %rcx
-               	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movl	$0x2, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
                	subq	$0x10, %rax
-               	movq	%fs:0x0, %rbx
-               	subq	$0x10, %rbx
-               	movslq	(%rbx), %rbx
+               	movq	%fs:0x0, %rdi
+               	subq	$0x10, %rdi
+               	movslq	(%rdi), %rdi
                	movq	%fs:0x0, %r8
                	subq	$0x8, %r8
                	movslq	(%r8), %r8
-               	addq	%r8, %rbx
-               	movslq	%ebx, %rbx
-               	movl	%ebx, (%rax)
+               	addq	%r8, %rdi
+               	movslq	%edi, %rdi
+               	movl	%edi, (%rax)
                	movq	%fs:0x0, %r8
                	subq	$0x10, %r8
                	movslq	(%r8), %r8
                	cmpq	$0x4, %r8
                	je	<addr>
-               	movl	$0x3, %ebx
-               	movq	%rbx, %rcx
-               	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movl	$0x3, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	xorq	%r8, %r8
-               	movq	%r8, %rcx
-               	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movq	%r8, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

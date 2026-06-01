@@ -11,19 +11,12 @@ Disassembly of section .text:
                	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x220, %rsp            # imm = 0x220
-               	movq	%rbx, (%rsp)
-               	leaq	-0x200(%rbp), %rbx
-               	movq	%rbx, %rdi
+               	subq	$0x210, %rsp            # imm = 0x210
+               	leaq	-0x200(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	%rcx, %rax
-               	addq	$0x220, %rsp            # imm = 0x220
+               	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

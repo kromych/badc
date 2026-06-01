@@ -12,28 +12,25 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x50
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x19, [sp, #0x20]
-               	mov	x20, #0x8               // =8
-               	mov	x0, x20
-               	bl	<addr>
-               	mov	x21, x0
-               	mov	x22, #0x64              // =100
-               	mov	x0, x22
+               	str	x19, [sp, #0x10]
+               	mov	x0, #0x8                // =8
                	bl	<addr>
                	mov	x20, x0
-               	mov	x0, x20
-               	mov	x2, x22
-               	mov	x1, x21
+               	mov	x21, #0x64              // =100
+               	mov	x0, x21
                	bl	<addr>
-               	mov	x0, #0x0                // =0
+               	mov	x1, x20
+               	mov	x2, x21
+               	bl	<addr>
+               	mov	x12, x0
+               	mov	x12, #0x0               // =0
+               	mov	x0, x12
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x19, [sp, #0x20]
-               	add	sp, sp, #0x60
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret

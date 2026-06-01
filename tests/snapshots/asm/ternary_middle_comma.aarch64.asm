@@ -12,11 +12,9 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x50
                	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x19, [sp, #0x20]
+               	str	x19, [sp, #0x10]
                	sxtw	x20, w0
                	adrp	x19, <page>
                	add	x19, x19, #0x100
@@ -33,14 +31,12 @@ Disassembly of section .text:
                	ldr	x13, [x13]
                	mov	x0, x13
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x19, [sp, #0x20]
-               	add	sp, sp, #0x60
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x14, x29, #0x18
-               	mov	x21, #0x0               // =0
+               	mov	x0, #0x0                // =0
                	adrp	x19, <page>
                	add	x19, x19, #0x118
                	mov	x12, x19
@@ -60,42 +56,35 @@ Disassembly of section .text:
                	sub	x11, x29, #0x18
                	lsl	x12, x20, #3
                	add	x11, x11, x12
-               	ldr	x22, [x11]
-               	mov	x0, x21
-               	mov	x1, x22
+               	ldr	x1, [x11]
                	bl	<addr>
-               	cbz	x0, <addr>
+               	mov	x11, x0
+               	cbz	x11, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x100
-               	mov	x22, x19
-               	lsl	x21, x20, #3
-               	add	x22, x22, x21
-               	ldr	x0, [x0]
-               	str	x0, [x22]
+               	mov	x1, x19
+               	lsl	x0, x20, #3
+               	add	x1, x1, x0
+               	ldr	x11, [x11]
+               	str	x11, [x1]
                	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x100
-               	mov	x0, x19
+               	mov	x11, x19
                	lsl	x20, x20, #3
-               	add	x0, x0, x20
-               	ldr	x0, [x0]
+               	add	x11, x11, x20
+               	ldr	x11, [x11]
+               	mov	x0, x11
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x19, [sp, #0x20]
-               	add	sp, sp, #0x60
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x120
+               	sub	sp, sp, #0x100
                	str	x20, [sp]
-               	str	x21, [sp, #0x8]
-               	str	x22, [sp, #0x10]
-               	str	x23, [sp, #0x18]
-               	str	x24, [sp, #0x20]
-               	str	x25, [sp, #0x28]
-               	str	x19, [sp, #0x30]
+               	str	x19, [sp, #0x10]
                	sub	x15, x29, #0x8
                	adrp	x19, <page>
                	add	x19, x19, #0x150
@@ -147,184 +136,167 @@ Disassembly of section .text:
                	cbz	x13, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x154
-               	mov	x21, x19
-               	sxtw	x22, w12
+               	mov	x0, x19
+               	sxtw	x1, w12
                	sub	x12, x29, #0x8
-               	ldrb	w23, [x12]
-               	mov	x0, x21
-               	mov	x2, x23
-               	mov	x1, x22
+               	ldrb	w2, [x12]
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x1                // =1
+               	mov	x12, x0
+               	mov	x12, #0x1               // =1
+               	mov	x0, x12
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x23, x29, #0x20
+               	sub	x2, x29, #0x20
                	adrp	x19, <page>
                	add	x19, x19, #0x16a
-               	mov	x0, x19
+               	mov	x12, x19
                	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x0]
-               	strb	w10, [x23]
-               	ldrb	w10, [x0, #0x1]
-               	strb	w10, [x23, #0x1]
-               	ldrb	w10, [x0, #0x2]
-               	strb	w10, [x23, #0x2]
-               	ldrb	w10, [x0, #0x3]
-               	strb	w10, [x23, #0x3]
+               	ldrb	w10, [x12]
+               	strb	w10, [x2]
+               	ldrb	w10, [x12, #0x1]
+               	strb	w10, [x2, #0x1]
+               	ldrb	w10, [x12, #0x2]
+               	strb	w10, [x2, #0x2]
+               	ldrb	w10, [x12, #0x3]
+               	strb	w10, [x2, #0x3]
                	ldr	x10, [sp], #0x10
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x23, x20, x17
-               	cmp	x23, #0x80
+               	and	x2, x20, x17
+               	cmp	x2, #0x80
                	b.hs	<addr>
-               	sub	x0, x29, #0x20
+               	sub	x12, x29, #0x20
                	mov	x17, #0xff              // =255
-               	and	x23, x20, x17
-               	strb	w23, [x0]
-               	mov	x22, #0x1               // =1
-               	stur	x22, [x29, #-0x98]
+               	and	x2, x20, x17
+               	strb	w2, [x12]
+               	mov	x1, #0x1                // =1
+               	stur	x1, [x29, #-0x98]
                	b	<addr>
-               	mov	x22, #0x63              // =99
-               	stur	x22, [x29, #-0x98]
+               	mov	x1, #0x63               // =99
+               	stur	x1, [x29, #-0x98]
                	b	<addr>
-               	ldur	x22, [x29, #-0x98]
-               	sxtw	x23, w22
-               	cmp	x23, #0x1
-               	cset	x23, ne
-               	stur	x23, [x29, #-0xa0]
-               	cbnz	x23, <addr>
-               	sub	x0, x29, #0x20
-               	ldrb	w0, [x0]
+               	ldur	x1, [x29, #-0x98]
+               	sxtw	x2, w1
+               	cmp	x2, #0x1
+               	cset	x2, ne
+               	stur	x2, [x29, #-0xa0]
+               	cbnz	x2, <addr>
+               	sub	x12, x29, #0x20
+               	ldrb	w12, [x12]
                	mov	x17, #0x2a              // =42
-               	eor	x0, x0, x17
+               	eor	x12, x12, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xa0]
+               	and	x12, x12, x17
+               	cmp	x12, #0x0
+               	cset	x12, ne
+               	stur	x12, [x29, #-0xa0]
                	b	<addr>
-               	ldur	x0, [x29, #-0xa0]
-               	cbz	x0, <addr>
+               	ldur	x12, [x29, #-0xa0]
+               	cbz	x12, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x16e
-               	mov	x24, x19
-               	sxtw	x22, w22
-               	sub	x0, x29, #0x20
-               	ldrb	w23, [x0]
-               	mov	x0, x24
-               	mov	x2, x23
-               	mov	x1, x22
+               	mov	x0, x19
+               	sxtw	x12, w1
+               	sub	x1, x29, #0x20
+               	ldrb	w2, [x1]
+               	mov	x1, x12
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x2                // =2
+               	mov	x1, x0
+               	mov	x1, #0x2                // =2
+               	mov	x0, x1
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x23, x29, #0x30
+               	sub	x2, x29, #0x30
                	adrp	x19, <page>
                	add	x19, x19, #0x184
-               	mov	x0, x19
+               	mov	x1, x19
                	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x0]
-               	strb	w10, [x23]
-               	ldrb	w10, [x0, #0x1]
-               	strb	w10, [x23, #0x1]
-               	ldrb	w10, [x0, #0x2]
-               	strb	w10, [x23, #0x2]
-               	ldrb	w10, [x0, #0x3]
-               	strb	w10, [x23, #0x3]
+               	ldrb	w10, [x1]
+               	strb	w10, [x2]
+               	ldrb	w10, [x1, #0x1]
+               	strb	w10, [x2, #0x1]
+               	ldrb	w10, [x1, #0x2]
+               	strb	w10, [x2, #0x2]
+               	ldrb	w10, [x1, #0x3]
+               	strb	w10, [x2, #0x3]
                	ldr	x10, [sp], #0x10
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x23, x20, x17
-               	cmp	x23, #0x80
+               	and	x2, x20, x17
+               	cmp	x2, #0x80
                	b.hs	<addr>
-               	sub	x0, x29, #0x30
+               	sub	x1, x29, #0x30
                	mov	x17, #0xff              // =255
-               	and	x23, x20, x17
-               	strb	w23, [x0]
-               	mov	x22, #0x1               // =1
-               	stur	x22, [x29, #-0xa8]
+               	and	x2, x20, x17
+               	strb	w2, [x1]
+               	mov	x12, #0x1               // =1
+               	stur	x12, [x29, #-0xa8]
                	b	<addr>
-               	mov	x22, #0x63              // =99
-               	stur	x22, [x29, #-0xa8]
+               	mov	x12, #0x63              // =99
+               	stur	x12, [x29, #-0xa8]
                	b	<addr>
-               	ldur	x22, [x29, #-0xa8]
-               	sxtw	x23, w22
-               	cmp	x23, #0x1
-               	cset	x23, ne
-               	stur	x23, [x29, #-0xb0]
-               	cbnz	x23, <addr>
-               	sub	x0, x29, #0x30
-               	ldrb	w0, [x0]
+               	ldur	x12, [x29, #-0xa8]
+               	sxtw	x2, w12
+               	cmp	x2, #0x1
+               	cset	x2, ne
+               	stur	x2, [x29, #-0xb0]
+               	cbnz	x2, <addr>
+               	sub	x1, x29, #0x30
+               	ldrb	w1, [x1]
                	mov	x17, #0x2a              // =42
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xb0]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x1, ne
+               	stur	x1, [x29, #-0xb0]
                	b	<addr>
-               	ldur	x0, [x29, #-0xb0]
-               	cbz	x0, <addr>
+               	ldur	x1, [x29, #-0xb0]
+               	cbz	x1, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x188
-               	mov	x21, x19
-               	sxtw	x22, w22
-               	sub	x0, x29, #0x30
-               	ldrb	w23, [x0]
-               	mov	x0, x21
-               	mov	x2, x23
-               	mov	x1, x22
+               	mov	x0, x19
+               	sxtw	x1, w12
+               	sub	x12, x29, #0x30
+               	ldrb	w2, [x12]
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x3                // =3
+               	mov	x12, x0
+               	mov	x12, #0x3               // =3
+               	mov	x0, x12
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x23, #0x0               // =0
-               	stur	w23, [x29, #-0x40]
-               	stur	w23, [x29, #-0x48]
-               	stur	w23, [x29, #-0x50]
+               	mov	x2, #0x0                // =0
+               	stur	w2, [x29, #-0x40]
+               	stur	w2, [x29, #-0x48]
+               	stur	w2, [x29, #-0x50]
                	cmp	x20, #0x0
                	b.le	<addr>
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x40]
+               	mov	x12, #0x1               // =1
+               	stur	w12, [x29, #-0x40]
                	mov	x20, #0x2               // =2
                	stur	w20, [x29, #-0x48]
-               	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x50]
+               	mov	x12, #0x3               // =3
+               	stur	w12, [x29, #-0x50]
                	ldursw	x20, [x29, #-0x40]
-               	ldursw	x0, [x29, #-0x48]
-               	add	x20, x20, x0
+               	ldursw	x12, [x29, #-0x48]
+               	add	x20, x20, x12
                	sxtw	x20, w20
-               	ldursw	x0, [x29, #-0x50]
-               	add	x20, x20, x0
+               	ldursw	x12, [x29, #-0x50]
+               	add	x20, x20, x12
                	sxtw	x20, w20
                	stur	x20, [x29, #-0xb8]
                	b	<addr>
@@ -335,134 +307,115 @@ Disassembly of section .text:
                	stur	x20, [x29, #-0xb8]
                	b	<addr>
                	ldur	x20, [x29, #-0xb8]
-               	sxtw	x0, w20
-               	cmp	x0, #0x6
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xd0]
-               	cbnz	x0, <addr>
-               	ldursw	x23, [x29, #-0x40]
-               	cmp	x23, #0x1
-               	cset	x23, ne
-               	stur	x23, [x29, #-0xd0]
+               	sxtw	x12, w20
+               	cmp	x12, #0x6
+               	cset	x12, ne
+               	stur	x12, [x29, #-0xd0]
+               	cbnz	x12, <addr>
+               	ldursw	x2, [x29, #-0x40]
+               	cmp	x2, #0x1
+               	cset	x2, ne
+               	stur	x2, [x29, #-0xd0]
                	b	<addr>
-               	ldur	x23, [x29, #-0xd0]
-               	stur	x23, [x29, #-0xc8]
-               	cbnz	x23, <addr>
-               	ldursw	x0, [x29, #-0x48]
-               	cmp	x0, #0x2
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xc8]
+               	ldur	x2, [x29, #-0xd0]
+               	stur	x2, [x29, #-0xc8]
+               	cbnz	x2, <addr>
+               	ldursw	x12, [x29, #-0x48]
+               	cmp	x12, #0x2
+               	cset	x12, ne
+               	stur	x12, [x29, #-0xc8]
                	b	<addr>
-               	ldur	x0, [x29, #-0xc8]
-               	stur	x0, [x29, #-0xc0]
-               	cbnz	x0, <addr>
-               	ldursw	x23, [x29, #-0x50]
-               	cmp	x23, #0x3
-               	cset	x23, ne
-               	stur	x23, [x29, #-0xc0]
+               	ldur	x12, [x29, #-0xc8]
+               	stur	x12, [x29, #-0xc0]
+               	cbnz	x12, <addr>
+               	ldursw	x2, [x29, #-0x50]
+               	cmp	x2, #0x3
+               	cset	x2, ne
+               	stur	x2, [x29, #-0xc0]
                	b	<addr>
-               	ldur	x23, [x29, #-0xc0]
-               	cbz	x23, <addr>
+               	ldur	x2, [x29, #-0xc0]
+               	cbz	x2, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x19e
-               	mov	x24, x19
-               	sxtw	x20, w20
-               	ldursw	x25, [x29, #-0x40]
-               	ldursw	x23, [x29, #-0x48]
-               	ldursw	x22, [x29, #-0x50]
-               	mov	x0, x24
-               	mov	x4, x22
-               	mov	x3, x23
-               	mov	x2, x25
-               	mov	x1, x20
+               	mov	x0, x19
+               	sxtw	x1, w20
+               	ldursw	x2, [x29, #-0x40]
+               	ldursw	x3, [x29, #-0x48]
+               	ldursw	x4, [x29, #-0x50]
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x4                // =4
+               	mov	x10, x0
+               	mov	x10, #0x4               // =4
+               	mov	x0, x10
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x22, x29, #0x60
+               	sub	x4, x29, #0x60
                	adrp	x19, <page>
                	add	x19, x19, #0x1bb
-               	mov	x0, x19
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x0]
-               	strb	w10, [x22]
-               	ldrb	w10, [x0, #0x1]
-               	strb	w10, [x22, #0x1]
-               	ldrb	w10, [x0, #0x2]
-               	strb	w10, [x22, #0x2]
-               	ldrb	w10, [x0, #0x3]
-               	strb	w10, [x22, #0x3]
-               	ldr	x10, [sp], #0x10
-               	mov	x22, #0xc8              // =200
+               	mov	x10, x19
+               	str	x11, [sp, #-0x10]!
+               	ldrb	w11, [x10]
+               	strb	w11, [x4]
+               	ldrb	w11, [x10, #0x1]
+               	strb	w11, [x4, #0x1]
+               	ldrb	w11, [x10, #0x2]
+               	strb	w11, [x4, #0x2]
+               	ldrb	w11, [x10, #0x3]
+               	strb	w11, [x4, #0x3]
+               	ldr	x11, [sp], #0x10
+               	mov	x4, #0xc8               // =200
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x22, x17
-               	cmp	x0, #0x80
+               	and	x10, x4, x17
+               	cmp	x10, #0x80
                	b.hs	<addr>
-               	sub	x23, x29, #0x60
+               	sub	x3, x29, #0x60
                	mov	x17, #0xff              // =255
-               	and	x22, x22, x17
-               	strb	w22, [x23]
-               	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0xd8]
+               	and	x4, x4, x17
+               	strb	w4, [x3]
+               	mov	x10, #0x1               // =1
+               	stur	x10, [x29, #-0xd8]
                	b	<addr>
-               	mov	x0, #0x63               // =99
-               	stur	x0, [x29, #-0xd8]
+               	mov	x10, #0x63              // =99
+               	stur	x10, [x29, #-0xd8]
                	b	<addr>
-               	ldur	x0, [x29, #-0xd8]
-               	sxtw	x22, w0
-               	cmp	x22, #0x63
-               	cset	x22, ne
-               	stur	x22, [x29, #-0xe0]
-               	cbnz	x22, <addr>
-               	sub	x23, x29, #0x60
-               	ldrb	w23, [x23]
-               	cmp	x23, #0x0
-               	cset	x23, ne
-               	stur	x23, [x29, #-0xe0]
+               	ldur	x10, [x29, #-0xd8]
+               	sxtw	x4, w10
+               	cmp	x4, #0x63
+               	cset	x4, ne
+               	stur	x4, [x29, #-0xe0]
+               	cbnz	x4, <addr>
+               	sub	x3, x29, #0x60
+               	ldrb	w3, [x3]
+               	cmp	x3, #0x0
+               	cset	x3, ne
+               	stur	x3, [x29, #-0xe0]
                	b	<addr>
-               	ldur	x23, [x29, #-0xe0]
-               	cbz	x23, <addr>
+               	ldur	x3, [x29, #-0xe0]
+               	cbz	x3, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x1bf
-               	mov	x21, x19
-               	sxtw	x22, w0
-               	sub	x0, x29, #0x60
-               	ldrb	w23, [x0]
-               	mov	x0, x21
-               	mov	x2, x23
-               	mov	x1, x22
+               	mov	x0, x19
+               	sxtw	x1, w10
+               	sub	x10, x29, #0x60
+               	ldrb	w2, [x10]
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x0, #0x5                // =5
+               	mov	x10, x0
+               	mov	x10, #0x5               // =5
+               	mov	x0, x10
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x23, #0x0               // =0
-               	mov	x0, x23
+               	mov	x2, #0x0                // =0
+               	mov	x0, x2
                	ldr	x20, [sp]
-               	ldr	x21, [sp, #0x8]
-               	ldr	x22, [sp, #0x10]
-               	ldr	x23, [sp, #0x18]
-               	ldr	x24, [sp, #0x20]
-               	ldr	x25, [sp, #0x28]
-               	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x120
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret

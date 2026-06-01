@@ -80,54 +80,47 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	movq	%r15, 0x18(%rsp)
                	leaq	<rip>, %rbx
                	leaq	<rip>, %r12
                	leaq	<rip>, %r14
-               	leaq	<rip>, %r15
+               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
-               	movq	%r15, %rsi
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x15, %r15d
-               	movq	%r15, %rcx
+               	movl	$0x15, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %r15
+               	leaq	<rip>, %rsi
                	movq	%r12, %rdi
-               	movq	%r15, %rsi
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x16, %r15d
-               	movq	%r15, %rcx
+               	movl	$0x16, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %r15
+               	leaq	<rip>, %rsi
                	movq	%r14, %rdi
-               	movq	%r15, %rsi
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x17, %r15d
-               	movq	%r15, %rcx
+               	movl	$0x17, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
@@ -142,7 +135,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
@@ -157,7 +149,6 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
@@ -167,89 +158,52 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
-               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	leaq	<rip>, %rbx
-               	leaq	<rip>, %r12
-               	movq	%rbx, %rdi
-               	movq	%r12, %rsi
+               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x1f, %r12d
-               	movq	%r12, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movl	$0x1f, %esi
+               	movq	%rsi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
                	callq	<addr>
                	movslq	%eax, %r9
                	cmpq	$0x0, %r9
                	je	<addr>
-               	movslq	%eax, %rbx
-               	movq	%rbx, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movslq	%eax, %rbx
-               	cmpq	$0x0, %rbx
+               	movq	%rax, %r9
+               	movslq	%r9d, %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
-               	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movslq	%r9d, %r9
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %r12
-               	leaq	<rip>, %rbx
-               	movq	%r12, %rdi
-               	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x29, %ebx
-               	movq	%rbx, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	movl	$0x29, %esi
+               	movq	%rsi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
-               	movq	%rax, %rcx
-               	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
-               	movq	%rcx, %rax
-               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

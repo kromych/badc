@@ -1299,14 +1299,22 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
 }
 
 /// Whether the target has the emit-layer prerequisites that make
-/// the `calls_after_def` relaxation safe by default. Win64 uses
-/// the same x86_64 CallIndirect picker as Linux x64 but its full
-/// demo gate hasn't been run under BADC_RELAX_ALL=1, so keep it
-/// on the conservative bound until that gate is satisfied.
+/// the `calls_after_def` relaxation safe by default. All four
+/// SysV/AAPCS64/Win64 targets share the same CallIndirect picker
+/// and `schedule_int_reg_moves` cycle-break; the kromyrzen.local
+/// Win64 demo gate (sqlite3 / miniz / tweetnacl / lua) + cargo
+/// test --release --lib are green under BADC_RELAX_ALL=1 here as
+/// well, so every target enables the relaxation. WindowsAarch64
+/// uses the aarch64 emit and the same `schedule_int_reg_moves`
+/// fix applies.
 fn target_enables_relaxation(target: Target) -> bool {
     matches!(
         target,
-        Target::LinuxX64 | Target::LinuxAarch64 | Target::MacOSAarch64
+        Target::LinuxX64
+            | Target::LinuxAarch64
+            | Target::MacOSAarch64
+            | Target::WindowsX64
+            | Target::WindowsAarch64
     )
 }
 

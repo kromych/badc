@@ -881,6 +881,19 @@ pub struct Compiler {
     /// spill to internal-linkage storage. Reset implicitly via
     /// `Compiler::default()` on every fresh compile.
     next_compound_literal_id: usize,
+
+    /// Original `(source, opts)` snapshot captured in `with_options`
+    /// when auto-include retry is permitted. On a "unknown function
+    /// `name`" error during [`Self::compile`] the snapshot is
+    /// re-used: the header that declares `name` (looked up in
+    /// `headers::header_declaring`) is appended to
+    /// `opts.force_includes` and a fresh `Compiler` runs the source
+    /// from scratch. C99 7.1.4p2 lets standard library functions be
+    /// referenced without a prior declaration; this turns that
+    /// permission into an actually-working build for fixtures that
+    /// rely on it. `None` after the first retry attempt, so the
+    /// recursion bottoms out at one level.
+    retry_state: Option<(String, CompileOptions)>,
 }
 
 impl Compiler {
@@ -951,6 +964,26 @@ impl Compiler {
     }
 
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
+        Self::with_options_inner(source, target, opts, true)
+    }
+
+    fn with_options_inner(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+        allow_auto_include_retry: bool,
+    ) -> Self {
+        let retry_state = if allow_auto_include_retry {
+            Some((source.clone(), opts.clone()))
+        } else {
+            None
+        };
+        let mut this = Self::build(source, target, opts);
+        this.retry_state = retry_state;
+        this
+    }
+
+    fn build(source: String, target: Target, opts: CompileOptions) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -1082,6 +1115,7 @@ impl Compiler {
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             next_compound_literal_id: 0,
+            retry_state: None,
         }
     }
 
@@ -1188,10 +1222,79 @@ impl Compiler {
         Ok(exports)
     }
 
+    /// Recover the function name from a compile error whose
+    /// message has the shape ``unknown function `<name>`...``,
+    /// returning `None` for any other error. Used to drive the
+    /// auto-include retry in [`Self::compile`] -- a parser-level
+    /// "unknown function" lands in `C5Error::Compile(_)` with the
+    /// matching text, and `header_declaring` keys off the
+    /// extracted name to pick the right `#include`.
+    fn parse_unknown_function_name_from(err: &C5Error) -> Option<String> {
+        let msg = match err {
+            C5Error::Compile(m) => m,
+            _ => return None,
+        };
+        let start = msg.find("unknown function `")? + "unknown function `".len();
+        let rest = &msg[start..];
+        let end = rest.find('`')?;
+        Some(rest[..end].to_string())
+    }
+
     /// Compile the source. On success, the returned `Program`
     /// carries the per-function SSA + static data segment + the
     /// ent_pc of `main`.
+    ///
+    /// Auto-include retry: when the first pass fails with
+    /// `unknown function `name`` and `name` is declared by one of
+    /// the embedded standard headers (per `headers::header_declaring`
+    /// + the build-time index in `BINDING_TO_HEADER`), this method
+    /// transparently re-runs the compile with the matching header
+    /// force-included. C99 7.1.4p2 lets standard library functions
+    /// be used without a prior declaration; this turns that
+    /// permission into a successful build instead of a friendly
+    /// error. The retry runs only once -- a second-pass failure
+    /// propagates the original error.
     pub fn compile(mut self) -> Result<Program, C5Error> {
+        let retry_state = self.retry_state.take();
+        let target = self.target;
+        match self.compile_one_pass() {
+            Ok(p) => Ok(p),
+            Err(e) => {
+                let Some((source, opts)) = retry_state else {
+                    return Err(e);
+                };
+                let Some(name) = Self::parse_unknown_function_name_from(&e) else {
+                    return Err(e);
+                };
+                let header = match super::headers::header_declaring(&name) {
+                    Some(h) => h,
+                    None => return Err(e),
+                };
+                if opts.force_includes.iter().any(|h| h == header) {
+                    return Err(e);
+                }
+                let mut opts2 = opts;
+                opts2.force_includes.push(header.to_string());
+                let mut prog = Compiler::with_options_inner(source, target, opts2, false)
+                    .compile_one_pass()?;
+                // Surface the recovery through the same diagnostic
+                // pipeline the CLI colourises (`info:` -> bold green).
+                // Insert at the head so it lands above any
+                // preprocessor / parser warnings that fired during
+                // the successful retry pass.
+                prog.warnings.insert(
+                    0,
+                    format!("info: auto-including <{header}> for undeclared `{name}`"),
+                );
+                Ok(prog)
+            }
+        }
+    }
+
+    /// Run the full compile pipeline once with no auto-include
+    /// retry. Shared by [`Self::compile`] (first pass) and by the
+    /// retry branch inside the same method.
+    fn compile_one_pass(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }

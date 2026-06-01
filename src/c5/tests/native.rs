@@ -533,6 +533,14 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 7.1.4p2: a TU may call `printf` without including
+    // `<stdio.h>`. The compiler hits the first-pass "unknown
+    // function `printf`" error, looks the name up in the
+    // build-time `BINDING_TO_HEADER` index, force-includes
+    // `<stdio.h>` and re-runs the compile in one transparent
+    // retry. Exits 0 when the auto-include path is wired up;
+    // a `BuildError` on this entry means the retry regressed.
+    ("auto_include_undeclared_libc.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

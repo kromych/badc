@@ -370,6 +370,7 @@ impl Compiler {
         // constant expression -- the float case has to flip the
         // IEEE-754 sign bit rather than negate an integer value.
         if self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit() {
+            let snap = self.lex.snapshot();
             self.next()?; // consume `-`
             if self.lex.tk == Token::FloatNum {
                 let bits = (self.lex.ival as u64) ^ (1u64 << 63);
@@ -381,8 +382,16 @@ impl Compiler {
                 return Ok((bits as i64, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num {
-                let v = -self.lex.ival;
-                self.next()?;
+                // Leading `-Num` may head a binary integer chain
+                // (`-N * M`, `-N + M`, ...). Without restarting the
+                // const-expression evaluator on the whole input the
+                // trailing operator escapes into the outer
+                // brace-list parser and the brace list miscounts
+                // its entries. Rewind to the `-` and route through
+                // `parse_constant_int`, which honours the C99 6.6
+                // precedence chain.
+                self.lex.restore(snap);
+                let v = self.parse_constant_int()?;
                 return Ok((v, InitElemReloc::None));
             }
             // peek said "digit next", so the lexer must have

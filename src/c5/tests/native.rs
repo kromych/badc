@@ -533,6 +533,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 6.6 leading-`-Num` in a struct-array brace entry. The
+    // `parse_constant_init_value` fast-path now rewinds and uses
+    // `parse_constant_int` for the whole expression so `-N * M`
+    // / `-N + M` shapes fold in place instead of leaking the
+    // trailing operator into the brace-list parser.
+    ("init_leading_neg_arith.c", 0),
     // C99 6.7.8p7 array designator on a struct-array element.
     // The known-size constant-staging path now resolves
     // `[K] = {field, ...}` to element K and resumes positional

@@ -49,7 +49,7 @@ EXECUTE_SUBDIR = Path("tests") / "cc" / "execute"
 # is tracked separately. Set the gate at the cross-platform
 # minimum so a lane-specific regression doesn't gate the others;
 # raise it as each remaining C99 gap closes.
-BASELINE = 229
+BASELINE = 232
 
 
 def resolve_badc() -> Path:
@@ -80,6 +80,25 @@ def run_one(badc: Path, src: Path, out_dir: Path, optimize: bool) -> tuple[bool,
     cmd: list[str | os.PathLike[str]] = [str(badc), "-q"]
     if optimize:
         cmd.append("-O")
+    # scc's harness passes the suite root and the two named
+    # subdirs on the compile command line. Mirror that here so the
+    # tests can reach their dependencies:
+    #   * suite_root         -- `0062-include.c` has
+    #                           `#include "include/0062-include.h"`
+    #                           which resolves under the suite root.
+    #   * suite_root/include -- `0062-include.h` itself has a
+    #                           bare `#include "0062-include2.h"`.
+    #   * suite_root/sysinclude -- `0064-sysinclude.c` has
+    #                           `#include <0064-sysinclude.h>`.
+    suite_root = src.parent
+    cmd += [
+        "-I",
+        str(suite_root),
+        "-I",
+        str(suite_root / "include"),
+        "-I",
+        str(suite_root / "sysinclude"),
+    ]
     cmd += ["-o", str(bin_path), str(src)]
     build = subprocess.run(cmd, capture_output=True, text=True)
     if build.returncode != 0:

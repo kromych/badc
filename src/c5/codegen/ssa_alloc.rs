@@ -887,6 +887,22 @@ fn populate_call_arg_hints(
                 continue;
             }
             if let Some(&r) = int_args.get(arg_pos) {
+                // ParamRefs materialise in inst order. Hinting
+                // ParamRef(pi)'s value into int_args[k] for any k
+                // beyond pi writes through a register that a later
+                // ParamRef(k) still needs to read, scrambling the
+                // incoming arguments. Refuse the hint in that shape;
+                // the value goes through the regular pick path
+                // instead of the coalesced arg-reg.
+                if let Inst::ParamRef { idx: pi, .. } = func.insts[vu]
+                    && (pi as usize) < int_args.len()
+                    && int_args[(pi as usize)..]
+                        .iter()
+                        .skip(1)
+                        .any(|&later| later == r)
+                {
+                    continue;
+                }
                 hints[vu] = Some(r);
             }
         }

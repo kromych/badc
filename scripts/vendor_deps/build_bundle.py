@@ -174,6 +174,21 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # SCC -- the Simple C Compiler by k0ga. Vendored from
+        # git.simple-cc.org/scc; the upstream-sha is the master
+        # branch's HEAD commit at the time of bundling. The
+        # archive is a `tar czf` of the cleaned tree (no `.git`)
+        # under the asset-named top-level directory, since
+        # upstream serves git-protocol only -- no http tarball
+        # endpoint to download.
+        name="scc",
+        version="20260529",
+        url="https://git.simple-cc.org/scc/",
+        ext=".tar.gz",
+        upstream_sha="cd2e378821e5e5f86215643e87a6b806a8b54492",
+        sha_kind="git",
+    ),
+    Source(
         # Lua 5.5.0 official test suite -- published as a separate
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.

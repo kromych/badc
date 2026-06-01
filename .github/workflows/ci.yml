@@ -514,6 +514,19 @@ jobs:
           if errorlevel 1 ( echo probe build failed & exit /b 0 )
           "%WORK%\probe.exe"
           echo probe exit: %ERRORLEVEL%
+      - name: scc execute suite smoke
+        # scc -- k0ga's Simple C Compiler -- ships a numbered
+        # `tests/cc/execute/` corpus that exercises C99 corners
+        # outside the hand-rolled badc fixture suite. The smoke
+        # walks each `*.c`, compiles + runs it through badc at
+        # both `-q -O0` and `-q -O`, and tallies the pass count
+        # against a committed BASELINE. POSIX-only: scc's tests
+        # call POSIX-shaped libc surfaces (open, getpid, fork
+        # through helper headers) and the binaries don't link on
+        # Windows targets without a wider shim.
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python demos/scc/setup.py && python demos/scc/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

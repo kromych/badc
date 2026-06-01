@@ -82,6 +82,14 @@ demos/chibicc/*
 !demos/chibicc/smoke.py
 !demos/chibicc/self_host.py
 !demos/chibicc/README.md
+# scc -- k0ga's Simple C Compiler. `setup.py` fetches the
+# upstream commit snapshot from the vendor-deps mirror and
+# unpacks it under `demos/scc/src/`; the smoke harness walks
+# `tests/cc/execute/*.c` and tallies a pass count against the
+# committed BASELINE. Only the runner scripts are committed.
+demos/scc/*
+!demos/scc/setup.py
+!demos/scc/smoke.py
 # tinycc -- Fabrice Bellard's TCC, multi-TU build for the
 # x86_64 / aarch64 backends across ELF / Mach-O / PE.
 # `setup.py` fetches the pinned `mob` commit snapshot. Only

@@ -20,8 +20,7 @@ Disassembly of section .text:
                	bl	<addr>
                	uxtb	w0, w0
                	mov	x12, x0
-               	mov	x12, #0x0               // =0
-               	mov	x0, x12
+               	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

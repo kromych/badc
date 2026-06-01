@@ -103,6 +103,8 @@ Disassembly of section .text:
                	movl	$0x4, %esi
                	callq	<addr>
                	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
+               	movslq	(%rax), %rsi
+               	movq	%rsi, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

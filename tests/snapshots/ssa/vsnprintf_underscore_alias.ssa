@@ -1531,7 +1531,7 @@ fn ent_pc=14 n_params=3 variadic=true locals=6
     v9   Imm(0)                                           -> x1
     v10  LocalAddr(-1)                                    -> x1
     v11  Intrinsic { kind=6, args=[v10] }                 -> x2
-    v12  Extend { value=v8, kind=I32 }                    -> x0
+    v12  Extend { value=v8, kind=I32 }                    -> x2
     terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main

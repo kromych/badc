@@ -70,7 +70,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x14, x0
                	mov	x17, #0x7f              // =127
-               	and	x14, x14, x17
-               	mov	x0, x14
+               	and	x0, x14, x17
                	ldp	x29, x30, [sp], #0x10
                	ret

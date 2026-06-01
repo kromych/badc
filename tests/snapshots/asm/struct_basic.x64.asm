@@ -31,9 +31,7 @@ Disassembly of section .text:
                	imulq	%rax, %rdi
                	movslq	%edi, %rdi
                	addq	%rdi, %r11
-               	movslq	%r11d, %r11
-               	movq	%r11, %rax
+               	movslq	%r11d, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

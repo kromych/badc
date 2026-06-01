@@ -85,7 +85,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v20  Call { target_pc=3, args=[] }                    -> x0
     v21  Binop { op=add, lhs=v19, rhs=v20 }               -> x3
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x3
-    v23  BinopI { op=shr, lhs=v22, rhs_imm=32 }           -> x3
+    v23  BinopI { op=shr, lhs=v22, rhs_imm=32 }           -> x0
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

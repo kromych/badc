@@ -35,8 +35,8 @@ Disassembly of section .text:
                	movq	%r8, %r11
                	movq	%rbx, %rdi
                	callq	*%r11
-               	movslq	(%rbx), %rbx
-               	movq	%rbx, %rcx
+               	movslq	(%rbx), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp

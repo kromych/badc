@@ -62,7 +62,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
                	callq	<addr>
-               	andq	$0x7f, %rax
+               	movq	%rax, %rdi
+               	andq	$0x7f, %rdi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

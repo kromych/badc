@@ -156,8 +156,7 @@ Disassembly of section .text:
                	bl	<addr>
                	add	sp, sp, #0x50
                	mov	x10, x0
-               	mov	x10, #0x0               // =0
-               	mov	x0, x10
+               	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

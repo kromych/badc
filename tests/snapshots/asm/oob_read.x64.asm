@@ -16,8 +16,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	addq	$0x190, %rax            # imm = 0x190
-               	movslq	(%rax), %rax
+               	movslq	(%rax), %rdi
+               	movq	%rdi, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -32,8 +32,7 @@ Disassembly of section .text:
                	mul	x0, x0, x14
                	sxtw	x0, w0
                	add	x12, x12, x0
-               	sxtw	x12, w12
-               	mov	x0, x12
+               	sxtw	x0, w12
                	ldr	x19, [sp]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

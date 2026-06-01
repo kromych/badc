@@ -53,8 +53,7 @@ Disassembly of section .text:
                	sxtw	x21, w21
                	sxtw	x0, w0
                	mul	x21, x21, x0
-               	sxtw	x21, w21
-               	mov	x0, x21
+               	sxtw	x0, w21
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]

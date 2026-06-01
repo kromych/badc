@@ -1480,8 +1480,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x11, x0
                	sub	x3, x29, #0x8
-               	sxtw	x11, w11
-               	mov	x0, x11
+               	sxtw	x0, w11
                	ldr	x19, [sp]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

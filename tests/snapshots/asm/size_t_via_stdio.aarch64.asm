@@ -146,8 +146,7 @@ Disassembly of section .text:
                	adrp	x19, <page>
                	add	x19, x19, #0x148
                	mov	x13, x19
-               	ldrsw	x13, [x13]
-               	mov	x0, x13
+               	ldrsw	x0, [x13]
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x7
     v23  Binop { op=add, lhs=v16, rhs=v22 }               -> x11
     v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x11
-    v25  BinopI { op=shr, lhs=v24, rhs_imm=32 }           -> x11
+    v25  BinopI { op=shr, lhs=v24, rhs_imm=32 }           -> x0
     terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

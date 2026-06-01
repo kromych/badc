@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v9   Imm(0)                                           -> x7
     v10  Store { addr=v8, value=v9, kind=I64 }            -> -
     v11  LoadLocal { off=-1, kind=I64 }                   -> x11
-    v12  Load { addr=v2, kind=I32 }                       -> x0
+    v12  Load { addr=v2, kind=I32 }                       -> x11
     terminator Return(v12)   (exit_acc=v12)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

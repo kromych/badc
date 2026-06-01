@@ -34,8 +34,8 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movzbq	(%r14), %r14
-               	movq	%r14, %rcx
+               	movzbq	(%r14), %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

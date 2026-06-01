@@ -91,8 +91,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x13, x0
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

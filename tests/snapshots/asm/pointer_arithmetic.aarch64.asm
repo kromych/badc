@@ -26,8 +26,7 @@ Disassembly of section .text:
                	add	x14, x14, #0x4
                	ldrsw	x14, [x14]
                	add	x12, x12, x14
-               	sxtw	x12, w12
-               	mov	x0, x12
+               	sxtw	x0, w12
                	ldr	x19, [sp]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

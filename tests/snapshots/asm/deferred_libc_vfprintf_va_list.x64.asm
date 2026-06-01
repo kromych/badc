@@ -1419,7 +1419,8 @@ Disassembly of section .text:
                	movq	-0x8(%rbp), %rcx
                	callq	<addr>
                	leaq	-0x8(%rbp), %rcx
-               	movslq	%eax, %rax
+               	movslq	%eax, %rdx
+               	movq	%rdx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
@@ -1464,3 +1465,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

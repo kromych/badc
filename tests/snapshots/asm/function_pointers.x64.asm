@@ -39,8 +39,8 @@ Disassembly of section .text:
                	movslq	%r12d, %r12
                	movslq	%eax, %rax
                	imulq	%rax, %r12
-               	movslq	%r12d, %r12
-               	movq	%r12, %rcx
+               	movslq	%r12d, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax

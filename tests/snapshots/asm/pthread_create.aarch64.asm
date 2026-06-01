@@ -64,8 +64,7 @@ Disassembly of section .text:
                	blr	x9
                	add	sp, sp, #0x20
                	mov	x10, x0
-               	ldur	x10, [x29, #-0x28]
-               	mov	x0, x10
+               	ldur	x0, [x29, #-0x28]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

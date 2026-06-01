@@ -263,6 +263,15 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // protect.
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
+    // Back-edge phi source per inst: if v_src is an incoming source for
+    // some phi v_phi where v_src is defined later in PC order than the
+    // phi, record v_phi against v_src. At v_src's pick site below the
+    // scan transfers v_phi's reg to v_src so the phi result and its
+    // back-edge source share a single physical register. Without this
+    // the predecessor-exit move from b_pred to v_phi at the loop header
+    // reads v_src from a register that the passthrough block clobbered
+    // between v_src's def and the back edge.
+    let back_edge_phi_of: Vec<ValueId> = compute_back_edge_phi_of(func);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -296,6 +305,27 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             continue;
         }
         let must_be_callee = calls_after_def[idx];
+
+        // Back-edge phi source: this inst writes the value that some
+        // earlier phi reads from its predecessor block. Force the dst
+        // into the phi's register so the predecessor-exit move at the
+        // back edge becomes a self-mov. Manually retire the phi result
+        // from the active list -- by SSA semantics the phi value is
+        // logically dead from here onward, replaced by this inst's
+        // result, and subsequent reads of the phi value land on the
+        // same register that this inst writes into.
+        if kind == ResultKind::Int && back_edge_phi_of[idx] != NO_VALUE {
+            let phi_v = back_edge_phi_of[idx];
+            if let Place::IntReg(r) = places[phi_v as usize] {
+                if let Some(pos) = active_int.iter().position(|(v, _, _)| *v == phi_v) {
+                    active_int.remove(pos);
+                    free_int.push(r);
+                }
+                if hints[idx].is_none() {
+                    hints[idx] = Some(r);
+                }
+            }
+        }
 
         // For a Binop / BinopI / Extend / Fneg whose lhs operand dies
         // at this very pc, set the dst's hint to lhs's register so the
@@ -1084,6 +1114,34 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// The allocator's hint policy is advisory; an unsuitable hint
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
+/// For each SSA value, the phi value-id whose back-edge incoming slot
+/// this value fills. `NO_VALUE` for any value that does not write a
+/// back-edge phi source. A back-edge source is a phi `v_phi` with an
+/// incoming `(_, v_src)` where `v_src > v_phi`: `v_src` is defined
+/// later in PC order than the phi reading it, i.e. the value flows
+/// around a loop. Only the first phi that names the value is recorded;
+/// a value that feeds multiple back-edge phis is handled by the first
+/// and the rest fall through to the regular allocation path.
+fn compute_back_edge_phi_of(func: &FunctionSsa) -> Vec<ValueId> {
+    let n = func.insts.len();
+    let mut be_of: Vec<ValueId> = alloc::vec![NO_VALUE; n];
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let Inst::Phi { incoming, .. } = inst else {
+            continue;
+        };
+        let phi_pc = idx as ValueId;
+        for (_, src) in incoming {
+            if *src == NO_VALUE {
+                continue;
+            }
+            if *src > phi_pc && (*src as usize) < n && be_of[*src as usize] == NO_VALUE {
+                be_of[*src as usize] = phi_pc;
+            }
+        }
+    }
+    be_of
+}
+
 fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
     loop {
         let mut changed = false;
@@ -1582,6 +1640,101 @@ mod tests {
             assert_eq!(
                 mcpy_place, dst_place,
                 "Mcpy result should reuse v_dst's freed register on {target:?}",
+            );
+        }
+    }
+
+    /// A loop header `phi(v_init, v_back)` with `v_back` defined in the
+    /// loop body shares a single physical register with the phi result.
+    /// Without this coalesce, the passthrough block between v_back's
+    /// def and the loop header phi (the for-loop step or any
+    /// terminator-only block) is free to clobber `v_back`'s register
+    /// for unrelated values, and the predecessor-exit move at the back
+    /// edge reads the wrong value.
+    #[test]
+    fn phi_back_edge_source_coalesces_with_phi_result() {
+        use crate::c5::ir::{Block, FunctionSsa};
+        // CFG:
+        //   b0 -> b1
+        //   b1: phi(b0:v_zero, b2:v_step); Bz exit b2
+        //   b2: v_step = v_phi + 1; Jmp b1
+        //   b3 (exit): Return v_phi
+        let insts = alloc::vec![
+            // block 0: v0 = Imm(0)
+            Inst::Imm(0),
+            // block 1: v1 = Phi { incoming=[b0:v0, b2:v3] }
+            Inst::Phi {
+                incoming: alloc::vec![(0, 0), (2, 3)],
+                kind: LoadKind::I64,
+            },
+            // block 2: v2 = Imm(1); v3 = v1 + v2
+            Inst::Imm(1),
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs: 2,
+            },
+            // block 3 (exit): no inst; Return v1
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..2,
+                terminator: Terminator::Bz {
+                    cond: 1,
+                    target: 3,
+                    fall_through: 2,
+                },
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..4,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 3,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 4..4,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            },
+        ];
+        let func = FunctionSsa {
+            name: alloc::string::String::new(),
+            ent_pc: 0,
+            end_pc: 0,
+            locals: 0,
+            n_params: 0,
+            is_variadic: false,
+            is_inline: false,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            insts,
+            blocks,
+            extern_call_refs: Vec::new(),
+            extern_imm_code_refs: Vec::new(),
+            extern_imm_data_refs: Vec::new(),
+            extern_tls_refs: Vec::new(),
+        };
+        for target in [
+            Target::MacOSAarch64,
+            Target::LinuxAarch64,
+            Target::WindowsAarch64,
+            Target::LinuxX64,
+            Target::WindowsX64,
+        ] {
+            let alloc = allocate(&func, target);
+            let phi_place = alloc.places[1];
+            let step_place = alloc.places[3];
+            assert_eq!(
+                phi_place, step_place,
+                "phi result (v1) and its back-edge source (v3) must coalesce on {target:?}",
             );
         }
     }

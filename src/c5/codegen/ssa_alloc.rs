@@ -1251,18 +1251,59 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     call_pcs.sort_unstable();
+    // Per-function relaxation gate. Off by default (env var unset)
+    // -> closed upper bound `first <= end`, which is conservative
+    // and preserves shipped behavior. When BADC_RELAX_FN_NAME
+    // matches func.name (or BADC_RELAX_ALL is set), the bound
+    // opens to `first < end`, exposing the call-at-last-use shape
+    // for QBE-style coalescing. The opening is a debugging probe:
+    // it surfaces the under-reported-liveness hazard in
+    // sqlite3BtreeInsert that has so far blocked an unconditional
+    // relaxation.
+    let strict_upper = relax_calls_after_def_for(&func.name);
     let mut out = vec![false; n];
     for (idx, &end) in last_use.iter().enumerate() {
         let def = idx as u32;
-        // Binary search for any call PC strictly between (def, end].
         let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
-        if let Some(&first) = call_pcs.get(lo)
-            && first <= end
-        {
-            out[idx] = true;
+        if let Some(&first) = call_pcs.get(lo) {
+            let hit = if strict_upper {
+                first < end
+            } else {
+                first <= end
+            };
+            if hit {
+                out[idx] = true;
+            }
         }
     }
     out
+}
+
+/// Whether the calls_after_def upper bound should open from
+/// `<= end` to `< end` for a function. Gated by environment so
+/// the default (no env vars set) is byte-identical to the prior
+/// behavior.
+///
+/// * `BADC_RELAX_ALL=1` -> apply to every function (the bare
+///   global relaxation that trips Hazard 2 in sqlite3 -O).
+/// * `BADC_RELAX_FN_NAME=<name>` -> apply only when `func.name`
+///   equals the given string. Use this to bisect which sqlite
+///   function tips the corruption cascade.
+fn relax_calls_after_def_for(name: &str) -> bool {
+    #[cfg(feature = "std")]
+    {
+        if std::env::var_os("BADC_RELAX_ALL").is_some() {
+            return true;
+        }
+        if let Ok(target) = std::env::var("BADC_RELAX_FN_NAME") {
+            return name == target;
+        }
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        let _ = name;
+    }
+    false
 }
 
 fn expire(

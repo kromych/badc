@@ -134,7 +134,12 @@ fn collect_headers(root: &Path, dir: &Path, out: &mut Vec<(PathBuf, String)>) {
         let path = entry.path();
         if path.is_dir() {
             collect_headers(root, &path, out);
-        } else if path.extension().and_then(|s| s.to_str()) == Some("h") {
+        } else if path.extension().and_then(|s| s.to_str()) == Some("h")
+            && !path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with('.'))
+        {
             let rel = path
                 .strip_prefix(root)
                 .unwrap()

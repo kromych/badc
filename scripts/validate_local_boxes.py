@@ -151,6 +151,7 @@ def sync_windows(box: Box, github_token: str) -> int:
             "--exclude=demos/*/.cache",
             "--exclude=demos/*/.work",
             "--exclude=demos/scc/src",
+            "--exclude=._*",
             ".",
         ],
         capture_output=True,
@@ -167,28 +168,38 @@ def sync_windows(box: Box, github_token: str) -> int:
     if scp.returncode != 0:
         sys.stdout.write(f"[{box.short}] scp failed: {scp.stderr}\n")
         return scp.returncode
+    remote_path = box.remote_path.replace("/", "\\")
     return stream(
         box.short,
         [
             "ssh",
             box.host,
-            f"cmd /c mkdir {box.remote_path} 2>NUL & "
-            f"cd /d {box.remote_path} && "
-            f"tar xzf C:/tmp/badc-tree.tar.gz",
+            f'cmd /c "mkdir {remote_path} 2>NUL & '
+            f"cd /d {remote_path} && "
+            f'tar xzf C:\\tmp\\badc-tree.tar.gz"',
         ],
     )
 
 
 def remote_run_windows(box: Box, github_token: str) -> int:
     demo_cmd = " && ".join(f"python {d}" for d in GATING_DEMOS)
+    # cmd's path separator is the backslash; forward slashes from a
+    # caller-supplied --box arg work for some commands but not for
+    # `cd /d`, which silently returns success without changing the cwd.
+    remote_path = box.remote_path.replace("/", "\\")
     inner = (
-        f"cd /d {box.remote_path} && "
+        f"cd /d {remote_path} && "
         f"set GITHUB_TOKEN={github_token} && "
         f"cargo build --release --locked && "
         f"cargo test --release --lib && "
         f"{demo_cmd}"
     )
-    return stream(box.short, ["ssh", box.host, f"cmd /c {inner}"])
+    # Quote the entire command so the outer ssh-side cmd /c treats the
+    # whole `cd && ... && cargo ...` chain as one cmd context. Without
+    # the quotes only the first `&&` chunk runs under the inner cd; the
+    # rest run in the outer shell's cwd (C:\Users\krom) and fail to find
+    # Cargo.toml.
+    return stream(box.short, ["ssh", box.host, f'cmd /c "{inner}"'])
 
 
 def run_box(box: Box, github_token: str) -> int:

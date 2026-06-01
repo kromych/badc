@@ -1084,6 +1084,32 @@ impl Compiler {
                             let sid = struct_id_of(ty);
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
+                                // C99 6.7.8p7 array designator on a
+                                // struct-array element: `[N] = {field, ...}`
+                                // jumps the cursor and writes the
+                                // brace list there.
+                                if self.lex.tk == Token::Brak {
+                                    self.next()?;
+                                    let idx = self.parse_constant_int()?;
+                                    if idx < 0 || idx >= count {
+                                        return Err(self.compile_err(format!(
+                                            "array designator index {idx} out of bounds [0, {count})"
+                                        )));
+                                    }
+                                    if self.lex.tk != ']' {
+                                        return Err(self.compile_err(
+                                            "`]` expected after array designator index",
+                                        ));
+                                    }
+                                    self.next()?;
+                                    if self.lex.tk != Token::Assign {
+                                        return Err(
+                                            self.compile_err("`=` expected after `[N]` designator")
+                                        );
+                                    }
+                                    self.next()?;
+                                    i = idx;
+                                }
                                 if i >= count {
                                     return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
@@ -1241,6 +1267,32 @@ impl Compiler {
                                 self.next()?;
                                 let mut idx: i64 = 0;
                                 while self.lex.tk != '}' {
+                                    // C99 6.7.8p7 array designator on a
+                                    // struct-array element: `[N] = {field, ...}`
+                                    // jumps the cursor and writes the
+                                    // brace list there.
+                                    if self.lex.tk == Token::Brak {
+                                        self.next()?;
+                                        let desig = self.parse_constant_int()?;
+                                        if desig < 0 || desig >= array_size {
+                                            return Err(self.compile_err(format!(
+                                                "array designator index {desig} out of bounds [0, {array_size})"
+                                            )));
+                                        }
+                                        if self.lex.tk != ']' {
+                                            return Err(self.compile_err(
+                                                "`]` expected after array designator index",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        if self.lex.tk != Token::Assign {
+                                            return Err(self.compile_err(
+                                                "`=` expected after `[N]` designator",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        idx = desig;
+                                    }
                                     if idx >= array_size {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",

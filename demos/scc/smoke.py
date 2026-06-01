@@ -49,7 +49,7 @@ EXECUTE_SUBDIR = Path("tests") / "cc" / "execute"
 # is tracked separately. Set the gate at the cross-platform
 # minimum so a lane-specific regression doesn't gate the others;
 # raise it as each remaining C99 gap closes.
-BASELINE = 233
+BASELINE = 234
 
 
 def resolve_badc() -> Path:

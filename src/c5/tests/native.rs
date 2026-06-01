@@ -533,6 +533,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 6.7.8p7 array designator on a struct-array element.
+    // The known-size constant-staging path now resolves
+    // `[K] = {field, ...}` to element K and resumes positional
+    // after the jump; missing indices stay zero (6.7.8p21).
+    ("struct_array_designator.c", 0),
     // C89 6.5.2 / C99 6.7.2p2 deprecated implicit-int: a decl
     // without a type specifier infers `int`. Honours
     // `f(int x) { ... }` / `g = 5;` / `main() { ... }`.

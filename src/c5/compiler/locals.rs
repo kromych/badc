@@ -849,13 +849,7 @@ impl Compiler {
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
-                    );
-                }
-                self.next()?;
-                self.structs[sid]
+                let outer_idx = self.structs[sid]
                     .fields
                     .iter()
                     .position(|f| f.name == field_name)
@@ -864,7 +858,53 @@ impl Compiler {
                             "struct {} has no field {}",
                             self.structs[sid].name, field_name
                         ))
-                    })?
+                    })?;
+                // C99 6.7.8p7 nested designator chain. See the
+                // matching branch in `collect_struct_initializer`
+                // for the constant-staging variant. Computes the
+                // cumulative offset / final type, then emits one
+                // store at `&local + extra_offset + final_offset`.
+                if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                    let outer = self.structs[sid].fields[outer_idx].clone();
+                    let chain_base = extra_offset + outer.offset as i64;
+                    let (final_offset, final_ty) =
+                        self.resolve_nested_designator_chain(chain_base, outer.ty)?;
+                    if self.lex.tk != Token::Assign {
+                        return Err(self.compile_err("`=` expected after nested-designator chain"));
+                    }
+                    self.next()?;
+                    self.emit_lea(local_val);
+                    if final_offset > 0 {
+                        self.ast_psh();
+                        self.emit_imm(final_offset);
+                        self.ast_binop(crate::c5::ir::BinOp::Add);
+                    }
+                    self.ast_psh();
+                    self.expr(Token::Assign as i64)?;
+                    let field_ast = self.ast_acc;
+                    self.ast_assign();
+                    if let Some(value) = field_ast {
+                        self.pending_local_runtime_elements.push(
+                            super::super::ast::RuntimeInitElement {
+                                offset: final_offset,
+                                value,
+                                ty: final_ty,
+                            },
+                        );
+                    }
+                    pos = outer_idx + 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    continue;
+                }
+                if self.lex.tk != Token::Assign {
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
+                }
+                self.next()?;
+                outer_idx
             } else {
                 pos
             };

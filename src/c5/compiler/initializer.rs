@@ -696,6 +696,54 @@ impl Compiler {
         Ok((v, InitElemReloc::None))
     }
 
+    /// Walk a C99 6.7.8p7 designator-chain tail (the part after the
+    /// first `.field` has already been consumed) and resolve it
+    /// down to a concrete `(byte_offset, type)` pair for the value
+    /// site. Accepts further `.member` steps; `[index]` sub-array
+    /// designators surface as a parse error until they are wired
+    /// up. The current type must be a value-typed struct or union
+    /// for any `.` step.
+    pub(super) fn resolve_nested_designator_chain(
+        &mut self,
+        mut cur_offset: i64,
+        mut cur_ty: i64,
+    ) -> Result<(i64, i64), C5Error> {
+        while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+            if self.lex.tk == Token::Dot {
+                if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
+                    return Err(
+                        self.compile_err("`.` designator on a non-struct / non-union field")
+                    );
+                }
+                let sid = struct_id_of(cur_ty);
+                self.next()?;
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("field name expected after `.`"));
+                }
+                let sub_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                let sub_idx = self.structs[sid]
+                    .fields
+                    .iter()
+                    .position(|f| f.name == sub_name)
+                    .ok_or_else(|| {
+                        self.compile_err(format!(
+                            "struct {} has no field {}",
+                            self.structs[sid].name, sub_name
+                        ))
+                    })?;
+                let sub = self.structs[sid].fields[sub_idx].clone();
+                cur_offset += sub.offset as i64;
+                cur_ty = sub.ty;
+            } else {
+                return Err(self.compile_err(
+                    "`[N]` sub-designator inside a struct chain is not yet supported",
+                ));
+            }
+        }
+        Ok((cur_offset, cur_ty))
+    }
+
     /// Collect a `{ ... }` struct initializer. Each entry can be
     /// designated (`.field = value`) or positional. Entries are
     /// returned in source order with their resolved field offset
@@ -720,14 +768,7 @@ impl Compiler {
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
-                    );
-                }
-                self.next()?;
-
-                self.structs[struct_id]
+                let outer_idx = self.structs[struct_id]
                     .fields
                     .iter()
                     .position(|f| f.name == field_name)
@@ -736,7 +777,39 @@ impl Compiler {
                             "struct {} has no field {}",
                             self.structs[struct_id].name, field_name
                         ))
-                    })?
+                    })?;
+                // C99 6.7.8p7: a designator list may be a chain of
+                // `.member` and `[index]` steps. `.outer.inner = v`
+                // is equivalent to `.outer = { .inner = v }`. Walk
+                // the chain to compute the cumulative byte offset
+                // and the final field's type, then store the value
+                // there directly. Falls through to the existing
+                // single-level path when no extra steps follow.
+                if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                    let outer = self.structs[struct_id].fields[outer_idx].clone();
+                    let chain_base = (var_offset as usize) + outer.offset;
+                    let (final_offset, final_ty) =
+                        self.resolve_nested_designator_chain(chain_base as i64, outer.ty)?;
+                    if self.lex.tk != Token::Assign {
+                        return Err(self.compile_err("`=` expected after nested-designator chain"));
+                    }
+                    self.next()?;
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    let size = self.size_of_type(final_ty);
+                    self.write_init_value(final_offset as usize, size, value, reloc);
+                    pos = outer_idx + 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    continue;
+                }
+                if self.lex.tk != Token::Assign {
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
+                }
+                self.next()?;
+                outer_idx
             } else {
                 pos
             };

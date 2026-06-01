@@ -533,6 +533,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 6.10.1 + 6.5.15: `#if (cond ? then : else)` ternary in
+    // a preprocessor constant expression, parenthesised + at the
+    // top level. Right-associative chains (`cond ? a : b ? c : d`)
+    // recurse through the else arm.
+    ("pp_if_ternary.c", 0),
     // C99 6.7.8p7 array designator inside a struct's array-field
     // nested brace list: `.row = {[0] = 10, [2] = 30}`. Also
     // pins `__STDC_HOSTED__ == 1` per C99 6.10.8p2.

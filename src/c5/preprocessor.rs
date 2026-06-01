@@ -1481,7 +1481,7 @@ impl Preprocessor {
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr);
         let mut p = IfExprParser::new(&prepared, self);
-        let v = p.parse_or()?;
+        let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
             // Note: `expand_if_expr` doesn't carry a `filename` --
@@ -2955,6 +2955,28 @@ impl<'a> IfExprParser<'a> {
         Ok(left)
     }
 
+    /// C99 6.10.1p1 / 6.5.15: `#if` accepts a ternary at the top of
+    /// the expression precedence. `cond ? then : else` -- both
+    /// branches are evaluated unconditionally and the picked one is
+    /// returned (no short-circuit semantics inside a constant
+    /// expression). Right-associative, so the `else` arm recurses.
+    fn parse_ternary(&mut self) -> Result<IfValue, C5Error> {
+        let cond = self.parse_or()?;
+        self.skip_ws();
+        if !self.eat_byte(b'?') {
+            return Ok(cond);
+        }
+        let then_v = self.parse_ternary()?;
+        self.skip_ws();
+        if !self.eat_byte(b':') {
+            return Err(C5Error::Compile(
+                "preprocessor: missing `:` in `#if` ternary expression".to_string(),
+            ));
+        }
+        let else_v = self.parse_ternary()?;
+        Ok(if cond.truthy() { then_v } else { else_v })
+    }
+
     fn parse_and(&mut self) -> Result<IfValue, C5Error> {
         let mut left = self.parse_bitor()?;
         loop {
@@ -3165,7 +3187,7 @@ impl<'a> IfExprParser<'a> {
     fn parse_primary(&mut self) -> Result<IfValue, C5Error> {
         self.skip_ws();
         if self.eat_byte(b'(') {
-            let v = self.parse_or()?;
+            let v = self.parse_ternary()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
                 return Err(C5Error::Compile(

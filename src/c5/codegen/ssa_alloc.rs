@@ -956,17 +956,24 @@ fn populate_call_result_hints(
 /// hint falls back to the default policy.
 fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
     // Hint the value feeding `Terminator::Return` to the ABI return
-    // register so a leaf function's exit move drops out. Scope
-    // restricted to leaf functions: relaxing to a per-value
-    // call-clobber guard surfaces a separate liveness gap (lua
-    // strings.lua / api.lua regress) that needs a deeper fix.
+    // register so the exit move drops out. Two cases are honoured:
+    //
+    //   * Leaf functions (no `Inst::Call*` anywhere). Empirically
+    //     safe -- no call can clobber the caller-saved return register.
+    //   * Single-block functions where the Return value's def has
+    //     no call between it and the terminator. Straight-line
+    //     control flow means there is no back-edge / phi-merge gap
+    //     that the broader per-value relaxation otherwise surfaces
+    //     (see task #197 -- the lua regression on broader relaxations
+    //     does not appear in straight-line shapes).
     let has_call = func.insts.iter().any(|inst| {
         matches!(
             inst,
             Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
         )
     });
-    if has_call {
+    let single_block = func.blocks.len() == 1;
+    if has_call && !single_block {
         return;
     }
     let (ret_int, ret_fp) = match target {
@@ -989,6 +996,24 @@ fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option
             && v != NO_VALUE
             && (v as usize) < func.insts.len()
         {
+            if has_call {
+                // Single-block branch: require v's def to live in
+                // this block AND no call after the def. Without
+                // these guards the hint clobbers v across the call.
+                let (start, end) = (block.inst_range.start, block.inst_range.end);
+                if v < start || v >= end {
+                    continue;
+                }
+                let intervening_call = (v + 1..end).any(|pc| {
+                    matches!(
+                        func.insts[pc as usize],
+                        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+                    )
+                });
+                if intervening_call {
+                    continue;
+                }
+            }
             match result_kind(&func.insts[v as usize]) {
                 ResultKind::Int => try_set(hints, v, ret_int),
                 ResultKind::Fp => try_set(hints, v, ret_fp),

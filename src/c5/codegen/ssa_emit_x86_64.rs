@@ -3241,20 +3241,35 @@ fn emit_call_indirect(
         .get(target as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Capture the target pointer into r11 before arg marshalling
-    // can clobber it. r11 is caller-saved on every x86_64 ABI we
-    // target; the SSA allocator's pool includes r11 (caller_gprs)
-    // but the value held there can be no longer live than the
-    // target itself since the SSA emit hijacks r11 for the call.
-    let target_r = match materialize_int(code, target_place, Reg::R11, frame) {
+    // Collect the registers currently holding arg-source values
+    // for this call. The target-stage scratch must avoid them:
+    // the materialise below writes the call target into the
+    // scratch and the subsequent marshal_args reads each arg
+    // from its allocator placement -- staging the target into a
+    // register that also holds an arg source corrupts that arg
+    // before the marshal can copy it to its arg-reg slot.
+    let mut arg_source_regs: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(args.len());
+    for &a in args {
+        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
+            arg_source_regs.push(Reg(*r));
+        }
+    }
+    // Capture the target pointer into a caller-saved scratch
+    // before arg marshalling can clobber it. R11 is the default
+    // choice because no ABI assigns it to an argument slot, so
+    // it almost never appears among the arg sources. The
+    // fallback walks `CALLER_SAVED_INT_SCRATCHES` for an
+    // alternative when R11 *does* hold an arg source.
+    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &arg_source_regs).unwrap_or(Reg::R11);
+    let target_r = match materialize_int(code, target_place, target_scratch, frame) {
         Some(r) => r,
         None => {
             bail_msg("CallIndirect: target not int reg / spill");
             return false;
         }
     };
-    if target_r.0 != Reg::R11.0 {
-        emit_mov_rr(code, Reg::R11, target_r);
+    if target_r.0 != target_scratch.0 {
+        emit_mov_rr(code, target_scratch, target_r);
     }
     let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
     if plan.scratch_bytes > 0 {
@@ -3263,7 +3278,7 @@ fn emit_call_indirect(
     if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
         return false;
     }
-    super::x86_64::emit_call_r(code, Reg::R11);
+    super::x86_64::emit_call_r(code, target_scratch);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }

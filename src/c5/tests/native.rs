@@ -533,6 +533,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C89 6.5.2 / C99 6.7.2p2 deprecated implicit-int: a decl
+    // without a type specifier infers `int`. Honours
+    // `f(int x) { ... }` / `g = 5;` / `main() { ... }`.
+    ("implicit_int_decl.c", 0),
     // C99 6.10.1 + 6.5.15: `#if (cond ? then : else)` ternary in
     // a preprocessor constant expression, parenthesised + at the
     // top level. Right-associative chains (`cond ? a : b ? c : d`)

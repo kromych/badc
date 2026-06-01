@@ -170,12 +170,30 @@ impl Compiler {
                 // `long long x;` (the implicit-int rule).
                 bt = m.int_base();
             } else if self.lex.tk == Token::Id {
-                // Identifier in base-type position with no
-                // matching typedef. Errors here rather than
-                // falling through to the `Ty::Int` default,
-                // which would silently mis-type the declarator.
-                let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                return Err(self.compile_err(format!("unknown type name `{name}`")));
+                // Identifier in base-type position with no matching
+                // typedef. C89 6.5.2 / C99 6.7.2p2 (deprecated)
+                // "implicit int": a declaration without a type
+                // specifier infers `int`. Common at file scope for
+                // `main() { ... }` and K&R-shaped third-party C.
+                // Honour the implicit-int rule only when the
+                // identifier looks like the declarator itself --
+                // i.e. the next non-whitespace byte is `(` (a
+                // function declarator) or `;` / `,` / `=` (a
+                // simple-variable declarator). Other shapes
+                // (`Foo bar;` where `Foo` is supposed to be a type)
+                // continue to error so a typo in a type name is
+                // surfaced at the declaration, not silently
+                // accepted as `int Foo bar;`.
+                if self.lex.peek_after_whitespace(b'(')
+                    || self.lex.peek_after_whitespace(b';')
+                    || self.lex.peek_after_whitespace(b',')
+                    || self.lex.peek_after_whitespace(b'=')
+                {
+                    bt = Ty::Int as i64;
+                } else {
+                    let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                    return Err(self.compile_err(format!("unknown type name `{name}`")));
+                }
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long

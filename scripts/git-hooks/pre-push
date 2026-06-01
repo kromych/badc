@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Pre-push gate: enforce the same fmt + clippy CI job locally and
-reject non-ASCII bytes in tracked source files.
+"""Pre-push gate: enforce the same fmt + clippy + no-default-features
+CI jobs locally and reject non-ASCII bytes in tracked source files.
 
-`cargo fmt --check` and `cargo clippy --release --all-targets -- -D
-warnings` run here. A failure aborts the push so a rebase or fix can
-land first. The ASCII check guards against zero-width / homoglyph
-characters slipping into Rust source, headers, fixtures, or scripts.
-Bypass with `git push --no-verify` when shipping a WIP branch where
-the strict gate isn't desired.
+`cargo fmt --check`, `cargo clippy --release --all-targets -- -D
+warnings`, and `cargo build --no-default-features --lib` run here. A
+failure aborts the push so a rebase or fix can land first. The ASCII
+check guards against zero-width / homoglyph characters slipping into
+Rust source, headers, fixtures, or scripts. Bypass with
+`git push --no-verify` when shipping a WIP branch where the strict
+gate isn't desired.
 """
 
 from __future__ import annotations
@@ -120,7 +121,7 @@ def main() -> int:
     rc = run("cargo fmt --check", ["cargo", "fmt", "--check"], root)
     if rc != 0:
         return rc
-    return run(
+    rc = run(
         "cargo clippy --release --all-targets -- -D warnings",
         [
             "cargo",
@@ -131,6 +132,18 @@ def main() -> int:
             "-D",
             "warnings",
         ],
+        root,
+    )
+    if rc != 0:
+        return rc
+    # Matches the `feature combos` CI job's first step. The lib still
+    # has to compile with the default features dropped (`std`-gated
+    # paths excluded), which mostly catches missing `alloc::*` /
+    # `core::*` imports in code that compiles fine under default
+    # features.
+    return run(
+        "cargo build --no-default-features --lib",
+        ["cargo", "build", "--no-default-features", "--lib"],
         root,
     )
 

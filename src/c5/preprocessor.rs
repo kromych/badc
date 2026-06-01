@@ -383,15 +383,16 @@ impl Preprocessor {
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). c5 honours all of these
-        // except `__STDC_HOSTED__` (we don't expose a freestanding /
-        // hosted distinction) and `__STDC_VERSION__` (the dialect is
-        // a c4-shaped subset, not an implementation of any specific
-        // C standard year). `__DATE__` and `__TIME__` are seeded at
-        // badc build time -- C99 says they reflect "the date and
-        // time of translation", and the closest analogue for an
-        // embedded library is the build time of badc itself.
+        // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
+        // is omitted -- the dialect is a c4-shaped subset, not an
+        // implementation of any specific C standard year. `__DATE__`
+        // and `__TIME__` are seeded at badc build time; C99 says they
+        // reflect "the date and time of translation", and the closest
+        // analogue for an embedded library is the build time of badc
+        // itself. `__STDC_HOSTED__` reflects that every supported
+        // target binds the host libc, so the dialect is hosted.
         macros.insert("__STDC__".to_string(), "1".to_string());
+        macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),

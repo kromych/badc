@@ -877,6 +877,33 @@ impl Compiler {
                 };
                 let mut idx: usize = 0;
                 while self.lex.tk != '}' {
+                    // C99 6.7.8p7 array designator inside an array
+                    // field's nested initializer. `[N] = value`
+                    // jumps the write cursor to N; subsequent
+                    // positional entries (or further `[K] = ...`
+                    // clauses) continue from there. Mirrors the
+                    // top-level array-init path in
+                    // `collect_array_initializer`.
+                    if self.lex.tk == Token::Brak {
+                        self.next()?;
+                        let n = self.parse_constant_int()?;
+                        if n < 0 {
+                            return Err(self.compile_err(format!(
+                                "array designator index must be non-negative (got {n})"
+                            )));
+                        }
+                        if self.lex.tk != ']' {
+                            return Err(
+                                self.compile_err("`]` expected after array designator index")
+                            );
+                        }
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(self.compile_err("`=` expected after `[N]` designator"));
+                        }
+                        self.next()?;
+                        idx = n as usize;
+                    }
                     if idx as i64 >= field.array_size {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}.{}`",

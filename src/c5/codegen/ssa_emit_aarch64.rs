@@ -1948,18 +1948,40 @@ fn emit_call_indirect(
         .get(target as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Capture the function pointer into x9 before marshalling
-    // touches any of x0..x7 or scratch.primary (x16). AAPCS64
-    // doesn't assign x9 to int args, so the marshalling loop
-    // can't overwrite it. x9 is caller-saved, but the blr happens
-    // before the callee can do anything observable to x9, so the
-    // value reaches the indirect branch intact.
+    // Collect the registers currently holding arg-source values
+    // for this call. AAPCS64 doesn't assign these scratch
+    // registers to int-arg slots, but the SSA allocator's
+    // caller-saved pool includes them and may park an arg's
+    // source value in one. The target stage must avoid that
+    // register; otherwise the materialise below overwrites the
+    // arg's source before the marshal can push it onto the
+    // c5-stride stack.
+    let mut arg_source_regs: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(args.len());
+    for &a in args {
+        if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
+            arg_source_regs.push(*r);
+        }
+    }
+    // Capture the function pointer into a caller-saved scratch
+    // disjoint from the arg sources. Prefer x9, then x10..x15 --
+    // none are arg-passing registers per AAPCS64, so they are
+    // safe to clobber via the blr. The blr happens before the
+    // callee can observe the scratch, so the value reaches the
+    // indirect branch intact regardless of which scratch holds
+    // it.
+    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+    let target_reg_idx = TARGET_SCRATCH_CANDIDATES
+        .iter()
+        .copied()
+        .find(|r| !arg_source_regs.contains(r))
+        .unwrap_or(9);
+    let target_reg = Reg(target_reg_idx);
     let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
     };
-    if target_r.0 != 9 {
-        emit_mov_reg(code, Reg(9), target_r);
+    if target_r.0 != target_reg.0 {
+        emit_mov_reg(code, target_reg, target_r);
     }
     // Indirect calls keep the c5-stack push shape regardless of
     // whether the callee is variadic. Variadic c5 callees read
@@ -2031,7 +2053,7 @@ fn emit_call_indirect(
             }
         }
     }
-    emit(code, enc_blr(Reg(9)));
+    emit(code, enc_blr(target_reg));
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }

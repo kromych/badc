@@ -955,16 +955,11 @@ fn populate_call_result_hints(
 /// the register is free and live-across-call-compatible, so a missed
 /// hint falls back to the default policy.
 fn populate_return_hints(func: &FunctionSsa, target: Target, hints: &mut [Option<u8>]) {
-    // Hint the value feeding `Terminator::Return` to the ABI
-    // return register so a leaf function's exit move drops out.
-    // Scope restricted to leaf functions: the hint is unsafe
-    // when a call sits between the return value's def and the
-    // Return, because the allocator's must-be-callee filter
-    // checks the value's [def, last_use] interval, but the hint
-    // pre-commits the value to a caller-saved register before
-    // that interval ends -- under-reported back-edge live
-    // ranges then escape the must-be-callee guard. Leaf
-    // functions have no calls and so no clobber to worry about.
+    // Hint the value feeding `Terminator::Return` to the ABI return
+    // register so a leaf function's exit move drops out. Scope
+    // restricted to leaf functions: relaxing to a per-value
+    // call-clobber guard surfaces a separate liveness gap (lua
+    // strings.lua / api.lua regress) that needs a deeper fix.
     let has_call = func.insts.iter().any(|inst| {
         matches!(
             inst,
@@ -1121,13 +1116,27 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
         });
     }
-    // Also: each block's exit_acc keeps that value live to the
-    // end of the block, and the terminator's branch may consume
-    // it (Bz / Bnz / Return). Bump conservatively.
+    // Each block's exit_acc keeps that value live to the end of the
+    // block, and the terminator may consume operands too. Bump every
+    // such carrier to `end_pc` so a value defined inside the block
+    // but read only by the terminator (the common Return-value case)
+    // has its interval cover any intervening call. Without this the
+    // forward scan leaves `last_use[v]` at v's own def PC, the
+    // `compute_calls_after_def` interval test then misses the
+    // intervening call, and a downstream coalescing hint can place
+    // `v` in a caller-saved register that the call clobbers.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
-        if b.exit_acc != NO_VALUE && last_use[b.exit_acc as usize] < end_pc {
-            last_use[b.exit_acc as usize] = end_pc;
+        let mut bump = |v: ValueId| {
+            if v != NO_VALUE && (v as usize) < last_use.len() && last_use[v as usize] < end_pc {
+                last_use[v as usize] = end_pc;
+            }
+        };
+        bump(b.exit_acc);
+        match &b.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(*cond),
+            Terminator::Return(v) => bump(*v),
+            _ => {}
         }
     }
     extend_last_use_across_blocks(func, &mut last_use);

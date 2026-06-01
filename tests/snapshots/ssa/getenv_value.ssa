@@ -1,30 +1,30 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=2
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(8)                                       -> x7
+    v1   ImmData(8)                                       -> x3
     v2   CallExt { binding_idx=16, args=[v1], fp_arg_mask=0x0 } -> x0
-    v3   Imm(0)                                           -> x7
-    v4   LoadLocal { off=-1, kind=I64 }                   -> x7
-    v5   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x7
+    v3   Imm(0)                                           -> x3
+    v4   LoadLocal { off=-1, kind=I64 }                   -> x3
+    v5   BinopI { op=eq, lhs=v2, rhs_imm=0 }              -> x3
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(1)                                           -> x8
     terminator Return(v6)   (exit_acc=v6)
   block 2  start_pc=0
-    v7   LoadLocal { off=-1, kind=I64 }                   -> x7
-    v8   Imm(0)                                           -> x7
+    v7   LoadLocal { off=-1, kind=I64 }                   -> x3
+    v8   Imm(0)                                           -> x3
     v9   Load { addr=v2, kind=U8 }                        -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x3
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0

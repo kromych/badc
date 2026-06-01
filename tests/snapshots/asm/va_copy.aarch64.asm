@@ -53,26 +53,42 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x4                // =4
-               	mov	x1, #0xa                // =10
-               	mov	x2, #0x14               // =20
-               	mov	x3, #0x1e               // =30
-               	mov	x4, #0x28               // =40
-               	str	x4, [sp, #-0x10]!
-               	str	x3, [sp, #-0x10]!
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
+               	sub	sp, sp, #0x30
+               	str	x20, [sp]
+               	str	x21, [sp, #0x8]
+               	str	x22, [sp, #0x10]
+               	str	x23, [sp, #0x18]
+               	str	x24, [sp, #0x20]
+               	mov	x20, #0x4               // =4
+               	mov	x21, #0xa               // =10
+               	mov	x22, #0x14              // =20
+               	mov	x23, #0x1e              // =30
+               	mov	x24, #0x28              // =40
+               	str	x24, [sp, #-0x10]!
+               	str	x23, [sp, #-0x10]!
+               	str	x22, [sp, #-0x10]!
+               	str	x21, [sp, #-0x10]!
+               	str	x20, [sp, #-0x10]!
                	bl	<addr>
                	add	sp, sp, #0x50
-               	mov	x10, x0
-               	cmp	x10, #0x64
+               	cmp	x0, #0x64
                	b.eq	<addr>
-               	mov	x4, #0xb                // =11
-               	mov	x0, x4
+               	mov	x24, #0xb               // =11
+               	mov	x0, x24
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x10, #0x0               // =0
-               	mov	x0, x10
+               	mov	x0, #0x0                // =0
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x22, [sp, #0x10]
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

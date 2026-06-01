@@ -23,16 +23,21 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	leaq	-<rip>, %rdi       # <addr>
-               	xorq	%rbx, %rbx
-               	movq	%rbx, %rsi
-               	movq	%rbx, %rdx
+               	movq	%r12, 0x8(%rsp)
+               	leaq	-<rip>, %rbx       # <addr>
+               	xorq	%r12, %r12
+               	movq	%rbx, %rdi
+               	movq	%r12, %rdx
+               	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%rbx, %rcx
+               	movq	%r12, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

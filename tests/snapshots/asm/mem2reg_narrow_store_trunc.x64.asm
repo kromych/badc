@@ -31,8 +31,12 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x12c, %edi            # imm = 0x12C
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	movl	$0x12c, %ebx            # imm = 0x12C
+               	movq	%rbx, %rdi
+               	movq	(%rsp), %rbx
+               	addq	$0x10, %rsp
                	popq	%rbp
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

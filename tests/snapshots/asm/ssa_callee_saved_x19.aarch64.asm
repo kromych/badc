@@ -34,18 +34,20 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	str	x20, [sp]
+               	str	x21, [sp, #0x8]
                	str	x19, [sp, #0x10]
                	adrp	x19, <page>
                	add	x19, x19, #0x298
-               	mov	x0, x19
-               	mov	x20, #0x0               // =0
-               	mov	x1, x20
-               	mov	x2, x20
+               	mov	x20, x19
+               	mov	x21, #0x0               // =0
+               	mov	x0, x20
+               	mov	x2, x21
+               	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x13, x0
-               	mov	x0, x20
+               	mov	x0, x21
                	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

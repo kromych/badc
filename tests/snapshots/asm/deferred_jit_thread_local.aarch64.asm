@@ -30,59 +30,67 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
-               	mov	x0, #0x0                // =0
+               	sub	sp, sp, #0x20
+               	str	x20, [sp]
+               	str	x19, [sp, #0x10]
+               	mov	x20, #0x0               // =0
+               	mov	x0, x20
                	bl	<addr>
-               	mov	x14, x0
-               	mrs	x14, TPIDR_EL0
-               	add	x14, x14, #0x10
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x7
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x10
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x7
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
+               	mov	x20, #0x1               // =1
+               	mov	x0, x20
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x14, TPIDR_EL0
-               	add	x14, x14, #0x18
-               	ldrsw	x14, [x14]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x18
+               	ldrsw	x0, [x0]
                	mov	x17, #0xfffd            // =65533
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	cmp	x14, x17
+               	cmp	x0, x17
                	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
+               	mov	x20, #0x2               // =2
+               	mov	x0, x20
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x14, TPIDR_EL0
-               	add	x14, x14, #0x10
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x10
-               	ldrsw	x0, [x0]
+               	mrs	x20, TPIDR_EL0
+               	add	x20, x20, #0x10
+               	ldrsw	x20, [x20]
                	mrs	x13, TPIDR_EL0
                	add	x13, x13, #0x18
                	ldrsw	x13, [x13]
-               	add	x0, x0, x13
-               	sxtw	x0, w0
-               	str	w0, [x14]
+               	add	x20, x20, x13
+               	sxtw	x20, w20
+               	str	w20, [x0]
                	mrs	x13, TPIDR_EL0
                	add	x13, x13, #0x10
                	ldrsw	x13, [x13]
                	cmp	x13, #0x4
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
+               	mov	x20, #0x3               // =3
+               	mov	x0, x20
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x13, #0x0               // =0
                	mov	x0, x13
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

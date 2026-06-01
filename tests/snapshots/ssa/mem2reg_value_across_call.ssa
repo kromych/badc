@@ -24,7 +24,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=g
 fn ent_pc=2 n_params=1 variadic=false locals=4
-  spill_count=0 gpr_used=[3, 12, 14] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I64)                            -> x3
@@ -49,7 +49,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=4
     v16  Binop { op=add, lhs=v11, rhs=v15 }               -> x7
     v17  StoreLocal { off=-2, value=v16, kind=I64 }       -> -
     v18  LoadLocal { off=-2, kind=I64 }                   -> x14
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x7
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x15
     v20  LoadLocal { off=-1, kind=I64 }                   -> x6
     v21  CallIndirect { target=v3, args=[v19] }           -> x0
     v22  Binop { op=add, lhs=v18, rhs=v21 }               -> x14
@@ -64,20 +64,20 @@ fn ent_pc=2 n_params=1 variadic=false locals=4
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=main
 fn ent_pc=3 n_params=0 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(3)                                           -> x7
+    v1   Imm(3)                                           -> x3
     v2   Call { target_pc=2, args=[v1] }                  -> x0
     v3   BinopI { op=and, lhs=v2, rhs_imm=127 }           -> x0
     terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
-  spill_count=0 gpr_used=[] fp_used=[]
+  spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x3
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0

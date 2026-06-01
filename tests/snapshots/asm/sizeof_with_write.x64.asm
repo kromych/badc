@@ -11,31 +11,37 @@ Disassembly of section .text:
                	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
+               	movq	%r14, 0x10(%rsp)
                	movl	$0x10, %ebx
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rsi
-               	movl	$0x1, %edi
-               	movl	%edi, (%rsi)
-               	movq	%rsi, %r8
-               	addq	$0x4, %r8
-               	movl	$0x2, %r9d
-               	movl	%r9d, (%r8)
-               	movq	%rsi, %rdx
+               	movq	%rax, %r12
+               	movl	$0x1, %r14d
+               	movl	%r14d, (%r12)
+               	movq	%r12, %rdi
+               	addq	$0x4, %rdi
+               	movl	$0x2, %esi
+               	movl	%esi, (%rdi)
+               	movq	%r12, %rdx
                	addq	$0x8, %rdx
-               	leaq	<rip>, %r9
-               	movq	%r9, (%rdx)
+               	leaq	<rip>, %rsi
+               	movq	%rsi, (%rdx)
+               	movq	%r14, %rdi
                	movq	%rbx, %rdx
+               	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x30, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

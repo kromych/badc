@@ -15,30 +15,35 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	xorq	%rdi, %rdi
-               	movl	$0x2, %esi
+               	movq	%r15, 0x18(%rsp)
+               	xorq	%rbx, %rbx
+               	movl	$0x2, %r12d
+               	movq	%rbx, %rdi
+               	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rbx
-               	cmpq	$0x0, %rbx
+               	movq	%rax, %r14
+               	cmpq	$0x0, %r14
                	jne	<addr>
-               	movl	$0x1, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x1, %ebx
+               	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rsi
-               	movq	%rbx, %rdi
+               	leaq	<rip>, %r15
+               	movq	%r14, %rdi
+               	movq	%r15, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
                	cmpq	$0x0, %r12
                	jne	<addr>
-               	movq	%rbx, %rdi
+               	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -47,25 +52,27 @@ Disassembly of section .text:
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rbx
                	movq	%r12, %r11
-               	callq	*%r11
-               	movq	%rax, %r14
                	movq	%rbx, %rdi
+               	callq	*%r11
+               	movq	%rax, %r15
+               	movq	%r14, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%r14d, %r14
-               	movq	%r14, %rcx
+               	movslq	%r15d, %r15
+               	movq	%r15, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

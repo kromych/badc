@@ -240,23 +240,7 @@ def main() -> int:
         ok = True
         ok &= run_suite("no-O", lua_noopt)
         ok &= run_suite("-O", lua_opt)
-        if ok:
-            return 0
-        # Build worked, some tests failed. On Windows the smoke
-        # currently surfaces a handful of msvcrt-runtime-specific
-        # test idiosyncrasies (`math.lua` ldexp/frexp boundary,
-        # `cstack.lua` recursion-limit policy, formatting and
-        # parser corners on AArch64) that reproduce only on real
-        # Microsoft CRTs -- the c5 build + setjmp/longjmp
-        # infrastructure round-trip cleanly through the cargo
-        # `native_pe_x64` / `native_pe_arm64` fixture parity.
-        # Match the chibicc / tinycc convention: exit 2 means
-        # "scaffolding works, content still has TODOs"; the
-        # workflow's `|| test $? -eq 2` accepts that without
-        # gating CI.
-        if sys.platform == "win32":
-            return 2
-        return 1
+        return 0 if ok else 1
 
 
 if __name__ == "__main__":

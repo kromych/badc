@@ -1267,7 +1267,7 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     call_pcs.sort_unstable();
-    // QBE-style call-arg coalescing: open the upper bound from
+    // Call-arg coalescing: open the upper bound from
     // `first <= end` to `first < end` on the targets where the
     // pre-conditions hold. A call at exactly `last_use` is the
     // value's consumer; its arg marshal reads the value before

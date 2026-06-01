@@ -230,6 +230,15 @@ impl Compiler {
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
             self.next()?;
+            // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
+            // prefixed by `static` and / or any type qualifier
+            // (`const` / `volatile` / `restrict`) in a parameter
+            // declarator. The keywords are hints to the compiler;
+            // c5 doesn't act on them but consumes them so the
+            // dimension expression parses cleanly.
+            while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
             if self.lex.tk == ']' {
                 // `int xs[]` -- empty brackets. The dimension is
                 // deferred: in parameter position the caller decays
@@ -272,6 +281,12 @@ impl Compiler {
             }
             while self.lex.tk == Token::Brak {
                 self.next()?;
+                // Same C99 6.7.5.3p7 qualifier-skip as the leading
+                // dimension above; applies to every trailing
+                // dimension too.
+                while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
                 if self.lex.tk == ']' {
                     self.next()?;
                     continue;

@@ -42,17 +42,14 @@ EXE_SUFFIX = ".exe" if WIN else ""
 # hand-rolled badc fixture suite.
 EXECUTE_SUBDIR = Path("tests") / "cc" / "execute"
 
-# Lower bound on the pass count. Today's badc compiles + runs 225
-# of the 275 execute tests at `-q -O0` (macOS aarch64 host) and
-# 224 at `-q -O` on Linux x86_64 -- one optimiser regression
-# specific to that lane is tracked as a TODO. The remaining 50
-# surface distinct C99 gaps (anonymous-union member access,
-# implicit braces removed for array-of-struct, function-call
-# expression inside an `&compound-literal`, etc.) that are tracked
-# as individual issues. Set the gate at the cross-platform
+# Lower bound on the pass count. Today's badc compiles + runs 227
+# of the 275 execute tests at both `-q -O0` and `-q -O` on macOS
+# aarch64; the Linux x86_64 lane historically drops one extra
+# test at -O (the parameter-shadow `0120-funpar.c` shape) which
+# is tracked separately. Set the gate at the cross-platform
 # minimum so a lane-specific regression doesn't gate the others;
-# raise it once the lane-specific gap closes.
-BASELINE = 224
+# raise it as each remaining C99 gap closes.
+BASELINE = 226
 
 
 def resolve_badc() -> Path:

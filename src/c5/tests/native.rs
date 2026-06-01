@@ -533,6 +533,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 6.7.5.3p7 + 6.7.5.2p1: `static` / `const` / `volatile`
+    // / `restrict` inside a parameter declarator's `[`. The
+    // keyword is a hint; badc skips it before parsing the
+    // dimension and treats the parameter as a plain pointer
+    // (matching the implicit decay rule).
+    ("param_array_qualifier.c", 0),
     // C99 6.7.8p7 nested designator chain. `.outer.inner = v`
     // sets a sub-field at the cumulative byte offset; the
     // constant-staging path (file-scope / `static` locals) and

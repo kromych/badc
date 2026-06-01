@@ -1267,94 +1267,26 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     call_pcs.sort_unstable();
-    // Call-arg coalescing: open the upper bound from
-    // `first <= end` to `first < end` on the targets where the
-    // pre-conditions hold. A call at exactly `last_use` is the
-    // value's consumer; its arg marshal reads the value before
-    // the callee runs, so the value lives in a caller-saved
-    // arg-register and `populate_call_arg_hints` can hint it to
-    // the matching slot. Five emit-layer prerequisites are in
-    // tree: the ParamRef ordering guard, the x86_64 + aarch64
-    // CallIndirect target-scratch pickers, and the scratch-aware
-    // cycle-break in both per-arch `schedule_int_reg_moves`
-    // implementations. Windows x64 stays on the conservative
-    // bound until the kromyrzen.local demo gate runs through it.
-    let strict_upper = relax_calls_after_def_for(&func.name) || target_enables_relaxation(target);
+    // Call-arg coalescing: the upper bound is `first < end`. A
+    // call at exactly `last_use` is the value's consumer; its arg
+    // marshal reads the value before the callee runs, so the
+    // value lives in a caller-saved arg-register and
+    // `populate_call_arg_hints` can hint it to the matching slot.
+    // Five emit-layer prerequisites are in tree: the ParamRef
+    // ordering guard, the x86_64 + aarch64 CallIndirect target-
+    // scratch pickers, and the scratch-aware cycle-break in both
+    // per-arch `schedule_int_reg_moves` implementations.
     let mut out = vec![false; n];
     for (idx, &end) in last_use.iter().enumerate() {
         let def = idx as u32;
         let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
-        if let Some(&first) = call_pcs.get(lo) {
-            let hit = if strict_upper {
-                first < end
-            } else {
-                first <= end
-            };
-            if hit {
-                out[idx] = true;
-            }
+        if let Some(&first) = call_pcs.get(lo)
+            && first < end
+        {
+            out[idx] = true;
         }
     }
     out
-}
-
-/// Whether the target has the emit-layer prerequisites that make
-/// the `calls_after_def` relaxation safe by default. All four
-/// SysV/AAPCS64/Win64 targets share the same CallIndirect picker
-/// and `schedule_int_reg_moves` cycle-break; the kromyrzen.local
-/// Win64 demo gate (sqlite3 / miniz / tweetnacl / lua) + cargo
-/// test --release --lib are green under BADC_RELAX_ALL=1 here as
-/// well, so every target enables the relaxation. WindowsAarch64
-/// uses the aarch64 emit and the same `schedule_int_reg_moves`
-/// fix applies.
-fn target_enables_relaxation(target: Target) -> bool {
-    matches!(
-        target,
-        Target::LinuxX64
-            | Target::LinuxAarch64
-            | Target::MacOSAarch64
-            | Target::WindowsX64
-            | Target::WindowsAarch64
-    )
-}
-
-/// Whether the calls_after_def upper bound should open from
-/// `<= end` to `< end` for a function via the env knobs. The
-/// shipped default is per-target via `target_enables_relaxation`;
-/// these env vars layer on top to override that decision.
-///
-/// * `BADC_RELAX_ALL=1` -> apply to every function (the bare
-///   global relaxation that trips Hazard 2 in sqlite3 -O).
-/// * `BADC_RELAX_FN_NAME=<csv>` -> apply when `func.name` matches
-///   any name in the comma-separated list.
-/// * `BADC_RELAX_FN_PREFIX=<csv>` -> apply when `func.name` starts
-///   with any prefix in the comma-separated list. Coarse bisect.
-fn relax_calls_after_def_for(name: &str) -> bool {
-    #[cfg(feature = "std")]
-    {
-        if std::env::var_os("BADC_RELAX_ALL").is_some() {
-            return true;
-        }
-        if let Ok(targets) = std::env::var("BADC_RELAX_FN_NAME") {
-            for target in targets.split(',') {
-                if !target.is_empty() && name == target {
-                    return true;
-                }
-            }
-        }
-        if let Ok(prefixes) = std::env::var("BADC_RELAX_FN_PREFIX") {
-            for prefix in prefixes.split(',') {
-                if !prefix.is_empty() && name.starts_with(prefix) {
-                    return true;
-                }
-            }
-        }
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        let _ = name;
-    }
-    false
 }
 
 fn expire(

@@ -1286,17 +1286,29 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
 ///
 /// * `BADC_RELAX_ALL=1` -> apply to every function (the bare
 ///   global relaxation that trips Hazard 2 in sqlite3 -O).
-/// * `BADC_RELAX_FN_NAME=<name>` -> apply only when `func.name`
-///   equals the given string. Use this to bisect which sqlite
-///   function tips the corruption cascade.
+/// * `BADC_RELAX_FN_NAME=<csv>` -> apply when `func.name` matches
+///   any name in the comma-separated list.
+/// * `BADC_RELAX_FN_PREFIX=<csv>` -> apply when `func.name` starts
+///   with any prefix in the comma-separated list. Coarse bisect.
 fn relax_calls_after_def_for(name: &str) -> bool {
     #[cfg(feature = "std")]
     {
         if std::env::var_os("BADC_RELAX_ALL").is_some() {
             return true;
         }
-        if let Ok(target) = std::env::var("BADC_RELAX_FN_NAME") {
-            return name == target;
+        if let Ok(targets) = std::env::var("BADC_RELAX_FN_NAME") {
+            for target in targets.split(',') {
+                if !target.is_empty() && name == target {
+                    return true;
+                }
+            }
+        }
+        if let Ok(prefixes) = std::env::var("BADC_RELAX_FN_PREFIX") {
+            for prefix in prefixes.split(',') {
+                if !prefix.is_empty() && name.starts_with(prefix) {
+                    return true;
+                }
+            }
         }
     }
     #[cfg(not(feature = "std"))]

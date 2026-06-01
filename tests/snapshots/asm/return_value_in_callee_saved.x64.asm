@@ -20,11 +20,7 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rbx, (%rsp)
-               	movl	$0x7, %ebx
-               	movq	%rbx, %rdi
-               	movq	(%rsp), %rbx
-               	addq	$0x10, %rsp
+               	movl	$0x7, %edi
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

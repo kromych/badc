@@ -1267,19 +1267,19 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     call_pcs.sort_unstable();
-    // Per-function relaxation gate. Off by default (env var
-    // unset) -> closed upper bound `first <= end`, conservative
-    // and preserves shipped behavior. With BADC_RELAX_* set, the
-    // bound opens to `first < end`, enabling the QBE-style
-    // call-arg coalescing. The four demo gates pass under
-    // BADC_RELAX_ALL=1 on macOS aarch64, Linux x86_64, and
-    // Linux aarch64 with the in-tree fixes, but a CI lane
-    // (test (macos-latest) debug build) crashed when the
-    // relaxation was applied unconditionally; the bisect of
-    // which JIT-or-debug-specific shape regresses hasn't
-    // landed, so the relaxation stays opt-in for now.
-    let _ = target;
-    let strict_upper = relax_calls_after_def_for(&func.name);
+    // QBE-style call-arg coalescing: open the upper bound from
+    // `first <= end` to `first < end` on the targets where the
+    // pre-conditions hold. A call at exactly `last_use` is the
+    // value's consumer; its arg marshal reads the value before
+    // the callee runs, so the value lives in a caller-saved
+    // arg-register and `populate_call_arg_hints` can hint it to
+    // the matching slot. Five emit-layer prerequisites are in
+    // tree: the ParamRef ordering guard, the x86_64 + aarch64
+    // CallIndirect target-scratch pickers, and the scratch-aware
+    // cycle-break in both per-arch `schedule_int_reg_moves`
+    // implementations. Windows x64 stays on the conservative
+    // bound until the kromyrzen.local demo gate runs through it.
+    let strict_upper = relax_calls_after_def_for(&func.name) || target_enables_relaxation(target);
     let mut out = vec![false; n];
     for (idx, &end) in last_use.iter().enumerate() {
         let def = idx as u32;
@@ -1298,10 +1298,22 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
     out
 }
 
+/// Whether the target has the emit-layer prerequisites that make
+/// the `calls_after_def` relaxation safe by default. Win64 uses
+/// the same x86_64 CallIndirect picker as Linux x64 but its full
+/// demo gate hasn't been run under BADC_RELAX_ALL=1, so keep it
+/// on the conservative bound until that gate is satisfied.
+fn target_enables_relaxation(target: Target) -> bool {
+    matches!(
+        target,
+        Target::LinuxX64 | Target::LinuxAarch64 | Target::MacOSAarch64
+    )
+}
+
 /// Whether the calls_after_def upper bound should open from
-/// `<= end` to `< end` for a function. Gated by environment so
-/// the default (no env vars set) is byte-identical to the prior
-/// behavior.
+/// `<= end` to `< end` for a function via the env knobs. The
+/// shipped default is per-target via `target_enables_relaxation`;
+/// these env vars layer on top to override that decision.
 ///
 /// * `BADC_RELAX_ALL=1` -> apply to every function (the bare
 ///   global relaxation that trips Hazard 2 in sqlite3 -O).

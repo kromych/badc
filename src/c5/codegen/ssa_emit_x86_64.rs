@@ -643,10 +643,22 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
             }
         }
         if !progress {
-            let saved = moves[0].0;
-            emit_mov_rr(code, scratch, Reg(saved));
+            // Pick a source whose register is not the scratch
+            // itself; the mirror of the aarch64 fix. Without the
+            // filter, if any cycle member's source equals
+            // `scratch`, `mov scratch, scratch` is a no-op and
+            // the rewrite leaves the move list unchanged, so the
+            // outer loop spins forever. Surfaces under the relaxed
+            // calls_after_def bound when the allocator parks an
+            // arg-source value on the scratch register.
+            let cycle_src = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|&s| s != scratch.0)
+                .unwrap_or(moves[0].0);
+            emit_mov_rr(code, scratch, Reg(cycle_src));
             for m in moves.iter_mut() {
-                if m.0 == saved {
+                if m.0 == cycle_src {
                     m.0 = scratch.0;
                 }
             }

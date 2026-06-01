@@ -12,16 +12,15 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x230
-               	str	x20, [sp]
-               	str	x19, [sp, #0x10]
-               	sub	x20, x29, #0x200
-               	mov	x0, x20
+               	sub	sp, sp, #0x220
+               	str	x19, [sp]
+               	sub	x0, x29, #0x200
                	bl	<addr>
                	sxtw	x0, w0
-               	sxtw	x0, w0
-               	ldr	x20, [sp]
-               	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x230
+               	mov	x14, x0
+               	sxtw	x14, w14
+               	mov	x0, x14
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x220
                	ldp	x29, x30, [sp], #0x10
                	ret

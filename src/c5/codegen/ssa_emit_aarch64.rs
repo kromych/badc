@@ -3290,10 +3290,25 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
             // into the scratch and redirect every move that read
             // from it; the redirected `(scratch, ...)` move now
             // breaks the cycle.
-            let saved = moves[0].0;
-            emit_mov_reg(code, scratch, Reg(saved));
+            //
+            // Pick a source whose register is not the scratch
+            // itself. Without the filter, if any cycle member's
+            // source equals `scratch`, the cycle-break emits
+            // `mov scratch, scratch` (no-op) and the rewrite
+            // returns sources to their original values -- the
+            // outer loop never makes progress and the function
+            // spins forever. The relaxed calls_after_def bound
+            // surfaces this shape by parking more values in
+            // caller-saved registers, occasionally landing one on
+            // the same physical register as the scratch.
+            let cycle_src = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|&s| s != scratch.0)
+                .unwrap_or(moves[0].0);
+            emit_mov_reg(code, scratch, Reg(cycle_src));
             for m in moves.iter_mut() {
-                if m.0 == saved {
+                if m.0 == cycle_src {
                     m.0 = scratch.0;
                 }
             }

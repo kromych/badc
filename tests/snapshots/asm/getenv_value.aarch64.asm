@@ -12,26 +12,24 @@ Disassembly of section .text:
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x20, [sp]
-               	str	x19, [sp, #0x10]
+               	sub	sp, sp, #0x20
+               	str	x19, [sp]
                	adrp	x19, <page>
                	add	x19, x19, #0xe8
-               	mov	x20, x19
-               	mov	x0, x20
+               	mov	x0, x19
                	bl	<addr>
-               	cmp	x0, #0x0
+               	mov	x14, x0
+               	cmp	x14, #0x0
                	b.ne	<addr>
                	mov	x13, #0x1               // =1
                	mov	x0, x13
-               	ldr	x20, [sp]
-               	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x30
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w0, [x0]
-               	ldr	x20, [sp]
-               	ldr	x19, [sp, #0x10]
-               	add	sp, sp, #0x30
+               	ldrb	w14, [x14]
+               	mov	x0, x14
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -41,17 +41,15 @@ Disassembly of section .text:
                	leaq	-<rip>, %rbx       # <addr>
                	leaq	-0x8(%rbp), %r12
                	movslq	(%r12), %r14
-               	movl	$0x1, %r15d
+               	movl	$0x1, %edi
                	movq	%rbx, %r11
-               	movq	%r15, %rdi
                	callq	*%r11
                	addq	%rax, %r14
                	movl	%r14d, (%r12)
                	leaq	-0x8(%rbp), %r15
                	movslq	(%r15), %r12
-               	movl	$0x2, %r14d
+               	movl	$0x2, %edi
                	movq	%rbx, %r11
-               	movq	%r14, %rdi
                	callq	*%r11
                	addq	%rax, %r12
                	movl	%r12d, (%r15)
@@ -63,30 +61,28 @@ Disassembly of section .text:
                	xorq	%r15, %r15
                	movq	%r15, -0x30(%rbp)
                	jmp	<addr>
-               	leaq	-0x8(%rbp), %rbx
-               	movslq	(%rbx), %r15
-               	movl	$0x3, %r14d
+               	leaq	-0x8(%rbp), %r14
+               	movslq	(%r14), %r15
+               	movl	$0x3, %edi
                	movq	-0x30(%rbp), %r12
                	movq	%r12, %r11
-               	movq	%r14, %rdi
                	callq	*%r11
                	addq	%rax, %r15
-               	movl	%r15d, (%rbx)
+               	movl	%r15d, (%r14)
                	jmp	<addr>
                	leaq	-<rip>, %rax      # <addr>
                	movq	%rax, -0x48(%rbp)
-               	leaq	-0x8(%rbp), %r14
-               	movslq	(%r14), %rbx
+               	leaq	-0x8(%rbp), %rbx
+               	movslq	(%rbx), %r14
                	leaq	-0x48(%rbp), %r15
                	movq	(%r15), %r15
-               	movl	$0x4, %r12d
+               	movl	$0x4, %edi
                	movq	%r15, %r11
-               	movq	%r12, %rdi
                	callq	*%r11
-               	addq	%rax, %rbx
-               	movl	%ebx, (%r14)
-               	movslq	-0x8(%rbp), %r14
-               	cmpq	$0x19a, %r14            # imm = 0x19A
+               	addq	%rax, %r14
+               	movl	%r14d, (%rbx)
+               	movslq	-0x8(%rbp), %rbx
+               	cmpq	$0x19a, %rbx            # imm = 0x19A
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, -0x60(%rbp)

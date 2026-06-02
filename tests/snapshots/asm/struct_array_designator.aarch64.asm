@@ -14,17 +14,15 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd0
                	ldrsw	x15, [x15]
                	cmp	x15, #0xa
                	cset	x15, ne
                	stur	x15, [x29, #-0x8]
                	cbnz	x15, <addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xd0
                	add	x14, x14, #0x4
                	ldrsw	x14, [x14]
                	cmp	x14, #0xb
@@ -38,18 +36,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xd0
                	add	x14, x14, #0x8
                	ldrsw	x14, [x14]
                	cmp	x14, #0x0
                	cset	x14, ne
                	stur	x14, [x29, #-0x10]
                	cbnz	x14, <addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
                	add	x0, x0, #0xc
                	ldrsw	x0, [x0]
                	cmp	x0, #0x0
@@ -64,18 +60,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
                	add	x0, x0, #0x10
                	ldrsw	x0, [x0]
                	cmp	x0, #0x1e
                	cset	x0, ne
                	stur	x0, [x29, #-0x18]
                	cbnz	x0, <addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xd0
                	add	x14, x14, #0x14
                	ldrsw	x14, [x14]
                	cmp	x14, #0x1f

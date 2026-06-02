@@ -43,9 +43,8 @@ Disassembly of section .text:
                	add	x15, x15, x6
                	sxtw	x15, w15
                	sub	x6, x29, #0x20
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x7, x19
+               	adrp	x7, <page>
+               	add	x7, x7, #0xd0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x7]
                	str	x10, [x6]

@@ -317,9 +317,8 @@ Disassembly of section .text:
                	b.lo	<addr>
                	sub	x0, x29, #0x50
                	sub	x1, x29, #0x10
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x3, x19
+               	adrp	x3, <page>
+               	add	x3, x3, #0xd0
                	mov	x2, x20
                	bl	<addr>
                	mov	x11, x0
@@ -388,9 +387,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0xb0
                	str	x19, [sp]
                	sub	x15, x29, #0x48
-               	adrp	x19, <page>
-               	add	x19, x19, #0xf0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xf0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x14]
                	str	x10, [x15]

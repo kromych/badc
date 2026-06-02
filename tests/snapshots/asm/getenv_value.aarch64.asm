@@ -14,9 +14,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	str	x19, [sp]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe8
                	bl	<addr>
                	mov	x14, x0
                	cmp	x14, #0x0

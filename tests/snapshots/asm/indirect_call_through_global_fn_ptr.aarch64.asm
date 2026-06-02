@@ -23,24 +23,20 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd8
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd8
                	mov	x14, #0x7               // =7
                	str	w14, [x15]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe0
-               	mov	x13, x19
+               	adrp	x13, <page>
+               	add	x13, x13, #0xe0
                	mov	x14, #0x23              // =35
                	str	w14, [x13]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x20, x19
+               	adrp	x20, <page>
+               	add	x20, x20, #0xd0
                	ldrsw	x1, [x15]
                	ldrsw	x2, [x13]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x13, x19
+               	adrp	x13, <page>
+               	add	x13, x13, #0xe8
                	ldr	x13, [x13]
                	mov	x9, x13
                	str	x2, [sp, #-0x10]!

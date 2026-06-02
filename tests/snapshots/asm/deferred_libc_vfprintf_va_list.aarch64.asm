@@ -16,16 +16,14 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	sxtw	x20, w0
-               	adrp	x19, <page>
-               	add	x19, x19, #0x108
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x108
                	lsl	x13, x20, #3
                	add	x14, x14, x13
                	ldr	x14, [x14]
                	cbz	x14, <addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0x108
-               	mov	x13, x19
+               	adrp	x13, <page>
+               	add	x13, x13, #0x108
                	lsl	x14, x20, #3
                	add	x13, x13, x14
                	ldr	x13, [x13]
@@ -37,21 +35,18 @@ Disassembly of section .text:
                	ret
                	sub	x14, x29, #0x18
                	mov	x0, #0x0                // =0
-               	adrp	x19, <page>
-               	add	x19, x19, #0x120
-               	mov	x12, x19
+               	adrp	x12, <page>
+               	add	x12, x12, #0x120
                	str	x12, [x14]
                	sub	x11, x29, #0x18
                	add	x11, x11, #0x8
-               	adrp	x19, <page>
-               	add	x19, x19, #0x126
-               	mov	x12, x19
+               	adrp	x12, <page>
+               	add	x12, x12, #0x126
                	str	x12, [x11]
                	sub	x14, x29, #0x18
                	add	x14, x14, #0x10
-               	adrp	x19, <page>
-               	add	x19, x19, #0x12d
-               	mov	x12, x19
+               	adrp	x12, <page>
+               	add	x12, x12, #0x12d
                	str	x12, [x14]
                	sub	x11, x29, #0x18
                	lsl	x12, x20, #3
@@ -60,17 +55,15 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x11, x0
                	cbz	x11, <addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0x108
-               	mov	x1, x19
+               	adrp	x1, <page>
+               	add	x1, x1, #0x108
                	lsl	x0, x20, #3
                	add	x1, x1, x0
                	ldr	x11, [x11]
                	str	x11, [x1]
                	b	<addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0x108
-               	mov	x11, x19
+               	adrp	x11, <page>
+               	add	x11, x11, #0x108
                	lsl	x20, x20, #3
                	add	x11, x11, x20
                	ldr	x11, [x11]
@@ -1293,9 +1286,8 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0x151
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0x151
                	stur	x0, [x29, #-0x98]
                	b	<addr>
                	mov	x0, #0x0                // =0
@@ -1491,9 +1483,8 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
-               	adrp	x19, <page>
-               	add	x19, x19, #0x158
-               	mov	x2, x19
+               	adrp	x2, <page>
+               	add	x2, x2, #0x158
                	mov	x3, #0x2a               // =42
                	mov	x4, #0x63               // =99
                	str	x4, [sp, #-0x10]!
@@ -1505,17 +1496,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	mov	x10, x0
                	sub	x0, x29, #0x40
-               	adrp	x19, <page>
-               	add	x19, x19, #0x15e
-               	mov	x1, x19
+               	adrp	x1, <page>
+               	add	x1, x1, #0x15e
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x3, x0
                	cmp	x3, #0x0
                	b.eq	<addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0x164
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0x164
                	sub	x1, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0

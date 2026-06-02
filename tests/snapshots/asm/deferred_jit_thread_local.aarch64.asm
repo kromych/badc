@@ -15,9 +15,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	sxtw	x15, w0
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xe0
                	lsl	x13, x15, #2
                	add	x13, x14, x13
                	str	w15, [x13]

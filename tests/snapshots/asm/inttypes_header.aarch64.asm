@@ -93,9 +93,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd0
                	ldrb	w0, [x15]
                	mov	x17, #0x6c              // =108
                	eor	x0, x0, x17
@@ -147,9 +146,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd4
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd4
                	ldrb	w0, [x15]
                	mov	x17, #0x6c              // =108
                	eor	x0, x0, x17
@@ -201,9 +199,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd8
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd8
                	ldrb	w0, [x15]
                	mov	x17, #0x6c              // =108
                	eor	x0, x0, x17
@@ -255,9 +252,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xdc
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xdc
                	ldrb	w0, [x15]
                	mov	x17, #0x64              // =100
                	eor	x0, x0, x17
@@ -281,9 +277,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xde
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xde
                	ldrb	w0, [x15]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
@@ -338,9 +333,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe2
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xe2
                	ldrb	w0, [x15]
                	mov	x17, #0x68              // =104
                	eor	x0, x0, x17
@@ -384,9 +378,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe5
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xe5
                	ldrb	w0, [x15]
                	mov	x17, #0x6c              // =108
                	eor	x0, x0, x17
@@ -447,9 +440,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x160
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe9
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xe9
                	ldrb	w0, [x15]
                	mov	x17, #0x6c              // =108
                	eor	x0, x0, x17

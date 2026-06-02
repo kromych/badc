@@ -25,9 +25,8 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	mov	x20, x0
-               	adrp	x19, <page>
-               	add	x19, x19, #0x238
-               	mov	x21, x19
+               	adrp	x21, <page>
+               	add	x21, x21, #0x238
                	mov	x13, #0x0               // =0
                	stur	x13, [x29, #-0x10]
                	stur	x13, [x29, #-0x18]

@@ -44,9 +44,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x90
                	str	x19, [sp]
                	sub	x15, x29, #0x68
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xd0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x14]
                	str	x10, [x15]

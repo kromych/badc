@@ -85,9 +85,8 @@ Disassembly of section .text:
                	ldursw	x14, [x29, #-0x20]
                	cmp	x14, #0x5
                	b.ge	<addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x1, x19
+               	adrp	x1, <page>
+               	add	x1, x1, #0xd0
                	ldursw	x14, [x29, #-0x20]
                	lsl	x0, x14, #2
                	add	x1, x1, x0
@@ -100,9 +99,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	stur	w0, [x29, #-0x20]
                	b	<addr>
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
                	ldrsw	x14, [x0]
                	add	x1, x0, #0x4
                	ldrsw	x1, [x1]
@@ -139,9 +137,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xe8
                	mov	x0, #0x0                // =0
                	mov	x1, #0x68               // =104
                	strb	w1, [x14]
@@ -164,9 +161,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xe8
                	add	x14, x14, #0x1
                	ldrb	w14, [x14]
                	mov	x17, #0x69              // =105
@@ -182,9 +178,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xe8
                	add	x14, x14, #0x2
                	ldrb	w14, [x14]
                	cmp	x14, #0x0

@@ -80,9 +80,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x13, x19
+               	adrp	x13, <page>
+               	add	x13, x13, #0xe8
                	ldrb	w13, [x13]
                	mov	x17, #0x62              // =98
                	eor	x13, x13, x17
@@ -118,9 +117,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd8
-               	mov	x13, x19
+               	adrp	x13, <page>
+               	add	x13, x13, #0xd8
                	mov	x1, #0x1                // =1
                	str	w1, [x13]
                	ldr	w13, [x13]

@@ -14,9 +14,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	adrp	x19, <page>
-               	add	x19, x19, #0x110
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0x110
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -25,12 +24,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x15, x19
-               	adrp	x19, <page>
-               	add	x19, x19, #0xf0
-               	mov	x14, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd0
+               	adrp	x14, <page>
+               	add	x14, x14, #0xf0
                	cmp	x15, x14
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
@@ -38,9 +35,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd0
                	ldr	w15, [x15]
                	mov	x17, #0x9ed8            // =40664
                	movk	x17, #0xc105, lsl #16
@@ -51,9 +47,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xf0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xf0
                	ldr	w15, [x15]
                	mov	x17, #0xe667            // =58983
                	movk	x17, #0x6a09, lsl #16
@@ -64,9 +59,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xd0
                	add	x15, x15, #0x1c
                	ldr	w15, [x15]
                	mov	x17, #0x4fa4            // =20388
@@ -78,9 +72,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xf0
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0xf0
                	add	x15, x15, #0x1c
                	ldr	w15, [x15]
                	mov	x17, #0xcd19            // =52505
@@ -92,12 +85,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x110
-               	mov	x15, x19
-               	adrp	x19, <page>
-               	add	x19, x19, #0x110
-               	mov	x0, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x110
+               	adrp	x0, <page>
+               	add	x0, x0, #0x110
                	cmp	x15, x0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -105,9 +96,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x110
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x110
                	ldr	w15, [x15]
                	mov	x17, #0xa5a5            // =42405
                	movk	x17, #0xa5a5, lsl #16
@@ -118,9 +108,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x110
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x110
                	add	x15, x15, #0x8
                	ldr	x15, [x15]
                	mov	x17, #0xbeef            // =48879

@@ -15,39 +15,33 @@ Disassembly of section .text:
                	sub	sp, sp, #0xa0
                	str	x19, [sp]
                	sub	x15, x29, #0x70
-               	adrp	x19, <page>
-               	add	x19, x19, #0x553
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x553
                	str	x14, [x15]
                	sub	x13, x29, #0x70
                	add	x13, x13, #0x8
-               	adrp	x19, <page>
-               	add	x19, x19, #0x560
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x560
                	str	x14, [x13]
                	sub	x15, x29, #0x70
                	add	x15, x15, #0x10
-               	adrp	x19, <page>
-               	add	x19, x19, #0x570
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x570
                	str	x14, [x15]
                	sub	x13, x29, #0x70
                	add	x13, x13, #0x18
-               	adrp	x19, <page>
-               	add	x19, x19, #0x590
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x590
                	str	x14, [x13]
                	sub	x15, x29, #0x70
                	add	x15, x15, #0x20
-               	adrp	x19, <page>
-               	add	x19, x19, #0x5d0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x5d0
                	str	x14, [x15]
                	sub	x13, x29, #0x70
                	add	x13, x13, #0x28
-               	adrp	x19, <page>
-               	add	x19, x19, #0x610
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0x610
                	str	x14, [x13]
                	sub	x15, x29, #0x70
                	ldr	x15, [x15]

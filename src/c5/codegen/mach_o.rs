@@ -1279,9 +1279,31 @@ fn patch_adrp_add(
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
 
-    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X19, imm21);
-    let add_word =
-        super::aarch64::enc_add_imm(super::aarch64::Reg::X19, super::aarch64::Reg::X19, in_page);
+    // Recover the destination register encoded by the codegen at the
+    // placeholder site. adrp/add carry the rd in the low 5 bits; the
+    // add additionally carries rn in bits 5..10. Both registers match
+    // by construction (`adrp rd; add rd, rd, #imm`).
+    let prev_adrp = u32::from_le_bytes([
+        out[adrp_file_off],
+        out[adrp_file_off + 1],
+        out[adrp_file_off + 2],
+        out[adrp_file_off + 3],
+    ]);
+    let prev_add = u32::from_le_bytes([
+        out[add_file_off],
+        out[add_file_off + 1],
+        out[add_file_off + 2],
+        out[add_file_off + 3],
+    ]);
+    let rd = (prev_adrp & 0x1F) as u8;
+    let add_rd = (prev_add & 0x1F) as u8;
+    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
+    let add_word = super::aarch64::enc_add_imm(
+        super::aarch64::Reg(add_rd),
+        super::aarch64::Reg(add_rn),
+        in_page,
+    );
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
     out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
     Ok(())

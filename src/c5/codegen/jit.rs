@@ -1423,10 +1423,21 @@ mod jit_impl {
         let imm21 = (page_diff >> 12) as i32;
         let in_page = (target_vmaddr & 0xFFF) as u32;
 
-        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X19, imm21);
+        // Recover the destination register encoded by the codegen at
+        // the placeholder site. adrp/add carry rd in the low 5 bits;
+        // the add additionally carries rn in bits 5..10. Both match
+        // by construction (`adrp rd; add rd, rd, #imm`).
+        let prev_adrp =
+            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
+        let prev_add =
+            u32::from_le_bytes([code[off + 4], code[off + 5], code[off + 6], code[off + 7]]);
+        let rd = (prev_adrp & 0x1F) as u8;
+        let add_rd = (prev_add & 0x1F) as u8;
+        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg(rd), imm21);
         let add_word = super::super::aarch64::enc_add_imm(
-            super::super::aarch64::Reg::X19,
-            super::super::aarch64::Reg::X19,
+            super::super::aarch64::Reg(add_rd),
+            super::super::aarch64::Reg(add_rn),
             in_page,
         );
         code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());

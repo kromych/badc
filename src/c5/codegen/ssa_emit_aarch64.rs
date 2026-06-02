@@ -1048,18 +1048,17 @@ fn emit_inst(
                 Some(r) => r,
                 None => return false,
             };
-            // The writer's patch_adrp_add hardcodes x19 as the
-            // adrp / add destination. Emit the placeholders with
-            // x19, then move the materialised address into the
-            // allocator's chosen register or spill slot.
+            // Encode `rd` in the adrp/add placeholder; the per-writer
+            // `patch_adrp_add` reads rd back from the placeholder, so
+            // the materialised address lands directly in the
+            // allocator's chosen register.
             let adrp_offset = code.len();
-            emit(code, enc_adrp(Reg(19), 0));
-            emit(code, enc_add_imm(Reg(19), Reg(19), 0));
+            emit(code, enc_adrp(rd, 0));
+            emit(code, enc_add_imm(rd, rd, 0));
             data_fixups.push(DataFixup {
                 adrp_offset,
                 data_offset: *offset as u64,
             });
-            emit_mov_reg(code, rd, Reg(19));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -1072,10 +1071,9 @@ fn emit_inst(
                 None => return false,
             };
             let adrp_offset = code.len();
-            emit(code, enc_adrp(Reg(19), 0));
-            emit(code, enc_add_imm(Reg(19), Reg(19), 0));
+            emit(code, enc_adrp(rd, 0));
+            emit(code, enc_add_imm(rd, rd, 0));
             pending_func_fixups.push((adrp_offset, *target_ent_pc));
-            emit_mov_reg(code, rd, Reg(19));
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));

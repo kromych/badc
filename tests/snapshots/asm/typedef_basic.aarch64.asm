@@ -23,9 +23,8 @@ Disassembly of section .text:
                	mov	x14, #0x41              // =65
                	mov	x13, #0x2d2             // =722
                	movk	x13, #0x4996, lsl #16
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x12, x19
+               	adrp	x12, <page>
+               	add	x12, x12, #0xd0
                	sub	x11, x29, #0x30
                	mov	x10, #0x7               // =7
                	str	w10, [x11]

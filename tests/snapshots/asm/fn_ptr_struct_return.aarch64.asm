@@ -15,9 +15,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	sxtw	x15, w0
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe0
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -29,9 +28,8 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x19, [sp, #0x10]
                	mov	x0, #0x0                // =0
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xe8
                	ldr	x14, [x14]
                	mov	x9, x14
                	str	x0, [sp, #-0x10]!
@@ -49,9 +47,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x20, x19
+               	adrp	x20, <page>
+               	add	x20, x20, #0xe8
                	ldr	x14, [x20]
                	mov	x0, #0x0                // =0
                	mov	x9, x14
@@ -86,9 +83,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x248
-               	mov	x21, x19
+               	adrp	x21, <page>
+               	add	x21, x21, #0x248
                	mov	x0, #0x0                // =0
                	mov	x9, x21
                	str	x0, [sp, #-0x10]!
@@ -121,9 +117,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0xe8
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe8
                	ldr	x0, [x0]
                	mov	x20, #0x0               // =0
                	mov	x9, x0

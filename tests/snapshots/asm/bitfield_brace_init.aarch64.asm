@@ -15,9 +15,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	str	x19, [sp]
                	sub	x15, x29, #0x8
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x14, x19
+               	adrp	x14, <page>
+               	add	x14, x14, #0xd0
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x14]
                	strb	w10, [x15]
@@ -70,9 +69,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x15, x29, #0x10
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd1
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd1
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x15]
@@ -122,9 +120,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x15, x29, #0x18
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd5
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd5
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x15]
@@ -165,9 +162,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x15, x29, #0x20
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd6
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd6
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x0]
                	strb	w10, [x15]

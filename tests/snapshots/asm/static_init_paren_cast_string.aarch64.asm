@@ -14,9 +14,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	adrp	x19, <page>
-               	add	x19, x19, #0x128
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x128
                	ldr	x15, [x15]
                	ldrb	w15, [x15]
                	mov	x17, #0x5               // =5
@@ -31,9 +30,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x128
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x128
                	ldr	x15, [x15]
                	add	x15, x15, #0x5
                	ldrb	w15, [x15]
@@ -49,9 +47,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x128
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x128
                	add	x15, x15, #0x8
                	ldr	x15, [x15]
                	ldrb	w15, [x15]
@@ -67,9 +64,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x128
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x128
                	add	x15, x15, #0x8
                	ldr	x15, [x15]
                	add	x15, x15, #0x9
@@ -86,9 +82,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x19, <page>
-               	add	x19, x19, #0x128
-               	mov	x15, x19
+               	adrp	x15, <page>
+               	add	x15, x15, #0x128
                	add	x15, x15, #0x10
                	ldr	x15, [x15]
                	add	x15, x15, #0x9

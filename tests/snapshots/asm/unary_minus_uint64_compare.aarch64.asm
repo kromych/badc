@@ -29,9 +29,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x15, x29, #0x10
-               	adrp	x19, <page>
-               	add	x19, x19, #0xd0
-               	mov	x0, x19
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x0]
                	str	x10, [x15]

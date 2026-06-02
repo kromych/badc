@@ -873,6 +873,23 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
             if local.is_empty() {
                 continue;
             }
+            // Skip callers that contain phis. `remap_caller_inst`
+            // remaps a phi's incoming values through the caller
+            // remap table in PC order, but a loop-head phi
+            // references back-edge incomings whose remap entries
+            // are still NO_VALUE when the phi is processed -- the
+            // phi then carries `incoming = (pred, NO_VALUE)` into
+            // the inlined IR and the per-arch emit bails on the
+            // first downstream operand that resolves to NO_VALUE.
+            // Inst::Phi only appears under BADC_PHI_PROMOTE today,
+            // so default-path inlining is unaffected.
+            if caller
+                .insts
+                .iter()
+                .any(|inst| matches!(inst, Inst::Phi { .. }))
+            {
+                continue;
+            }
             let before = caller.insts.len();
             inline_caller(caller, &local);
             if caller.insts.len() != before {

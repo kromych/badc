@@ -374,9 +374,20 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                           active_fp: &mut Vec<(ValueId, u32, u8)>,
                           free_fp: &mut Vec<u8>,
                           places: &[Place],
-                          last_use: &[u32]| {
+                          last_use: &[u32],
+                          class_last_use: &[u32],
+                          classes: &mut super::ssa_phi_class::PhiClasses| {
                 let vu = v as usize;
                 if vu >= last_use.len() || last_use[vu] != pc {
+                    return;
+                }
+                // The active-list entry covers the class's combined
+                // last_use, not the individual value's. Retiring
+                // early would free a register a later class member
+                // still needs; the picker could then place an
+                // unrelated value there and clobber the chain.
+                let class_root = classes.find(v) as usize;
+                if class_root < class_last_use.len() && class_last_use[class_root] != pc {
                     return;
                 }
                 match places[vu] {
@@ -404,6 +415,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                     &mut free_fp,
                     &places,
                     &last_use,
+                    &class_last_use,
+                    &mut classes,
                 );
             }
             if let Some(t) = target {
@@ -415,6 +428,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                     &mut free_fp,
                     &places,
                     &last_use,
+                    &class_last_use,
+                    &mut classes,
                 );
             }
         }

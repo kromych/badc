@@ -378,16 +378,110 @@ mod jit_impl {
         // a parent function would make). main reads argc/argv from
         // the System V argument registers and returns its exit code
         // in rax / x0.
+        //
+        // Dispatch through a fresh `pthread_create` worker on POSIX
+        // hosts. The cargo test harness's parallel scheduler runs
+        // each lib test on a thread it owns; calling the JIT'd code
+        // directly on that thread exposes it to whatever signal mask,
+        // stack guard size, alternate-stack setup, and TLS the
+        // harness has installed for itself. A pthread worker has the
+        // kernel-defaulted register state, signal mask, and TLS, so
+        // the JIT'd code observes the environment a freshly-launched
+        // native binary would. Windows keeps the in-thread call: it
+        // has no concurrent native-fixture parity harness pressuring
+        // the same thread.
+        let exit_code = run_main_isolated(
+            entry_ptr,
+            args.len() as c_int,
+            argv_ptrs.as_ptr(),
+            argv_cstrings,
+        )?;
+        Ok(exit_code)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn run_main_isolated(
+        entry_ptr: *const u8,
+        argc: c_int,
+        argv: *const *const c_char,
+        _argv_owned: Vec<CString>,
+    ) -> Result<i32, C5Error> {
+        // pthread_t is an opaque pointer on Linux and macOS (8 bytes
+        // on every supported host arch).
+        type PthreadT = usize;
+        unsafe extern "C" {
+            fn pthread_create(
+                tid: *mut PthreadT,
+                attr: *const c_void,
+                start: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+                arg: *mut c_void,
+            ) -> c_int;
+            fn pthread_join(tid: PthreadT, retval: *mut *mut c_void) -> c_int;
+        }
+
+        // Payload moves to the worker by raw pointer; the worker
+        // reads it once, then ownership returns through `worker_ret`.
+        struct Payload {
+            entry_addr: usize,
+            argc: c_int,
+            argv: *const *const c_char,
+        }
+        let payload = Box::new(Payload {
+            entry_addr: entry_ptr as usize,
+            argc,
+            argv,
+        });
+
+        unsafe extern "C" fn worker(arg: *mut c_void) -> *mut c_void {
+            // SAFETY: arg is the raw pointer the spawning thread
+            // produced via `Box::into_raw`. Boxing it back hands the
+            // payload's lifetime to this thread.
+            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
+                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
+            let rc = main_fn(payload.argc, payload.argv);
+            // C11 7.22.4.2p1: atexit handlers fire in LIFO order.
+            // Drain on the worker so any TLS the handlers touched
+            // belongs to the worker, not the spawning thread.
+            drain_jit_atexit_chain();
+            Box::into_raw(Box::new(rc)) as *mut c_void
+        }
+
+        let mut tid: PthreadT = 0;
+        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let rc = unsafe { pthread_create(&mut tid, core::ptr::null(), worker, raw_payload) };
+        if rc != 0 {
+            // Reclaim the payload box; the worker never ran.
+            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: pthread_create failed (rc={rc})"),
+            )));
+        }
+        let mut ret: *mut c_void = core::ptr::null_mut();
+        let join_rc = unsafe { pthread_join(tid, &mut ret) };
+        if join_rc != 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: pthread_join failed (rc={join_rc})"),
+            )));
+        }
+        let exit_code = unsafe { *Box::from_raw(ret as *mut c_int) };
+        // _argv_owned dropped here, after the worker has joined and
+        // any reads through `argv` have completed.
+        Ok(exit_code as i32)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn run_main_isolated(
+        entry_ptr: *const u8,
+        argc: c_int,
+        argv: *const *const c_char,
+        _argv_owned: Vec<CString>,
+    ) -> Result<i32, C5Error> {
         let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
             unsafe { std::mem::transmute(entry_ptr) };
-        let exit_code = main_fn(args.len() as c_int, argv_ptrs.as_ptr());
-        // Run atexit() handlers registered by JIT'd code while the
-        // code region is still mapped. The handler PCs point into
-        // the mmap'd region; once `region` drops (munmap), they
-        // become dangling. C11 7.22.4.2p1: handlers fire in LIFO
-        // order.
+        let rc = main_fn(argc, argv);
         drain_jit_atexit_chain();
-        Ok(exit_code as i32)
+        Ok(rc as i32)
     }
 
     fn lower_for_jit(

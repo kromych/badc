@@ -52,6 +52,19 @@ impl PhiClasses {
     /// result, and the per-arch predecessor exit-move handles the
     /// source-to-result load.
     pub(super) fn from_func(func: &FunctionSsa) -> Self {
+        Self::from_func_with_last_use(func, &[])
+    }
+
+    /// Build the union-find with a liveness-aware safety guard. The
+    /// optional `last_use` slice (one entry per `ValueId`) lets the
+    /// pass refuse to union a phi source whose last use is *after*
+    /// the phi -- in that case the source value is still needed in
+    /// its own register past the merge, and forcing it to share a
+    /// register with the phi result clobbers the source the next
+    /// time any other class member is emitted. An empty slice
+    /// disables the guard (used by the unit tests, which construct
+    /// minimal IRs by hand).
+    pub(super) fn from_func_with_last_use(func: &FunctionSsa, last_use: &[u32]) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
@@ -60,7 +73,8 @@ impl PhiClasses {
             let Inst::Phi { incoming, .. } = inst else {
                 continue;
             };
-            let phi_root = classes.find(idx as ValueId);
+            let phi_pc = idx as ValueId;
+            let phi_root = classes.find(phi_pc);
             for (_, src) in incoming {
                 if *src == NO_VALUE || (*src as usize) >= n {
                     continue;
@@ -75,6 +89,17 @@ impl PhiClasses {
                 // other phi class, and joining the two classes would
                 // collapse their live ranges.
                 if src_root != *src {
+                    continue;
+                }
+                // Refuse to join when `src` has a use beyond the phi.
+                // In that case the phi is *not* `src`'s last consumer,
+                // and giving the class one shared register forces
+                // either the phi's other arm or another class member
+                // to overwrite `src`'s register before its later use
+                // reads it.
+                if let Some(&lu) = last_use.get(*src as usize)
+                    && lu > phi_pc
+                {
                     continue;
                 }
                 // Make phi_root the parent of src_root. The order

@@ -176,3 +176,143 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
+    use super::run_one;
+    use alloc::vec::Vec;
+
+    fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
+        FunctionSsa {
+            name: alloc::string::String::new(),
+            ent_pc: 0,
+            end_pc: 0,
+            locals: 0,
+            n_params: 0,
+            is_variadic: false,
+            is_inline: false,
+            inst_src: alloc::vec![(0, 0); insts.len()],
+            insts,
+            blocks,
+            extern_call_refs: Vec::new(),
+            extern_imm_code_refs: Vec::new(),
+            extern_imm_data_refs: Vec::new(),
+            extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// CFG:
+    ///   b0: v0 = ImmData(7); v1 = Load(v0); Bz v1, b2, b1
+    ///   b1: v2 = ImmData(7); v3 = Load(v2); Return(v3)   // duplicate ImmData
+    ///   b2: Return(v0)
+    ///
+    /// b0 dominates b1, so the dedup pass must redirect v3's `addr` operand
+    /// from v2 to v0. v2 then becomes dead (use_counts == 0).
+    #[test]
+    fn cross_block_immdata_dedup_redirects_consumers_to_entry_canonical() {
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ImmData(7),
+                Inst::Load {
+                    addr: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ImmData(7),
+                Inst::Load {
+                    addr: 2,
+                    kind: LoadKind::I64,
+                },
+            ],
+            alloc::vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..2,
+                    terminator: Terminator::Bz {
+                        cond: 1,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..4,
+                    terminator: Terminator::Return(3),
+                    exit_acc: 3,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 4..4,
+                    terminator: Terminator::Return(0),
+                    exit_acc: 0,
+                },
+            ],
+        );
+        run_one(&mut f);
+        // v3's addr operand was v2 (the duplicate); after dedup it should be v0.
+        let Inst::Load { addr, .. } = f.insts[3] else {
+            panic!("expected Load at v3, got {:?}", f.insts[3]);
+        };
+        assert_eq!(
+            addr, 0,
+            "Load(v3)'s addr operand should redirect from v2 to the entry-block canonical v0",
+        );
+    }
+
+    /// When the entry block has no `ImmData(K)` for a key that later blocks
+    /// duplicate, the pass leaves the later occurrences alone (no
+    /// dominance guarantee). Locks the conservatism in.
+    #[test]
+    fn no_entry_canonical_means_no_redirect() {
+        let mut f = fresh(
+            alloc::vec![
+                // Entry block has no ImmData.
+                Inst::Imm(0),
+                // b1 and b2 both have ImmData(5) but neither dominates
+                // the other.
+                Inst::ImmData(5),
+                Inst::ImmData(5),
+            ],
+            alloc::vec![
+                Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator: Terminator::Bz {
+                        cond: 0,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                    exit_acc: 0,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 1..2,
+                    terminator: Terminator::Return(1),
+                    exit_acc: 1,
+                },
+                Block {
+                    start_pc: 0,
+                    inst_range: 2..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                },
+            ],
+        );
+        run_one(&mut f);
+        // Both ImmData stay distinct; their Return values stay distinct.
+        let returns: Vec<u32> = f
+            .blocks
+            .iter()
+            .filter_map(|b| match b.terminator {
+                Terminator::Return(v) if v != NO_VALUE => Some(v),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(returns.len(), 2);
+        assert_ne!(
+            returns[0], returns[1],
+            "without an entry-block canonical, v1 and v2 must stay distinct",
+        );
+    }
+}

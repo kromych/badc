@@ -317,6 +317,9 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("mem2reg_param_promoted.c", 0),
+    ("phi_class_for_loop_sum.c", 45),
+    ("phi_class_nested_loops.c", 49),
+    ("phi_class_diamond_join.c", 30),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),

@@ -53,6 +53,7 @@ mod ssa_emit_x86_64;
 mod ssa_inline;
 pub(crate) mod ssa_mem2reg;
 mod ssa_native;
+mod ssa_phi_class;
 mod ssa_rotate;
 pub(crate) mod ssa_shadow;
 mod x86_64;

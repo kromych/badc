@@ -121,11 +121,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	movq	%r12, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rbx, %rdx
+               	movq	%r12, %r8
+               	shlq	$0x2, %r8
+               	addq	%rbx, %r8
                	movslq	-0x10(%rbp), %rax
-               	movl	%eax, (%rdx)
+               	movl	%eax, (%r8)
                	movslq	-0x8(%rbp), %r14
                	movq	%r12, %rax
                	addq	$0x1, %rax
@@ -145,8 +145,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	cmpq	$0x5c, %rax
                	je	<addr>
-               	movl	$0x1, %esi
-               	movq	%rsi, %rax
+               	movl	$0x1, %edi
+               	movq	%rdi, %rax
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
@@ -154,4 +154,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

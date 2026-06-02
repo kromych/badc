@@ -349,6 +349,76 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             continue;
         }
 
+        // At a Call / CallExt / CallIndirect PC, every value the call
+        // consumes (its int / FP args and the indirect target pointer)
+        // has `last_use == pc`. `expire()` retains them until pc + 1
+        // because the half-open `last_use < pc` test is conservative.
+        // Without an early retire, the arg-register hints set by
+        // `populate_call_result_hints` see x0 (the AAPCS / SysV return
+        // register) as still busy with arg 0, fall back to a different
+        // register, and an extra `mov rd, x0` lands after the call.
+        // Retire each consumed value's register here -- the values are
+        // caller-saved and the call clobbers them in any case, so
+        // freeing them at pc only changes the picker's view, not the
+        // lifetime model.
+        let consumed: Option<(&[ValueId], Option<ValueId>)> = match inst {
+            Inst::Call { args, .. } => Some((args.as_slice(), None)),
+            Inst::CallExt { args, .. } => Some((args.as_slice(), None)),
+            Inst::CallIndirect { args, target } => Some((args.as_slice(), Some(*target))),
+            _ => None,
+        };
+        if let Some((args, target)) = consumed {
+            let retire = |v: ValueId,
+                          active_int: &mut Vec<(ValueId, u32, u8)>,
+                          free_int: &mut Vec<u8>,
+                          active_fp: &mut Vec<(ValueId, u32, u8)>,
+                          free_fp: &mut Vec<u8>,
+                          places: &[Place],
+                          last_use: &[u32]| {
+                let vu = v as usize;
+                if vu >= last_use.len() || last_use[vu] != pc {
+                    return;
+                }
+                match places[vu] {
+                    Place::IntReg(r) => {
+                        if let Some(pos) = active_int.iter().position(|(av, _, _)| *av == v) {
+                            active_int.remove(pos);
+                            free_int.push(r);
+                        }
+                    }
+                    Place::FpReg(r) => {
+                        if let Some(pos) = active_fp.iter().position(|(av, _, _)| *av == v) {
+                            active_fp.remove(pos);
+                            free_fp.push(r);
+                        }
+                    }
+                    _ => {}
+                }
+            };
+            for &a in args {
+                retire(
+                    a,
+                    &mut active_int,
+                    &mut free_int,
+                    &mut active_fp,
+                    &mut free_fp,
+                    &places,
+                    &last_use,
+                );
+            }
+            if let Some(t) = target {
+                retire(
+                    t,
+                    &mut active_int,
+                    &mut free_int,
+                    &mut active_fp,
+                    &mut free_fp,
+                    &places,
+                    &last_use,
+                );
+            }
+        }
+
         // For a Binop / BinopI / Extend / Fneg whose lhs operand dies
         // at this very pc, set the dst's hint to lhs's register so the
         // 2-operand fusion kicks in (x86_64 `add Rd, Rm` with Rd == lhs;

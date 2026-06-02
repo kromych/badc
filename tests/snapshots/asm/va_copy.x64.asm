@@ -69,11 +69,12 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	cmpq	$0x64, %rax
                	je	<addr>
-               	movl	$0xb, %r8d
-               	movq	%r8, %rax
+               	movl	$0xb, %ecx
+               	movq	%rcx, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

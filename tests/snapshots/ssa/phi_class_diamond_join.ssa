@@ -39,10 +39,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v2   Imm(10)                                          -> x6
     v3   Imm(0)                                           -> x3
     v4   Call { target_pc=0, args=[v1, v2, v3] }          -> x12
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> x7
     v6   Imm(20)                                          -> x2
     v7   Call { target_pc=0, args=[v3, v3, v6] }          -> x0
-    v8   Imm(0)                                           -> x2
+    v8   Imm(0)                                           -> x3
     v9   Extend { value=v4, kind=I32 }                    -> x12
     v10  Extend { value=v7, kind=I32 }                    -> x0
     v11  Binop { op=add, lhs=v9, rhs=v10 }                -> x12

@@ -96,38 +96,38 @@ Disassembly of section .text:
                	sub	x0, x29, #0x100
                	sub	x1, x29, #0x80
                	bl	<addr>
-               	mov	x15, x0
                	sub	x0, x29, #0x100
                	bl	<addr>
-               	mov	x1, x0
-               	mov	x0, #0x110              // =272
+               	mov	x1, #0x110              // =272
                	mov	x15, #0x2               // =2
-               	sdiv	x0, x0, x15
-               	cmp	x1, x0
+               	sdiv	x1, x1, x15
+               	cmp	x0, x1
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x1, x29, #0x100
-               	ldr	x1, [x1]
-               	cmp	x1, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x1, x29, #0x100
-               	add	x1, x1, #0x78
-               	ldr	x1, [x1]
-               	cmp	x1, #0x10
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x120
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x1, #0x0                // =0
+               	mov	x1, #0x1                // =1
                	mov	x0, x1
+               	add	sp, sp, #0x120
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x100
+               	ldr	x0, [x0]
+               	cmp	x0, #0x1
+               	b.eq	<addr>
+               	mov	x1, #0x2                // =2
+               	mov	x0, x1
+               	add	sp, sp, #0x120
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x100
+               	add	x0, x0, #0x78
+               	ldr	x0, [x0]
+               	cmp	x0, #0x10
+               	b.eq	<addr>
+               	mov	x1, #0x3                // =3
+               	mov	x0, x1
+               	add	sp, sp, #0x120
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x120
                	ldp	x29, x30, [sp], #0x10
                	ret

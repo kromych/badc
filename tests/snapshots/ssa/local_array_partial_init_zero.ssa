@@ -88,23 +88,23 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v1   Imm(3735928559)                                  -> x7
     v2   Call { target_pc=0, args=[v1] }                  -> x0
     v3   Call { target_pc=1, args=[] }                    -> x3
-    v4   Imm(0)                                           -> x7
+    v4   Imm(0)                                           -> x9
     v5   Imm(305419896)                                   -> x7
     v6   Call { target_pc=0, args=[v5] }                  -> x0
     v7   Call { target_pc=1, args=[] }                    -> x0
-    v8   Imm(0)                                           -> x7
+    v8   Imm(0)                                           -> x8
     v9   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x3
     v10  BinopI { op=ne, lhs=v9, rhs_imm=0 }              -> x3
     terminator Bz { cond=v10, target=b2, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
-    v11  Imm(1)                                           -> x7
+    v11  Imm(1)                                           -> x8
     terminator Return(v11)   (exit_acc=v11)
   block 2  start_pc=0
     v12  BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x0
     v13  BinopI { op=ne, lhs=v12, rhs_imm=0 }             -> x0
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
-    v14  Imm(2)                                           -> x7
+    v14  Imm(2)                                           -> x8
     terminator Return(v14)   (exit_acc=v14)
   block 4  start_pc=0
     v15  Imm(0)                                           -> x0

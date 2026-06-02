@@ -7,16 +7,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v1   ImmData(8)                                       -> x7
     v2   Imm(0)                                           -> x6
     v3   CallExt { binding_idx=11, args=[v1, v2], fp_arg_mask=0x0 } -> x0
-    v4   Imm(0)                                           -> x6
-    v5   LoadLocal { off=-1, kind=I64 }                   -> x6
-    v6   Imm(5039527983027585024)                         -> x6
+    v4   Imm(0)                                           -> x7
+    v5   LoadLocal { off=-1, kind=I64 }                   -> x7
+    v6   Imm(5039527983027585024)                         -> x7
     v7   Binop { op=fne, lhs=v3, rhs=v6 }                 -> x0
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
-    v8   Imm(11)                                          -> x6
+    v8   Imm(11)                                          -> x7
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v9   ImmData(40)                                      -> x7
+    v9   ImmData(40)                                      -> x0
     v10  Imm(0)                                           -> x6
     v11  CallExt { binding_idx=11, args=[v9, v10], fp_arg_mask=0x0 } -> x0
     v12  Imm(0)                                           -> x6
@@ -31,13 +31,13 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v17  Imm(4607182418800017408)                         -> x7
     v18  Imm(53)                                          -> x6
     v19  CallExt { binding_idx=56, args=[v17, v18], fp_arg_mask=0x1 } -> x0
-    v20  Imm(0)                                           -> x6
-    v21  LoadLocal { off=-3, kind=I64 }                   -> x6
-    v22  Imm(4845873199050653696)                         -> x6
+    v20  Imm(0)                                           -> x7
+    v21  LoadLocal { off=-3, kind=I64 }                   -> x7
+    v22  Imm(4845873199050653696)                         -> x7
     v23  Binop { op=fne, lhs=v19, rhs=v22 }               -> x0
     terminator Bz { cond=v23, target=b6, fall=b5 }   (exit_acc=v23)
   block 5  start_pc=0
-    v24  Imm(13)                                          -> x6
+    v24  Imm(13)                                          -> x7
     terminator Return(v24)   (exit_acc=v24)
   block 6  start_pc=0
     v25  Imm(0)                                           -> x0

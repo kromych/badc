@@ -40,9 +40,9 @@ Disassembly of section .text:
                	mov	x21, x0
                	adrp	x1, <page>
                	add	x1, x1, #0x24c
-               	mov	x15, #0x5               // =5
+               	mov	x12, #0x5               // =5
                	mov	x9, x1
-               	str	x15, [sp, #-0x10]!
+               	str	x12, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]

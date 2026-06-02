@@ -46,46 +46,42 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	je	<addr>
-               	movl	$0x1, %edi
-               	movq	%rdi, %rax
+               	movl	$0x1, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
-               	movl	$0x1, %eax
-               	movq	%rax, %rdi
+               	movl	$0x1, %edi
                	callq	<addr>
-               	movq	%rax, %rdi
-               	cmpq	$0x1, %rdi
+               	cmpq	$0x1, %rax
                	je	<addr>
-               	movl	$0x2, %eax
+               	movl	$0x2, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>
-               	movl	$0x3, %edi
-               	movq	%rdi, %rax
+               	movl	$0x3, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
-               	movl	$0xa, %eax
-               	movq	%rax, %rdi
+               	movl	$0xa, %edi
                	callq	<addr>
-               	movq	%rax, %rdi
-               	cmpq	$0x37, %rdi
+               	cmpq	$0x37, %rax
                	je	<addr>
-               	movl	$0x4, %eax
+               	movl	$0x4, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
                	movl	$0x14, %edi
                	callq	<addr>
                	cmpq	$0x1a6d, %rax           # imm = 0x1A6D
                	je	<addr>
-               	movl	$0x5, %edi
-               	movq	%rdi, %rax
+               	movl	$0x5, %r9d
+               	movq	%r9, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

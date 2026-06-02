@@ -104,8 +104,8 @@ fn ent_pc=2 n_params=0 variadic=false locals=35
     v18  LocalAddr(-32)                                   -> x7
     v19  Call { target_pc=1, args=[v18] }                 -> x0
     v20  Imm(272)                                         -> x7
-    v21  Imm(1168231104512)                               -> x6
-    v22  Imm(2)                                           -> x6
+    v21  Imm(1168231104512)                               -> x11
+    v22  Imm(2)                                           -> x11
     v23  Binop { op=div, lhs=v20, rhs=v22 }               -> x7
     v24  Binop { op=ne, lhs=v19, rhs=v23 }                -> x0
     terminator Bz { cond=v24, target=b6, fall=b5 }   (exit_acc=v24)

@@ -82,18 +82,18 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v23  BinopI { op=ne, lhs=v22, rhs_imm=24 }            -> x0
     terminator Bz { cond=v23, target=b6, fall=b5 }   (exit_acc=v23)
   block 5  start_pc=0
-    v24  Imm(3)                                           -> x7
+    v24  Imm(3)                                           -> x9
     terminator Return(v24)   (exit_acc=v24)
   block 6  start_pc=0
-    v25  Imm(0)                                           -> x0
-    v26  Call { target_pc=1, args=[v25] }                 -> x7
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x7
+    v25  Imm(0)                                           -> x7
+    v26  Call { target_pc=1, args=[v25] }                 -> x0
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=0 }             -> x0
     terminator Bz { cond=v27, target=b8, fall=b7 }   (exit_acc=v27)
   block 7  start_pc=0
-    v28  Imm(4)                                           -> x0
+    v28  Imm(4)                                           -> x9
     terminator Return(v28)   (exit_acc=v28)
   block 8  start_pc=0
-    v29  Imm(0)                                           -> x7
+    v29  Imm(0)                                           -> x0
     terminator Return(v29)   (exit_acc=v29)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

@@ -54,12 +54,12 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	je	<addr>
-               	leaq	<rip>, %r8
-               	movq	%rbx, %rdi
-               	shlq	$0x3, %rdi
-               	addq	%rdi, %r8
+               	leaq	<rip>, %rdi
+               	movq	%rbx, %rsi
+               	shlq	$0x3, %rsi
+               	addq	%rsi, %rdi
                	movq	(%rax), %rax
-               	movq	%rax, (%r8)
+               	movq	%rax, (%rdi)
                	jmp	<addr>
                	leaq	<rip>, %rax
                	shlq	$0x3, %rbx
@@ -140,11 +140,10 @@ Disassembly of section .text:
                	movq	%rdi, (%rsp)
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movq	%rax, %r11
-               	cmpq	$0x55fb, %r11           # imm = 0x55FB
+               	movq	%rax, %rsi
+               	cmpq	$0x55fb, %rsi           # imm = 0x55FB
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movq	%r11, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -160,11 +159,11 @@ Disassembly of section .text:
                	movq	%rdi, (%rsp)
                	callq	<addr>
                	addq	$0x20, %rsp
-               	movq	%rax, %r11
-               	cmpq	$0x7e, %r11
+               	movq	%rax, %rsi
+               	cmpq	$0x7e, %rsi
                	je	<addr>
-               	leaq	<rip>, %rdi
-               	movq	%r11, %rsi
+               	leaq	<rip>, %rdx
+               	movq	%rdx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -172,9 +171,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
-               	movq	%rdi, %rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

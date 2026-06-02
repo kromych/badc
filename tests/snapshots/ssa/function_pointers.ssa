@@ -44,11 +44,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v6   CallIndirect { target=v1, args=[v3, v4] }        -> x12
     v7   Imm(0)                                           -> x6
     v8   ImmCode(ent_pc=1)                                -> x6
-    v9   Imm(0)                                           -> x11
-    v10  Imm(5)                                           -> x11
+    v9   Imm(0)                                           -> x7
+    v10  Imm(5)                                           -> x7
     v11  LoadLocal { off=-1, kind=I64 }                   -> x8
     v12  CallIndirect { target=v8, args=[v3, v10] }       -> x0
-    v13  Imm(0)                                           -> x11
+    v13  Imm(0)                                           -> x7
     v14  Extend { value=v6, kind=I32 }                    -> x12
     v15  Extend { value=v12, kind=I32 }                   -> x0
     v16  Binop { op=mul, lhs=v14, rhs=v15 }               -> x12

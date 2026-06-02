@@ -7,20 +7,20 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v1   Imm(0)                                           -> x7
     v2   Imm(2)                                           -> x6
     v3   CallExt { binding_idx=124, args=[v1, v2], fp_arg_mask=0x0 } -> x3
-    v4   Imm(0)                                           -> x6
-    v5   LoadLocal { off=-1, kind=I64 }                   -> x6
-    v6   BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> x6
+    v4   Imm(0)                                           -> x7
+    v5   LoadLocal { off=-1, kind=I64 }                   -> x7
+    v6   BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> x7
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(1)                                           -> x7
+    v7   Imm(1)                                           -> x8
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   LoadLocal { off=-1, kind=I64 }                   -> x6
+    v8   LoadLocal { off=-1, kind=I64 }                   -> x7
     v9   ImmData(16)                                      -> x6
     v10  CallExt { binding_idx=125, args=[v3, v9], fp_arg_mask=0x0 } -> x12
-    v11  Imm(0)                                           -> x6
-    v12  LoadLocal { off=-2, kind=I64 }                   -> x6
-    v13  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x6
+    v11  Imm(0)                                           -> x8
+    v12  LoadLocal { off=-2, kind=I64 }                   -> x8
+    v13  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> x8
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
     v14  LoadLocal { off=-1, kind=I64 }                   -> x11

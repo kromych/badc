@@ -41,8 +41,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movq	%rax, %r12
-               	movslq	%r12d, %rdi
-               	cmpq	$0x0, %rdi
+               	movslq	%r12d, %r8
+               	cmpq	$0x0, %r8
                	jne	<addr>
                	leaq	-0x208(%rbp), %rdi
                	movl	$0x7, %esi

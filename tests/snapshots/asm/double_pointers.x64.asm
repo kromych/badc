@@ -50,9 +50,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, (%rbx)
-               	movq	(%rbx), %rdi
+               	movq	(%rbx), %r11
                	movl	$0x7b, %eax
-               	movl	%eax, (%rdi)
+               	movl	%eax, (%r11)
                	movq	(%rbx), %r8
                	movslq	(%r8), %r8
                	cmpq	$0x7b, %r8
@@ -83,4 +83,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -6,23 +6,23 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v0   AllocaInit(0)                                    -> -
     v1   Imm(5)                                           -> x7
     v2   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x3
-    v3   Imm(0)                                           -> x7
-    v4   LoadLocal { off=-1, kind=I64 }                   -> x7
+    v3   Imm(0)                                           -> x9
+    v4   LoadLocal { off=-1, kind=I64 }                   -> x9
     v5   Imm(65)                                          -> x6
     v6   Imm(4)                                           -> x2
     v7   CallExt { binding_idx=32, args=[v2, v5, v6], fp_arg_mask=0x0 } -> x0
     v8   LoadLocal { off=-1, kind=I64 }                   -> x0
     v9   BinopI { op=add, lhs=v2, rhs_imm=4 }             -> x0
-    v10  Imm(0)                                           -> x2
+    v10  Imm(0)                                           -> x6
     v11  Store { addr=v9, value=v10, kind=I8 }            -> -
-    v12  LoadLocal { off=-1, kind=I64 }                   -> x6
+    v12  LoadLocal { off=-1, kind=I64 }                   -> x11
     v13  Load { addr=v2, kind=U8 }                        -> x3
     v14  BinopI { op=xor, lhs=v13, rhs_imm=65 }           -> x3
     v15  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x3
     v16  BinopI { op=eq, lhs=v15, rhs_imm=0 }             -> x3
     terminator Bz { cond=v16, target=b2, fall=b1 }   (exit_acc=v16)
   block 1  start_pc=0
-    v17  Imm(42)                                          -> x6
+    v17  Imm(42)                                          -> x11
     terminator Return(v17)   (exit_acc=v17)
   block 2  start_pc=0
     v18  Imm(0)                                           -> x3

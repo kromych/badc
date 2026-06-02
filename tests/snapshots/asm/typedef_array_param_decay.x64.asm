@@ -97,8 +97,7 @@ Disassembly of section .text:
                	leaq	-0x100(%rbp), %rdi
                	callq	<addr>
                	movl	$0x110, %edi            # imm = 0x110
-               	movl	$0x2, %esi
-               	movq	%rsi, %r11
+               	movl	$0x2, %r11d
                	pushq	%rax
                	pushq	%rdx
                	movq	%rdi, %rax
@@ -137,5 +136,4 @@ Disassembly of section .text:
                	addq	$0x120, %rsp            # imm = 0x120
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

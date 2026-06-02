@@ -81,14 +81,13 @@ Disassembly of section .text:
                	mov	x0, #0xbeef             // =48879
                	movk	x0, #0xdead, lsl #16
                	bl	<addr>
-               	mov	x14, x0
-               	cmp	x14, #0x18
+               	cmp	x0, #0x18
                	b.eq	<addr>
-               	mov	x0, #0x3                // =3
+               	mov	x14, #0x3               // =3
+               	mov	x0, x14
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0x0
                	b.eq	<addr>

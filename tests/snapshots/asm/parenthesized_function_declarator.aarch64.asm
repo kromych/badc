@@ -30,33 +30,33 @@ Disassembly of section .text:
                	sxtw	x20, w15
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	mov	x13, x0
                	sxtw	x20, w20
                	cmp	x20, #0xb
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
+               	mov	x13, #0x1               // =1
+               	mov	x0, x13
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x13, #0x0
+               	cmp	x0, #0x0
                	cset	x20, eq
                	stur	x20, [x29, #-0x20]
                	cbnz	x20, <addr>
-               	ldrsw	x13, [x13]
-               	cmp	x13, #0xa
-               	cset	x13, ne
-               	stur	x13, [x29, #-0x20]
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0xa
+               	cset	x0, ne
+               	stur	x0, [x29, #-0x20]
                	b	<addr>
-               	ldur	x13, [x29, #-0x20]
-               	cbz	x13, <addr>
-               	mov	x0, #0x2                // =2
+               	ldur	x0, [x29, #-0x20]
+               	cbz	x0, <addr>
+               	mov	x13, #0x2               // =2
+               	mov	x0, x13
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

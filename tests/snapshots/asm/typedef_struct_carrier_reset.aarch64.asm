@@ -65,43 +65,45 @@ Disassembly of section .text:
                	sub	sp, sp, #0xc0
                	sub	x0, x29, #0xa8
                	bl	<addr>
-               	mov	x14, x0
-               	sxtw	x14, w14
-               	cmp	x14, #0x64
+               	sxtw	x0, w0
+               	cmp	x0, #0x64
                	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x14, x29, #0xa8
-               	add	x14, x14, #0x14
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x14, x29, #0xa8
-               	add	x14, x14, #0x3c
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x6
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x14, x29, #0xa8
-               	add	x14, x14, #0xa0
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x64
-               	b.eq	<addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0xc0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	x14, #0x0               // =0
+               	mov	x14, #0x1               // =1
                	mov	x0, x14
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0xa8
+               	add	x0, x0, #0x14
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x5
+               	b.eq	<addr>
+               	mov	x14, #0x2               // =2
+               	mov	x0, x14
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0xa8
+               	add	x0, x0, #0x3c
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x6
+               	b.eq	<addr>
+               	mov	x14, #0x3               // =3
+               	mov	x0, x14
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0xa8
+               	add	x0, x0, #0xa0
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x64
+               	b.eq	<addr>
+               	mov	x14, #0x4               // =4
+               	mov	x0, x14
+               	add	sp, sp, #0xc0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret

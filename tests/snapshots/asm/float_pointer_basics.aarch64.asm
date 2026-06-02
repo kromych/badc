@@ -50,16 +50,16 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	bl	<addr>
                	mov	x22, x0
-               	mov	x0, #0x3f800000         // =1065353216
-               	str	w0, [x21]
+               	mov	x20, #0x3f800000        // =1065353216
+               	str	w20, [x21]
                	add	x12, x21, #0x4
-               	mov	x0, #0x40000000         // =1073741824
-               	str	w0, [x12]
+               	mov	x20, #0x40000000        // =1073741824
+               	str	w20, [x12]
                	mov	x11, #0x3ff0000000000000 // =4607182418800017408
                	str	x11, [x22]
-               	add	x0, x22, #0x8
+               	add	x20, x22, #0x8
                	mov	x11, #0x4000000000000000 // =4611686018427387904
-               	str	x11, [x0]
+               	str	x11, [x20]
                	ldrsw	x12, [x21]
                	mov	x17, #0x3f800000        // =1065353216
                	cmp	x12, x17

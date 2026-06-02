@@ -66,25 +66,25 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v6   BinopI { op=ne, lhs=v5, rhs_imm=9123 }           -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v7   Imm(11)                                          -> x1
+    v7   Imm(11)                                          -> x2
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
     v8   ImmCode(ent_pc=0)                                -> x0
-    v9   Imm(0)                                           -> x1
+    v9   Imm(0)                                           -> x2
     v10  Imm(9)                                           -> x7
     v11  Imm(1)                                           -> x6
     v12  Imm(2)                                           -> x2
     v13  Imm(3)                                           -> x1
     v14  LoadLocal { off=-1, kind=I64 }                   -> x8
-    v15  CallIndirect { target=v8, args=[v10, v11, v12, v13] } -> x8
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=9123 }          -> x8
+    v15  CallIndirect { target=v8, args=[v10, v11, v12, v13] } -> x0
+    v16  BinopI { op=ne, lhs=v15, rhs_imm=9123 }          -> x0
     terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
     v17  Imm(12)                                          -> x1
     terminator Return(v17)   (exit_acc=v17)
   block 4  start_pc=0
-    v18  Imm(0)                                           -> x8
-    v19  ImmCode(ent_pc=0)                                -> x8
+    v18  Imm(0)                                           -> x0
+    v19  ImmCode(ent_pc=0)                                -> x0
     v20  Imm(9)                                           -> x7
     v21  Imm(1)                                           -> x6
     v22  Imm(2)                                           -> x2

@@ -122,7 +122,5 @@ Disassembly of section .text:
                	str	x10, [sp, #0x10]
                	bl	<addr>
                	add	sp, sp, #0x20
-               	mov	x11, x0
-               	mov	x0, x11
                	ldp	x29, x30, [sp], #0x10
                	ret

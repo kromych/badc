@@ -65,14 +65,12 @@ Disassembly of section .text:
                	str	x0, [sp, #-0x10]!
                	bl	<addr>
                	add	sp, sp, #0x50
-               	mov	x10, x0
-               	cmp	x10, #0x64
+               	cmp	x0, #0x64
                	b.eq	<addr>
-               	mov	x4, #0xb                // =11
-               	mov	x0, x4
+               	mov	x3, #0xb                // =11
+               	mov	x0, x3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x10, #0x0               // =0
-               	mov	x0, x10
+               	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret

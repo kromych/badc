@@ -120,10 +120,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	lsl	x2, x21, #2
-               	add	x2, x20, x2
+               	lsl	x13, x21, #2
+               	add	x13, x20, x13
                	ldursw	x0, [x29, #-0x10]
-               	str	w0, [x2]
+               	str	w0, [x13]
                	ldursw	x22, [x29, #-0x8]
                	add	x0, x21, #0x1
                	sxtw	x1, w0
@@ -139,17 +139,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	mov	x13, x0
-               	sxtw	x13, w13
-               	cmp	x13, #0x5c
+               	sxtw	x0, w0
+               	cmp	x0, #0x5c
                	b.eq	<addr>
                	mov	x1, #0x1                // =1
                	mov	x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

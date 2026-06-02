@@ -251,18 +251,6 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 
     let banks = RegBanks::for_target(target);
     let last_use = compute_last_use(func);
-    let calls_after_def = compute_calls_after_def(func, &last_use, target);
-    // Call-argument coalescing hints. Run after `last_use` and
-    // `calls_after_def` so the per-value safety guards can read them.
-    // The prior unconditional ABI-hint pass was reverted in commit
-    // 1609bbc after it sent a value to a caller-saved arg register
-    // even when the value's interval extended past the call --
-    // a later use then read the call-clobbered register. Restrict
-    // the hint to values whose last use is exactly this call so the
-    // call consumes them and there is no surviving live range to
-    // protect.
-    populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
-    populate_call_result_hints(func, target, &calls_after_def, &mut hints);
     // Phi class union-find: every phi result and its incoming sources
     // join one equivalence class. The allocator places the first-
     // allocated member of a class, then routes every other member to
@@ -283,6 +271,29 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         }
         cl
     };
+    let mut calls_after_def = compute_calls_after_def(func, &last_use, target);
+    // Promote per-value `calls_after_def` to the class's combined
+    // live range. Without this, a class member whose own last use
+    // does not cross a call but whose class root lives past one
+    // would be placed in a caller-saved register and clobbered.
+    promote_calls_after_def_to_classes(
+        &mut classes,
+        func,
+        &class_last_use,
+        target,
+        &mut calls_after_def,
+    );
+    // Call-argument coalescing hints. Run after `last_use` and
+    // `calls_after_def` so the per-value safety guards can read them.
+    // The prior unconditional ABI-hint pass was reverted in commit
+    // 1609bbc after it sent a value to a caller-saved arg register
+    // even when the value's interval extended past the call --
+    // a later use then read the call-clobbered register. Restrict
+    // the hint to values whose last use is exactly this call so the
+    // call consumes them and there is no surviving live range to
+    // protect.
+    populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
+    populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -1389,6 +1400,58 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target)
         }
     }
     out
+}
+
+/// Promote each phi class's `calls_after_def` flag so every member
+/// inherits the class's combined call-crossing status. Without this,
+/// `compute_calls_after_def` reads per-value `last_use[v]` -- a class
+/// member whose own last use does not cross any call but whose
+/// *class root* lives past a call would be placed in a caller-saved
+/// register and clobbered by that call.
+fn promote_calls_after_def_to_classes(
+    classes: &mut super::ssa_phi_class::PhiClasses,
+    func: &FunctionSsa,
+    class_last_use: &[u32],
+    target: Target,
+    calls_after_def: &mut [bool],
+) {
+    let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
+    let n = func.insts.len();
+    let mut call_pcs: Vec<u32> = Vec::new();
+    for (idx, inst) in func.insts.iter().enumerate() {
+        let is_call = matches!(
+            inst,
+            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+        if is_call {
+            call_pcs.push(idx as u32);
+        }
+    }
+    call_pcs.sort_unstable();
+    // For every value, check whether any call sits between the
+    // class's first definition (= class root's PC) and the class's
+    // combined last use. If so, every member of the class needs a
+    // callee-saved placement.
+    let mut class_must_callee: alloc::collections::BTreeMap<ValueId, bool> =
+        alloc::collections::BTreeMap::new();
+    for v in 0..n {
+        let root = classes.find(v as ValueId);
+        if class_must_callee.contains_key(&root) {
+            continue;
+        }
+        let lo = call_pcs.binary_search(&(root + 1)).unwrap_or_else(|i| i);
+        let crosses_call = call_pcs
+            .get(lo)
+            .map(|&first| first < class_last_use[root as usize])
+            .unwrap_or(false);
+        class_must_callee.insert(root, crosses_call);
+    }
+    for (v, entry) in calls_after_def.iter_mut().enumerate().take(n) {
+        let root = classes.find(v as ValueId);
+        if class_must_callee[&root] {
+            *entry = true;
+        }
+    }
 }
 
 fn expire(

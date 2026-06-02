@@ -263,15 +263,26 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // protect.
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
-    // Back-edge phi source per inst: if v_src is an incoming source for
-    // some phi v_phi where v_src is defined later in PC order than the
-    // phi, record v_phi against v_src. At v_src's pick site below the
-    // scan transfers v_phi's reg to v_src so the phi result and its
-    // back-edge source share a single physical register. Without this
-    // the predecessor-exit move from b_pred to v_phi at the loop header
-    // reads v_src from a register that the passthrough block clobbered
-    // between v_src's def and the back edge.
-    let back_edge_phi_of: Vec<ValueId> = compute_back_edge_phi_of(func);
+    // Phi class union-find: every phi result and its incoming sources
+    // join one equivalence class. The allocator places the first-
+    // allocated member of a class, then routes every other member to
+    // the same `Place`. For a function with no phis every class is a
+    // singleton and the lookup degenerates to identity, so the path
+    // collapses to today's per-value behaviour. Class-level
+    // last-use is the max over all members so the active-list entry
+    // expires only when every member is dead.
+    let mut classes = super::ssa_phi_class::PhiClasses::from_func(func);
+    let class_last_use: Vec<u32> = {
+        let n = func.insts.len();
+        let mut cl = alloc::vec![0u32; n];
+        for (v, &lu) in last_use.iter().enumerate().take(n) {
+            let c = classes.find(v as ValueId) as usize;
+            if lu > cl[c] {
+                cl[c] = lu;
+            }
+        }
+        cl
+    };
 
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
@@ -306,25 +317,23 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         }
         let must_be_callee = calls_after_def[idx];
 
-        // Back-edge phi source: this inst writes the value that some
-        // earlier phi reads from its predecessor block. Force the dst
-        // into the phi's register so the predecessor-exit move at the
-        // back edge becomes a self-mov. Manually retire the phi result
-        // from the active list -- by SSA semantics the phi value is
-        // logically dead from here onward, replaced by this inst's
-        // result, and subsequent reads of the phi value land on the
-        // same register that this inst writes into.
-        if kind == ResultKind::Int && back_edge_phi_of[idx] != NO_VALUE {
-            let phi_v = back_edge_phi_of[idx];
-            if let Place::IntReg(r) = places[phi_v as usize] {
-                if let Some(pos) = active_int.iter().position(|(v, _, _)| *v == phi_v) {
-                    active_int.remove(pos);
-                    free_int.push(r);
-                }
-                if hints[idx].is_none() {
-                    hints[idx] = Some(r);
-                }
-            }
+        // Phi class membership: route every member of v's class to the
+        // place the class root holds. If an earlier member of the class
+        // was already allocated, reuse that place and skip the rest of
+        // the pick path. The class-keyed active-list entry covers the
+        // class's combined live range, so v sharing a register with the
+        // class root requires no additional bookkeeping. Singleton
+        // classes (every value in a function with no phis) bypass this
+        // branch.
+        let class_root = classes.find(idx as ValueId);
+        if places[class_root as usize] != Place::None {
+            // An earlier member of this class already allocated;
+            // route v through the same place. The class-keyed
+            // active-list entry covers the combined live range, so
+            // no additional bookkeeping is needed here.
+            let class_place = places[class_root as usize];
+            places[idx] = class_place;
+            continue;
         }
 
         // For a Binop / BinopI / Extend / Fneg whose lhs operand dies
@@ -456,11 +465,19 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             if let Some(pos) = free.iter().position(|x| *x == r) {
                 free.swap_remove(pos);
             }
-            active.push((pc, last_use[idx], r));
+            // Use the class's combined last-use so the reg stays
+            // claimed until every member of the class is dead.
+            let class_end = class_last_use[class_root as usize];
+            active.push((pc, class_end, r));
             // Sort active by last_use ascending so expire() can
             // pop from the front cheaply.
             active.sort_by_key(|e| e.1);
             used.insert(r);
+            places[class_root as usize] = match kind {
+                ResultKind::Int => Place::IntReg(r),
+                ResultKind::Fp => Place::FpReg(r),
+                ResultKind::None => unreachable!(),
+            };
             places[idx] = match kind {
                 ResultKind::Int => Place::IntReg(r),
                 ResultKind::Fp => Place::FpReg(r),
@@ -489,8 +506,14 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 let slot = spill_count;
                 spill_count += 1;
                 places[victim_id as usize] = Place::Spill(slot);
-                active.push((pc, last_use[idx], victim_reg));
+                let class_end = class_last_use[class_root as usize];
+                active.push((pc, class_end, victim_reg));
                 active.sort_by_key(|e| e.1);
+                places[class_root as usize] = match kind {
+                    ResultKind::Int => Place::IntReg(victim_reg),
+                    ResultKind::Fp => Place::FpReg(victim_reg),
+                    ResultKind::None => unreachable!(),
+                };
                 places[idx] = match kind {
                     ResultKind::Int => Place::IntReg(victim_reg),
                     ResultKind::Fp => Place::FpReg(victim_reg),
@@ -498,10 +521,12 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 };
             } else {
                 // No active interval to spill (rare: pool fully
-                // empty and nothing live). Spill directly.
+                // empty and nothing live). Spill directly. Propagate
+                // to the class root so later members route through it.
                 let slot = spill_count;
                 spill_count += 1;
                 places[idx] = Place::Spill(slot);
+                places[class_root as usize] = Place::Spill(slot);
             }
         }
     }
@@ -1114,34 +1139,6 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
 /// The allocator's hint policy is advisory; an unsuitable hint
 /// (register live elsewhere at the pick site) falls through to the
 /// default policy without compromising correctness.
-/// For each SSA value, the phi value-id whose back-edge incoming slot
-/// this value fills. `NO_VALUE` for any value that does not write a
-/// back-edge phi source. A back-edge source is a phi `v_phi` with an
-/// incoming `(_, v_src)` where `v_src > v_phi`: `v_src` is defined
-/// later in PC order than the phi reading it, i.e. the value flows
-/// around a loop. Only the first phi that names the value is recorded;
-/// a value that feeds multiple back-edge phis is handled by the first
-/// and the rest fall through to the regular allocation path.
-fn compute_back_edge_phi_of(func: &FunctionSsa) -> Vec<ValueId> {
-    let n = func.insts.len();
-    let mut be_of: Vec<ValueId> = alloc::vec![NO_VALUE; n];
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let Inst::Phi { incoming, .. } = inst else {
-            continue;
-        };
-        let phi_pc = idx as ValueId;
-        for (_, src) in incoming {
-            if *src == NO_VALUE {
-                continue;
-            }
-            if *src > phi_pc && (*src as usize) < n && be_of[*src as usize] == NO_VALUE {
-                be_of[*src as usize] = phi_pc;
-            }
-        }
-    }
-    be_of
-}
-
 fn populate_phi_hints(func: &FunctionSsa, hints: &mut [Option<u8>]) {
     loop {
         let mut changed = false;

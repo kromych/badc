@@ -37,8 +37,20 @@ pub(super) struct PhiClasses {
 impl PhiClasses {
     /// Build the union-find from `func`. Every value starts as its
     /// own singleton class; each phi instruction unions the result
-    /// with every incoming source, transitively merging chains of
-    /// phis through their shared participants.
+    /// with every incoming source whose current class is still a
+    /// singleton.
+    ///
+    /// The singleton check is what keeps two distinct phi classes
+    /// from accidentally merging through a shared constant source.
+    /// In SSA emitted by mem2reg, two parallel `for`-loop locals
+    /// often both initialise from the same `Imm(0)`. Unioning every
+    /// source unconditionally would put both phi results in the same
+    /// class -- forcing them to share a register, which then forces
+    /// one of their live ranges to alias the other and miscompile.
+    /// The first phi to reach a source claims it; subsequent phis
+    /// reading the same source pick a different register for their
+    /// result, and the per-arch predecessor exit-move handles the
+    /// source-to-result load.
     pub(super) fn from_func(func: &FunctionSsa) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
@@ -54,14 +66,23 @@ impl PhiClasses {
                     continue;
                 }
                 let src_root = classes.find(*src);
-                if src_root != phi_root {
-                    // Make phi_root the parent of src_root. The order
-                    // is arbitrary for correctness; picking phi_root
-                    // keeps the root closer to the phi PC so a later
-                    // `find` from a phi member's pick site walks a
-                    // shorter path before compression kicks in.
-                    classes.parent[src_root as usize] = phi_root;
+                if src_root == phi_root {
+                    continue;
                 }
+                // Only union if `src` is still its own root -- i.e.
+                // no earlier phi has claimed it. If `src_root != src`
+                // then `src` is already a non-root member of some
+                // other phi class, and joining the two classes would
+                // collapse their live ranges.
+                if src_root != *src {
+                    continue;
+                }
+                // Make phi_root the parent of src_root. The order
+                // is arbitrary for correctness; picking phi_root
+                // keeps the root closer to the phi PC so a later
+                // `find` from a phi member's pick site walks a
+                // shorter path before compression kicks in.
+                classes.parent[src_root as usize] = phi_root;
             }
         }
         classes
@@ -94,8 +115,8 @@ impl PhiClasses {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::ir::{Block, FunctionSsa, LoadKind, Terminator};
+    use super::*;
     use alloc::string::String;
     use alloc::vec;
 
@@ -189,6 +210,55 @@ mod tests {
         for v in 0..4 {
             assert_eq!(classes.find(v), root, "v{v} should share v3's class");
         }
+    }
+
+    #[test]
+    fn shared_constant_source_does_not_merge_two_phi_classes() {
+        // Two parallel loops in one function: phi_a at b1 head
+        // sees v0 (Imm(0)) and v_back_a; phi_b at b2 head sees the
+        // same v0 and v_back_b. Both phis share v0 as the b0-edge
+        // source. Joining unconditionally would put phi_a and
+        // phi_b in one class, forcing them to share a register and
+        // miscompiling whichever loop runs second. The first phi
+        // claims v0; the second phi's class excludes v0 and
+        // contains only itself + its own back-edge source.
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (2, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: super::super::super::ir::BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::BinopI {
+                op: super::super::super::ir::BinOp::Add,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+        ];
+        let blocks = vec![Block {
+            start_pc: 0,
+            inst_range: 0..5,
+            terminator: Terminator::Return(1),
+            exit_acc: 1,
+        }];
+        let func = func_with(insts, blocks);
+        let mut classes = PhiClasses::from_func(&func);
+        let root_a = classes.find(1);
+        let root_b = classes.find(2);
+        assert_ne!(
+            root_a, root_b,
+            "two phis sharing a constant init source must remain in distinct classes"
+        );
+        assert_eq!(classes.find(3), root_a, "phi_a back-edge must join phi_a");
+        assert_eq!(classes.find(4), root_b, "phi_b back-edge must join phi_b");
     }
 
     #[test]

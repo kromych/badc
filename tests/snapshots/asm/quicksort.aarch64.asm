@@ -15,7 +15,6 @@ Disassembly of section .text:
                	ldrsw	x13, [x15]
                	ldrsw	x12, [x14]
                	str	w12, [x15]
-               	sxtw	x13, w13
                	str	w13, [x14]
                	mov	x0, #0x0                // =0
                	ret
@@ -49,8 +48,7 @@ Disassembly of section .text:
                	lsl	x14, x14, #2
                	add	x14, x20, x14
                	ldrsw	x14, [x14]
-               	sxtw	x12, w22
-               	cmp	x14, x12
+               	cmp	x14, x22
                	b.gt	<addr>
                	b	<addr>
                	ldursw	x1, [x29, #-0x10]

@@ -169,6 +169,7 @@ pub(super) fn is_dead_pure(
             | BinopI { .. }
             | Fneg(_)
             | FpCast { .. }
+            | Extend { .. }
     );
     if !pure {
         return false;

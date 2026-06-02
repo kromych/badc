@@ -36,19 +36,16 @@ Disassembly of section .text:
                	movl	$0x3e8, %r10d           # imm = 0x3E8
                	imulq	%r10, %rsi
                	movslq	%esi, %rsi
-               	movslq	%r9d, %r9
                	movl	$0x64, %r10d
                	imulq	%r10, %r9
                	movslq	%r9d, %r9
                	addq	%r9, %rsi
                	movslq	%esi, %rsi
-               	movslq	%r11d, %r11
                	movl	$0xa, %r10d
                	imulq	%r10, %r11
                	movslq	%r11d, %r11
                	addq	%r11, %rsi
                	movslq	%esi, %rsi
-               	movslq	%edi, %rdi
                	addq	%rdi, %rsi
                	movslq	%esi, %rax
                	addq	$0x20, %rsp
@@ -114,3 +111,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

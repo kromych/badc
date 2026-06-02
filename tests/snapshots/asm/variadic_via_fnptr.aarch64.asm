@@ -38,19 +38,16 @@ Disassembly of section .text:
                	mov	x17, #0x3e8             // =1000
                	mul	x11, x11, x17
                	sxtw	x11, w11
-               	sxtw	x14, w14
                	mov	x17, #0x64              // =100
                	mul	x14, x14, x17
                	sxtw	x14, w14
                	add	x11, x11, x14
                	sxtw	x11, w11
-               	sxtw	x15, w15
                	mov	x17, #0xa               // =10
                	mul	x15, x15, x17
                	sxtw	x15, w15
                	add	x11, x11, x15
                	sxtw	x11, w11
-               	sxtw	x12, w12
                	add	x11, x11, x12
                	sxtw	x0, w11
                	ldr	x19, [sp]

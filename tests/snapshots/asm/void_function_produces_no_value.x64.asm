@@ -77,7 +77,6 @@ Disassembly of section .text:
                	movslq	%r11d, %r11
                	addq	$0x7, %r11
                	movslq	%r11d, %r11
-               	movslq	%r11d, %r11
                	xorq	%rax, %rax
                	retq
                	movslq	%edi, %r11
@@ -160,7 +159,6 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	addq	$0x7, %rsi
                	movslq	%esi, %rsi
-               	movslq	%esi, %rsi
                	xorq	%r12, %r12
                	movq	%r12, %rdi
                	callq	<addr>
@@ -171,4 +169,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

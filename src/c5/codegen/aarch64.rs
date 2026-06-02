@@ -1254,6 +1254,9 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (aarch64)", || {
             super::ssa_split_crit_edges::run(&mut ssa_funcs);
         });
+        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
+            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

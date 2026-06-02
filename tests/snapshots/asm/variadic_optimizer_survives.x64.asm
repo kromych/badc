@@ -27,14 +27,12 @@ Disassembly of section .text:
                	movq	%r10, (%r8)
                	movslq	(%r11), %r11
                	leaq	-0x8(%rbp), %r8
-               	movslq	%r9d, %r9
                	cmpq	$0x2a, %r9
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movslq	%r11d, %r11
                	cmpq	$0x7, %r11
                	je	<addr>
                	movl	$0x2, %eax
@@ -61,4 +59,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

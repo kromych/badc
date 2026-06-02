@@ -42,7 +42,6 @@ Disassembly of section .text:
                	stur	w14, [x29, #-0x10]
                	b	<addr>
                	ldursw	x14, [x29, #-0x10]
-               	sxtw	x12, w12
                	add	x14, x14, x12
                	sxtw	x0, w14
                	add	sp, sp, #0x20

@@ -26,9 +26,7 @@ Disassembly of section .text:
                	subq	$0x240, %rsp            # imm = 0x240
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xb, %r9d
                	movq	%r9, %rcx
                	movq	(%rsp), %rbx
@@ -99,4 +97,4 @@ Disassembly of section .text:
                	addq	$0x240, %rsp            # imm = 0x240
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

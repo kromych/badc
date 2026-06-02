@@ -1440,6 +1440,9 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);
         });
+        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (x86_64)", || {
+            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

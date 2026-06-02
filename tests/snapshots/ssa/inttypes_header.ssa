@@ -39,73 +39,73 @@ fn ent_pc=0 n_params=0 variadic=false locals=41
     v23  LocalAddr(-8)                                    -> x11
     v24  Imm(0)                                           -> x11
     v25  Imm(0)                                           -> x11
-    terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
+    terminator Jmp(b2)   (exit_acc=v25)
   block 1  start_pc=0
     v26  Imm(11)                                          -> x0
     terminator Return(v26)   (exit_acc=v26)
   block 2  start_pc=0
     v27  Imm(0)                                           -> x11
-    terminator Bz { cond=v27, target=b4, fall=b3 }   (exit_acc=v27)
+    terminator Jmp(b4)   (exit_acc=v27)
   block 3  start_pc=0
     v28  Imm(12)                                          -> x0
     terminator Return(v28)   (exit_acc=v28)
   block 4  start_pc=0
     v29  Imm(0)                                           -> x11
-    terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
+    terminator Jmp(b6)   (exit_acc=v29)
   block 5  start_pc=0
     v30  Imm(13)                                          -> x0
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
     v31  Imm(0)                                           -> x11
-    terminator Bz { cond=v31, target=b8, fall=b7 }   (exit_acc=v31)
+    terminator Jmp(b8)   (exit_acc=v31)
   block 7  start_pc=0
     v32  Imm(14)                                          -> x0
     terminator Return(v32)   (exit_acc=v32)
   block 8  start_pc=0
     v33  Imm(0)                                           -> x11
-    terminator Bz { cond=v33, target=b10, fall=b9 }   (exit_acc=v33)
+    terminator Jmp(b10)   (exit_acc=v33)
   block 9  start_pc=0
     v34  Imm(15)                                          -> x0
     terminator Return(v34)   (exit_acc=v34)
   block 10  start_pc=0
     v35  Imm(0)                                           -> x11
-    terminator Bz { cond=v35, target=b12, fall=b11 }   (exit_acc=v35)
+    terminator Jmp(b12)   (exit_acc=v35)
   block 11  start_pc=0
     v36  Imm(16)                                          -> x0
     terminator Return(v36)   (exit_acc=v36)
   block 12  start_pc=0
     v37  Imm(0)                                           -> x11
-    terminator Bz { cond=v37, target=b14, fall=b13 }   (exit_acc=v37)
+    terminator Jmp(b14)   (exit_acc=v37)
   block 13  start_pc=0
     v38  Imm(17)                                          -> x0
     terminator Return(v38)   (exit_acc=v38)
   block 14  start_pc=0
     v39  Imm(0)                                           -> x11
-    terminator Bz { cond=v39, target=b16, fall=b15 }   (exit_acc=v39)
+    terminator Jmp(b16)   (exit_acc=v39)
   block 15  start_pc=0
     v40  Imm(18)                                          -> x0
     terminator Return(v40)   (exit_acc=v40)
   block 16  start_pc=0
     v41  Imm(0)                                           -> x11
-    terminator Bz { cond=v41, target=b18, fall=b17 }   (exit_acc=v41)
+    terminator Jmp(b18)   (exit_acc=v41)
   block 17  start_pc=0
     v42  Imm(19)                                          -> x0
     terminator Return(v42)   (exit_acc=v42)
   block 18  start_pc=0
     v43  Imm(0)                                           -> x11
-    terminator Bz { cond=v43, target=b20, fall=b19 }   (exit_acc=v43)
+    terminator Jmp(b20)   (exit_acc=v43)
   block 19  start_pc=0
     v44  Imm(20)                                          -> x0
     terminator Return(v44)   (exit_acc=v44)
   block 20  start_pc=0
     v45  Imm(0)                                           -> x11
-    terminator Bz { cond=v45, target=b22, fall=b21 }   (exit_acc=v45)
+    terminator Jmp(b22)   (exit_acc=v45)
   block 21  start_pc=0
     v46  Imm(21)                                          -> x0
     terminator Return(v46)   (exit_acc=v46)
   block 22  start_pc=0
     v47  Imm(0)                                           -> x11
-    terminator Bz { cond=v47, target=b24, fall=b23 }   (exit_acc=v47)
+    terminator Jmp(b24)   (exit_acc=v47)
   block 23  start_pc=0
     v48  Imm(22)                                          -> x0
     terminator Return(v48)   (exit_acc=v48)

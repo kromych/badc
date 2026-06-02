@@ -5779,8 +5779,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x50]
                	b	<addr>
-               	mov	x0, #0x1                // =1
-               	cbz	x0, <addr>
+               	b	<addr>
                	sub	x23, x29, #0x30
                	ldr	x0, [x23]
                	add	x21, x0, #0x8

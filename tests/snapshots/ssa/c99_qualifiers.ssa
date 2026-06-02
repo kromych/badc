@@ -96,19 +96,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     terminator Return(v27)   (exit_acc=v27)
   block 6  start_pc=0
     v28  Imm(0)                                           -> x0
-    terminator Bz { cond=v28, target=b8, fall=b7 }   (exit_acc=v28)
+    terminator Jmp(b8)   (exit_acc=v28)
   block 7  start_pc=0
     v29  Imm(4)                                           -> x6
     terminator Return(v29)   (exit_acc=v29)
   block 8  start_pc=0
     v30  Imm(0)                                           -> x0
-    terminator Bz { cond=v30, target=b10, fall=b9 }   (exit_acc=v30)
+    terminator Jmp(b10)   (exit_acc=v30)
   block 9  start_pc=0
     v31  Imm(5)                                           -> x6
     terminator Return(v31)   (exit_acc=v31)
   block 10  start_pc=0
     v32  Imm(0)                                           -> x0
-    terminator Bz { cond=v32, target=b12, fall=b11 }   (exit_acc=v32)
+    terminator Jmp(b12)   (exit_acc=v32)
   block 11  start_pc=0
     v33  Imm(6)                                           -> x6
     terminator Return(v33)   (exit_acc=v33)

@@ -71,9 +71,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x220, %rsp            # imm = 0x220
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %r9d
                	movq	%r9, %rax
                	addq	$0x220, %rsp            # imm = 0x220
@@ -141,4 +139,3 @@ Disassembly of section .text:
                	addq	$0x220, %rsp            # imm = 0x220
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

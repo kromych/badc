@@ -70,8 +70,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x220
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x1               // =1
                	mov	x0, x14
                	add	sp, sp, #0x220

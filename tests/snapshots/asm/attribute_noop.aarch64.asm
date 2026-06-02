@@ -122,8 +122,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x12, #0x0               // =0
-               	cbz	x12, <addr>
+               	b	<addr>
                	mov	x2, #0xd                // =13
                	mov	x0, x2
                	ldr	x19, [sp]

@@ -86,7 +86,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=65
     v48  Imm(274877906944)                                -> x11
     v49  Imm(2199023255552)                               -> x11
     v50  Imm(0)                                           -> x11
-    terminator Bz { cond=v50, target=b18, fall=b17 }   (exit_acc=v50)
+    terminator Jmp(b18)   (exit_acc=v50)
   block 17  start_pc=0
     v51  Imm(9)                                           -> x0
     terminator Return(v51)   (exit_acc=v51)
@@ -96,7 +96,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=65
     v54  Imm(274877906944)                                -> x11
     v55  Imm(2199023255552)                               -> x11
     v56  Imm(0)                                           -> x11
-    terminator Bz { cond=v56, target=b20, fall=b19 }   (exit_acc=v56)
+    terminator Jmp(b20)   (exit_acc=v56)
   block 19  start_pc=0
     v57  Imm(10)                                          -> x0
     terminator Return(v57)   (exit_acc=v57)
@@ -174,7 +174,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=65
     v108 Imm(516)                                         -> x7
     v109 Imm(2216203124736)                               -> x7
     v110 Imm(0)                                           -> x7
-    terminator Bz { cond=v110, target=b32, fall=b31 }   (exit_acc=v110)
+    terminator Jmp(b32)   (exit_acc=v110)
   block 31  start_pc=0
     v111 Imm(16)                                          -> x0
     terminator Return(v111)   (exit_acc=v111)

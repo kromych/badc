@@ -74,97 +74,73 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x1, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x3, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x4, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x5, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x6, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xb, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xc, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xd, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xe, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xf, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x10, %r9d
                	movq	%r9, %rax
                	addq	$0x50, %rsp

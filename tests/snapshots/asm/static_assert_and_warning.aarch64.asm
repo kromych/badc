@@ -85,15 +85,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x15, #0x0               // =0
                	stur	w15, [x29, #-0x8]
-               	mov	x14, #0x1               // =1
-               	cbz	x14, <addr>
+               	b	<addr>
                	sub	x15, x29, #0x8
                	ldrsw	x14, [x15]
                	add	x14, x14, #0x1
                	str	w14, [x15]
                	b	<addr>
-               	mov	x14, #0x1               // =1
-               	cbz	x14, <addr>
+               	b	<addr>
                	sub	x13, x29, #0x8
                	ldrsw	x14, [x13]
                	add	x14, x14, #0x1

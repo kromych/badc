@@ -4385,7 +4385,7 @@ fn ent_pc=17 n_params=2 variadic=false locals=27
     terminator Jmp(b129)   (exit_acc=v713)
   block 129  start_pc=0
     v714 Imm(1)                                           -> x7
-    terminator Bz { cond=v714, target=b131, fall=b130 }   (exit_acc=v714)
+    terminator Jmp(b130)   (exit_acc=v714)
   block 130  start_pc=0
     v715 LocalAddr(-6)                                    -> x14
     v716 Load { addr=v715, kind=I64 }                     -> x7

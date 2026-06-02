@@ -68,14 +68,14 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v1   Imm(184)                                         -> x11
     v2   Imm(790273982464)                                -> x11
     v3   Imm(0)                                           -> x11
-    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+    terminator Jmp(b2)   (exit_acc=v3)
   block 1  start_pc=0
     v4   Imm(1)                                           -> x0
     terminator Return(v4)   (exit_acc=v4)
   block 2  start_pc=0
     v5   Imm(8)                                           -> x11
     v6   Imm(0)                                           -> x11
-    terminator Bz { cond=v6, target=b4, fall=b3 }   (exit_acc=v6)
+    terminator Jmp(b4)   (exit_acc=v6)
   block 3  start_pc=0
     v7   Imm(2)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)

@@ -6,14 +6,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x11
     v2   Imm(0)                                           -> x11
-    terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
+    terminator Jmp(b2)   (exit_acc=v2)
   block 1  start_pc=0
     v3   Imm(11)                                          -> x0
     terminator Return(v3)   (exit_acc=v3)
   block 2  start_pc=0
     v4   Imm(3)                                           -> x11
     v5   Imm(0)                                           -> x11
-    terminator Bz { cond=v5, target=b4, fall=b3 }   (exit_acc=v5)
+    terminator Jmp(b4)   (exit_acc=v5)
   block 3  start_pc=0
     v6   Imm(12)                                          -> x0
     terminator Return(v6)   (exit_acc=v6)
@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v7   Imm(50)                                          -> x11
     v8   Imm(214748364800)                                -> x11
     v9   Imm(0)                                           -> x11
-    terminator Bz { cond=v9, target=b6, fall=b5 }   (exit_acc=v9)
+    terminator Jmp(b6)   (exit_acc=v9)
   block 5  start_pc=0
     v10  Imm(13)                                          -> x0
     terminator Return(v10)   (exit_acc=v10)
@@ -29,7 +29,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v11  Imm(17)                                          -> x11
     v12  Imm(73014444032)                                 -> x11
     v13  Imm(0)                                           -> x11
-    terminator Bz { cond=v13, target=b8, fall=b7 }   (exit_acc=v13)
+    terminator Jmp(b8)   (exit_acc=v13)
   block 7  start_pc=0
     v14  Imm(14)                                          -> x0
     terminator Return(v14)   (exit_acc=v14)
@@ -37,7 +37,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v15  Imm(3)                                           -> x11
     v16  Imm(12884901888)                                 -> x11
     v17  Imm(0)                                           -> x11
-    terminator Bz { cond=v17, target=b10, fall=b9 }   (exit_acc=v17)
+    terminator Jmp(b10)   (exit_acc=v17)
   block 9  start_pc=0
     v18  Imm(15)                                          -> x0
     terminator Return(v18)   (exit_acc=v18)

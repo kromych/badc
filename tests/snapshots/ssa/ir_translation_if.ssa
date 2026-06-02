@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(1)                                           -> x11
-    terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
+    terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
     v2   Imm(2)                                           -> x0
     terminator Return(v2)   (exit_acc=v2)

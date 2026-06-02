@@ -75,7 +75,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     terminator Return(v22)   (exit_acc=v22)
   block 5  start_pc=0
     v23  Imm(0)                                           -> x0
-    terminator Bz { cond=v23, target=b7, fall=b6 }   (exit_acc=v23)
+    terminator Jmp(b7)   (exit_acc=v23)
   block 6  start_pc=0
     v24  Imm(2)                                           -> x6
     terminator Return(v24)   (exit_acc=v24)
@@ -137,13 +137,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     terminator Return(v70)   (exit_acc=v70)
   block 12  start_pc=0
     v71  Imm(0)                                           -> x0
-    terminator Bz { cond=v71, target=b14, fall=b13 }   (exit_acc=v71)
+    terminator Jmp(b14)   (exit_acc=v71)
   block 13  start_pc=0
     v72  Imm(4)                                           -> x7
     terminator Return(v72)   (exit_acc=v72)
   block 14  start_pc=0
     v73  Imm(0)                                           -> x0
-    terminator Bz { cond=v73, target=b16, fall=b15 }   (exit_acc=v73)
+    terminator Jmp(b16)   (exit_acc=v73)
   block 15  start_pc=0
     v74  Imm(5)                                           -> x7
     terminator Return(v74)   (exit_acc=v74)
@@ -250,7 +250,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=16
     terminator Return(v145)   (exit_acc=v145)
   block 31  start_pc=0
     v146 Imm(0)                                           -> x0
-    terminator Bz { cond=v146, target=b33, fall=b32 }   (exit_acc=v146)
+    terminator Jmp(b33)   (exit_acc=v146)
   block 32  start_pc=0
     v147 Imm(12)                                          -> x6
     terminator Return(v147)   (exit_acc=v147)

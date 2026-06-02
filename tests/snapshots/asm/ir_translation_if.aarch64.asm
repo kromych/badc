@@ -10,8 +10,7 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	mov	x15, #0x1               // =1
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x0                // =0

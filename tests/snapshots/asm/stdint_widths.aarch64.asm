@@ -84,96 +84,84 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	str	x19, [sp]
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x1               // =1
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x2               // =2
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x3               // =3
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x4               // =4
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x5               // =5
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x6               // =6
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0xb               // =11
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0xc               // =12
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0xd               // =13
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0xe               // =14
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0xf               // =15
                	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	cbz	x15, <addr>
+               	b	<addr>
                	mov	x14, #0x10              // =16
                	mov	x0, x14
                	ldr	x19, [sp]

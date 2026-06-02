@@ -16,86 +16,62 @@ Disassembly of section .text:
                	movq	%r11, -0x20(%rbp)
                	movl	$0x4, %r9d
                	movq	%r9, -0x40(%rbp)
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xb, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xc, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xd, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xe, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xf, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x10, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x11, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x12, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x13, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x14, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x15, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x16, %eax
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp

@@ -141,8 +141,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	xorq	%r11, %r11
                	movl	%r11d, -0x8(%rbp)
-               	cmpq	$0x0, %r11
-               	je	<addr>
+               	jmp	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x4, %esi
                	movb	$0x0, %al
@@ -151,9 +150,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x8, %esi
                	movb	$0x0, %al
@@ -167,8 +164,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm15
                	movss	%xmm15, (%rsi,%riz)
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x4, %esi
                	movb	$0x0, %al
@@ -522,3 +518,5 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

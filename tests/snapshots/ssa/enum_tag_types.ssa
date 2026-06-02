@@ -28,25 +28,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v6   Imm(0)                                           -> x11
-    terminator Bz { cond=v6, target=b4, fall=b3 }   (exit_acc=v6)
+    terminator Jmp(b4)   (exit_acc=v6)
   block 3  start_pc=0
     v7   Imm(2)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 4  start_pc=0
     v8   Imm(0)                                           -> x11
-    terminator Bz { cond=v8, target=b6, fall=b5 }   (exit_acc=v8)
+    terminator Jmp(b6)   (exit_acc=v8)
   block 5  start_pc=0
     v9   Imm(3)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
   block 6  start_pc=0
     v10  Imm(0)                                           -> x11
-    terminator Bz { cond=v10, target=b8, fall=b7 }   (exit_acc=v10)
+    terminator Jmp(b8)   (exit_acc=v10)
   block 7  start_pc=0
     v11  Imm(4)                                           -> x0
     terminator Return(v11)   (exit_acc=v11)
   block 8  start_pc=0
     v12  Imm(0)                                           -> x11
-    terminator Bz { cond=v12, target=b10, fall=b9 }   (exit_acc=v12)
+    terminator Jmp(b10)   (exit_acc=v12)
   block 9  start_pc=0
     v13  Imm(5)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
@@ -61,13 +61,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Return(v18)   (exit_acc=v18)
   block 12  start_pc=0
     v19  Imm(0)                                           -> x11
-    terminator Bz { cond=v19, target=b14, fall=b13 }   (exit_acc=v19)
+    terminator Jmp(b14)   (exit_acc=v19)
   block 13  start_pc=0
     v20  Imm(7)                                           -> x0
     terminator Return(v20)   (exit_acc=v20)
   block 14  start_pc=0
     v21  Imm(0)                                           -> x11
-    terminator Bz { cond=v21, target=b16, fall=b15 }   (exit_acc=v21)
+    terminator Jmp(b16)   (exit_acc=v21)
   block 15  start_pc=0
     v22  Imm(8)                                           -> x0
     terminator Return(v22)   (exit_acc=v22)
@@ -84,7 +84,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Return(v29)   (exit_acc=v29)
   block 18  start_pc=0
     v30  Imm(0)                                           -> x11
-    terminator Bz { cond=v30, target=b20, fall=b19 }   (exit_acc=v30)
+    terminator Jmp(b20)   (exit_acc=v30)
   block 19  start_pc=0
     v31  Imm(10)                                          -> x0
     terminator Return(v31)   (exit_acc=v31)

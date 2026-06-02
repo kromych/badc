@@ -93,13 +93,10 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movq	%rbx, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rbx
-               	jne	<addr>
+               	jmp	<addr>
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	movl	$0x1, %eax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x10(%rbp), %rdi
                	movslq	(%rdi), %rax
                	addq	$0x64, %rax
@@ -127,12 +124,8 @@ Disassembly of section .text:
                	addq	$0x1869f, %rdi          # imm = 0x1869F
                	movl	%edi, (%rax)
                	jmp	<addr>
-               	xorq	%r9, %r9
-               	cmpq	$0x0, %r9
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	cmpq	$0x0, %rax
-               	jne	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	callq	<addr>
@@ -170,5 +163,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

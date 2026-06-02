@@ -143,7 +143,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x20]
                	mov	x15, #0x0               // =0
                	stur	w15, [x29, #-0x8]
-               	cbz	x15, <addr>
+               	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x168
                	mov	x0, x19
@@ -154,8 +154,7 @@ Disassembly of section .text:
                	mov	x13, #0x1               // =1
                	stur	w13, [x29, #-0x8]
                	b	<addr>
-               	mov	x13, #0x0               // =0
-               	cbz	x13, <addr>
+               	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x180
                	mov	x0, x19
@@ -171,7 +170,7 @@ Disassembly of section .text:
                	fmov	d0, x13
                	fcvt	s0, d0
                	str	s0, [x1]
-               	cbz	x13, <addr>
+               	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0x199
                	mov	x0, x19

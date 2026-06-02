@@ -78,7 +78,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=67
     v3   Imm(274877906944)                                -> x11
     v4   Imm(2199023255552)                               -> x11
     v5   Imm(0)                                           -> x11
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
+    terminator Jmp(b2)   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(1)                                           -> x9
     terminator Return(v6)   (exit_acc=v6)

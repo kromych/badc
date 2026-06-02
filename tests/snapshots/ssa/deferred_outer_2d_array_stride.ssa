@@ -67,21 +67,21 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
     v0   AllocaInit(0)                                    -> -
     v1   Imm(48)                                          -> x11
     v2   Imm(0)                                           -> x11
-    terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
+    terminator Jmp(b2)   (exit_acc=v2)
   block 1  start_pc=0
     v3   Imm(1)                                           -> x0
     terminator Return(v3)   (exit_acc=v3)
   block 2  start_pc=0
     v4   Imm(16)                                          -> x11
     v5   Imm(0)                                           -> x11
-    terminator Bz { cond=v5, target=b4, fall=b3 }   (exit_acc=v5)
+    terminator Jmp(b4)   (exit_acc=v5)
   block 3  start_pc=0
     v6   Imm(2)                                           -> x0
     terminator Return(v6)   (exit_acc=v6)
   block 4  start_pc=0
     v7   Imm(16)                                          -> x11
     v8   Imm(0)                                           -> x11
-    terminator Bz { cond=v8, target=b6, fall=b5 }   (exit_acc=v8)
+    terminator Jmp(b6)   (exit_acc=v8)
   block 5  start_pc=0
     v9   Imm(3)                                           -> x0
     terminator Return(v9)   (exit_acc=v9)
@@ -196,14 +196,14 @@ fn ent_pc=14 n_params=0 variadic=false locals=3
   block 22  start_pc=0
     v86  Imm(48)                                          -> x0
     v87  Imm(0)                                           -> x0
-    terminator Bz { cond=v87, target=b24, fall=b23 }   (exit_acc=v87)
+    terminator Jmp(b24)   (exit_acc=v87)
   block 23  start_pc=0
     v88  Imm(9)                                           -> x11
     terminator Return(v88)   (exit_acc=v88)
   block 24  start_pc=0
     v89  Imm(12)                                          -> x0
     v90  Imm(0)                                           -> x0
-    terminator Bz { cond=v90, target=b26, fall=b25 }   (exit_acc=v90)
+    terminator Jmp(b26)   (exit_acc=v90)
   block 25  start_pc=0
     v91  Imm(10)                                          -> x11
     terminator Return(v91)   (exit_acc=v91)

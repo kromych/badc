@@ -90,8 +90,7 @@ Disassembly of section .text:
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x90]
                	b	<addr>
-               	mov	x13, #0x0               // =0
-               	cbnz	x13, <addr>
+               	b	<addr>
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0x98]
                	b	<addr>
@@ -143,8 +142,7 @@ Disassembly of section .text:
                	orr	x13, x13, x17
                	strb	w13, [x14]
                	b	<addr>
-               	mov	x13, #0x0               // =0
-               	cbnz	x13, <addr>
+               	b	<addr>
                	b	<addr>
                	sub	x15, x29, #0x80
                	stur	x15, [x29, #-0xa8]
@@ -158,8 +156,7 @@ Disassembly of section .text:
                	orr	x15, x15, x17
                	strb	w15, [x13]
                	b	<addr>
-               	mov	x15, #0x0               // =0
-               	cbnz	x15, <addr>
+               	b	<addr>
                	b	<addr>
                	sub	x14, x29, #0x80
                	stur	x14, [x29, #-0xb0]
@@ -172,8 +169,7 @@ Disassembly of section .text:
                	orr	x14, x14, x17
                	strb	w14, [x15]
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	cbnz	x14, <addr>
+               	b	<addr>
                	b	<addr>
                	sub	x13, x29, #0x80
                	stur	x13, [x29, #-0xb8]
@@ -187,8 +183,7 @@ Disassembly of section .text:
                	orr	x13, x13, x17
                	strb	w13, [x14]
                	b	<addr>
-               	mov	x13, #0x0               // =0
-               	cbnz	x13, <addr>
+               	b	<addr>
                	sub	x15, x29, #0x80
                	mov	x13, #0x0               // =0
                	mov	x14, #0x8               // =8
@@ -343,8 +338,7 @@ Disassembly of section .text:
                	and	x15, x15, x17
                	strb	w15, [x13]
                	b	<addr>
-               	mov	x15, #0x0               // =0
-               	cbnz	x15, <addr>
+               	b	<addr>
                	sub	x14, x29, #0x80
                	mov	x15, #0x7               // =7
                	mov	x13, #0x8               // =8
@@ -404,8 +398,7 @@ Disassembly of section .text:
                	orr	x14, x14, x17
                	strb	w14, [x15]
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	cbnz	x14, <addr>
+               	b	<addr>
                	sub	x13, x29, #0x80
                	mov	x14, #0x0               // =0
                	mov	x15, #0x8               // =8
@@ -428,8 +421,7 @@ Disassembly of section .text:
                	mov	x14, #0x0               // =0
                	stur	w14, [x29, #-0xe0]
                	b	<addr>
-               	mov	x15, #0x0               // =0
-               	cbnz	x15, <addr>
+               	b	<addr>
                	sub	x14, x29, #0x80
                	mov	x15, #0x0               // =0
                	mov	x13, #0x8               // =8

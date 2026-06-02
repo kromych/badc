@@ -74,7 +74,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b4)   (exit_acc=v4)
   block 2  start_pc=0
     v17  Imm(0)                                           -> x8
-    terminator Bnz { cond=v17, target=b1, fall=b3 }   (exit_acc=v17)
+    terminator Jmp(b3)   (exit_acc=v17)
   block 3  start_pc=0
     v18  Imm(0)                                           -> x9
     v19  StoreLocal { off=-19, value=v18, kind=I32 }      -> -
@@ -135,7 +135,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b13)   (exit_acc=v43)
   block 13  start_pc=0
     v44  Imm(0)                                           -> x8
-    terminator Bnz { cond=v44, target=b12, fall=b14 }   (exit_acc=v44)
+    terminator Jmp(b14)   (exit_acc=v44)
   block 14  start_pc=0
     terminator Jmp(b15)
   block 15  start_pc=0
@@ -154,7 +154,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b16)   (exit_acc=v56)
   block 16  start_pc=0
     v57  Imm(0)                                           -> x11
-    terminator Bnz { cond=v57, target=b15, fall=b17 }   (exit_acc=v57)
+    terminator Jmp(b17)   (exit_acc=v57)
   block 17  start_pc=0
     terminator Jmp(b18)
   block 18  start_pc=0
@@ -172,7 +172,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b19)   (exit_acc=v68)
   block 19  start_pc=0
     v69  Imm(0)                                           -> x9
-    terminator Bnz { cond=v69, target=b18, fall=b20 }   (exit_acc=v69)
+    terminator Jmp(b20)   (exit_acc=v69)
   block 20  start_pc=0
     terminator Jmp(b21)
   block 21  start_pc=0
@@ -192,7 +192,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b22)   (exit_acc=v82)
   block 22  start_pc=0
     v83  Imm(0)                                           -> x8
-    terminator Bnz { cond=v83, target=b21, fall=b23 }   (exit_acc=v83)
+    terminator Jmp(b23)   (exit_acc=v83)
   block 23  start_pc=0
     v84  LocalAddr(-16)                                   -> x11
     v85  Imm(0)                                           -> x8
@@ -336,7 +336,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b43)   (exit_acc=v184)
   block 43  start_pc=0
     v185 Imm(0)                                           -> x11
-    terminator Bnz { cond=v185, target=b42, fall=b44 }   (exit_acc=v185)
+    terminator Jmp(b44)   (exit_acc=v185)
   block 44  start_pc=0
     v186 LocalAddr(-16)                                   -> x9
     v187 Imm(7)                                           -> x11
@@ -396,7 +396,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b52)   (exit_acc=v226)
   block 52  start_pc=0
     v227 Imm(0)                                           -> x9
-    terminator Bnz { cond=v227, target=b51, fall=b53 }   (exit_acc=v227)
+    terminator Jmp(b53)   (exit_acc=v227)
   block 53  start_pc=0
     v228 LocalAddr(-16)                                   -> x8
     v229 Imm(0)                                           -> x9
@@ -421,7 +421,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=29
     terminator Jmp(b59)   (exit_acc=v241)
   block 57  start_pc=0
     v254 Imm(0)                                           -> x11
-    terminator Bnz { cond=v254, target=b56, fall=b58 }   (exit_acc=v254)
+    terminator Jmp(b58)   (exit_acc=v254)
   block 58  start_pc=0
     v255 LocalAddr(-16)                                   -> x9
     v256 Imm(0)                                           -> x11

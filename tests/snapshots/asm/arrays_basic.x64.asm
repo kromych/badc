@@ -70,9 +70,7 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x2, %esi
                	movq	%rsi, %rax
                	addq	$0x80, %rsp
@@ -126,17 +124,13 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x4, %edi
                	movq	%rdi, %rax
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0x5, %edi
                	movq	%rdi, %rax
                	addq	$0x80, %rsp
@@ -243,9 +237,7 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	jmp	<addr>
                	movl	$0xc, %esi
                	movq	%rsi, %rax
                	addq	$0x80, %rsp

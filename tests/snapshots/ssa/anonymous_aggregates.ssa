@@ -66,7 +66,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x11
-    terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v1)
+    terminator Jmp(b2)   (exit_acc=v1)
   block 1  start_pc=0
     v2   Imm(1)                                           -> x0
     terminator Return(v2)   (exit_acc=v2)
@@ -205,7 +205,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     terminator Return(v87)   (exit_acc=v87)
   block 26  start_pc=0
     v88  Imm(0)                                           -> x8
-    terminator Bz { cond=v88, target=b28, fall=b27 }   (exit_acc=v88)
+    terminator Jmp(b28)   (exit_acc=v88)
   block 27  start_pc=0
     v89  Imm(20)                                          -> x0
     terminator Return(v89)   (exit_acc=v89)

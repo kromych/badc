@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     terminator Return(v11)   (exit_acc=v11)
   block 2  start_pc=0
     v12  Imm(0)                                           -> x9
-    terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
+    terminator Jmp(b4)   (exit_acc=v12)
   block 3  start_pc=0
     v13  Imm(2)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)

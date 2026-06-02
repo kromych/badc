@@ -76,17 +76,13 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorq	%r11, %r11
                	movl	%r11d, -0x8(%rbp)
-               	movl	$0x1, %r9d
-               	cmpq	$0x0, %r9
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x8(%rbp), %r11
                	movslq	(%r11), %r9
                	addq	$0x1, %r9
                	movl	%r9d, (%r11)
                	jmp	<addr>
-               	movl	$0x1, %r9d
-               	cmpq	$0x0, %r9
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x8(%rbp), %r8
                	movslq	(%r8), %r9
                	addq	$0x1, %r9

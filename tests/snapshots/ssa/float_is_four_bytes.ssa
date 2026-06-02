@@ -100,7 +100,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=23
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x11
     v2   StoreLocal { off=-1, value=v1, kind=I32 }        -> -
-    terminator Bz { cond=v1, target=b2, fall=b1 }   (exit_acc=v1)
+    terminator Jmp(b2)   (exit_acc=v1)
   block 1  start_pc=0
     v3   ImmData(104)                                     -> x7
     v4   Imm(4)                                           -> x6
@@ -110,7 +110,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=23
     terminator Jmp(b2)   (exit_acc=v7)
   block 2  start_pc=0
     v8   Imm(0)                                           -> x0
-    terminator Bz { cond=v8, target=b4, fall=b3 }   (exit_acc=v8)
+    terminator Jmp(b4)   (exit_acc=v8)
   block 3  start_pc=0
     v9   ImmData(128)                                     -> x7
     v10  Imm(8)                                           -> x6
@@ -122,7 +122,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=23
     v14  Imm(0)                                           -> x0
     v15  LocalAddr(-2)                                    -> x6
     v16  Store { addr=v15, value=v14, kind=F32 }          -> -
-    terminator Bz { cond=v14, target=b6, fall=b5 }   (exit_acc=v14)
+    terminator Jmp(b6)   (exit_acc=v14)
   block 5  start_pc=0
     v17  ImmData(153)                                     -> x7
     v18  Imm(4)                                           -> x6

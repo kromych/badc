@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v33)   (exit_acc=v33)
   block 6  start_pc=0
     v34  Imm(0)                                           -> x11
-    terminator Bz { cond=v34, target=b8, fall=b7 }   (exit_acc=v34)
+    terminator Jmp(b8)   (exit_acc=v34)
   block 7  start_pc=0
     v35  Imm(4)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
@@ -89,7 +89,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v64)   (exit_acc=v64)
   block 10  start_pc=0
     v65  Imm(0)                                           -> x0
-    terminator Bz { cond=v65, target=b12, fall=b11 }   (exit_acc=v65)
+    terminator Jmp(b12)   (exit_acc=v65)
   block 11  start_pc=0
     v66  Imm(6)                                           -> x11
     terminator Return(v66)   (exit_acc=v66)
@@ -138,7 +138,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v93)   (exit_acc=v93)
   block 20  start_pc=0
     v94  Imm(0)                                           -> x0
-    terminator Bz { cond=v94, target=b22, fall=b21 }   (exit_acc=v94)
+    terminator Jmp(b22)   (exit_acc=v94)
   block 21  start_pc=0
     v95  Imm(11)                                          -> x11
     terminator Return(v95)   (exit_acc=v95)
@@ -257,7 +257,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v168)   (exit_acc=v168)
   block 42  start_pc=0
     v169 Imm(0)                                           -> x0
-    terminator Bz { cond=v169, target=b44, fall=b43 }   (exit_acc=v169)
+    terminator Jmp(b44)   (exit_acc=v169)
   block 43  start_pc=0
     v170 Imm(22)                                          -> x11
     terminator Return(v170)   (exit_acc=v170)
@@ -286,7 +286,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=7
     terminator Return(v189)   (exit_acc=v189)
   block 46  start_pc=0
     v190 Imm(0)                                           -> x0
-    terminator Bz { cond=v190, target=b48, fall=b47 }   (exit_acc=v190)
+    terminator Jmp(b48)   (exit_acc=v190)
   block 47  start_pc=0
     v191 Imm(24)                                          -> x11
     terminator Return(v191)   (exit_acc=v191)

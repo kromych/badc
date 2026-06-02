@@ -4644,9 +4644,7 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	movq	%rdi, -0x50(%rbp)
                	jmp	<addr>
-               	movl	$0x1, %edi
-               	cmpq	$0x0, %rdi
-               	je	<addr>
+               	jmp	<addr>
                	leaq	-0x30(%rbp), %r14
                	movq	(%r14), %rdi
                	movq	%rdi, %rax
@@ -5348,4 +5346,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

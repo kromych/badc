@@ -80,9 +80,7 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	movl	%r9d, -0x90(%rbp)
                	jmp	<addr>
-               	xorq	%r8, %r8
-               	cmpq	$0x0, %r8
-               	jne	<addr>
+               	jmp	<addr>
                	xorq	%r9, %r9
                	movl	%r9d, -0x98(%rbp)
                	jmp	<addr>
@@ -139,9 +137,7 @@ Disassembly of section .text:
                	orq	$0x1, %r8
                	movb	%r8b, (%r9)
                	jmp	<addr>
-               	xorq	%r8, %r8
-               	cmpq	$0x0, %r8
-               	jne	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	leaq	-0x80(%rbp), %r11
                	movq	%r11, -0xa8(%rbp)
@@ -162,9 +158,7 @@ Disassembly of section .text:
                	orq	$0x80, %r11
                	movb	%r11b, (%r8)
                	jmp	<addr>
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	jne	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	leaq	-0x80(%rbp), %r9
                	movq	%r9, -0xb0(%rbp)
@@ -184,9 +178,7 @@ Disassembly of section .text:
                	orq	$0x1, %r9
                	movb	%r9b, (%r11)
                	jmp	<addr>
-               	xorq	%r9, %r9
-               	cmpq	$0x0, %r9
-               	jne	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	leaq	-0x80(%rbp), %r8
                	movq	%r8, -0xb8(%rbp)
@@ -206,9 +198,7 @@ Disassembly of section .text:
                	orq	$0x10, %r8
                	movb	%r8b, (%r9)
                	jmp	<addr>
-               	xorq	%r8, %r8
-               	cmpq	$0x0, %r8
-               	jne	<addr>
+               	jmp	<addr>
                	leaq	-0x80(%rbp), %r11
                	xorq	%r8, %r8
                	movl	$0x8, %r9d
@@ -397,9 +387,7 @@ Disassembly of section .text:
                	andq	$-0x81, %r11
                	movb	%r11b, (%r8)
                	jmp	<addr>
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	jne	<addr>
+               	jmp	<addr>
                	leaq	-0x80(%rbp), %r9
                	movl	$0x7, %r11d
                	movl	$0x8, %r8d
@@ -485,9 +473,7 @@ Disassembly of section .text:
                	orq	$0x1, %r9
                	movb	%r9b, (%r11)
                	jmp	<addr>
-               	xorq	%r9, %r9
-               	cmpq	$0x0, %r9
-               	jne	<addr>
+               	jmp	<addr>
                	leaq	-0x80(%rbp), %r8
                	xorq	%r9, %r9
                	movl	$0x8, %r11d
@@ -515,9 +501,7 @@ Disassembly of section .text:
                	xorq	%r9, %r9
                	movl	%r9d, -0xe0(%rbp)
                	jmp	<addr>
-               	xorq	%r11, %r11
-               	cmpq	$0x0, %r11
-               	jne	<addr>
+               	jmp	<addr>
                	leaq	-0x80(%rbp), %r9
                	xorq	%r11, %r11
                	movl	$0x8, %r8d

@@ -531,6 +531,19 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         }
     }
 
+    // Realign every value's place with its class root's final place.
+    // A class member's place is set when its pick site routes through
+    // an earlier-allocated root; if that root is later spilled
+    // mid-allocation, the spill writes `Spill(slot)` to the root but
+    // every previously-routed member still holds the now-stale
+    // `IntReg(r)` from before the spill.
+    for v in 0..func.insts.len() {
+        let root = classes.find(v as ValueId) as usize;
+        if root != v {
+            places[v] = places[root];
+        }
+    }
+
     // Only callee-saved registers need prologue / epilogue
     // save and restore. Caller-saved registers are preserved
     // by the caller across the function's call sites (via the

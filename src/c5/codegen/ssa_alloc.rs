@@ -1864,8 +1864,8 @@ mod tests {
                 }
                 let mut int_owner: [Option<ValueId>; 64] = [None; 64];
                 let mut fp_owner: [Option<ValueId>; 64] = [None; 64];
-                for v in 0..f.insts.len() {
-                    if !non_singleton_root[v] {
+                for (v, &is_root) in non_singleton_root.iter().enumerate() {
+                    if !is_root {
                         continue;
                     }
                     let (slot_table, reg) = match alloc.places[v] {

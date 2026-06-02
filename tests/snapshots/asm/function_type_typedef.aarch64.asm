@@ -62,8 +62,6 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x0, <page>
                	add	x0, x0, #0x238
                	mov	x1, #0x3                // =3
@@ -74,8 +72,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x1                // =1
                	mov	x0, x2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -88,8 +84,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x2                // =2
                	mov	x0, x2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -102,8 +96,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x3                // =3
                	mov	x0, x2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -116,13 +108,9 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x2, #0x4                // =4
                	mov	x0, x2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x12, #0x0               // =0
                	mov	x0, x12
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

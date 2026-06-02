@@ -10,10 +10,6 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xd0]
                	blr	x16
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x15, <page>
                	add	x15, x15, #0xe0
                	ldrsw	x14, [x15]
@@ -21,14 +17,7 @@ Disassembly of section .text:
                	sxtw	x14, w14
                	str	w14, [x15]
                	ldrsw	x0, [x15]
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	sxtw	x15, w0
                	cbz	x15, <addr>
                	adrp	x14, <page>
@@ -57,14 +46,7 @@ Disassembly of section .text:
                	ldrsw	x13, [x13]
                	add	x15, x15, x13
                	sxtw	x0, w15
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x15, <page>
                	add	x15, x15, #0xf8
                	ldrsw	x14, [x15]
@@ -72,14 +54,7 @@ Disassembly of section .text:
                	sxtw	x14, w14
                	str	w14, [x15]
                	ldrsw	x0, [x15]
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x15, <page>
                	add	x15, x15, #0x100
                	ldrsw	x14, [x15]
@@ -87,9 +62,6 @@ Disassembly of section .text:
                	sxtw	x14, w14
                	str	w14, [x15]
                	ldrsw	x0, [x15]
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

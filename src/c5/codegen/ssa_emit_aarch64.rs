@@ -202,18 +202,17 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
 }
 
 /// x19 is overwritten only by the lowerings that route through it:
-/// the ImmData / ImmCode address-materialisation placeholders the
-/// writer rewrites to x19, the indirect-call environment setup, the
-/// setjmp / longjmp intrinsics, TLS address loads, and external call
-/// thunks. A function touching none of these leaves x19 untouched, so
-/// its prologue need not save the caller's value.
+/// the indirect-call environment setup, the setjmp / longjmp
+/// intrinsics, TLS address loads, and external call thunks. A
+/// function touching none of these leaves x19 untouched, so its
+/// prologue need not save the caller's value. `Inst::ImmData` and
+/// `Inst::ImmCode` route the adrp/add through the allocator's chosen
+/// destination, so they no longer participate.
 fn function_clobbers_x19(func: &FunctionSsa) -> bool {
     func.insts.iter().any(|inst| {
         matches!(
             inst,
-            Inst::ImmData(_)
-                | Inst::ImmCode(_)
-                | Inst::TlsAddr(_)
+            Inst::TlsAddr(_)
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }

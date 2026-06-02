@@ -73,10 +73,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	mov	x15, x0
                	adrp	x15, <page>
                	add	x15, x15, #0x148
@@ -84,14 +80,7 @@ Disassembly of section .text:
                	add	x14, x14, #0x1
                	str	w14, [x15]
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	mov	x15, x0
                	adrp	x15, <page>
                	add	x15, x15, #0x148
@@ -99,14 +88,7 @@ Disassembly of section .text:
                	add	x14, x14, #0x1
                	str	w14, [x15]
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	mov	x15, x0
                	mov	x14, x1
                	adrp	x14, <page>
@@ -115,14 +97,9 @@ Disassembly of section .text:
                	add	x15, x15, #0x1
                	str	w15, [x14]
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x14, x0
@@ -136,7 +113,5 @@ Disassembly of section .text:
                	adrp	x13, <page>
                	add	x13, x13, #0x148
                	ldrsw	x0, [x13]
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

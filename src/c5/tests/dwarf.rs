@@ -767,13 +767,15 @@ fn block_scoped_local_emitted() {
 /// for address materialisation. A function that materialises no
 /// address and makes no indirect / external call never clobbers x19,
 /// so its prologue must not spill it; a function that touches a
-/// global materialises the address through x19 and must save it.
+/// CallExt thunk shape still relies on x19 internally.
 #[test]
 fn leaf_function_omits_x19_save() {
-    let src = "int g_sink;\n\
+    let src = "extern int puts(const char *);\n\
+               int g_sink;\n\
                int leaf(int a, int b, int c){ return a * b + c; }\n\
                int uses(int a){ g_sink = a; return g_sink; }\n\
-               int main(void){ return leaf(1, 2, 3) + uses(4); }";
+               int with_ext(void){ puts(\"hi\"); return 0; }\n\
+               int main(void){ return leaf(1, 2, 3) + uses(4) + with_ext(); }";
     let path = build_signed_mach_o(src, "leaf_callee_probe");
     let Some(leaf) = lldb_disasm(&path, "leaf") else {
         let _ = std::fs::remove_file(&path);
@@ -786,8 +788,14 @@ fn leaf_function_omits_x19_save() {
     let uses =
         lldb_disasm(&path, "uses").unwrap_or_else(|| panic!("lldb could not disassemble `uses`"));
     assert!(
-        uses.contains("x19"),
-        "global-touching function must save/restore x19:\n{uses}"
+        !uses.contains("x19"),
+        "global-only function (ImmData picks its own dst) must not save x19:\n{uses}"
+    );
+    let with_ext = lldb_disasm(&path, "with_ext")
+        .unwrap_or_else(|| panic!("lldb could not disassemble `with_ext`"));
+    assert!(
+        with_ext.contains("x19"),
+        "function with CallExt must save/restore x19:\n{with_ext}"
     );
     let _ = std::fs::remove_file(&path);
 }

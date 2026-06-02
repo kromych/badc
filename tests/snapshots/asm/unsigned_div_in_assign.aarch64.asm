@@ -28,8 +28,7 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	str	x19, [sp]
+               	sub	sp, sp, #0x20
                	sub	x15, x29, #0x8
                	adrp	x14, <page>
                	add	x14, x14, #0xd0
@@ -61,7 +60,6 @@ Disassembly of section .text:
                	stur	x15, [x29, #-0x18]
                	b	<addr>
                	ldur	x0, [x29, #-0x18]
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x30
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

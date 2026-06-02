@@ -10,10 +10,6 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xd8]
                	blr	x16
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x15, <page>
                	add	x15, x15, #0xe8
                	ldrsw	x15, [x15]
@@ -24,9 +20,6 @@ Disassembly of section .text:
                	str	w15, [x14]
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

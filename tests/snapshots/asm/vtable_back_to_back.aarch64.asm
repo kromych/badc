@@ -73,10 +73,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	mov	x15, x0
                	mov	x14, x1
                	sxtw	x13, w2
@@ -89,9 +85,6 @@ Disassembly of section .text:
                	sxtw	x13, w13
                	str	w13, [x15]
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x15, x0
                	mov	x14, x1

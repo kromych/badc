@@ -657,8 +657,6 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	str	x19, [sp]
                	adrp	x0, <page>
                	add	x0, x0, #0x118
                	adrp	x1, <page>
@@ -679,8 +677,6 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x4, #0x1                // =1
                	mov	x0, x4
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -693,8 +689,6 @@ Disassembly of section .text:
                	cmp	x4, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x4, <page>
@@ -707,8 +701,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x4, #0x3                // =3
                	mov	x0, x4
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -721,8 +713,6 @@ Disassembly of section .text:
                	cmp	x4, #0x3
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x4, <page>
@@ -737,12 +727,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x1, #0x5                // =5
                	mov	x0, x1
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

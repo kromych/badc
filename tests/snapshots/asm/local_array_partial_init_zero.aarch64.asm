@@ -113,11 +113,13 @@ Disassembly of section .text:
                	mov	x0, #0xbeef             // =48879
                	movk	x0, #0xdead, lsl #16
                	bl	<addr>
+               	mov	x14, x0
                	bl	<addr>
                	mov	x20, x0
                	mov	x0, #0x5678             // =22136
                	movk	x0, #0x1234, lsl #16
                	bl	<addr>
+               	mov	x13, x0
                	bl	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16

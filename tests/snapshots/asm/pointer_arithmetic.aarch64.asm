@@ -16,15 +16,16 @@ Disassembly of section .text:
                	str	x19, [sp]
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	mov	x14, #0x1               // =1
-               	str	w14, [x0]
-               	add	x13, x0, #0x4
-               	mov	x14, #0x2               // =2
-               	str	w14, [x13]
-               	ldrsw	x12, [x0]
-               	add	x0, x0, #0x4
-               	ldrsw	x0, [x0]
-               	add	x12, x12, x0
+               	mov	x14, x0
+               	mov	x0, #0x1                // =1
+               	str	w0, [x14]
+               	add	x13, x14, #0x4
+               	mov	x0, #0x2                // =2
+               	str	w0, [x13]
+               	ldrsw	x12, [x14]
+               	add	x14, x14, #0x4
+               	ldrsw	x14, [x14]
+               	add	x12, x12, x14
                	sxtw	x0, w12
                	ldr	x19, [sp]
                	add	sp, sp, #0x20

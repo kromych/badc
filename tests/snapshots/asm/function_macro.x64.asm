@@ -88,8 +88,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x15, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x15, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -102,8 +102,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x16, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x16, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -116,8 +116,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x17, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x17, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -144,8 +144,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x19, %ebx
-               	movq	%rbx, %rcx
+               	movl	$0x19, %r14d
+               	movq	%r14, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14
@@ -169,8 +169,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x1f, %edi
-               	movq	%rdi, %rax
+               	movl	$0x1f, %esi
+               	movq	%rsi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
@@ -199,12 +199,11 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x29, %edi
-               	movq	%rdi, %rax
+               	movl	$0x29, %esi
+               	movq	%rsi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

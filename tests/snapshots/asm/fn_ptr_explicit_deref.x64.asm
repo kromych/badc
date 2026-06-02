@@ -24,37 +24,33 @@ Disassembly of section .text:
                	callq	*%r11
                	cmpq	$0x29, %rax
                	je	<addr>
-               	movl	$0x1, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x1, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x28, %eax
-               	movq	-0x8(%rbp), %rdi
-               	movq	%rdi, %r11
-               	movq	%rax, %rdi
+               	movl	$0x28, %edi
+               	movq	-0x8(%rbp), %r11
                	callq	*%r11
                	cmpq	$0x29, %rax
                	je	<addr>
-               	movl	$0x2, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x2, %r11d
+               	movq	%r11, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	leaq	-0x8(%rbp), %rbx
-               	movq	(%rbx), %rdi
-               	movl	$0x28, %r8d
-               	movq	%rdi, %r11
-               	movq	%r8, %rdi
+               	movq	(%rbx), %r11
+               	movl	$0x28, %edi
                	callq	*%r11
                	cmpq	$0x29, %rax
                	je	<addr>
-               	movl	$0x3, %r8d
-               	movq	%r8, %rcx
+               	movl	$0x3, %edi
+               	movq	%rdi, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x50, %rsp

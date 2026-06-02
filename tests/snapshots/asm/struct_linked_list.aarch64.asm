@@ -29,36 +29,38 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x10               // =16
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	ldur	x13, [x29, #-0x10]
-               	ldursw	x0, [x29, #-0x20]
-               	str	w0, [x13]
+               	mov	x13, x0
+               	stur	x13, [x29, #-0x10]
+               	ldur	x0, [x29, #-0x10]
+               	ldursw	x13, [x29, #-0x20]
+               	str	w13, [x0]
                	ldur	x14, [x29, #-0x10]
                	add	x14, x14, #0x8
-               	ldur	x0, [x29, #-0x8]
-               	str	x0, [x14]
+               	ldur	x13, [x29, #-0x8]
+               	str	x13, [x14]
+               	ldur	x0, [x29, #-0x10]
+               	stur	x0, [x29, #-0x8]
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	stur	w0, [x29, #-0x18]
+               	ldur	x13, [x29, #-0x8]
+               	stur	x13, [x29, #-0x10]
+               	b	<addr>
                	ldur	x13, [x29, #-0x10]
-               	stur	x13, [x29, #-0x8]
-               	b	<addr>
-               	mov	x13, #0x0               // =0
-               	stur	w13, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x8]
-               	stur	x0, [x29, #-0x10]
-               	b	<addr>
-               	ldur	x0, [x29, #-0x10]
-               	cmp	x0, #0x0
+               	cmp	x13, #0x0
                	b.eq	<addr>
-               	ldursw	x13, [x29, #-0x18]
-               	ldur	x0, [x29, #-0x10]
-               	ldrsw	x14, [x0]
-               	add	x13, x13, x14
-               	sxtw	x13, w13
-               	stur	w13, [x29, #-0x18]
-               	add	x0, x0, #0x8
-               	ldr	x0, [x0]
-               	stur	x0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x18]
+               	ldur	x13, [x29, #-0x10]
+               	ldrsw	x14, [x13]
+               	add	x0, x0, x14
+               	sxtw	x0, w0
+               	stur	w0, [x29, #-0x18]
+               	add	x13, x13, #0x8
+               	ldr	x13, [x13]
+               	stur	x13, [x29, #-0x10]
+               	b	<addr>
+               	ldursw	x13, [x29, #-0x18]
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

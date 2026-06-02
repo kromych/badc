@@ -33,6 +33,7 @@ Disassembly of section .text:
                	strb	w20, [x11]
                	bl	<addr>
                	sxtw	x0, w0
+               	mov	x10, x0
                	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

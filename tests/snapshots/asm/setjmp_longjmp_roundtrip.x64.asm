@@ -51,25 +51,25 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	leaq	<rip>, %r9
+               	leaq	<rip>, %rdi
                	xorq	%rax, %rax
-               	movl	%eax, (%r9)
+               	movl	%eax, (%rdi)
                	movl	$0x5, %edi
                	movl	$0x2a, %esi
                	callq	<addr>
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
-               	movslq	(%rdi), %rdi
-               	cmpq	$0x6, %rdi
+               	leaq	<rip>, %rsi
+               	movslq	(%rsi), %rsi
+               	cmpq	$0x6, %rsi
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x2, %eax
-               	movl	%eax, (%rdi)
+               	movl	%eax, (%rsi)
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -84,9 +84,9 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	xorq	%rax, %rax
-               	movl	%eax, (%rdi)
+               	movl	%eax, (%rsi)
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -98,12 +98,12 @@ Disassembly of section .text:
                	cmpq	$0x1, %rdi
                	je	<addr>
                	jmp	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi
                	movl	$0x3, %eax
-               	movl	%eax, (%rdi)
-               	leaq	<rip>, %r9
+               	movl	%eax, (%rsi)
+               	leaq	<rip>, %rdi
                	xorq	%rax, %rax
-               	movl	%eax, (%r9)
+               	movl	%eax, (%rdi)
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -149,3 +149,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

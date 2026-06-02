@@ -79,19 +79,21 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x18, %rax
                	je	<addr>
-               	movl	$0x3, %r9d
-               	movq	%r9, %rax
-               	popq	%rbp
-               	retq
-               	xorq	%rdi, %rdi
-               	callq	<addr>
-               	cmpq	$0x0, %rax
-               	je	<addr>
-               	movl	$0x4, %r9d
-               	movq	%r9, %rax
+               	movl	$0x3, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
+               	movq	%rax, %rdi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	cmpq	$0x0, %rdi
+               	je	<addr>
+               	movl	$0x4, %eax
+               	popq	%rbp
+               	retq
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	addb	%al, (%rax)

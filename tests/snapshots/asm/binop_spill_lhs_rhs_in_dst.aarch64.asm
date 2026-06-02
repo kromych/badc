@@ -73,6 +73,8 @@ Disassembly of section .text:
                	str	w15, [x11]
                	sub	x0, x29, #0x18
                	bl	<addr>
+               	mov	x15, x0
+               	mov	x0, x15
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

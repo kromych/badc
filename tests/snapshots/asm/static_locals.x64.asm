@@ -83,61 +83,63 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0xca, %rax
                	je	<addr>
-               	movl	$0x4, %r9d
-               	movq	%r9, %rax
+               	movl	$0x4, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
-               	xorq	%rdi, %rdi
+               	xorq	%rax, %rax
+               	movq	%rax, %rdi
                	callq	<addr>
-               	cmpq	$0x131, %rax            # imm = 0x131
+               	movq	%rax, %rdi
+               	cmpq	$0x131, %rdi            # imm = 0x131
                	je	<addr>
-               	movl	$0x5, %r9d
-               	movq	%r9, %rax
+               	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpq	$0xca, %rax
                	je	<addr>
-               	movl	$0x6, %r9d
-               	movq	%r9, %rax
+               	movl	$0x6, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	cmpq	$0x1, %rax
                	je	<addr>
-               	movl	$0x7, %r9d
-               	movq	%r9, %rax
+               	movl	$0x7, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	cmpq	$0x2, %rax
                	je	<addr>
-               	movl	$0x8, %r9d
-               	movq	%r9, %rax
+               	movl	$0x8, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	cmpq	$0x3e9, %rax            # imm = 0x3E9
                	je	<addr>
-               	movl	$0x9, %r9d
-               	movq	%r9, %rax
+               	movl	$0x9, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	cmpq	$0x3ea, %rax            # imm = 0x3EA
                	je	<addr>
-               	movl	$0xa, %r9d
-               	movq	%r9, %rax
+               	movl	$0xa, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	callq	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>
-               	movl	$0xb, %r9d
-               	movq	%r9, %rax
+               	movl	$0xb, %edi
+               	movq	%rdi, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

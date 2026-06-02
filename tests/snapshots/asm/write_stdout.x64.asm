@@ -23,16 +23,16 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movq	%rsi, %r8
                	addq	$0x1, %r8
-               	movl	$0x69, %r11d
-               	movb	%r11b, (%r8)
+               	movl	$0x69, %r9d
+               	movb	%r9b, (%r8)
                	movq	%rsi, %rdx
                	addq	$0x2, %rdx
-               	movl	$0xa, %r11d
-               	movb	%r11b, (%rdx)
+               	movl	$0xa, %r9d
+               	movb	%r9b, (%rdx)
                	movl	$0x3, %edx
-               	movq	%rsi, %r11
-               	addq	$0x3, %r11
-               	movb	%bl, (%r11)
+               	movq	%rsi, %r9
+               	addq	$0x3, %r9
+               	movb	%bl, (%r9)
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

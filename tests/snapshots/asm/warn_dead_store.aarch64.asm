@@ -59,7 +59,8 @@ Disassembly of section .text:
                	sxtw	x20, w15
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	add	x20, x20, x0
+               	mov	x13, x0
+               	add	x20, x20, x13
                	sxtw	x20, w20
                	bl	<addr>
                	add	x20, x20, x0

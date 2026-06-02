@@ -139,9 +139,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	%r12, (%rsp)
-               	movq	%r14, 0x8(%rsp)
-               	movq	%r15, 0x10(%rsp)
+               	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
+               	movq	%r14, 0x10(%rsp)
+               	movq	%r15, 0x18(%rsp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
@@ -161,12 +162,14 @@ Disassembly of section .text:
                	movq	%r12, 0x20(%rsp)
                	callq	<addr>
                	addq	$0x30, %rsp
-               	movq	%rax, %rcx
-               	movq	(%rsp), %r12
-               	movq	0x8(%rsp), %r14
-               	movq	0x10(%rsp), %r15
+               	movq	%rax, %rbx
+               	movq	%rbx, %rcx
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	0x10(%rsp), %r14
+               	movq	0x18(%rsp), %r15
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

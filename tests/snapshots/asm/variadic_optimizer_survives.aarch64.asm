@@ -60,5 +60,7 @@ Disassembly of section .text:
                	str	x0, [sp, #-0x10]!
                	bl	<addr>
                	add	sp, sp, #0x30
+               	mov	x12, x0
+               	mov	x0, x12
                	ldp	x29, x30, [sp], #0x10
                	ret

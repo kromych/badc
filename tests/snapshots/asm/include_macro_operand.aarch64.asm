@@ -23,7 +23,8 @@ Disassembly of section .text:
                	mov	x21, #0x2a              // =42
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	cmp	x0, #0x0
+               	mov	x12, x0
+               	cmp	x12, #0x0
                	b.ne	<addr>
                	mov	x11, #0x1               // =1
                	mov	x0, x11
@@ -33,6 +34,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, x12
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535

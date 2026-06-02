@@ -36,11 +36,11 @@ Disassembly of section .text:
                	movq	%r9, %r11
                	callq	*%r11
                	movq	%rax, %rbx
-               	movslq	%ebx, %r9
-               	cmpq	$0x0, %r9
+               	movslq	%ebx, %rdx
+               	cmpq	$0x0, %rdx
                	jge	<addr>
-               	movl	$0x1, %edx
-               	movq	%rdx, %rcx
+               	movl	$0x1, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
                	movq	0x10(%rsp), %r14

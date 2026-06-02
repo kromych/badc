@@ -34,12 +34,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=36
     v27  Imm(420)                                         -> x2
     v28  LoadLocal { off=-1, kind=I64 }                   -> x8
     v29  CallIndirect { target=v3, args=[v25, v26, v27] } -> x3
-    v30  Imm(0)                                           -> x9
-    v31  Extend { value=v29, kind=I32 }                   -> x9
-    v32  BinopI { op=lt, lhs=v31, rhs_imm=0 }             -> x9
+    v30  Imm(0)                                           -> x2
+    v31  Extend { value=v29, kind=I32 }                   -> x2
+    v32  BinopI { op=lt, lhs=v31, rhs_imm=0 }             -> x2
     terminator Bz { cond=v32, target=b2, fall=b1 }   (exit_acc=v32)
   block 1  start_pc=0
-    v33  Imm(1)                                           -> x2
+    v33  Imm(1)                                           -> x6
     terminator Return(v33)   (exit_acc=v33)
   block 2  start_pc=0
     v34  Extend { value=v29, kind=I32 }                   -> x7

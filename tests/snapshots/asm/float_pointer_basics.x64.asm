@@ -51,18 +51,18 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r14
-               	movl	$0x3f800000, %ebx       # imm = 0x3F800000
-               	movl	%ebx, (%r12)
+               	movl	$0x3f800000, %edi       # imm = 0x3F800000
+               	movl	%edi, (%r12)
                	movq	%r12, %r8
                	addq	$0x4, %r8
-               	movl	$0x40000000, %ebx       # imm = 0x40000000
-               	movl	%ebx, (%r8)
+               	movl	$0x40000000, %edi       # imm = 0x40000000
+               	movl	%edi, (%r8)
                	movabsq	$0x3ff0000000000000, %rsi # imm = 0x3FF0000000000000
                	movq	%rsi, (%r14)
-               	movq	%r14, %rbx
-               	addq	$0x8, %rbx
+               	movq	%r14, %rdi
+               	addq	$0x8, %rdi
                	movabsq	$0x4000000000000000, %rsi # imm = 0x4000000000000000
-               	movq	%rsi, (%rbx)
+               	movq	%rsi, (%rdi)
                	movslq	(%r12), %r8
                	cmpq	$0x3f800000, %r8        # imm = 0x3F800000
                	je	<addr>

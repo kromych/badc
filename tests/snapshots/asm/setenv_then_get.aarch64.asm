@@ -21,18 +21,21 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
+               	mov	x12, x0
                	adrp	x0, <page>
                	add	x0, x0, #0x103
                	bl	<addr>
-               	cmp	x0, #0x0
+               	mov	x2, x0
+               	cmp	x2, #0x0
                	b.ne	<addr>
-               	mov	x2, #0x1                // =1
-               	mov	x0, x2
+               	mov	x1, #0x1                // =1
+               	mov	x0, x1
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w0, [x0]
+               	ldrb	w2, [x2]
+               	mov	x0, x2
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

@@ -7,14 +7,14 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v1   Imm(8)                                           -> x7
     v2   Imm(34359738368)                                 -> x9
     v3   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
-    v4   Imm(0)                                           -> x9
-    v5   LoadLocal { off=-1, kind=I64 }                   -> x9
-    v6   Imm(1)                                           -> x9
+    v4   Imm(0)                                           -> x7
+    v5   LoadLocal { off=-1, kind=I64 }                   -> x7
+    v6   Imm(1)                                           -> x7
     v7   Store { addr=v3, value=v6, kind=I32 }            -> -
     v8   LoadLocal { off=-1, kind=I64 }                   -> x8
     v9   Imm(4)                                           -> x8
     v10  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x8
-    v11  Imm(2)                                           -> x9
+    v11  Imm(2)                                           -> x7
     v12  Store { addr=v10, value=v11, kind=I32 }          -> -
     v13  LoadLocal { off=-1, kind=I64 }                   -> x11
     v14  Load { addr=v3, kind=I32 }                       -> x11

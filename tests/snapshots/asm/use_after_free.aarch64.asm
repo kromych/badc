@@ -18,8 +18,8 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	bl	<addr>
                	mov	x20, x0
-               	mov	x14, #0x2a              // =42
-               	str	w14, [x20]
+               	mov	x0, #0x2a               // =42
+               	str	w0, [x20]
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0

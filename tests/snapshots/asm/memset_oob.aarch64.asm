@@ -17,8 +17,10 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x0, #0x8                // =8
                	bl	<addr>
+               	mov	x14, x0
                	mov	x20, #0x0               // =0
                	mov	x2, #0x64               // =100
+               	mov	x0, x14
                	mov	x1, x20
                	bl	<addr>
                	mov	x0, x20

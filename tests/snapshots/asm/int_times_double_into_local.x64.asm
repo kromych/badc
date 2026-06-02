@@ -54,12 +54,12 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	je	<addr>
-               	leaq	<rip>, %rdi
-               	movq	%rbx, %rsi
-               	shlq	$0x3, %rsi
-               	addq	%rsi, %rdi
+               	leaq	<rip>, %r8
+               	movq	%rbx, %rdi
+               	shlq	$0x3, %rdi
+               	addq	%rdi, %r8
                	movq	(%rax), %rax
-               	movq	%rax, (%rdi)
+               	movq	%rax, (%r8)
                	jmp	<addr>
                	leaq	<rip>, %rax
                	shlq	$0x3, %rbx
@@ -117,13 +117,13 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	movl	$0x1, %esi
                	callq	<addr>
-               	movabsq	$0x4000000000000000, %rdi # imm = 0x4000000000000000
-               	movq	%rdi, %xmm7
+               	movabsq	$0x4000000000000000, %rsi # imm = 0x4000000000000000
+               	movq	%rsi, %xmm7
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
                	xorpd	%xmm15, %xmm7
-               	movabsq	$0x400921fb54442d18, %rdi # imm = 0x400921FB54442D18
-               	movq	%rdi, %xmm15
+               	movabsq	$0x400921fb54442d18, %rsi # imm = 0x400921FB54442D18
+               	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm7
                	movq	%rax, %xmm14
                	ucomisd	%xmm7, %xmm14
@@ -134,16 +134,15 @@ Disassembly of section .text:
                	orq	%r11, %rax
                	cmpq	$0x0, %rax
                	je	<addr>
-               	movl	$0x2, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x2, %esi
+               	movq	%rsi, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x8, %eax
+               	movl	$0x8, %edi
                	movl	$0x2, %esi
-               	movq	%rax, %rdi
                	callq	<addr>
                	movabsq	$0x4010000000000000, %rsi # imm = 0x4010000000000000
                	movq	%rsi, %xmm7
@@ -176,4 +175,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

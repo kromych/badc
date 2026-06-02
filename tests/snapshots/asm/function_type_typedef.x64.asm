@@ -43,8 +43,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x7, %rax
                	je	<addr>
-               	movl	$0x1, %esi
-               	movq	%rsi, %rax
+               	movl	$0x1, %edx
+               	movq	%rdx, %rax
                	popq	%rbp
                	retq
                	leaq	-<rip>, %rdi       # <addr>
@@ -53,8 +53,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x6, %rax
                	je	<addr>
-               	movl	$0x2, %esi
-               	movq	%rsi, %rax
+               	movl	$0x2, %edx
+               	movq	%rdx, %rax
                	popq	%rbp
                	retq
                	leaq	-<rip>, %rdi       # <addr>
@@ -63,8 +63,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0xb, %rax
                	je	<addr>
-               	movl	$0x3, %esi
-               	movq	%rsi, %rax
+               	movl	$0x3, %edx
+               	movq	%rdx, %rax
                	popq	%rbp
                	retq
                	leaq	-<rip>, %rdi       # <addr>
@@ -73,8 +73,8 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0xc, %rax
                	je	<addr>
-               	movl	$0x4, %esi
-               	movq	%rsi, %rax
+               	movl	$0x4, %edx
+               	movq	%rdx, %rax
                	popq	%rbp
                	retq
                	xorq	%rax, %rax

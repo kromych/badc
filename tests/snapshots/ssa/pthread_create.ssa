@@ -18,22 +18,22 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v1   Imm(0)                                           -> x3
     v2   Imm(2)                                           -> x6
     v3   CallExt { binding_idx=90, args=[v1, v2], fp_arg_mask=0x0 } -> x12
-    v4   Imm(0)                                           -> x8
-    v5   LoadLocal { off=-1, kind=I64 }                   -> x8
+    v4   Imm(0)                                           -> x6
+    v5   LoadLocal { off=-1, kind=I64 }                   -> x6
     v6   ImmData(16)                                      -> x6
     v7   CallExt { binding_idx=91, args=[v3, v6], fp_arg_mask=0x0 } -> x14
-    v8   Imm(0)                                           -> x7
-    v9   LoadLocal { off=-1, kind=I64 }                   -> x7
+    v8   Imm(0)                                           -> x6
+    v9   LoadLocal { off=-1, kind=I64 }                   -> x6
     v10  ImmData(31)                                      -> x6
     v11  CallExt { binding_idx=91, args=[v3, v10], fp_arg_mask=0x0 } -> x15
-    v12  Imm(0)                                           -> x12
+    v12  Imm(0)                                           -> x6
     v13  LocalAddr(-4)                                    -> x7
     v14  ImmCode(ent_pc=0)                                -> x2
-    v15  LoadLocal { off=-2, kind=I64 }                   -> x9
+    v15  LoadLocal { off=-2, kind=I64 }                   -> x12
     v16  CallIndirect { target=v7, args=[v13, v1, v14, v1] } -> x0
     v17  LoadLocal { off=-4, kind=I64 }                   -> x7
     v18  LocalAddr(-5)                                    -> x6
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x3
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x0
     v20  CallIndirect { target=v11, args=[v17, v18] }     -> x0
     v21  LoadLocal { off=-5, kind=I64 }                   -> x0
     terminator Return(v21)   (exit_acc=v21)

@@ -55,15 +55,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=15
     v25  Load { addr=v24, kind=I64 }                      -> x0
     v26  Imm(2)                                           -> x7
     v27  Imm(9)                                           -> x6
-    v28  CallIndirect { target=v25, args=[v26, v27] }     -> x0
-    v29  BinopI { op=ne, lhs=v28, rhs_imm=18 }            -> x0
+    v28  CallIndirect { target=v25, args=[v26, v27] }     -> x3
+    v29  BinopI { op=ne, lhs=v28, rhs_imm=18 }            -> x3
     terminator Bz { cond=v29, target=b6, fall=b5 }   (exit_acc=v29)
   block 5  start_pc=0
     v30  Imm(3)                                           -> x6
     terminator Return(v30)   (exit_acc=v30)
   block 6  start_pc=0
-    v31  LocalAddr(-2)                                    -> x0
-    v32  Load { addr=v31, kind=I64 }                      -> x0
+    v31  LocalAddr(-2)                                    -> x3
+    v32  Load { addr=v31, kind=I64 }                      -> x3
     v33  Imm(6)                                           -> x7
     v34  Imm(4)                                           -> x6
     v35  CallIndirect { target=v32, args=[v33, v34] }     -> x0

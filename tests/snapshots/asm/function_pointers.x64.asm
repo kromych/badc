@@ -31,11 +31,11 @@ Disassembly of section .text:
                	callq	*%r11
                	movq	%rax, %r12
                	leaq	-<rip>, %rsi       # <addr>
-               	movl	$0x5, %edi
-               	movq	%rsi, %r11
-               	movq	%rdi, %rsi
+               	movl	$0x5, %r11d
+               	movq	%rsi, %r10
                	movq	%rbx, %rdi
-               	callq	*%r11
+               	movq	%r11, %rsi
+               	callq	*%r10
                	movslq	%r12d, %r12
                	movslq	%eax, %rax
                	imulq	%rax, %r12
@@ -48,4 +48,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

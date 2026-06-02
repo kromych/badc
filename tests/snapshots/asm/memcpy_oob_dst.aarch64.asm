@@ -22,8 +22,10 @@ Disassembly of section .text:
                	mov	x21, x0
                	mov	x0, #0x8                // =8
                	bl	<addr>
-               	mov	x1, x21
+               	mov	x12, x0
+               	mov	x0, x12
                	mov	x2, x20
+               	mov	x1, x21
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]

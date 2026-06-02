@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   Imm(8)                                           -> x7
     v2   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x3
-    v3   Imm(0)                                           -> x9
+    v3   Imm(0)                                           -> x7
     v4   Imm(100)                                         -> x12
     v5   CallExt { binding_idx=0, args=[v4], fp_arg_mask=0x0 } -> x7
     v6   Imm(0)                                           -> x11

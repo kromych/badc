@@ -83,8 +83,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sxtw	x15, w0
-               	sxtw	x15, w1
+               	sxtw	x0, w0
+               	sxtw	x1, w1
                	mov	x14, #0x2d18            // =11544
                	movk	x14, #0x5444, lsl #16
                	movk	x14, #0x21fb, lsl #32
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	scvtf	d7, x13
                	fmov	d1, x14
                	fmul	d7, d7, d1
-               	scvtf	d6, x15
+               	scvtf	d6, x1
                	fmul	d7, d7, d6
                	fmov	x16, d7
                	stur	x16, [x29, #-0x10]

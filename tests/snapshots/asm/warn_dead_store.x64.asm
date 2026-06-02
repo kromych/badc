@@ -24,10 +24,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %r11
+               	movslq	%edi, %rdi
                	movl	$0x1, %r9d
                	movl	%r9d, -0x8(%rbp)
-               	cmpq	$0x0, %r11
+               	cmpq	$0x0, %rdi
                	je	<addr>
                	movl	$0x2, %r8d
                	movl	%r8d, -0x8(%rbp)

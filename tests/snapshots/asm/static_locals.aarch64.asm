@@ -30,38 +30,39 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	sxtw	x15, w0
-               	cbz	x15, <addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
                	adrp	x19, <page>
                	add	x19, x19, #0xe8
                	mov	x14, x19
-               	mov	x15, #0x64              // =100
-               	str	w15, [x14]
+               	mov	x0, #0x64               // =100
+               	str	w0, [x14]
                	adrp	x19, <page>
                	add	x19, x19, #0xf0
                	mov	x13, x19
-               	mov	x15, #0x0               // =0
-               	str	w15, [x13]
+               	mov	x0, #0x0                // =0
+               	str	w0, [x13]
                	b	<addr>
                	adrp	x19, <page>
                	add	x19, x19, #0xe8
-               	mov	x15, x19
-               	ldrsw	x14, [x15]
+               	mov	x0, x19
+               	ldrsw	x14, [x0]
                	add	x14, x14, #0x1
                	sxtw	x14, w14
-               	str	w14, [x15]
+               	str	w14, [x0]
                	adrp	x19, <page>
                	add	x19, x19, #0xf0
                	mov	x13, x19
                	ldrsw	x14, [x13]
-               	ldrsw	x12, [x15]
+               	ldrsw	x12, [x0]
                	add	x14, x14, x12
                	sxtw	x14, w14
                	str	w14, [x13]
-               	ldrsw	x15, [x15]
+               	ldrsw	x0, [x0]
                	ldrsw	x13, [x13]
-               	add	x15, x15, x13
-               	sxtw	x0, w15
+               	add	x0, x0, x13
+               	sxtw	x13, w0
+               	mov	x0, x13
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

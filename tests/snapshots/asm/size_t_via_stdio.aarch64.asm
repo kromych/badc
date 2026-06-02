@@ -84,13 +84,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	mov	x15, x0
                	adrp	x19, <page>
                	add	x19, x19, #0x148
-               	mov	x15, x19
-               	ldrsw	x14, [x15]
+               	mov	x0, x19
+               	ldrsw	x14, [x0]
                	add	x14, x14, #0x1
-               	str	w14, [x15]
+               	str	w14, [x0]
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
@@ -100,13 +99,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	mov	x15, x0
                	adrp	x19, <page>
                	add	x19, x19, #0x148
-               	mov	x15, x19
-               	ldrsw	x14, [x15]
+               	mov	x0, x19
+               	ldrsw	x14, [x0]
                	add	x14, x14, #0x1
-               	str	w14, [x15]
+               	str	w14, [x0]
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
@@ -116,14 +114,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	mov	x15, x0
-               	mov	x14, x1
                	adrp	x19, <page>
                	add	x19, x19, #0x148
-               	mov	x14, x19
-               	ldrsw	x15, [x14]
-               	add	x15, x15, #0x1
-               	str	w15, [x14]
+               	mov	x1, x19
+               	ldrsw	x0, [x1]
+               	add	x0, x0, #0x1
+               	str	w0, [x1]
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

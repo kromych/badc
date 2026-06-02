@@ -71,10 +71,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %r11
-               	movq	%rsi, %r9
-               	cvtsi2sd	%r9, %xmm7
-               	movq	%r11, %xmm14
+               	cvtsi2sd	%rsi, %xmm7
+               	movq	%rdi, %xmm14
                	ucomisd	%xmm7, %xmm14
                	setb	%al
                	movzbq	%al, %rax
@@ -82,10 +80,8 @@ Disassembly of section .text:
                	movzbq	%r11b, %r11
                	andq	%r11, %rax
                	retq
-               	movq	%rdi, %r11
-               	movq	%rsi, %r9
-               	cvtsi2sd	%r9, %xmm7
-               	movq	%r11, %xmm14
+               	cvtsi2sd	%rsi, %xmm7
+               	movq	%rdi, %xmm14
                	ucomisd	%xmm7, %xmm14
                	setbe	%al
                	movzbq	%al, %rax

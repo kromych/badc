@@ -13,9 +13,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x15, x0
                	mov	x17, #0x3               // =3
-               	mul	x15, x15, x17
+               	mul	x0, x0, x17
                	mov	x14, #0x0               // =0
                	stur	x14, [x29, #-0x10]
                	stur	x14, [x29, #-0x18]
@@ -24,13 +23,14 @@ Disassembly of section .text:
                	cmp	x14, #0x4
                	b.ge	<addr>
                	ldur	x13, [x29, #-0x10]
-               	add	x13, x13, x15
+               	add	x13, x13, x0
                	stur	x13, [x29, #-0x10]
                	ldur	x14, [x29, #-0x18]
                	add	x14, x14, #0x1
                	stur	x14, [x29, #-0x18]
                	b	<addr>
-               	ldur	x0, [x29, #-0x10]
+               	ldur	x14, [x29, #-0x10]
+               	mov	x0, x14
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

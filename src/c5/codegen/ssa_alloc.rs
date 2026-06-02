@@ -518,6 +518,19 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
                 let (victim_id, _victim_end, victim_reg) = active.remove(pos);
                 let slot = spill_count;
                 spill_count += 1;
+                // Mark the victim's class root as spilled, not just
+                // the victim value. The active-list entry's first
+                // tuple element is the PC of the value that first
+                // allocated the class's register; the class root may
+                // be a later-PC phi the realign post-pass walks back
+                // to. Writing `Spill` to the root makes realign
+                // propagate it to every member. Writing only to the
+                // value lets realign copy the unchanged root's stale
+                // `IntReg` over the spill, leaving the new owner's
+                // class and the victim's class both claiming
+                // `victim_reg`.
+                let victim_root = classes.find(victim_id) as usize;
+                places[victim_root] = Place::Spill(slot);
                 places[victim_id as usize] = Place::Spill(slot);
                 let class_end = class_last_use[class_root as usize];
                 active.push((pc, class_end, victim_reg));
@@ -1811,6 +1824,66 @@ mod tests {
                 phi_place, step_place,
                 "phi result (v1) and its back-edge source (v3) must coalesce on {target:?}",
             );
+        }
+    }
+
+    /// When the spill path picks a victim that belongs to a phi
+    /// class with more than one member, it must mark the class root
+    /// as `Place::Spill` so the realign post-pass propagates the
+    /// spill to every member. Without that propagation, realign
+    /// walks the spilled value back to the (unchanged) root and
+    /// copies the root's stale `IntReg` over the spill, leaving the
+    /// new owner's class and the victim's class both claiming the
+    /// same physical register.
+    ///
+    /// Post-condition: across the whole function, no two distinct
+    /// non-singleton class roots share an `IntReg` or `FpReg`.
+    /// Singleton classes naturally reuse registers across
+    /// non-overlapping live ranges, so the check filters them out.
+    /// c4.c is large enough to drive the AArch64 + SysV callee-
+    /// saved budget into the spill path with phi classes.
+    #[test]
+    fn distinct_phi_class_roots_never_share_a_register() {
+        let funcs = lift("tests/fixtures/c/c4.c");
+        for target in [
+            Target::MacOSAarch64,
+            Target::LinuxAarch64,
+            Target::WindowsAarch64,
+            Target::LinuxX64,
+            Target::WindowsX64,
+        ] {
+            for f in &funcs {
+                let alloc = allocate(f, target);
+                let mut classes = crate::c5::codegen::ssa_phi_class::PhiClasses::from_func(f);
+                let mut non_singleton_root = alloc::vec![false; f.insts.len()];
+                for v in 0..f.insts.len() {
+                    let root = classes.find(v as ValueId) as usize;
+                    if root != v {
+                        non_singleton_root[root] = true;
+                    }
+                }
+                let mut int_owner: [Option<ValueId>; 64] = [None; 64];
+                let mut fp_owner: [Option<ValueId>; 64] = [None; 64];
+                for v in 0..f.insts.len() {
+                    if !non_singleton_root[v] {
+                        continue;
+                    }
+                    let (slot_table, reg) = match alloc.places[v] {
+                        Place::IntReg(r) => (&mut int_owner, r),
+                        Place::FpReg(r) => (&mut fp_owner, r),
+                        _ => continue,
+                    };
+                    let slot = &mut slot_table[reg as usize];
+                    if let Some(prev) = *slot {
+                        panic!(
+                            "fn at pc {} on {target:?}: non-singleton class roots \
+                             v{prev} and v{v} both claim register {reg}",
+                            f.ent_pc,
+                        );
+                    }
+                    *slot = Some(v as ValueId);
+                }
+            }
         }
     }
 }

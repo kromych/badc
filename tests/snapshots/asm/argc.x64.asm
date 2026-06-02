@@ -10,6 +10,4 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	movslq	%edi, %rax
-               	movq	%rsi, %r9
                	retq
-               	addb	%al, 0x41(%rdx)

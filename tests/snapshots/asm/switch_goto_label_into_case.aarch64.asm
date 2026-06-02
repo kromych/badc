@@ -13,14 +13,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x15, w0
+               	sxtw	x0, w0
                	b	<addr>
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xa                // =10
+               	mov	x14, #0xa               // =10
+               	mov	x0, x14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -29,32 +29,34 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1e               // =30
+               	mov	x14, #0x1e              // =30
+               	mov	x0, x14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	x15, #0x5
+               	cmp	x0, #0x5
                	cset	x13, ge
                	stur	x13, [x29, #-0x8]
                	cbz	x13, <addr>
                	b	<addr>
-               	cmp	x15, #0x1
+               	cmp	x0, #0x1
                	b.eq	<addr>
-               	cmp	x15, #0x2
+               	cmp	x0, #0x2
                	b.eq	<addr>
-               	cmp	x15, #0x3
+               	cmp	x0, #0x3
                	b.eq	<addr>
-               	cmp	x15, #0x4
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	b	<addr>
-               	cmp	x15, #0x8
-               	cset	x15, le
-               	stur	x15, [x29, #-0x8]
+               	cmp	x0, #0x8
+               	cset	x0, le
+               	stur	x0, [x29, #-0x8]
                	b	<addr>
-               	ldur	x15, [x29, #-0x8]
-               	cbz	x15, <addr>
+               	ldur	x0, [x29, #-0x8]
+               	cbz	x0, <addr>
                	b	<addr>
-               	mov	x0, #0x0                // =0
+               	mov	x14, #0x0               // =0
+               	mov	x0, x14
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

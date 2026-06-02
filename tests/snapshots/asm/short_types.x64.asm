@@ -71,21 +71,21 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movslq	%edi, %r11
-               	andq	$0xffff, %r11           # imm = 0xFFFF
-               	movslq	%r11d, %r9
+               	movslq	%edi, %rdi
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
+               	movslq	%edi, %r9
                	andq	$0x8000, %r9            # imm = 0x8000
                	cmpq	$0x0, %r9
                	je	<addr>
-               	movslq	%r11d, %r8
+               	movslq	%edi, %r8
                	subq	$0x10000, %r8           # imm = 0x10000
                	movslq	%r8d, %rax
                	retq
-               	movslq	%r11d, %r8
+               	movslq	%edi, %r8
                	movq	%r8, %rax
                	retq
-               	movslq	%edi, %r11
-               	movq	%r11, %rax
+               	movslq	%edi, %rdi
+               	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
                	pushq	%rbp

@@ -4,7 +4,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x11
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     terminator Jmp(b6)   (exit_acc=v1)
@@ -15,13 +15,13 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v14  Imm(1)                                           -> x0
     terminator Return(v14)   (exit_acc=v14)
   block 3  start_pc=0
-    v15  Imm(2)                                           -> x11
+    v15  Imm(2)                                           -> x7
     terminator Return(v15)   (exit_acc=v15)
   block 4  start_pc=0
     v16  Imm(3)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
   block 5  start_pc=0
-    v17  Imm(0)                                           -> x11
+    v17  Imm(0)                                           -> x7
     terminator Return(v17)   (exit_acc=v17)
   block 6  start_pc=0
     v4   BinopI { op=eq, lhs=v1, rhs_imm=97 }             -> x9
@@ -51,7 +51,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v12  BinopI { op=eq, lhs=v1, rhs_imm=50 }             -> x9
     terminator Bnz { cond=v12, target=b4, fall=b15 }   (exit_acc=v12)
   block 15  start_pc=0
-    v13  BinopI { op=eq, lhs=v1, rhs_imm=51 }             -> x11
+    v13  BinopI { op=eq, lhs=v1, rhs_imm=51 }             -> x7
     terminator Bnz { cond=v13, target=b4, fall=b16 }   (exit_acc=v13)
   block 16  start_pc=0
     terminator Jmp(b5)

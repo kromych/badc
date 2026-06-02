@@ -65,10 +65,10 @@ fn ent_pc=14 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x11
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
-    v4   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x11
+    v4   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x7
     v5   Imm(0)                                           -> x9
     v6   Extend { value=v4, kind=I32 }                    -> x9
     v7   BinopI { op=and, lhs=v6, rhs_imm=32768 }         -> x9
@@ -88,7 +88,7 @@ fn ent_pc=15 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x11
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x0

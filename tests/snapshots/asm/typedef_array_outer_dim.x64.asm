@@ -12,7 +12,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	%rdi, %r11
                	xorq	%r9, %r9
                	movq	%r9, -0x18(%rbp)
                	movl	%r9d, -0x8(%rbp)
@@ -37,35 +36,35 @@ Disassembly of section .text:
                	cmpq	$0x10, %r9
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x10(%rbp), %rdi
-               	movslq	(%rdi), %r9
+               	leaq	-0x10(%rbp), %r11
+               	movslq	(%r11), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%rdi)
+               	movl	%r9d, (%r11)
                	jmp	<addr>
                	movslq	-0x8(%rbp), %r9
                	movq	%r9, %r8
                	shlq	$0x7, %r8
-               	addq	%r11, %r8
-               	movslq	-0x10(%rbp), %rdi
-               	movq	%rdi, %rsi
+               	addq	%rdi, %r8
+               	movslq	-0x10(%rbp), %r11
+               	movq	%r11, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %r8
                	shlq	$0x4, %r9
                	movslq	%r9d, %r9
-               	addq	%rdi, %r9
+               	addq	%r11, %r9
                	movslq	%r9d, %r9
                	movq	%r9, (%r8)
-               	leaq	-0x18(%rbp), %rdi
-               	movq	(%rdi), %r9
+               	leaq	-0x18(%rbp), %r11
+               	movq	(%r11), %r9
                	movslq	-0x8(%rbp), %r8
                	shlq	$0x7, %r8
-               	addq	%r11, %r8
+               	addq	%rdi, %r8
                	movslq	-0x10(%rbp), %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %r8
                	movq	(%r8), %r8
                	addq	%r8, %r9
-               	movq	%r9, (%rdi)
+               	movq	%r9, (%r11)
                	jmp	<addr>
                	jmp	<addr>
                	pushq	%rbp
@@ -141,4 +140,3 @@ Disassembly of section .text:
                	addq	$0x220, %rsp            # imm = 0x220
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

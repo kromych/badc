@@ -12,39 +12,38 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	%rdi, %r11
-               	movslq	%esi, %r9
-               	movslq	%edx, %r8
-               	movq	%r8, %rdi
-               	shlq	$0x2, %rdi
-               	addq	%r11, %rdi
-               	movslq	(%rdi), %rdi
-               	xorq	%rsi, %rsi
-               	movl	%esi, -0x10(%rbp)
-               	movl	%r9d, -0x8(%rbp)
+               	movslq	%esi, %rsi
+               	movslq	%edx, %rdx
+               	movq	%rdx, %r11
+               	shlq	$0x2, %r11
+               	addq	%rdi, %r11
+               	movslq	(%r11), %r11
+               	xorq	%r9, %r9
+               	movl	%r9d, -0x10(%rbp)
+               	movl	%esi, -0x8(%rbp)
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %r9
-               	cmpq	%r8, %r9
+               	movslq	-0x8(%rbp), %rsi
+               	cmpq	%rdx, %rsi
                	jg	<addr>
                	jmp	<addr>
-               	leaq	-0x8(%rbp), %rdx
-               	movslq	(%rdx), %r9
-               	addq	$0x1, %r9
-               	movl	%r9d, (%rdx)
+               	leaq	-0x8(%rbp), %r8
+               	movslq	(%r8), %rsi
+               	addq	$0x1, %rsi
+               	movl	%esi, (%r8)
                	jmp	<addr>
-               	movslq	-0x10(%rbp), %r9
-               	movslq	-0x8(%rbp), %rsi
-               	shlq	$0x2, %rsi
-               	addq	%r11, %rsi
-               	movslq	(%rsi), %rsi
-               	addq	%rsi, %r9
-               	movslq	%r9d, %r9
-               	movl	%r9d, -0x10(%rbp)
-               	jmp	<addr>
-               	movslq	-0x10(%rbp), %r9
-               	movslq	%edi, %rdi
+               	movslq	-0x10(%rbp), %rsi
+               	movslq	-0x8(%rbp), %r9
+               	shlq	$0x2, %r9
                	addq	%rdi, %r9
-               	movslq	%r9d, %rax
+               	movslq	(%r9), %r9
+               	addq	%r9, %rsi
+               	movslq	%esi, %rsi
+               	movl	%esi, -0x10(%rbp)
+               	jmp	<addr>
+               	movslq	-0x10(%rbp), %rsi
+               	movslq	%r11d, %r11
+               	addq	%r11, %rsi
+               	movslq	%esi, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq

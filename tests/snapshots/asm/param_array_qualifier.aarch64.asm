@@ -10,48 +10,44 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
+               	ldrsw	x14, [x0]
+               	add	x13, x0, #0x4
                	ldrsw	x13, [x13]
                	add	x14, x14, x13
                	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x14, x14, x0
                	sxtw	x0, w14
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
+               	ldrsw	x14, [x0]
+               	add	x13, x0, #0x4
                	ldrsw	x13, [x13]
                	add	x14, x14, x13
                	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x14, x14, x0
                	sxtw	x0, w14
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
+               	ldrsw	x14, [x0]
+               	add	x13, x0, #0x4
                	ldrsw	x13, [x13]
                	add	x14, x14, x13
                	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x14, x14, x0
                	sxtw	x0, w14
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
+               	ldrsw	x14, [x0]
+               	add	x13, x0, #0x4
                	ldrsw	x13, [x13]
                	add	x14, x14, x13
                	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x14, x14, x0
                	sxtw	x0, w14
                	ret
                	stp	x29, x30, [sp, #-0x10]!

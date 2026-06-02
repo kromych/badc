@@ -9,10 +9,10 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movslq	%edi, %r11
-               	movslq	%esi, %r9
-               	imulq	%r9, %r11
-               	movslq	%r11d, %rax
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	imulq	%rsi, %rdi
+               	movslq	%edi, %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

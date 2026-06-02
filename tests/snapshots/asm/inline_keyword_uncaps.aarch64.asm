@@ -13,23 +13,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
-               	mov	x15, x0
-               	add	x15, x15, #0x1
-               	add	x15, x15, #0x2
-               	add	x15, x15, #0x3
-               	add	x15, x15, #0x4
-               	add	x15, x15, #0x5
-               	add	x15, x15, #0x6
-               	add	x15, x15, #0x7
-               	add	x15, x15, #0x8
-               	add	x15, x15, #0x9
-               	add	x15, x15, #0xa
-               	add	x15, x15, #0xb
-               	add	x15, x15, #0xc
-               	add	x15, x15, #0xd
-               	add	x15, x15, #0xe
-               	add	x15, x15, #0xf
-               	add	x0, x15, #0x10
+               	add	x0, x0, #0x1
+               	add	x0, x0, #0x2
+               	add	x0, x0, #0x3
+               	add	x0, x0, #0x4
+               	add	x0, x0, #0x5
+               	add	x0, x0, #0x6
+               	add	x0, x0, #0x7
+               	add	x0, x0, #0x8
+               	add	x0, x0, #0x9
+               	add	x0, x0, #0xa
+               	add	x0, x0, #0xb
+               	add	x0, x0, #0xc
+               	add	x0, x0, #0xd
+               	add	x0, x0, #0xe
+               	add	x0, x0, #0xf
+               	add	x14, x0, #0x10
+               	mov	x0, x14
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret

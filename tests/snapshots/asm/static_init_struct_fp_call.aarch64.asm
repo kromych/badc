@@ -80,15 +80,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x15, w0
-               	sxtw	x14, w1
-               	add	x15, x15, x14
-               	sxtw	x0, w15
+               	sxtw	x0, w0
+               	sxtw	x1, w1
+               	add	x0, x0, x1
+               	sxtw	x1, w0
+               	mov	x0, x1
                	ret
-               	sxtw	x15, w0
-               	sxtw	x14, w1
-               	sub	x15, x15, x14
-               	sxtw	x0, w15
+               	sxtw	x0, w0
+               	sxtw	x1, w1
+               	sub	x0, x0, x1
+               	sxtw	x1, w0
+               	mov	x0, x1
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

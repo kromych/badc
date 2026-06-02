@@ -4,17 +4,17 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x11
+    v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x9
+    v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   Load { addr=v1, kind=I32 }                       -> x8
-    v7   Imm(0)                                           -> x7
-    v8   LoadLocal { off=3, kind=I64 }                    -> x7
-    v9   Load { addr=v3, kind=I32 }                       -> x7
+    v7   Imm(0)                                           -> x11
+    v8   LoadLocal { off=3, kind=I64 }                    -> x11
+    v9   Load { addr=v3, kind=I32 }                       -> x11
     v10  Store { addr=v1, value=v9, kind=I32 }            -> -
-    v11  LoadLocal { off=3, kind=I64 }                    -> x6
+    v11  LoadLocal { off=3, kind=I64 }                    -> x9
     v12  Extend { value=v6, kind=I32 }                    -> x8
     v13  Store { addr=v3, value=v12, kind=I32 }           -> -
     v14  Imm(0)                                           -> x0

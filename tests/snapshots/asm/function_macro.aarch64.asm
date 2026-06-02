@@ -15,50 +15,49 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, x0
-               	stur	x15, [x29, #0x10]
-               	mov	x14, x1
-               	stur	x14, [x29, #0x20]
+               	stur	x0, [x29, #0x10]
+               	stur	x1, [x29, #0x20]
                	b	<addr>
-               	ldur	x14, [x29, #0x10]
-               	ldrb	w14, [x14]
-               	stur	x14, [x29, #-0x8]
-               	cbz	x14, <addr>
+               	ldur	x1, [x29, #0x10]
+               	ldrb	w1, [x1]
+               	stur	x1, [x29, #-0x8]
+               	cbz	x1, <addr>
                	b	<addr>
-               	add	x14, x29, #0x10
-               	ldr	x15, [x14]
-               	add	x15, x15, #0x1
-               	str	x15, [x14]
+               	add	x1, x29, #0x10
+               	ldr	x0, [x1]
+               	add	x0, x0, #0x1
+               	str	x0, [x1]
                	add	x13, x29, #0x20
-               	ldr	x15, [x13]
-               	add	x15, x15, #0x1
-               	str	x15, [x13]
+               	ldr	x0, [x13]
+               	add	x0, x0, #0x1
+               	str	x0, [x13]
                	b	<addr>
-               	ldur	x15, [x29, #0x10]
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, eq
-               	stur	x15, [x29, #-0x10]
-               	cbz	x15, <addr>
+               	ldur	x0, [x29, #0x10]
+               	ldrb	w0, [x0]
+               	cmp	x0, #0x0
+               	cset	x0, eq
+               	stur	x0, [x29, #-0x10]
+               	cbz	x0, <addr>
                	b	<addr>
-               	ldur	x15, [x29, #0x10]
-               	ldrb	w15, [x15]
-               	ldur	x14, [x29, #0x20]
-               	ldrb	w14, [x14]
-               	cmp	x15, x14
-               	cset	x15, eq
-               	stur	x15, [x29, #-0x8]
+               	ldur	x0, [x29, #0x10]
+               	ldrb	w0, [x0]
+               	ldur	x1, [x29, #0x20]
+               	ldrb	w1, [x1]
+               	cmp	x0, x1
+               	cset	x0, eq
+               	stur	x0, [x29, #-0x8]
                	b	<addr>
-               	ldur	x15, [x29, #-0x8]
-               	cbz	x15, <addr>
+               	ldur	x0, [x29, #-0x8]
+               	cbz	x0, <addr>
                	b	<addr>
-               	ldur	x14, [x29, #0x20]
-               	ldrb	w14, [x14]
-               	cmp	x14, #0x0
-               	cset	x14, eq
-               	stur	x14, [x29, #-0x10]
+               	ldur	x1, [x29, #0x20]
+               	ldrb	w1, [x1]
+               	cmp	x1, #0x0
+               	cset	x1, eq
+               	stur	x1, [x29, #-0x10]
                	b	<addr>
-               	ldur	x0, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x10]
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20

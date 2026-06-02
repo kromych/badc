@@ -71,8 +71,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %r11
-               	movzwq	(%r11), %rax
+               	movzwq	(%rdi), %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -161,4 +160,3 @@ Disassembly of section .text:
                	addq	$0x520, %rsp            # imm = 0x520
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

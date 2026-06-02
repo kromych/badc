@@ -86,8 +86,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, x0
-               	mov	x14, x2
                	sub	x13, x29, #0x10
                	ldur	x12, [x29, #0x20]
                	str	x10, [sp, #-0x10]!
@@ -101,28 +99,31 @@ Disassembly of section .text:
                	ldr	w13, [x13]
                	cmp	x13, #0x7
                	b.eq	<addr>
-               	mov	x0, #0xa                // =10
+               	mov	x12, #0xa               // =10
+               	mov	x0, x12
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-               	cmp	x14, #0x0
+               	cmp	x2, #0x0
                	b.ne	<addr>
-               	mov	x0, #0x14               // =20
+               	mov	x12, #0x14              // =20
+               	mov	x0, x12
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x2a
+               	ldrsw	x2, [x2]
+               	cmp	x2, #0x2a
                	b.eq	<addr>
-               	mov	x0, #0x1e               // =30
+               	mov	x13, #0x1e              // =30
+               	mov	x0, x13
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-               	mov	x14, #0x1               // =1
-               	str	w14, [x15]
+               	mov	x2, #0x1                // =1
+               	str	w2, [x0]
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

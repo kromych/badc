@@ -80,48 +80,45 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, x0
-               	sxtw	x14, w1
-               	lsl	x14, x14, #2
-               	add	x15, x15, x14
-               	ldrh	w14, [x15]
-               	add	x15, x15, #0x2
-               	ldrh	w15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	sxtw	x1, w1
+               	lsl	x1, x1, #2
+               	add	x0, x0, x1
+               	ldrh	w1, [x0]
+               	add	x0, x0, #0x2
+               	ldrh	w0, [x0]
+               	add	x1, x1, x0
+               	sxtw	x0, w1
                	ret
-               	mov	x15, x0
-               	sxtw	x14, w1
+               	sxtw	x1, w1
                	mov	x17, #0xc               // =12
-               	mul	x14, x14, x17
-               	add	x15, x15, x14
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
+               	mul	x1, x1, x17
+               	add	x0, x0, x1
+               	ldrsw	x1, [x0]
+               	add	x13, x0, #0x4
                	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	add	x1, x1, x13
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x1, x1, x0
+               	sxtw	x0, w1
                	ret
-               	mov	x15, x0
-               	sxtw	x14, w1
-               	lsl	x14, x14, #2
-               	add	x15, x15, x14
-               	ldrb	w14, [x15]
-               	add	x13, x15, #0x1
+               	sxtw	x1, w1
+               	lsl	x1, x1, #2
+               	add	x0, x0, x1
+               	ldrb	w1, [x0]
+               	add	x13, x0, #0x1
                	ldrb	w13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x13, x15, #0x2
+               	add	x1, x1, x13
+               	sxtw	x1, w1
+               	add	x13, x0, #0x2
                	ldrb	w13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	add	x1, x1, x13
+               	sxtw	x1, w1
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
+               	add	x1, x1, x0
+               	sxtw	x0, w1
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

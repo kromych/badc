@@ -9,52 +9,48 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movq	%rdi, %r11
-               	movslq	(%r11), %r9
-               	movq	%r11, %r8
+               	movslq	(%rdi), %r9
+               	movq	%rdi, %r8
                	addq	$0x4, %r8
                	movslq	(%r8), %r8
                	addq	%r8, %r9
                	movslq	%r9d, %r9
-               	addq	$0x8, %r11
-               	movslq	(%r11), %r11
-               	addq	%r11, %r9
+               	addq	$0x8, %rdi
+               	movslq	(%rdi), %rdi
+               	addq	%rdi, %r9
                	movslq	%r9d, %rax
                	retq
-               	movq	%rdi, %r11
-               	movslq	(%r11), %r9
-               	movq	%r11, %r8
+               	movslq	(%rdi), %r9
+               	movq	%rdi, %r8
                	addq	$0x4, %r8
                	movslq	(%r8), %r8
                	addq	%r8, %r9
                	movslq	%r9d, %r9
-               	addq	$0x8, %r11
-               	movslq	(%r11), %r11
-               	addq	%r11, %r9
+               	addq	$0x8, %rdi
+               	movslq	(%rdi), %rdi
+               	addq	%rdi, %r9
                	movslq	%r9d, %rax
                	retq
-               	movq	%rdi, %r11
-               	movslq	(%r11), %r9
-               	movq	%r11, %r8
+               	movslq	(%rdi), %r9
+               	movq	%rdi, %r8
                	addq	$0x4, %r8
                	movslq	(%r8), %r8
                	addq	%r8, %r9
                	movslq	%r9d, %r9
-               	addq	$0x8, %r11
-               	movslq	(%r11), %r11
-               	addq	%r11, %r9
+               	addq	$0x8, %rdi
+               	movslq	(%rdi), %rdi
+               	addq	%rdi, %r9
                	movslq	%r9d, %rax
                	retq
-               	movq	%rdi, %r11
-               	movslq	(%r11), %r9
-               	movq	%r11, %r8
+               	movslq	(%rdi), %r9
+               	movq	%rdi, %r8
                	addq	$0x4, %r8
                	movslq	(%r8), %r8
                	addq	%r8, %r9
                	movslq	%r9d, %r9
-               	addq	$0x8, %r11
-               	movslq	(%r11), %r11
-               	addq	%r11, %r9
+               	addq	$0x8, %rdi
+               	movslq	(%rdi), %rdi
+               	addq	%rdi, %r9
                	movslq	%r9d, %rax
                	retq
                	pushq	%rbp

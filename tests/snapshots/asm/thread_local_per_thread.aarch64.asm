@@ -14,21 +14,21 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	mov	x15, x0
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x10
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x0
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x10
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x0
                	b.eq	<addr>
-               	mov	x0, #0xbad1             // =47825
+               	mov	x14, #0xbad1            // =47825
+               	mov	x0, x14
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mrs	x15, TPIDR_EL0
-               	add	x15, x15, #0x10
-               	mov	x0, #0x63               // =99
-               	str	w0, [x15]
+               	mrs	x0, TPIDR_EL0
+               	add	x0, x0, #0x10
+               	mov	x14, #0x63              // =99
+               	str	w14, [x0]
                	mrs	x13, TPIDR_EL0
                	add	x13, x13, #0x10
                	ldrsw	x13, [x13]

@@ -66,9 +66,9 @@ fn ent_pc=14 n_params=2 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x11
-    v2   Imm(0)                                           -> x11
-    v3   ParamRef(1, kind=I32)                            -> x11
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x7
+    v3   ParamRef(1, kind=I32)                            -> x6
     v4   Imm(0)                                           -> x9
     v5   Imm(4614256656552045848)                         -> x9
     v6   Imm(0)                                           -> x8

@@ -71,22 +71,22 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movslq	%edi, %r11
-               	movslq	%esi, %r9
-               	imulq	%r9, %r11
-               	movslq	%r11d, %r11
-               	addq	$0x7, %r11
-               	movslq	%r11d, %r11
-               	movslq	%r11d, %r11
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	imulq	%rsi, %rdi
+               	movslq	%edi, %rdi
+               	addq	$0x7, %rdi
+               	movslq	%edi, %rdi
+               	movslq	%edi, %rdi
                	xorq	%rax, %rax
                	retq
-               	movslq	%edi, %r11
-               	cmpq	$0x0, %r11
+               	movslq	%edi, %rdi
+               	cmpq	$0x0, %rdi
                	jge	<addr>
                	xorq	%rax, %rax
                	retq
-               	xorq	%r11, %r11
-               	movq	%r11, %rax
+               	xorq	%rdi, %rdi
+               	movq	%rdi, %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

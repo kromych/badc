@@ -14,15 +14,15 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	sxtw	x15, w0
+               	sxtw	x0, w0
                	adrp	x19, <page>
                	add	x19, x19, #0xe0
                	mov	x14, x19
-               	lsl	x13, x15, #2
+               	lsl	x13, x0, #2
                	add	x13, x14, x13
-               	str	w15, [x13]
-               	lsl	x15, x15, #2
-               	add	x14, x14, x15
+               	str	w0, [x13]
+               	lsl	x0, x0, #2
+               	add	x14, x14, x0
                	ldrsw	x0, [x14]
                	ldr	x19, [sp]
                	add	sp, sp, #0x10

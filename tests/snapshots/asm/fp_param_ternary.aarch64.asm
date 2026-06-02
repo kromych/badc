@@ -85,29 +85,29 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sxtw	x15, w0
+               	sxtw	x0, w0
                	ldur	x14, [x29, #0x20]
                	sub	x13, x29, #0x8
                	fmov	d0, x14
                	fcvt	s0, d0
                	str	s0, [x13]
                	mov	x17, #0x1               // =1
-               	and	x15, x15, x17
-               	cbz	x15, <addr>
+               	and	x0, x0, x17
+               	cbz	x0, <addr>
                	sub	x16, x29, #0x8
                	ldr	s7, [x16]
                	fcvt	d7, s7
-               	sub	x15, x29, #0x10
+               	sub	x0, x29, #0x10
                	fcvt	s0, d7
-               	str	s0, [x15]
+               	str	s0, [x0]
                	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	s7, [x16]
                	fcvt	d7, s7
                	fneg	d7, d7
-               	sub	x15, x29, #0x10
+               	sub	x0, x29, #0x10
                	fcvt	s0, d7
-               	str	s0, [x15]
+               	str	s0, [x0]
                	b	<addr>
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sxtw	x15, w0
+               	sxtw	x0, w0
                	ldur	x14, [x29, #0x20]
                	sub	x13, x29, #0x8
                	fmov	d0, x14
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	fcvt	s0, d0
                	str	s0, [x14]
                	mov	x17, #0x1               // =1
-               	and	x14, x15, x17
+               	and	x14, x0, x17
                	cbz	x14, <addr>
                	sub	x16, x29, #0x8
                	ldr	s7, [x16]
@@ -159,29 +159,29 @@ Disassembly of section .text:
                	fcvt	s0, d7
                	str	s0, [x14]
                	mov	x17, #0x2               // =2
-               	and	x15, x15, x17
-               	cbz	x15, <addr>
+               	and	x0, x0, x17
+               	cbz	x0, <addr>
                	sub	x16, x29, #0x10
                	ldr	s6, [x16]
                	fcvt	d6, s6
-               	sub	x15, x29, #0x30
+               	sub	x0, x29, #0x30
                	fcvt	s0, d6
-               	str	s0, [x15]
+               	str	s0, [x0]
                	b	<addr>
                	sub	x16, x29, #0x10
                	ldr	s6, [x16]
                	fcvt	d6, s6
                	fneg	d6, d6
-               	sub	x15, x29, #0x30
+               	sub	x0, x29, #0x30
                	fcvt	s0, d6
-               	str	s0, [x15]
+               	str	s0, [x0]
                	b	<addr>
                	sub	x16, x29, #0x30
                	ldr	s6, [x16]
                	fcvt	d6, s6
-               	sub	x15, x29, #0x20
+               	sub	x0, x29, #0x20
                	fcvt	s0, d6
-               	str	s0, [x15]
+               	str	s0, [x0]
                	sub	x16, x29, #0x18
                	ldr	s7, [x16]
                	fcvt	d7, s7

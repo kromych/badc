@@ -71,10 +71,10 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movslq	%edi, %r11
-               	movslq	%esi, %r9
-               	addq	%r9, %r11
-               	movslq	%r11d, %rax
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	addq	%rsi, %rdi
+               	movslq	%edi, %rax
                	retq
                	movl	$0x2a, %eax
                	retq

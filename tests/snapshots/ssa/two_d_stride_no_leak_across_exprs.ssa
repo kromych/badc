@@ -65,7 +65,7 @@ fn ent_pc=14 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x11
+    v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
     v4   Imm(0)                                           -> x9

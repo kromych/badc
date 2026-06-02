@@ -80,95 +80,79 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fadd	d0, d0, d1
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fsub	d0, d0, d1
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fmul	d0, d0, d1
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fdiv	d0, d0, d1
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	fmov	d0, x15
+               	fmov	d0, x0
                	fneg	d0, d0
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, eq
+               	cset	x13, eq
+               	mov	x0, x13
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, ne
+               	cset	x13, ne
+               	mov	x0, x13
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, mi
+               	cset	x13, mi
+               	mov	x0, x13
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, gt
+               	cset	x13, gt
+               	mov	x0, x13
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, ls
+               	cset	x13, ls
+               	mov	x0, x13
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	fmov	d0, x15
-               	fmov	d1, x14
+               	fmov	d0, x0
+               	fmov	d1, x1
                	fcmp	d0, d1
-               	cset	x0, ge
+               	cset	x13, ge
+               	mov	x0, x13
                	ret
-               	sxtw	x15, w0
-               	scvtf	d0, x15
+               	sxtw	x0, w0
+               	scvtf	d0, x0
                	fmov	x0, d0
                	ret
-               	mov	x15, x0
-               	fmov	d0, x15
-               	fcvtzs	x0, d0
+               	fmov	d0, x0
+               	fcvtzs	x14, d0
+               	mov	x0, x14
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, x0
                	sub	x14, x29, #0x8
-               	fmov	d0, x15
+               	fmov	d0, x0
                	fcvt	s0, d0
                	str	s0, [x14]
                	sub	x16, x29, #0x8

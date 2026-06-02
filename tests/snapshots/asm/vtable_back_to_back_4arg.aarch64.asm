@@ -84,31 +84,28 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x19, [sp]
-               	mov	x15, x0
-               	mov	x14, x1
-               	sxtw	x13, w2
-               	sxtw	x12, w3
+               	sxtw	x2, w2
+               	sxtw	x3, w3
                	adrp	x19, <page>
                	add	x19, x19, #0x148
-               	mov	x14, x19
-               	str	x14, [x15]
-               	add	x15, x15, #0x8
-               	add	x13, x13, x12
-               	sxtw	x13, w13
-               	str	w13, [x15]
+               	mov	x1, x19
+               	str	x1, [x0]
+               	add	x0, x0, #0x8
+               	add	x2, x2, x3
+               	sxtw	x2, w2
+               	str	w2, [x0]
                	mov	x0, #0x0                // =0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, x0
-               	mov	x14, x1
-               	sxtw	x0, w2
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x15, x15, #0x64
-               	sxtw	x15, w15
-               	str	w15, [x14]
+               	sxtw	x13, w2
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x0, #0x64
+               	sxtw	x0, w0
+               	str	w0, [x1]
+               	mov	x0, x13
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

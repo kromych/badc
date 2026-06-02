@@ -12,19 +12,19 @@ fn ent_pc=1 n_params=2 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x11
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I32)                            -> x9
-    v4   Imm(0)                                           -> x9
-    v5   LoadLocal { off=2, kind=I32 }                    -> x9
-    v6   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x11
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x11
-    v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x11
-    v9   Imm(0)                                           -> x9
-    v10  Imm(11)                                          -> x9
-    v11  Imm(0)                                           -> x9
-    v12  Imm(12)                                          -> x9
-    v13  Imm(0)                                           -> x9
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x6
+    v5   LoadLocal { off=2, kind=I32 }                    -> x6
+    v6   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x7
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x7
+    v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x7
+    v9   Imm(0)                                           -> x6
+    v10  Imm(11)                                          -> x6
+    v11  Imm(0)                                           -> x6
+    v12  Imm(12)                                          -> x6
+    v13  Imm(0)                                           -> x6
     v14  Extend { value=v8, kind=I32 }                    -> x0
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=2 ---

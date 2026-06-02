@@ -259,7 +259,9 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so the active-list entry
     // expires only when every member is dead.
-    let mut classes = super::ssa_phi_class::PhiClasses::from_func_with_last_use(func, &last_use);
+    let phi_class_use_counts = compute_use_counts(func);
+    let mut classes =
+        super::ssa_phi_class::PhiClasses::from_func_with_use_counts(func, &phi_class_use_counts);
     let class_last_use: Vec<u32> = {
         let n = func.insts.len();
         let mut cl = alloc::vec![0u32; n];

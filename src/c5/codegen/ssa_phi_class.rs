@@ -52,19 +52,31 @@ impl PhiClasses {
     /// result, and the per-arch predecessor exit-move handles the
     /// source-to-result load.
     pub(super) fn from_func(func: &FunctionSsa) -> Self {
-        Self::from_func_with_last_use(func, &[])
+        Self::from_func_with_use_counts(func, &[])
     }
 
-    /// Build the union-find with a liveness-aware safety guard. The
-    /// optional `last_use` slice (one entry per `ValueId`) lets the
-    /// pass refuse to union a phi source whose last use is *after*
-    /// the phi -- in that case the source value is still needed in
-    /// its own register past the merge, and forcing it to share a
-    /// register with the phi result clobbers the source the next
-    /// time any other class member is emitted. An empty slice
-    /// disables the guard (used by the unit tests, which construct
-    /// minimal IRs by hand).
-    pub(super) fn from_func_with_last_use(func: &FunctionSsa, last_use: &[u32]) -> Self {
+    /// Build the union-find with a single-use safety guard. The
+    /// optional `use_counts` slice (one entry per `ValueId`) lets
+    /// the pass refuse to union a phi source that has more than
+    /// one consumer.
+    ///
+    /// Joining a phi source `v_src` with the phi result `v_phi`
+    /// forces every class member to share one register. That is
+    /// safe only when this phi is the *only* consumer of `v_src`
+    /// -- otherwise another consumer of `v_src` reads the shared
+    /// register after some other class member's emit has
+    /// overwritten it. `use_counts[v_src] == 1` proves single-use
+    /// (the one consumer must be this phi since the phi names
+    /// `v_src` as an incoming). An empty slice disables the
+    /// guard for the unit tests, which build minimal IRs by hand.
+    ///
+    /// A position-based check (`last_use[src] > phi_pc`) would be
+    /// strictly wrong here: loop back-edge sources have their
+    /// per-value last-use bumped to the predecessor block's end by
+    /// the cross-block liveness pass, so a position check rejects
+    /// the exact case the union-find exists to handle. The
+    /// use-count check is unaffected by that bump.
+    pub(super) fn from_func_with_use_counts(func: &FunctionSsa, use_counts: &[u32]) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
@@ -73,8 +85,7 @@ impl PhiClasses {
             let Inst::Phi { incoming, .. } = inst else {
                 continue;
             };
-            let phi_pc = idx as ValueId;
-            let phi_root = classes.find(phi_pc);
+            let phi_root = classes.find(idx as ValueId);
             for (_, src) in incoming {
                 if *src == NO_VALUE || (*src as usize) >= n {
                     continue;
@@ -91,14 +102,14 @@ impl PhiClasses {
                 if src_root != *src {
                     continue;
                 }
-                // Refuse to join when `src` has a use beyond the phi.
-                // In that case the phi is *not* `src`'s last consumer,
-                // and giving the class one shared register forces
-                // either the phi's other arm or another class member
-                // to overwrite `src`'s register before its later use
-                // reads it.
-                if let Some(&lu) = last_use.get(*src as usize)
-                    && lu > phi_pc
+                // Refuse to join when `src` has more than one
+                // consumer. In that case some other instruction
+                // also reads `src`, and giving the class one shared
+                // register lets another class member's emit
+                // overwrite `src`'s register before that other
+                // consumer reads it.
+                if let Some(&uc) = use_counts.get(*src as usize)
+                    && uc != 1
                 {
                     continue;
                 }

@@ -151,10 +151,13 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
     // mem2reg between this test's set and remove see promotion
     // enabled, which deterministically miscompiled fixtures whose
     // SSA contains a multi-source phi class.
-    let (phis_on, result) = crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(
-        true,
-        || (count_phis_in_main(), jit_exit_native_optimized(src, &["jit-phi-promote"])),
-    );
+    let (phis_on, result) =
+        crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(true, || {
+            (
+                count_phis_in_main(),
+                jit_exit_native_optimized(src, &["jit-phi-promote"]),
+            )
+        });
     assert_eq!(
         phis_off, 0,
         "no Inst::Phi expected in main's IR with BADC_PHI_PROMOTE unset"

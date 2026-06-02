@@ -390,7 +390,7 @@ mod jit_impl {
         // native binary would. Windows keeps the in-thread call: it
         // has no concurrent native-fixture parity harness pressuring
         // the same thread.
-        let exit_code = run_main_isolated(
+        let exit_code = run_main_threaded(
             entry_ptr,
             args.len() as c_int,
             argv_ptrs.as_ptr(),
@@ -400,7 +400,7 @@ mod jit_impl {
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn run_main_isolated(
+    fn run_main_threaded(
         entry_ptr: *const u8,
         argc: c_int,
         argv: *const *const c_char,
@@ -471,17 +471,90 @@ mod jit_impl {
     }
 
     #[cfg(target_os = "windows")]
-    fn run_main_isolated(
+    fn run_main_threaded(
         entry_ptr: *const u8,
         argc: c_int,
         argv: *const *const c_char,
         _argv_owned: Vec<CString>,
     ) -> Result<i32, C5Error> {
-        let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
-            unsafe { std::mem::transmute(entry_ptr) };
-        let rc = main_fn(argc, argv);
-        drain_jit_atexit_chain();
-        Ok(rc as i32)
+        // Windows kernel32 thread API. HANDLE is a pointer-sized
+        // opaque token; DWORD is 32-bit. The thread entry shape is
+        // `DWORD WINAPI ThreadProc(LPVOID)`. On x86_64 / aarch64
+        // Windows the WINAPI calling convention coincides with
+        // `extern "C"`.
+        type Handle = *mut c_void;
+        unsafe extern "system" {
+            fn CreateThread(
+                lp_thread_attributes: *mut c_void,
+                dw_stack_size: usize,
+                lp_start_address: unsafe extern "system" fn(*mut c_void) -> u32,
+                lp_parameter: *mut c_void,
+                dw_creation_flags: u32,
+                lp_thread_id: *mut u32,
+            ) -> Handle;
+            fn WaitForSingleObject(handle: Handle, dw_milliseconds: u32) -> u32;
+            fn GetExitCodeThread(handle: Handle, lp_exit_code: *mut u32) -> i32;
+            fn CloseHandle(handle: Handle) -> i32;
+        }
+
+        struct Payload {
+            entry_addr: usize,
+            argc: c_int,
+            argv: *const *const c_char,
+        }
+        let payload = Box::new(Payload {
+            entry_addr: entry_ptr as usize,
+            argc,
+            argv,
+        });
+
+        unsafe extern "system" fn worker(arg: *mut c_void) -> u32 {
+            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
+                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
+            let rc = main_fn(payload.argc, payload.argv);
+            drain_jit_atexit_chain();
+            // Thread exit code is a 32-bit DWORD; the caller widens
+            // back to i32 on retrieval. Negative `rc` round-trips
+            // through the two's-complement representation.
+            rc as u32
+        }
+
+        let mut thread_id: u32 = 0;
+        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let handle: Handle = unsafe {
+            CreateThread(
+                core::ptr::null_mut(),
+                0,
+                worker,
+                raw_payload,
+                0,
+                &mut thread_id,
+            )
+        };
+        if handle.is_null() {
+            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "JIT: CreateThread returned NULL",
+            )));
+        }
+        const INFINITE: u32 = 0xFFFF_FFFF;
+        let wait_rc = unsafe { WaitForSingleObject(handle, INFINITE) };
+        if wait_rc != 0 {
+            unsafe { CloseHandle(handle) };
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: WaitForSingleObject failed (rc={wait_rc:#x})"),
+            )));
+        }
+        let mut exit_code: u32 = 0;
+        let ok = unsafe { GetExitCodeThread(handle, &mut exit_code) };
+        unsafe { CloseHandle(handle) };
+        if ok == 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "JIT: GetExitCodeThread failed",
+            )));
+        }
+        Ok(exit_code as i32)
     }
 
     fn lower_for_jit(

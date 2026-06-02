@@ -33,6 +33,7 @@ fn run_one(func: &mut FunctionSsa) {
     let entry_range = func.blocks[0].inst_range.clone();
     let mut canonical_data: HashMap<i64, ValueId> = HashMap::new();
     let mut canonical_code: HashMap<usize, ValueId> = HashMap::new();
+    let mut canonical_tls: HashMap<i64, ValueId> = HashMap::new();
     for idx in entry_range.clone() {
         let i = idx as usize;
         if i >= func.insts.len() {
@@ -45,10 +46,13 @@ fn run_one(func: &mut FunctionSsa) {
             Inst::ImmCode(t) => {
                 canonical_code.entry(*t).or_insert(idx);
             }
+            Inst::TlsAddr(off) => {
+                canonical_tls.entry(*off).or_insert(idx);
+            }
             _ => {}
         }
     }
-    if canonical_data.is_empty() && canonical_code.is_empty() {
+    if canonical_data.is_empty() && canonical_code.is_empty() && canonical_tls.is_empty() {
         return;
     }
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
@@ -67,6 +71,14 @@ fn run_one(func: &mut FunctionSsa) {
                 }
                 Inst::ImmCode(t) => {
                     if let Some(&canon) = canonical_code.get(t)
+                        && canon != idx as ValueId
+                    {
+                        redirect[idx] = Some(canon);
+                        any = true;
+                    }
+                }
+                Inst::TlsAddr(off) => {
+                    if let Some(&canon) = canonical_tls.get(off)
                         && canon != idx as ValueId
                     {
                         redirect[idx] = Some(canon);
@@ -97,7 +109,7 @@ fn run_one(func: &mut FunctionSsa) {
         v
     }
     for inst in func.insts.iter_mut() {
-        if matches!(inst, Inst::ImmData(_) | Inst::ImmCode(_)) {
+        if matches!(inst, Inst::ImmData(_) | Inst::ImmCode(_) | Inst::TlsAddr(_)) {
             continue;
         }
         for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));

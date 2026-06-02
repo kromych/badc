@@ -65,21 +65,21 @@ fn ent_pc=14 n_params=2 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I32)                            -> x6
+    v3   ParamRef(1, kind=I32)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I32 }                    -> x8
     v6   LoadLocal { off=3, kind=I32 }                    -> x8
-    v7   Binop { op=mul, lhs=v1, rhs=v3 }                 -> x7
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x7
-    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x7
-    v10  BinopI { op=add, lhs=v9, rhs_imm=7 }             -> x7
-    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x7
-    v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x7
-    v13  Imm(0)                                           -> x6
-    v14  Extend { value=v12, kind=I32 }                   -> x7
-    v15  BinopI { op=and, lhs=v14, rhs_imm=255 }          -> x7
+    v7   Binop { op=mul, lhs=v1, rhs=v3 }                 -> x11
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x11
+    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x11
+    v10  BinopI { op=add, lhs=v9, rhs_imm=7 }             -> x11
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x11
+    v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x11
+    v13  Imm(0)                                           -> x9
+    v14  Extend { value=v12, kind=I32 }                   -> x11
+    v15  BinopI { op=and, lhs=v14, rhs_imm=255 }          -> x11
     v16  Imm(0)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
 ; --- SSA dump (ok=true) ent_pc=15 ---
@@ -88,16 +88,16 @@ fn ent_pc=15 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
-    v4   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x7
+    v4   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x11
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
     v5   Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
-    v6   Imm(0)                                           -> x7
+    v6   Imm(0)                                           -> x11
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=main

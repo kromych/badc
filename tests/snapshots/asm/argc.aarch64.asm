@@ -11,4 +11,5 @@ Disassembly of section .text:
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	sxtw	x0, w0
+               	mov	x14, x1
                	ret

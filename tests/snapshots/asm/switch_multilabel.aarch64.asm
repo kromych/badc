@@ -10,40 +10,39 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	sxtw	x0, w0
+               	sxtw	x15, w0
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
-               	ret
-               	mov	x14, #0x1               // =1
-               	mov	x0, x14
-               	ret
-               	mov	x0, #0x2                // =2
-               	ret
-               	mov	x14, #0x3               // =3
-               	mov	x0, x14
-               	ret
                	mov	x0, #0x0                // =0
                	ret
-               	cmp	x0, #0x61
+               	mov	x0, #0x1                // =1
+               	ret
+               	mov	x15, #0x2               // =2
+               	mov	x0, x15
+               	ret
+               	mov	x0, #0x3                // =3
+               	ret
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
+               	ret
+               	cmp	x15, #0x61
                	b.eq	<addr>
-               	cmp	x0, #0x62
+               	cmp	x15, #0x62
                	b.eq	<addr>
-               	cmp	x0, #0x63
+               	cmp	x15, #0x63
                	b.eq	<addr>
-               	cmp	x0, #0x64
+               	cmp	x15, #0x64
                	b.eq	<addr>
-               	cmp	x0, #0x41
+               	cmp	x15, #0x41
                	b.eq	<addr>
-               	cmp	x0, #0x42
+               	cmp	x15, #0x42
                	b.eq	<addr>
-               	cmp	x0, #0x30
+               	cmp	x15, #0x30
                	b.eq	<addr>
-               	cmp	x0, #0x31
+               	cmp	x15, #0x31
                	b.eq	<addr>
-               	cmp	x0, #0x32
+               	cmp	x15, #0x32
                	b.eq	<addr>
-               	cmp	x0, #0x33
+               	cmp	x15, #0x33
                	b.eq	<addr>
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!

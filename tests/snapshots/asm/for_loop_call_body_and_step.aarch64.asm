@@ -10,15 +10,13 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	sxtw	x14, w0
-               	mov	x0, x14
+               	sxtw	x15, w0
+               	add	x15, x15, #0x1
+               	sxtw	x0, w15
                	ret
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	sxtw	x14, w0
-               	mov	x0, x14
+               	sxtw	x15, w0
+               	add	x15, x15, #0x1
+               	sxtw	x0, w15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

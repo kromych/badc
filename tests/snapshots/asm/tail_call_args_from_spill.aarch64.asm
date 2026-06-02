@@ -80,62 +80,61 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sxtw	x2, w2
-               	sxtw	x3, w3
-               	sxtw	x0, w0
-               	lsl	x1, x1, #1
-               	sxtw	x1, w1
-               	add	x0, x0, x1
-               	sxtw	x0, w0
+               	sxtw	x15, w0
+               	sxtw	x14, w1
+               	sxtw	x13, w2
+               	sxtw	x12, w3
+               	sxtw	x15, w15
+               	lsl	x14, x14, #1
+               	sxtw	x14, w14
+               	add	x15, x15, x14
+               	sxtw	x15, w15
                	mov	x17, #0x3               // =3
-               	mul	x2, x2, x17
-               	sxtw	x2, w2
-               	add	x0, x0, x2
-               	sxtw	x0, w0
-               	lsl	x3, x3, #2
-               	sxtw	x3, w3
-               	add	x0, x0, x3
-               	sxtw	x3, w0
-               	mov	x0, x3
+               	mul	x13, x13, x17
+               	sxtw	x13, w13
+               	add	x15, x15, x13
+               	sxtw	x15, w15
+               	lsl	x12, x12, #2
+               	sxtw	x12, w12
+               	add	x15, x15, x12
+               	sxtw	x0, w15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x28, [sp]
-               	sxtw	x0, w0
-               	sxtw	x14, w0
-               	add	x13, x0, #0x1
+               	sxtw	x15, w0
+               	sxtw	x14, w15
+               	add	x13, x15, #0x1
                	sxtw	x13, w13
-               	add	x12, x0, #0x2
+               	add	x12, x15, #0x2
                	sxtw	x12, w12
-               	add	x11, x0, #0x3
+               	add	x11, x15, #0x3
                	sxtw	x11, w11
-               	add	x10, x0, #0x4
+               	add	x10, x15, #0x4
                	sxtw	x10, w10
-               	add	x9, x0, #0x5
+               	add	x9, x15, #0x5
                	sxtw	x9, w9
-               	add	x8, x0, #0x6
+               	add	x8, x15, #0x6
                	sxtw	x8, w8
-               	add	x7, x0, #0x7
+               	add	x7, x15, #0x7
                	sxtw	x7, w7
-               	add	x6, x0, #0x8
+               	add	x6, x15, #0x8
                	sxtw	x6, w6
-               	add	x5, x0, #0x9
+               	add	x5, x15, #0x9
                	sxtw	x5, w5
-               	add	x4, x0, #0xa
+               	add	x4, x15, #0xa
                	sxtw	x4, w4
-               	add	x3, x0, #0xb
+               	add	x3, x15, #0xb
                	sxtw	x3, w3
-               	add	x2, x0, #0xc
+               	add	x2, x15, #0xc
                	sxtw	x2, w2
-               	add	x1, x0, #0xd
+               	add	x1, x15, #0xd
                	sxtw	x1, w1
-               	add	x15, x0, #0xe
-               	sxtw	x15, w15
-               	add	x0, x0, #0xf
+               	add	x0, x15, #0xe
                	sxtw	x0, w0
+               	add	x15, x15, #0xf
+               	sxtw	x15, w15
                	sxtw	x14, w14
                	sxtw	x13, w13
                	add	x14, x14, x13
@@ -167,11 +166,11 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	add	x14, x14, x2
                	sxtw	x14, w14
-               	sxtw	x15, w15
-               	add	x14, x14, x15
-               	sxtw	x14, w14
                	sxtw	x0, w0
                	add	x14, x14, x0
+               	sxtw	x14, w14
+               	sxtw	x15, w15
+               	add	x14, x14, x15
                	sxtw	x14, w14
                	sxtw	x14, w14
                	cmp	x14, #0x0

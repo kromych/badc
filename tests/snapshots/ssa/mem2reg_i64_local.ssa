@@ -4,10 +4,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
-    v4   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x7
+    v4   BinopI { op=mul, lhs=v1, rhs_imm=3 }             -> x11
     v5   Imm(0)                                           -> x9
     v6   Imm(0)                                           -> x9
     v7   StoreLocal { off=-2, value=v6, kind=I64 }        -> -

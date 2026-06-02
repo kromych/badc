@@ -10,38 +10,37 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	sxtw	x0, w0
+               	sxtw	x15, w0
                	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
-               	sxtw	x0, w0
-               	add	x0, x0, #0x1
-               	sxtw	x14, w0
-               	mov	x0, x14
+               	mul	x15, x15, x17
+               	sxtw	x15, w15
+               	add	x15, x15, #0x1
+               	sxtw	x0, w15
                	ret
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	x0, [x29, #0x10]
+               	mov	x15, x0
+               	stur	x15, [x29, #0x10]
                	mov	x14, #0x0               // =0
                	stur	x14, [x29, #-0x8]
                	b	<addr>
                	ldur	x14, [x29, #0x10]
                	cbz	x14, <addr>
-               	sub	x0, x29, #0x8
-               	ldr	x14, [x0]
+               	sub	x15, x29, #0x8
+               	ldr	x14, [x15]
                	ldur	x13, [x29, #0x10]
                	mov	x17, #0x1               // =1
                	and	x13, x13, x17
                	add	x14, x14, x13
-               	str	x14, [x0]
+               	str	x14, [x15]
                	add	x13, x29, #0x10
                	ldr	x14, [x13]
                	lsr	x14, x14, #1
                	str	x14, [x13]
                	b	<addr>
-               	ldur	x14, [x29, #-0x8]
-               	mov	x0, x14
+               	ldur	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10

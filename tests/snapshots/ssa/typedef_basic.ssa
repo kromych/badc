@@ -4,14 +4,14 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I32)                            -> x6
+    v3   ParamRef(1, kind=I32)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I32 }                    -> x8
     v6   LoadLocal { off=3, kind=I32 }                    -> x8
-    v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x7
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x7
+    v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x11
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x11
     v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x0
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=1 ---

@@ -21,13 +21,13 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   Imm(57005)                                       -> x9
     v4   Imm(0)                                           -> x8
     v5   Imm(48879)                                       -> x8
-    v6   Imm(0)                                           -> x11
-    v7   Imm(51966)                                       -> x11
+    v6   Imm(0)                                           -> x7
+    v7   Imm(51966)                                       -> x7
     v8   Imm(0)                                           -> x6
     v9   Imm(1027311)                                     -> x6
     v10  Imm(0)                                           -> x2
@@ -40,7 +40,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=4
     v17  Binop { op=add, lhs=v15, rhs=v7 }                -> x9
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x9
     v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x9
-    v20  LoadLocal { off=-4, kind=I32 }                   -> x11
+    v20  LoadLocal { off=-4, kind=I32 }                   -> x7
     v21  Binop { op=add, lhs=v19, rhs=v9 }                -> x9
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x9
     v23  BinopI { op=shr, lhs=v22, rhs_imm=32 }           -> x9

@@ -10,13 +10,13 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	sxtw	x0, w0
-               	cmp	x0, #0x2
+               	sxtw	x15, w0
+               	mov	x14, x1
+               	cmp	x15, #0x2
                	b.ge	<addr>
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x0, #0x0                // =0
                	ret
-               	add	x1, x1, #0x8
-               	ldr	x1, [x1]
-               	ldrb	w0, [x1]
+               	add	x14, x14, #0x8
+               	ldr	x14, [x14]
+               	ldrb	w0, [x14]
                	ret

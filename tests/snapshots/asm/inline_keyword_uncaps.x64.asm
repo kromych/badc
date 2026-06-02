@@ -12,22 +12,23 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
-               	addq	$0x1, %rdi
-               	addq	$0x2, %rdi
-               	addq	$0x3, %rdi
-               	addq	$0x4, %rdi
-               	addq	$0x5, %rdi
-               	addq	$0x6, %rdi
-               	addq	$0x7, %rdi
-               	addq	$0x8, %rdi
-               	addq	$0x9, %rdi
-               	addq	$0xa, %rdi
-               	addq	$0xb, %rdi
-               	addq	$0xc, %rdi
-               	addq	$0xd, %rdi
-               	addq	$0xe, %rdi
-               	addq	$0xf, %rdi
-               	movq	%rdi, %rax
+               	movq	%rdi, %r11
+               	addq	$0x1, %r11
+               	addq	$0x2, %r11
+               	addq	$0x3, %r11
+               	addq	$0x4, %r11
+               	addq	$0x5, %r11
+               	addq	$0x6, %r11
+               	addq	$0x7, %r11
+               	addq	$0x8, %r11
+               	addq	$0x9, %r11
+               	addq	$0xa, %r11
+               	addq	$0xb, %r11
+               	addq	$0xc, %r11
+               	addq	$0xd, %r11
+               	addq	$0xe, %r11
+               	addq	$0xf, %r11
+               	movq	%r11, %rax
                	addq	$0x10, %rax
                	addq	$0x80, %rsp
                	popq	%rbp
@@ -82,4 +83,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

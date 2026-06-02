@@ -80,26 +80,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w0
+               	sxtw	x15, w0
                	mov	x17, #0xffff            // =65535
-               	and	x0, x0, x17
-               	sxtw	x14, w0
+               	and	x15, x15, x17
+               	sxtw	x14, w15
                	mov	x17, #0x8000            // =32768
                	and	x14, x14, x17
                	cbz	x14, <addr>
-               	sxtw	x13, w0
+               	sxtw	x13, w15
                	mov	x17, #0x10000           // =65536
                	sub	x13, x13, x17
-               	sxtw	x14, w13
-               	mov	x0, x14
+               	sxtw	x0, w13
                	ret
-               	sxtw	x13, w0
+               	sxtw	x13, w15
                	mov	x0, x13
                	ret
-               	sxtw	x0, w0
+               	sxtw	x15, w0
                	mov	x17, #0xffff            // =65535
-               	and	x14, x0, x17
-               	mov	x0, x14
+               	and	x0, x15, x17
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

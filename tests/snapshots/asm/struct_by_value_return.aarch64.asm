@@ -37,7 +37,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sxtw	x0, w0
+               	sxtw	x15, w0
                	mov	x14, #0xdead            // =57005
                	mov	x13, #0xbeef            // =48879
                	mov	x12, #0xcafe            // =51966
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	sxtw	x14, w14
                	add	x14, x14, x11
                	sxtw	x14, w14
-               	add	x14, x14, x0
+               	add	x14, x14, x15
                	sxtw	x0, w14
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

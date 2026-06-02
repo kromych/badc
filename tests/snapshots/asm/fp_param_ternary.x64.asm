@@ -79,29 +79,29 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
+               	movslq	%edi, %r11
                	movq	0x20(%rbp), %r9
                	leaq	-0x8(%rbp), %r8
                	movq	%r9, %xmm14
                	cvtsd2ss	%xmm14, %xmm15
                	movss	%xmm15, (%r8,%riz)
-               	andq	$0x1, %rdi
-               	cmpq	$0x0, %rdi
+               	andq	$0x1, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	movss	-0x8(%rbp,%riz), %xmm7
                	cvtss2sd	%xmm7, %xmm7
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x10(%rbp), %r11
                	cvtsd2ss	%xmm7, %xmm15
-               	movss	%xmm15, (%rdi,%riz)
+               	movss	%xmm15, (%r11,%riz)
                	jmp	<addr>
                	movss	-0x8(%rbp,%riz), %xmm7
                	cvtss2sd	%xmm7, %xmm7
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
                	xorpd	%xmm15, %xmm7
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x10(%rbp), %r11
                	cvtsd2ss	%xmm7, %xmm15
-               	movss	%xmm15, (%rdi,%riz)
+               	movss	%xmm15, (%r11,%riz)
                	jmp	<addr>
                	movss	-0x10(%rbp,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
@@ -122,7 +122,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movslq	%edi, %rdi
+               	movslq	%edi, %r11
                	movq	0x20(%rbp), %r9
                	leaq	-0x8(%rbp), %r8
                	movq	%r9, %xmm14
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	movq	%r8, %xmm14
                	cvtsd2ss	%xmm14, %xmm15
                	movss	%xmm15, (%r9,%riz)
-               	movq	%rdi, %r9
+               	movq	%r11, %r9
                	andq	$0x1, %r9
                	cmpq	$0x0, %r9
                	je	<addr>
@@ -145,8 +145,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	movss	-0x8(%rbp,%riz), %xmm7
                	cvtss2sd	%xmm7, %xmm7
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	movq	%r11, %xmm15
+               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
+               	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm7
                	leaq	-0x28(%rbp), %r9
                	cvtsd2ss	%xmm7, %xmm15
@@ -157,29 +157,29 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %r9
                	cvtsd2ss	%xmm7, %xmm15
                	movss	%xmm15, (%r9,%riz)
-               	andq	$0x2, %rdi
-               	cmpq	$0x0, %rdi
+               	andq	$0x2, %r11
+               	cmpq	$0x0, %r11
                	je	<addr>
                	movss	-0x10(%rbp,%riz), %xmm6
                	cvtss2sd	%xmm6, %xmm6
-               	leaq	-0x30(%rbp), %rdi
+               	leaq	-0x30(%rbp), %r11
                	cvtsd2ss	%xmm6, %xmm15
-               	movss	%xmm15, (%rdi,%riz)
+               	movss	%xmm15, (%r11,%riz)
                	jmp	<addr>
                	movss	-0x10(%rbp,%riz), %xmm6
                	cvtss2sd	%xmm6, %xmm6
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
                	xorpd	%xmm15, %xmm6
-               	leaq	-0x30(%rbp), %rdi
+               	leaq	-0x30(%rbp), %r11
                	cvtsd2ss	%xmm6, %xmm15
-               	movss	%xmm15, (%rdi,%riz)
+               	movss	%xmm15, (%r11,%riz)
                	jmp	<addr>
                	movss	-0x30(%rbp,%riz), %xmm6
                	cvtss2sd	%xmm6, %xmm6
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	-0x20(%rbp), %r11
                	cvtsd2ss	%xmm6, %xmm15
-               	movss	%xmm15, (%rdi,%riz)
+               	movss	%xmm15, (%r11,%riz)
                	movss	-0x18(%rbp,%riz), %xmm7
                	cvtss2sd	%xmm7, %xmm7
                	movss	-0x20(%rbp,%riz), %xmm6

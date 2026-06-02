@@ -83,8 +83,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	ldr	x0, [x0]
-               	cmp	x0, #0x11
+               	mov	x15, x0
+               	ldr	x15, [x15]
+               	cmp	x15, #0x11
                	b.ne	<addr>
                	mov	x14, #0x0               // =0
                	stur	x14, [x29, #-0x8]
@@ -92,8 +93,7 @@ Disassembly of section .text:
                	mov	x14, #0x1               // =1
                	stur	x14, [x29, #-0x8]
                	b	<addr>
-               	ldur	x14, [x29, #-0x8]
-               	mov	x0, x14
+               	ldur	x0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

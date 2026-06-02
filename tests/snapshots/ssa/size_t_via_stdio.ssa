@@ -65,11 +65,11 @@ fn ent_pc=14 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
-    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x7
-    v5   ImmData(88)                                      -> x7
+    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x11
+    v5   ImmData(88)                                      -> x11
     v6   Load { addr=v5, kind=I32 }                       -> x9
     v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x9
     v8   Store { addr=v5, value=v7, kind=I32 }            -> -
@@ -81,11 +81,11 @@ fn ent_pc=15 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
-    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x7
-    v5   ImmData(88)                                      -> x7
+    v4   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x11
+    v5   ImmData(88)                                      -> x11
     v6   Load { addr=v5, kind=I32 }                       -> x9
     v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x9
     v8   Store { addr=v5, value=v7, kind=I32 }            -> -
@@ -97,17 +97,17 @@ fn ent_pc=16 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
-    v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x7
-    v6   BinopI { op=and, lhs=v5, rhs_imm=255 }           -> x7
-    v7   LoadLocal { off=3, kind=I64 }                    -> x7
-    v8   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x6
-    v9   ImmData(88)                                      -> x6
-    v10  Load { addr=v9, kind=I32 }                       -> x7
-    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x7
+    v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x11
+    v6   BinopI { op=and, lhs=v5, rhs_imm=255 }           -> x11
+    v7   LoadLocal { off=3, kind=I64 }                    -> x11
+    v8   BinopI { op=and, lhs=v3, rhs_imm=255 }           -> x9
+    v9   ImmData(88)                                      -> x9
+    v10  Load { addr=v9, kind=I32 }                       -> x11
+    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x11
     v12  Store { addr=v9, value=v11, kind=I32 }           -> -
     v13  Imm(0)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)

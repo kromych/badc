@@ -71,22 +71,26 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
-               	movslq	(%rdi), %r9
+               	movq	%rdi, %r11
+               	leaq	<rip>, %r11
+               	movslq	(%r11), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%rdi)
+               	movl	%r9d, (%r11)
                	xorq	%rax, %rax
                	retq
-               	leaq	<rip>, %rdi
-               	movslq	(%rdi), %r9
+               	movq	%rdi, %r11
+               	leaq	<rip>, %r11
+               	movslq	(%r11), %r9
                	addq	$0x1, %r9
-               	movl	%r9d, (%rdi)
+               	movl	%r9d, (%r11)
                	xorq	%rax, %rax
                	retq
-               	leaq	<rip>, %rsi
-               	movslq	(%rsi), %rdi
-               	addq	$0x1, %rdi
-               	movl	%edi, (%rsi)
+               	movq	%rdi, %r11
+               	movq	%rsi, %r9
+               	leaq	<rip>, %r9
+               	movslq	(%r9), %r11
+               	addq	$0x1, %r11
+               	movl	%r11d, (%r9)
                	xorq	%rax, %rax
                	retq
                	pushq	%rbp
@@ -103,4 +107,4 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

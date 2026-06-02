@@ -10,31 +10,33 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	sxtw	x1, w1
-               	lsr	x13, x0, x1
+               	mov	x15, x0
+               	sxtw	x14, w1
+               	lsr	x13, x15, x14
                	mov	x12, #0x40              // =64
-               	sub	x12, x12, x1
+               	sub	x12, x12, x14
                	sxtw	x12, w12
-               	lsl	x0, x0, x12
-               	orr	x12, x13, x0
-               	mov	x0, x12
+               	lsl	x15, x15, x12
+               	orr	x0, x13, x15
                	ret
-               	and	x1, x0, x1
+               	mov	x15, x0
+               	mov	x14, x1
+               	mov	x13, x2
+               	and	x14, x15, x14
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	eor	x0, x0, x17
-               	and	x0, x0, x2
-               	eor	x2, x1, x0
-               	mov	x0, x2
+               	eor	x15, x15, x17
+               	and	x15, x15, x13
+               	eor	x0, x14, x15
                	ret
-               	ror	x14, x0, #0xe
-               	ror	x13, x0, #0x12
+               	mov	x15, x0
+               	ror	x14, x15, #0xe
+               	ror	x13, x15, #0x12
                	eor	x14, x14, x13
-               	ror	x0, x0, #0x29
-               	eor	x13, x14, x0
-               	mov	x0, x13
+               	ror	x15, x15, #0x29
+               	eor	x0, x14, x15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

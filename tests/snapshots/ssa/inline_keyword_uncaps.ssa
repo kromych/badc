@@ -4,57 +4,57 @@ fn ent_pc=0 n_params=1 variadic=false locals=16
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
-    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x7
+    v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x11
     v5   Imm(0)                                           -> x9
     v6   LoadLocal { off=-1, kind=I64 }                   -> x9
-    v7   BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x7
+    v7   BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x11
     v8   Imm(0)                                           -> x9
     v9   LoadLocal { off=-2, kind=I64 }                   -> x9
-    v10  BinopI { op=add, lhs=v7, rhs_imm=3 }             -> x7
+    v10  BinopI { op=add, lhs=v7, rhs_imm=3 }             -> x11
     v11  Imm(0)                                           -> x9
     v12  LoadLocal { off=-3, kind=I64 }                   -> x9
-    v13  BinopI { op=add, lhs=v10, rhs_imm=4 }            -> x7
+    v13  BinopI { op=add, lhs=v10, rhs_imm=4 }            -> x11
     v14  Imm(0)                                           -> x9
     v15  LoadLocal { off=-4, kind=I64 }                   -> x9
-    v16  BinopI { op=add, lhs=v13, rhs_imm=5 }            -> x7
+    v16  BinopI { op=add, lhs=v13, rhs_imm=5 }            -> x11
     v17  Imm(0)                                           -> x9
     v18  LoadLocal { off=-5, kind=I64 }                   -> x9
-    v19  BinopI { op=add, lhs=v16, rhs_imm=6 }            -> x7
+    v19  BinopI { op=add, lhs=v16, rhs_imm=6 }            -> x11
     v20  Imm(0)                                           -> x9
     v21  LoadLocal { off=-6, kind=I64 }                   -> x9
-    v22  BinopI { op=add, lhs=v19, rhs_imm=7 }            -> x7
+    v22  BinopI { op=add, lhs=v19, rhs_imm=7 }            -> x11
     v23  Imm(0)                                           -> x9
     v24  LoadLocal { off=-7, kind=I64 }                   -> x9
-    v25  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x7
+    v25  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x11
     v26  Imm(0)                                           -> x9
     v27  LoadLocal { off=-8, kind=I64 }                   -> x9
-    v28  BinopI { op=add, lhs=v25, rhs_imm=9 }            -> x7
+    v28  BinopI { op=add, lhs=v25, rhs_imm=9 }            -> x11
     v29  Imm(0)                                           -> x9
     v30  LoadLocal { off=-9, kind=I64 }                   -> x9
-    v31  BinopI { op=add, lhs=v28, rhs_imm=10 }           -> x7
+    v31  BinopI { op=add, lhs=v28, rhs_imm=10 }           -> x11
     v32  Imm(0)                                           -> x9
     v33  LoadLocal { off=-10, kind=I64 }                  -> x9
-    v34  BinopI { op=add, lhs=v31, rhs_imm=11 }           -> x7
+    v34  BinopI { op=add, lhs=v31, rhs_imm=11 }           -> x11
     v35  Imm(0)                                           -> x9
     v36  LoadLocal { off=-11, kind=I64 }                  -> x9
-    v37  BinopI { op=add, lhs=v34, rhs_imm=12 }           -> x7
+    v37  BinopI { op=add, lhs=v34, rhs_imm=12 }           -> x11
     v38  Imm(0)                                           -> x9
     v39  LoadLocal { off=-12, kind=I64 }                  -> x9
-    v40  BinopI { op=add, lhs=v37, rhs_imm=13 }           -> x7
+    v40  BinopI { op=add, lhs=v37, rhs_imm=13 }           -> x11
     v41  Imm(0)                                           -> x9
     v42  LoadLocal { off=-13, kind=I64 }                  -> x9
-    v43  BinopI { op=add, lhs=v40, rhs_imm=14 }           -> x7
+    v43  BinopI { op=add, lhs=v40, rhs_imm=14 }           -> x11
     v44  Imm(0)                                           -> x9
     v45  LoadLocal { off=-14, kind=I64 }                  -> x9
-    v46  BinopI { op=add, lhs=v43, rhs_imm=15 }           -> x7
+    v46  BinopI { op=add, lhs=v43, rhs_imm=15 }           -> x11
     v47  Imm(0)                                           -> x9
     v48  LoadLocal { off=-15, kind=I64 }                  -> x9
     v49  BinopI { op=add, lhs=v46, rhs_imm=16 }           -> x0
-    v50  Imm(0)                                           -> x7
-    v51  LoadLocal { off=-16, kind=I64 }                  -> x7
+    v50  Imm(0)                                           -> x11
+    v51  LoadLocal { off=-16, kind=I64 }                  -> x11
     terminator Return(v49)   (exit_acc=v49)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

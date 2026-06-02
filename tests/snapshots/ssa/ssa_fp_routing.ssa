@@ -65,9 +65,9 @@ fn ent_pc=14 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -79,9 +79,9 @@ fn ent_pc=15 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -93,9 +93,9 @@ fn ent_pc=16 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -107,9 +107,9 @@ fn ent_pc=17 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -121,7 +121,7 @@ fn ent_pc=18 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
     v4   Fneg(v1)                                         -> d0
@@ -132,9 +132,9 @@ fn ent_pc=19 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -146,9 +146,9 @@ fn ent_pc=20 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -160,9 +160,9 @@ fn ent_pc=21 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -174,9 +174,9 @@ fn ent_pc=22 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -188,9 +188,9 @@ fn ent_pc=23 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -202,9 +202,9 @@ fn ent_pc=24 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
-    v3   ParamRef(1, kind=I64)                            -> x6
+    v3   ParamRef(1, kind=I64)                            -> x9
     v4   Imm(0)                                           -> x8
     v5   LoadLocal { off=2, kind=I64 }                    -> x8
     v6   LoadLocal { off=3, kind=I64 }                    -> x8
@@ -216,7 +216,7 @@ fn ent_pc=25 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   FpCast { kind=IntToFp, value=v1 }                -> d0
@@ -227,7 +227,7 @@ fn ent_pc=26 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
     v4   FpCast { kind=FpToInt, value=v1 }                -> x0
@@ -238,7 +238,7 @@ fn ent_pc=27 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
     v4   LocalAddr(-1)                                    -> x9

@@ -601,19 +601,19 @@ fn ent_pc=0 n_params=1 variadic=false locals=600
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I32 }                    -> x9
     v4   Imm(0)                                           -> x9
-    v5   Extend { value=v1, kind=I32 }                    -> x7
-    v6   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x7
-    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x7
-    v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x7
+    v5   Extend { value=v1, kind=I32 }                    -> x11
+    v6   BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x11
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x11
+    v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x11
     v9   Imm(0)                                           -> x9
-    v10  Extend { value=v8, kind=I32 }                    -> x7
-    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x7
-    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x7
-    v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x7
+    v10  Extend { value=v8, kind=I32 }                    -> x11
+    v11  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x11
+    v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x11
+    v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x11
     v14  Imm(0)                                           -> x9
     v15  Extend { value=v13, kind=I32 }                   -> x0
     terminator Return(v15)   (exit_acc=v15)

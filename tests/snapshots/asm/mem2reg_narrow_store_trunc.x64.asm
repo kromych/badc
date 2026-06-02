@@ -12,12 +12,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %rdi
-               	andq	$0xff, %rdi
-               	xorq	$0x2c, %rdi
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rdi
-               	cmpq	$0x0, %rdi
+               	movslq	%edi, %r11
+               	andq	$0xff, %r11
+               	xorq	$0x2c, %r11
+               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
+               	andq	%r10, %r11
+               	cmpq	$0x0, %r11
                	jne	<addr>
                	xorq	%r9, %r9
                	movq	%r9, -0x10(%rbp)

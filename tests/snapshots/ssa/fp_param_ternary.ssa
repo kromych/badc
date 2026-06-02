@@ -65,23 +65,23 @@ fn ent_pc=14 n_params=2 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=3, kind=I64 }                    -> x9
     v4   LocalAddr(-1)                                    -> x8
     v5   Store { addr=v4, value=v3, kind=F32 }            -> -
     v6   LoadLocal { off=2, kind=I32 }                    -> x8
-    v7   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x7
+    v7   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x11
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   LoadLocal { off=-1, kind=F32 }                   -> d7
-    v9   LocalAddr(-2)                                    -> x7
+    v9   LocalAddr(-2)                                    -> x11
     v10  Store { addr=v9, value=v8, kind=F32 }            -> -
     terminator Jmp(b3)   (exit_acc=v10)
   block 2  start_pc=0
     v11  LoadLocal { off=-1, kind=F32 }                   -> d7
     v12  Fneg(v11)                                        -> d7
-    v13  LocalAddr(-2)                                    -> x7
+    v13  LocalAddr(-2)                                    -> x11
     v14  Store { addr=v13, value=v12, kind=F32 }          -> -
     terminator Jmp(b3)   (exit_acc=v14)
   block 3  start_pc=0
@@ -93,7 +93,7 @@ fn ent_pc=15 n_params=3 variadic=false locals=6
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x7
+    v1   ParamRef(0, kind=I32)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=3, kind=I64 }                    -> x9
     v4   LocalAddr(-1)                                    -> x8
@@ -120,22 +120,22 @@ fn ent_pc=15 n_params=3 variadic=false locals=6
     v19  LocalAddr(-3)                                    -> x9
     v20  Store { addr=v19, value=v18, kind=F32 }          -> -
     v21  LoadLocal { off=2, kind=I32 }                    -> x9
-    v22  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x7
+    v22  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x11
     terminator Bz { cond=v22, target=b5, fall=b4 }   (exit_acc=v22)
   block 4  start_pc=0
     v23  LoadLocal { off=-2, kind=F32 }                   -> d6
-    v24  LocalAddr(-6)                                    -> x7
+    v24  LocalAddr(-6)                                    -> x11
     v25  Store { addr=v24, value=v23, kind=F32 }          -> -
     terminator Jmp(b6)   (exit_acc=v25)
   block 5  start_pc=0
     v26  LoadLocal { off=-2, kind=F32 }                   -> d6
     v27  Fneg(v26)                                        -> d6
-    v28  LocalAddr(-6)                                    -> x7
+    v28  LocalAddr(-6)                                    -> x11
     v29  Store { addr=v28, value=v27, kind=F32 }          -> -
     terminator Jmp(b6)   (exit_acc=v29)
   block 6  start_pc=0
     v30  LoadLocal { off=-6, kind=F32 }                   -> d6
-    v31  LocalAddr(-4)                                    -> x7
+    v31  LocalAddr(-4)                                    -> x11
     v32  Store { addr=v31, value=v30, kind=F32 }          -> -
     v33  LoadLocal { off=-3, kind=F32 }                   -> d7
     v34  LoadLocal { off=-4, kind=F32 }                   -> d6

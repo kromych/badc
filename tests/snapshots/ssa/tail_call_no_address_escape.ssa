@@ -65,11 +65,11 @@ fn ent_pc=14 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x7
+    v1   ParamRef(0, kind=I64)                            -> x11
     v2   Imm(0)                                           -> x9
     v3   LoadLocal { off=2, kind=I64 }                    -> x9
-    v4   Load { addr=v1, kind=I64 }                       -> x7
-    v5   BinopI { op=eq, lhs=v4, rhs_imm=17 }             -> x7
+    v4   Load { addr=v1, kind=I64 }                       -> x11
+    v5   BinopI { op=eq, lhs=v4, rhs_imm=17 }             -> x11
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(0)                                           -> x9

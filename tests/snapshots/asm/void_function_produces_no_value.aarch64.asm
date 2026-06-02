@@ -80,22 +80,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	mul	x0, x0, x1
-               	sxtw	x0, w0
-               	add	x0, x0, #0x7
-               	sxtw	x0, w0
-               	sxtw	x0, w0
+               	sxtw	x15, w0
+               	sxtw	x14, w1
+               	mul	x15, x15, x14
+               	sxtw	x15, w15
+               	add	x15, x15, #0x7
+               	sxtw	x15, w15
+               	sxtw	x15, w15
                	mov	x0, #0x0                // =0
                	ret
-               	sxtw	x0, w0
-               	cmp	x0, #0x0
+               	sxtw	x15, w0
+               	cmp	x15, #0x0
                	b.ge	<addr>
-               	mov	x14, #0x0               // =0
-               	mov	x0, x14
-               	ret
                	mov	x0, #0x0                // =0
+               	ret
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

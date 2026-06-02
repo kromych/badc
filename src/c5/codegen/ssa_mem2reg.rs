@@ -1649,4 +1649,105 @@ mod tests {
         assert_eq!(preds[2], alloc::vec![0]);
         assert_eq!(preds[3], alloc::vec![1, 2]);
     }
+
+    /// Loop-head dom-tree children where the body has multiple
+    /// StoreLocals to the same slot must each see the loop-head phi
+    /// as the reaching def, not an intra-body intermediate. The
+    /// previous forward-walk of `Frame::Restore` left the slot's
+    /// `current` at the body's second-to-last store value, so the
+    /// loop-exit sibling inherited that intermediate.
+    ///
+    /// CFG:
+    ///   b0 (entry): store slot=-1 = imm(0); Jmp b1
+    ///   b1 (loop head): phi(slot=-1); Bz cond -> b3 (exit) / b2 (body)
+    ///   b2 (body): store slot=-1 = imm(7); store slot=-1 = imm(9); Jmp b1
+    ///   b3 (exit): load slot=-1; Return(load)
+    ///
+    /// b2 and b3 are both dom-tree children of b1. After mem2reg
+    /// the load in b3 must redirect to the phi at b1's head; the
+    /// forward-walk bug routed it to the imm(7) intermediate.
+    #[test]
+    fn loop_exit_sees_loop_head_phi_not_body_intermediate() {
+        let insts = alloc::vec![
+            // b0
+            Inst::Imm(0), // v0
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64
+            }, // v1
+            // b1: condition operand (placeholder; the body emits a
+            // constant so the branch is deterministic; not subject
+            // to constfold here since this test runs mem2reg only).
+            Inst::Imm(1), // v2
+            // b2: store -1 = imm(7); store -1 = imm(9)
+            Inst::Imm(7), // v3
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64
+            }, // v4
+            Inst::Imm(9), // v5
+            Inst::StoreLocal {
+                off: -1,
+                value: 5,
+                kind: StoreKind::I64
+            }, // v6
+            // b3: load -1
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64
+            }, // v7
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..2,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..3,
+                terminator: Terminator::Bz {
+                    cond: 2,
+                    target: 3,
+                    fall_through: 2,
+                },
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..7,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 6,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 7..8,
+                terminator: Terminator::Return(7),
+                exit_acc: 7,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        with_phi_promote_override(true, || {
+            let _ = run(&mut f);
+        });
+        // mem2reg renumbers insts when it inserts phis at block
+        // heads, so the loop-head phi can land at any id. The
+        // post-condition: the Return operand must resolve to an
+        // `Inst::Phi` (the loop-head merge for slot -1). Under the
+        // pre-fix forward-walk of Frame::Restore, the operand
+        // landed at one of the body's `Inst::Imm` intermediates
+        // (imm(7) or imm(9)), never an `Inst::Phi`.
+        let Terminator::Return(ret_v) = f.blocks.last().unwrap().terminator else {
+            panic!("expected Return terminator on the last block");
+        };
+        assert!(
+            matches!(f.insts[ret_v as usize], Inst::Phi { .. }),
+            "loop-exit Return must reach the loop-head phi for \
+             slot -1; instead got v{ret_v} = {:?}",
+            f.insts[ret_v as usize],
+        );
+    }
 }

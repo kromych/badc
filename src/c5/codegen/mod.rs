@@ -46,6 +46,7 @@ mod ssa_alloc;
 pub(crate) mod ssa_build;
 mod ssa_c5_cdecl_audit;
 mod ssa_constfold_branch;
+mod ssa_dedup_imm;
 mod ssa_drop_redundant_extend;
 #[cfg(feature = "std")]
 mod ssa_dump;

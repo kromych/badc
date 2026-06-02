@@ -1446,6 +1446,9 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (x86_64)", || {
             super::ssa_split_crit_edges::run(&mut ssa_funcs);
         });
+        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (x86_64)", || {
+            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        });
         super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (x86_64)", || {
             super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
         });

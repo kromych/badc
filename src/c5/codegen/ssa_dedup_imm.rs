@@ -1,0 +1,178 @@
+//! Cross-block dedup for `Inst::ImmData(k)` and `Inst::ImmCode(t)`.
+//! Both materialise an address that depends only on the writer's
+//! data/code layout, so any two occurrences of the same key are the
+//! same value. The walker's per-block CSE cache resets at block
+//! boundaries; this pass picks up the cross-block duplicates the
+//! cache misses.
+//!
+//! Dominance: the entry block dominates every other block, so
+//! replacing a non-entry-block occurrence's consumers with the
+//! entry-block canonical preserves SSA. The pass is conservative:
+//! it does not hoist into the entry block. If the entry block has
+//! no `ImmData(k)` of its own, later occurrences of that key stay
+//! untouched.
+//!
+//! Dead duplicates are removed by the per-arch emit's `is_dead_pure`
+//! skip; the pass does not touch the inst tape.
+
+use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
+use alloc::vec::Vec;
+use hashbrown::HashMap;
+
+pub(crate) fn run(funcs: &mut [FunctionSsa]) {
+    for func in funcs {
+        run_one(func);
+    }
+}
+
+fn run_one(func: &mut FunctionSsa) {
+    let n = func.insts.len();
+    if func.blocks.is_empty() || n == 0 {
+        return;
+    }
+    let entry_range = func.blocks[0].inst_range.clone();
+    let mut canonical_data: HashMap<i64, ValueId> = HashMap::new();
+    let mut canonical_code: HashMap<usize, ValueId> = HashMap::new();
+    for idx in entry_range.clone() {
+        let i = idx as usize;
+        if i >= func.insts.len() {
+            break;
+        }
+        match &func.insts[i] {
+            Inst::ImmData(k) => {
+                canonical_data.entry(*k).or_insert(idx);
+            }
+            Inst::ImmCode(t) => {
+                canonical_code.entry(*t).or_insert(idx);
+            }
+            _ => {}
+        }
+    }
+    if canonical_data.is_empty() && canonical_code.is_empty() {
+        return;
+    }
+    let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
+    let mut any = false;
+    for (idx, inst) in func.insts.iter().enumerate() {
+        if idx >= entry_range.end as usize {
+            // Non-entry block.
+            match inst {
+                Inst::ImmData(k) => {
+                    if let Some(&canon) = canonical_data.get(k)
+                        && canon != idx as ValueId
+                    {
+                        redirect[idx] = Some(canon);
+                        any = true;
+                    }
+                }
+                Inst::ImmCode(t) => {
+                    if let Some(&canon) = canonical_code.get(t)
+                        && canon != idx as ValueId
+                    {
+                        redirect[idx] = Some(canon);
+                        any = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if !any {
+        return;
+    }
+    fn resolve(redirect: &[Option<ValueId>], mut v: ValueId) -> ValueId {
+        let mut guard = 0u32;
+        while v != NO_VALUE && (v as usize) < redirect.len() {
+            match redirect[v as usize] {
+                Some(t) if t != v => {
+                    v = t;
+                    guard += 1;
+                    if guard > redirect.len() as u32 {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        v
+    }
+    for inst in func.insts.iter_mut() {
+        if matches!(inst, Inst::ImmData(_) | Inst::ImmCode(_)) {
+            continue;
+        }
+        for_each_operand_mut(inst, |op| *op = resolve(&redirect, *op));
+    }
+    for block in func.blocks.iter_mut() {
+        if block.exit_acc != NO_VALUE {
+            block.exit_acc = resolve(&redirect, block.exit_acc);
+        }
+        match &mut block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                *cond = resolve(&redirect, *cond);
+            }
+            Terminator::Return(v) if *v != NO_VALUE => {
+                *v = resolve(&redirect, *v);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
+    match inst {
+        Inst::Imm(_)
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::LoadLocal { .. }
+        | Inst::TailExt(_)
+        | Inst::AllocaInit(_)
+        | Inst::ParamRef { .. } => {}
+        Inst::Load { addr, .. } => f(addr),
+        Inst::Store { addr, value, .. } => {
+            f(addr);
+            f(value);
+        }
+        Inst::StoreLocal { value, .. } => f(value),
+        Inst::LoadIndexed { base, index, .. } => {
+            f(base);
+            f(index);
+        }
+        Inst::StoreIndexed {
+            base, index, value, ..
+        } => {
+            f(base);
+            f(index);
+            f(value);
+        }
+        Inst::Binop { lhs, rhs, .. } => {
+            f(lhs);
+            f(rhs);
+        }
+        Inst::BinopI { lhs, .. } => f(lhs),
+        Inst::Fneg(v) => f(v),
+        Inst::Extend { value, .. } => f(value),
+        Inst::FpCast { value, .. } => f(value),
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+            for a in args {
+                f(a);
+            }
+        }
+        Inst::CallIndirect { target, args } => {
+            f(target);
+            for a in args {
+                f(a);
+            }
+        }
+        Inst::Mcpy { dst, src, .. } => {
+            f(dst);
+            f(src);
+        }
+        Inst::Phi { incoming, .. } => {
+            for (_, v) in incoming {
+                f(v);
+            }
+        }
+    }
+}

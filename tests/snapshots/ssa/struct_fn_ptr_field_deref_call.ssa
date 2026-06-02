@@ -27,7 +27,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main
 fn ent_pc=2 n_params=0 variadic=false locals=13
-  spill_count=0 gpr_used=[3, 12, 14, 15] fp_used=[]
+  spill_count=0 gpr_used=[3, 12, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x3
@@ -43,7 +43,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v11  CallIndirect { target=v9, args=[v10] }           -> x12
     v12  Imm(0)                                           -> x9
     v13  LoadLocal { off=-1, kind=I64 }                   -> x9
-    v14  Load { addr=v1, kind=I64 }                       -> x3
+    v14  Load { addr=v1, kind=I64 }                       -> x9
     v15  Imm(20)                                          -> x7
     v16  CallIndirect { target=v14, args=[v15] }          -> x0
     v17  Imm(0)                                           -> x7
@@ -61,19 +61,19 @@ fn ent_pc=2 n_params=0 variadic=false locals=13
     v23  Imm(2)                                           -> x7
     terminator Return(v23)   (exit_acc=v23)
   block 4  start_pc=0
-    v24  ImmData(8)                                       -> x14
-    v25  ImmCode(ent_pc=1)                                -> x7
-    v26  Store { addr=v24, value=v25, kind=I64 }          -> -
-    v27  Load { addr=v24, kind=I64 }                      -> x12
-    v28  Imm(100)                                         -> x7
-    v29  CallIndirect { target=v27, args=[v28] }          -> x15
-    v30  Imm(0)                                           -> x7
-    v31  Load { addr=v24, kind=I64 }                      -> x14
+    v24  ImmData(8)                                       -> x0
+    v25  ImmCode(ent_pc=1)                                -> x0
+    v26  Store { addr=v1, value=v25, kind=I64 }           -> -
+    v27  Load { addr=v1, kind=I64 }                       -> x7
+    v28  Imm(100)                                         -> x0
+    v29  CallIndirect { target=v27, args=[v28] }          -> x14
+    v30  Imm(0)                                           -> x0
+    v31  Load { addr=v1, kind=I64 }                       -> x3
     v32  Imm(200)                                         -> x7
     v33  CallIndirect { target=v31, args=[v32] }          -> x0
     v34  Imm(0)                                           -> x7
-    v35  Extend { value=v29, kind=I32 }                   -> x15
-    v36  BinopI { op=ne, lhs=v35, rhs_imm=107 }           -> x15
+    v35  Extend { value=v29, kind=I32 }                   -> x14
+    v36  BinopI { op=ne, lhs=v35, rhs_imm=107 }           -> x14
     terminator Bz { cond=v36, target=b6, fall=b5 }   (exit_acc=v36)
   block 5  start_pc=0
     v37  Imm(3)                                           -> x7

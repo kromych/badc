@@ -12,52 +12,44 @@ Disassembly of section .text:
                	blr	x16
                	adrp	x15, <page>
                	add	x15, x15, #0xd0
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
+               	ldrb	w14, [x15]
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x1
-               	ldrb	w15, [x15]
+               	add	x14, x15, #0x1
+               	ldrb	w14, [x14]
                	mov	x17, #0x4               // =4
-               	eor	x15, x15, x17
+               	eor	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
-               	cmp	x15, #0x0
+               	and	x14, x14, x17
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x2
-               	ldrb	w15, [x15]
+               	add	x14, x15, #0x2
+               	ldrb	w14, [x14]
                	mov	x17, #0x8               // =8
-               	eor	x15, x15, x17
+               	eor	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
-               	cmp	x15, #0x0
+               	and	x14, x14, x17
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
+               	add	x14, x15, #0x3
+               	ldrb	w14, [x14]
                	mov	x17, #0x10              // =16
-               	eor	x15, x15, x17
+               	eor	x14, x14, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x15, x15, x17
-               	cmp	x15, #0x0
+               	and	x14, x14, x17
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
                	add	x15, x15, #0x4
                	ldrb	w15, [x15]
                	mov	x17, #0x12              // =18

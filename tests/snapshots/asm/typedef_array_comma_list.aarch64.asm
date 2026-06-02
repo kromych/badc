@@ -15,15 +15,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x210
                	adrp	x15, <page>
                	add	x15, x15, #0xd0
-               	ldr	x15, [x15]
-               	cmp	x15, #0x0
+               	ldr	x14, [x15]
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
                	add	x15, x15, #0x78
                	ldr	x15, [x15]
                	cmp	x15, #0x0
@@ -105,14 +103,14 @@ Disassembly of section .text:
                	add	x15, x15, #0x138
                	mov	x0, #0x2a               // =42
                	str	x0, [x15]
-               	adrp	x13, <page>
-               	add	x13, x13, #0x450
-               	add	x13, x13, #0x1f8
+               	adrp	x14, <page>
+               	add	x14, x14, #0x450
+               	add	x14, x14, #0x1f8
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
-               	str	x0, [x13]
+               	str	x0, [x14]
                	ldr	x15, [x15]
                	cmp	x15, #0x2a
                	b.eq	<addr>

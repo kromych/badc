@@ -10,27 +10,27 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	leaq	<rip>, %r11
-               	addq	$0x8, %r11
-               	movslq	(%r11), %r11
-               	cmpq	$-0x4650, %r11          # imm = 0xB9B0
+               	movq	%r11, %r9
+               	addq	$0x8, %r9
+               	movslq	(%r9), %r9
+               	cmpq	$-0x4650, %r9           # imm = 0xB9B0
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %r11
-               	addq	$0x18, %r11
-               	movslq	(%r11), %r11
-               	cmpq	$-0x5460, %r11          # imm = 0xABA0
+               	movq	%r11, %r9
+               	addq	$0x18, %r9
+               	movslq	(%r9), %r9
+               	cmpq	$-0x5460, %r9           # imm = 0xABA0
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %r11
-               	addq	$0x28, %r11
-               	movslq	(%r11), %r11
-               	cmpq	$-0x6234, %r11          # imm = 0x9DCC
+               	movq	%r11, %r9
+               	addq	$0x28, %r9
+               	movslq	(%r9), %r9
+               	cmpq	$-0x6234, %r9           # imm = 0x9DCC
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %r11
                	addq	$0x38, %r11
                	movslq	(%r11), %r11
                	cmpq	$-0x9, %r11

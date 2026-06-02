@@ -6,18 +6,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x11
     v2   Imm(0)                                           -> x9
-    v3   Load { addr=v1, kind=U8 }                        -> x11
-    v4   BinopI { op=xor, lhs=v3, rhs_imm=101 }           -> x11
-    v5   BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x11
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x11
+    v3   Load { addr=v1, kind=U8 }                        -> x9
+    v4   BinopI { op=xor, lhs=v3, rhs_imm=101 }           -> x9
+    v5   BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x9
+    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x9
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(1)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   ImmData(8)                                       -> x11
-    v9   Imm(15)                                          -> x0
-    v10  BinopI { op=add, lhs=v8, rhs_imm=15 }            -> x11
+    v8   ImmData(8)                                       -> x9
+    v9   Imm(15)                                          -> x9
+    v10  BinopI { op=add, lhs=v1, rhs_imm=15 }            -> x11
     v11  Load { addr=v10, kind=U8 }                       -> x11
     v12  BinopI { op=xor, lhs=v11, rhs_imm=107 }          -> x11
     v13  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x11

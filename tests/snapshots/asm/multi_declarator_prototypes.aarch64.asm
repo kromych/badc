@@ -32,13 +32,11 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x13, <page>
-               	add	x13, x13, #0xd0
-               	ldrsw	x13, [x13]
-               	cmp	x13, #0xa
+               	ldrsw	x15, [x15]
+               	cmp	x15, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	mov	x13, #0x0               // =0
-               	mov	x0, x13
+               	mov	x15, #0x0               // =0
+               	mov	x0, x15
                	ret

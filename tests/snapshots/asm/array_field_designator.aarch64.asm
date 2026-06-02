@@ -12,37 +12,29 @@ Disassembly of section .text:
                	blr	x16
                	adrp	x15, <page>
                	add	x15, x15, #0xd0
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0xa
+               	ldrsw	x14, [x15]
+               	cmp	x14, #0xa
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x0
+               	add	x14, x15, #0x4
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x1e
+               	add	x14, x15, #0x8
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0xc
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x0
+               	add	x14, x15, #0xc
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
                	add	x15, x15, #0x10
                	ldrsw	x15, [x15]
                	cmp	x15, #0x32

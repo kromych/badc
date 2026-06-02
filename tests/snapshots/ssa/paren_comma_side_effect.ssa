@@ -1,63 +1,63 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_lazy_stream
 fn ent_pc=0 n_params=1 variadic=false locals=6
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ParamRef(0, kind=I32)                            -> x3
     v2   Imm(0)                                           -> x9
-    v3   ImmData(8)                                       -> x9
+    v3   ImmData(8)                                       -> x12
     v4   LoadLocal { off=2, kind=I32 }                    -> x8
     v5   BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x8
-    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x9
-    v7   Load { addr=v6, kind=I64 }                       -> x9
+    v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x8
+    v7   Load { addr=v6, kind=I64 }                       -> x8
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
-    v8   ImmData(8)                                       -> x8
-    v9   LoadLocal { off=2, kind=I32 }                    -> x9
-    v10  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x9
-    v11  Binop { op=add, lhs=v8, rhs=v10 }                -> x8
-    v12  Load { addr=v11, kind=I64 }                      -> x8
+    v8   ImmData(8)                                       -> x7
+    v9   LoadLocal { off=2, kind=I32 }                    -> x7
+    v10  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x7
+    v11  Binop { op=add, lhs=v3, rhs=v10 }                -> x7
+    v12  Load { addr=v11, kind=I64 }                      -> x7
     terminator Return(v12)   (exit_acc=v12)
   block 2  start_pc=0
-    v13  LocalAddr(-3)                                    -> x9
+    v13  LocalAddr(-3)                                    -> x8
     v14  Imm(0)                                           -> x7
-    v15  ImmData(32)                                      -> x8
+    v15  ImmData(32)                                      -> x6
     v16  Store { addr=v13, value=v15, kind=I64 }          -> -
-    v17  LocalAddr(-3)                                    -> x6
-    v18  Imm(8)                                           -> x8
-    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x6
-    v20  ImmData(38)                                      -> x8
+    v17  LocalAddr(-3)                                    -> x2
+    v18  Imm(8)                                           -> x6
+    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x2
+    v20  ImmData(38)                                      -> x6
     v21  Store { addr=v19, value=v20, kind=I64 }          -> -
-    v22  LocalAddr(-3)                                    -> x9
-    v23  Imm(16)                                          -> x8
-    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x9
-    v25  ImmData(45)                                      -> x8
+    v22  LocalAddr(-3)                                    -> x8
+    v23  Imm(16)                                          -> x6
+    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x8
+    v25  ImmData(45)                                      -> x6
     v26  Store { addr=v24, value=v25, kind=I64 }          -> -
-    v27  LocalAddr(-3)                                    -> x6
-    v28  LoadLocal { off=2, kind=I32 }                    -> x8
-    v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x8
-    v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x6
-    v31  Load { addr=v30, kind=I64 }                      -> x8
+    v27  LocalAddr(-3)                                    -> x2
+    v28  LoadLocal { off=2, kind=I32 }                    -> x6
+    v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x6
+    v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x2
+    v31  Load { addr=v30, kind=I64 }                      -> x6
     v32  CallExt { binding_idx=139, args=[v14, v31], fp_arg_mask=0x0 } -> x0
-    v33  Imm(0)                                           -> x8
-    v34  LoadLocal { off=-4, kind=I64 }                   -> x8
+    v33  Imm(0)                                           -> x6
+    v34  LoadLocal { off=-4, kind=I64 }                   -> x6
     terminator Bz { cond=v32, target=b4, fall=b3 }   (exit_acc=v32)
   block 3  start_pc=0
-    v35  ImmData(8)                                       -> x8
-    v36  LoadLocal { off=2, kind=I32 }                    -> x7
-    v37  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x7
-    v38  Binop { op=add, lhs=v35, rhs=v37 }               -> x8
+    v35  ImmData(8)                                       -> x6
+    v36  LoadLocal { off=2, kind=I32 }                    -> x6
+    v37  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x6
+    v38  Binop { op=add, lhs=v3, rhs=v37 }                -> x6
     v39  LoadLocal { off=-4, kind=I64 }                   -> x7
     v40  Load { addr=v32, kind=I64 }                      -> x0
     v41  Store { addr=v38, value=v40, kind=I64 }          -> -
     terminator Jmp(b4)   (exit_acc=v41)
   block 4  start_pc=0
     v42  ImmData(8)                                       -> x0
-    v43  LoadLocal { off=2, kind=I32 }                    -> x7
+    v43  LoadLocal { off=2, kind=I32 }                    -> x0
     v44  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x3
-    v45  Binop { op=add, lhs=v42, rhs=v44 }               -> x0
-    v46  Load { addr=v45, kind=I64 }                      -> x0
+    v45  Binop { op=add, lhs=v3, rhs=v44 }                -> x12
+    v46  Load { addr=v45, kind=I64 }                      -> x12
     terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=bump_to
@@ -83,28 +83,28 @@ fn ent_pc=15 n_params=0 variadic=false locals=5
     v3   Store { addr=v1, value=v2, kind=I32 }            -> -
     v4   Imm(7)                                           -> x7
     v5   Call { target_pc=14, args=[v4] }                 -> x0
-    v6   Load { addr=v1, kind=I32 }                       -> x3
-    v7   Imm(0)                                           -> x0
-    v8   Extend { value=v6, kind=I32 }                    -> x0
-    v9   BinopI { op=ne, lhs=v6, rhs_imm=7 }              -> x0
+    v6   Load { addr=v1, kind=I32 }                       -> x12
+    v7   Imm(0)                                           -> x7
+    v8   Extend { value=v6, kind=I32 }                    -> x7
+    v9   BinopI { op=ne, lhs=v6, rhs_imm=7 }              -> x7
     terminator Bz { cond=v9, target=b2, fall=b1 }   (exit_acc=v9)
   block 1  start_pc=0
-    v10  Imm(2)                                           -> x7
-    v11  Call { target_pc=0, args=[v10] }                 -> x0
+    v10  Imm(2)                                           -> x8
+    v11  Call { target_pc=0, args=[v10] }                 -> x7
     v12  ImmData(96)                                      -> x6
     v13  Extend { value=v6, kind=I32 }                    -> x8
-    v14  CallExt { binding_idx=1, args=[v11, v12, v6], fp_arg_mask=0x0 } -> x8
-    v15  Imm(1)                                           -> x8
+    v14  CallExt { binding_idx=1, args=[v11, v12, v6], fp_arg_mask=0x0 } -> x0
+    v15  Imm(1)                                           -> x0
     terminator Return(v15)   (exit_acc=v15)
   block 2  start_pc=0
-    v16  ImmData(88)                                      -> x12
-    v17  Imm(1)                                           -> x8
-    v18  Store { addr=v16, value=v17, kind=I32 }          -> -
+    v16  ImmData(88)                                      -> x6
+    v17  Imm(1)                                           -> x6
+    v18  Store { addr=v1, value=v17, kind=I32 }           -> -
     v19  Imm(11)                                          -> x7
     v20  Call { target_pc=14, args=[v19] }                -> x0
     v21  Imm(13)                                          -> x7
     v22  Call { target_pc=14, args=[v21] }                -> x0
-    v23  Load { addr=v16, kind=I32 }                      -> x12
+    v23  Load { addr=v1, kind=I32 }                       -> x3
     v24  Imm(0)                                           -> x0
     v25  Extend { value=v23, kind=I32 }                   -> x0
     v26  BinopI { op=ne, lhs=v23, rhs_imm=13 }            -> x0
@@ -113,7 +113,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=5
     v27  Imm(2)                                           -> x14
     v28  Call { target_pc=0, args=[v27] }                 -> x7
     v29  ImmData(115)                                     -> x6
-    v30  Extend { value=v23, kind=I32 }                   -> x8
+    v30  Extend { value=v23, kind=I32 }                   -> x12
     v31  CallExt { binding_idx=1, args=[v28, v29, v23], fp_arg_mask=0x0 } -> x0
     terminator Return(v27)   (exit_acc=v27)
   block 4  start_pc=0

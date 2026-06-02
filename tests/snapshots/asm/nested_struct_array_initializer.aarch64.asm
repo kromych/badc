@@ -12,61 +12,47 @@ Disassembly of section .text:
                	blr	x16
                	adrp	x15, <page>
                	add	x15, x15, #0xd0
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x64
+               	ldrsw	x14, [x15]
+               	cmp	x14, #0x64
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x1
+               	add	x14, x15, #0x4
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x2
+               	add	x14, x15, #0x8
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x2
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0xc
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x3
+               	add	x14, x15, #0xc
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x3
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x10
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x4
+               	add	x14, x15, #0x10
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x4
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x14
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x5
+               	add	x14, x15, #0x14
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x5
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x18
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x6
+               	add	x14, x15, #0x18
+               	ldrsw	x14, [x14]
+               	cmp	x14, #0x6
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
                	add	x15, x15, #0x1c
                	ldrsw	x15, [x15]
                	cmp	x15, #0xc8

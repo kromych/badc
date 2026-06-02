@@ -13,14 +13,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x210, %rsp            # imm = 0x210
                	leaq	<rip>, %r11
-               	movq	(%r11), %r11
-               	cmpq	$0x0, %r11
+               	movq	(%r11), %r9
+               	cmpq	$0x0, %r9
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x210, %rsp            # imm = 0x210
                	popq	%rbp
                	retq
-               	leaq	<rip>, %r11
                	addq	$0x78, %r11
                	movq	(%r11), %r11
                	cmpq	$0x0, %r11
@@ -95,10 +94,10 @@ Disassembly of section .text:
                	addq	$0x138, %r11            # imm = 0x138
                	movl	$0x2a, %eax
                	movq	%rax, (%r11)
-               	leaq	<rip>, %r8
-               	addq	$0x1f8, %r8             # imm = 0x1F8
+               	leaq	<rip>, %r9
+               	addq	$0x1f8, %r9             # imm = 0x1F8
                	movabsq	$-0x1, %rax
-               	movq	%rax, (%r8)
+               	movq	%rax, (%r9)
                	movq	(%r11), %r11
                	cmpq	$0x2a, %r11
                	je	<addr>
@@ -155,4 +154,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

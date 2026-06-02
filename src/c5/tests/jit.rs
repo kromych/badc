@@ -145,14 +145,16 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
             .count()
     };
     let phis_off = count_phis_in_main();
-    unsafe {
-        std::env::set_var("BADC_PHI_PROMOTE", "1");
-    }
-    let phis_on = count_phis_in_main();
-    let result = jit_exit_native_optimized(src, &["jit-phi-promote"]);
-    unsafe {
-        std::env::remove_var("BADC_PHI_PROMOTE");
-    }
+    // Scope the promotion flag to the current test thread so a
+    // concurrent test on a different thread is not affected. The
+    // earlier `std::env::set_var` race made every test that ran
+    // mem2reg between this test's set and remove see promotion
+    // enabled, which deterministically miscompiled fixtures whose
+    // SSA contains a multi-source phi class.
+    let (phis_on, result) = crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(
+        true,
+        || (count_phis_in_main(), jit_exit_native_optimized(src, &["jit-phi-promote"])),
+    );
     assert_eq!(
         phis_off, 0,
         "no Inst::Phi expected in main's IR with BADC_PHI_PROMOTE unset"

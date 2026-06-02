@@ -132,27 +132,36 @@ mod jit_impl {
     // dlopen-NULL error); Windows reaches for `format!` instead.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use alloc::vec::Vec;
+    use std::cell::RefCell;
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
-    use std::sync::Mutex;
 
-    /// atexit handlers registered by JIT'd code, in registration
-    /// order. C11 7.22.4.2p1 requires them to fire in LIFO order;
-    /// the drain walks the Vec in reverse.
-    ///
-    /// Each entry carries the raw handler pointer plus an argument
-    /// word. C89-style `atexit(handler)` stores the handler as a
-    /// `(void)` function and ignores the arg; `__cxa_atexit(handler,
-    /// arg, dso)` stores the handler as a `(void*)` function and
-    /// the arg word it was given. Both shapes are ABI-compatible
-    /// with `extern "C" fn(*mut c_void)` on every supported target:
-    /// the extra register on a no-arg handler call is harmless.
-    ///
-    /// Process-global because libc's atexit chain is process-global
-    /// too; the drain happens at the end of every `jit_run` so
-    /// successive runs don't leak.
-    static JIT_ATEXIT_CHAIN: Mutex<Vec<(extern "C" fn(*mut c_void), usize)>> =
-        Mutex::new(Vec::new());
+    thread_local! {
+        /// atexit handlers registered by JIT'd code during the
+        /// currently-executing `jit_run`, in registration order. C11
+        /// 7.22.4.2p1 requires LIFO drain order; the post-`main_fn`
+        /// drain walks the Vec in reverse.
+        ///
+        /// Each entry carries the raw handler pointer plus an argument
+        /// word. C89-style `atexit(handler)` stores the handler as a
+        /// `(void)` function and ignores the arg; `__cxa_atexit(handler,
+        /// arg, dso)` stores the handler as a `(void*)` function and
+        /// the arg word it was given. Both shapes are ABI-compatible
+        /// with `extern "C" fn(*mut c_void)` on every supported target:
+        /// the extra register on a no-arg handler call is harmless.
+        ///
+        /// Scoped to the executing thread so concurrent `jit_run`
+        /// invocations on the cargo test harness's parallel scheduler
+        /// do not see each other's handler PCs. `jit_run` saves any
+        /// pre-existing entries (a nested call) on entry, drains the
+        /// current call's entries after `main_fn` returns, then
+        /// restores the prior state. arg is stored as `usize` so the
+        /// `RefCell<Vec<...>>` need not enforce `Sync` on the raw
+        /// pointer; the lifetime is owned by the JIT data region the
+        /// caller passed in (typically NULL or a `&__dso_handle`).
+        static JIT_ATEXIT_CHAIN: RefCell<Vec<(extern "C" fn(*mut c_void), usize)>> =
+            const { RefCell::new(Vec::new()) };
+    }
 
     /// Replacement for libc's `atexit` when JIT'd code resolves
     /// the symbol through `dlsym`. C89 signature: handler takes
@@ -180,19 +189,12 @@ mod jit_impl {
     }
 
     fn push_atexit_entry(handler: extern "C" fn(*mut c_void), arg: *mut c_void) -> c_int {
-        if let Ok(mut chain) = JIT_ATEXIT_CHAIN.lock() {
-            // Stash arg as usize so the Mutex<Vec<...>> stays Sync.
-            // The pointer survives the round-trip because the JIT
-            // runtime owns the arg's lifetime (callers pass NULL
-            // or a `&__dso_handle` from the JIT data region).
-            chain.push((handler, arg as usize));
-            0
-        } else {
-            // Lock poisoned by another thread's panic; report
-            // failure rather than corrupting the chain. C11
-            // permits a non-zero return.
-            -1
-        }
+        // Stash arg as usize so the RefCell holds plain data; the
+        // pointer survives the round-trip because the JIT runtime
+        // owns the arg's lifetime (callers pass NULL or a
+        // `&__dso_handle` from the JIT data region).
+        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().push((handler, arg as usize)));
+        0
     }
 
     /// Return the JIT-side thunk address for any libc atexit-shape
@@ -216,16 +218,41 @@ mod jit_impl {
     /// the current `jit_run`. Called after JIT'd `main` returns
     /// and before the code region is unmapped.
     fn drain_jit_atexit_chain() {
-        let entries: Vec<(extern "C" fn(*mut c_void), usize)> = match JIT_ATEXIT_CHAIN.lock() {
-            Ok(mut chain) => chain.drain(..).collect(),
-            Err(_) => return,
-        };
+        let entries: Vec<(extern "C" fn(*mut c_void), usize)> =
+            JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect());
         for (handler, arg) in entries.into_iter().rev() {
             handler(arg as *mut c_void);
         }
     }
 
+    /// Save the current thread's atexit chain (any entries left over
+    /// from a nested `jit_run` invocation on the same thread) so the
+    /// outer call's drain does not consume them. Restore by passing
+    /// the returned Vec to [`restore_jit_atexit_chain`].
+    fn take_prior_jit_atexit_chain() -> Vec<(extern "C" fn(*mut c_void), usize)> {
+        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect())
+    }
+
+    fn restore_jit_atexit_chain(prior: Vec<(extern "C" fn(*mut c_void), usize)>) {
+        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = prior);
+    }
+
     pub fn jit_run(
+        program: &Program,
+        args: &[String],
+        options: NativeOptions,
+    ) -> Result<i32, C5Error> {
+        // Reset the per-thread atexit chain so this invocation's
+        // drain only processes its own entries. Any pre-existing
+        // entries (from a nested `jit_run` further up the stack on
+        // this thread) are saved here and restored after the drain.
+        let prior_atexit = take_prior_jit_atexit_chain();
+        let result = jit_run_inner(program, args, options);
+        restore_jit_atexit_chain(prior_atexit);
+        result
+    }
+
+    fn jit_run_inner(
         program: &Program,
         args: &[String],
         options: NativeOptions,

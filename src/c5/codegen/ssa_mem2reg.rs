@@ -557,19 +557,54 @@ fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
     true
 }
 
-/// Promote address-free, full-width local slots that need no phi to
-/// direct value references, dropping their frame loads and stores.
-/// Slots that merge two definitions (non-empty phi placement) stay in
-/// memory until phi insertion lands.
-///
-/// The rewrite keeps every `ValueId` stable: a promoted `LoadLocal`
-/// has its uses redirected to the reaching definition (it then has no
-/// consumers and the emit drops it as dead-pure), and a promoted
-/// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
-/// semantics treat as the stored value -- is redirected to that value.
-/// Promote eligible slots and return the offsets actually promoted
-/// (their frame loads and stores removed), so the debug-info emitter
-/// can drop the now-stale frame location for those locals.
+// Promote address-free, full-width local slots that need no phi to
+// direct value references, dropping their frame loads and stores.
+// Slots that merge two definitions (non-empty phi placement) stay in
+// memory until phi insertion lands.
+//
+// The rewrite keeps every `ValueId` stable: a promoted `LoadLocal`
+// has its uses redirected to the reaching definition (it then has no
+// consumers and the emit drops it as dead-pure), and a promoted
+// `StoreLocal` is replaced with `Imm(0)` after its id -- which the c5
+// semantics treat as the stored value -- is redirected to that value.
+// Promote eligible slots and return the offsets actually promoted
+// (their frame loads and stores removed), so the debug-info emitter
+// can drop the now-stale frame location for those locals.
+
+#[cfg(feature = "std")]
+thread_local! {
+    /// Per-thread override for `BADC_PHI_PROMOTE`. `Some(true)` and
+    /// `Some(false)` force promotion on / off respectively; `None`
+    /// (the default) falls back to the process-global env var.
+    /// Tests that need to drive promotion deterministically set
+    /// this via [`with_phi_promote_override`] so a parallel test on
+    /// a different thread does not see the change.
+    static PHI_PROMOTE_OVERRIDE: core::cell::Cell<Option<bool>> = const { core::cell::Cell::new(None) };
+}
+
+#[cfg(feature = "std")]
+fn phi_promote_override() -> Option<bool> {
+    PHI_PROMOTE_OVERRIDE.with(|cell| cell.get())
+}
+
+/// Run `f` with the per-thread phi-promote override set to `value`,
+/// restoring whatever was there before on return (or unwind). Tests
+/// use this to drive the gate without touching the process-global
+/// env table.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -> R {
+    let prior = PHI_PROMOTE_OVERRIDE.with(|cell| cell.replace(Some(value)));
+    struct Restore(Option<bool>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PHI_PROMOTE_OVERRIDE.with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(prior);
+    f()
+}
+
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen.
@@ -631,9 +666,13 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Multi-block merges promote through an SSA phi at each join only
     // when the gate is set; the per-arch emit reads `Inst::Phi` and
     // emits the predecessor-exit moves the parallel-copy lowering
-    // expects.
+    // expects. The per-thread override takes precedence over the
+    // env-var so concurrent tests under cargo test's parallel
+    // scheduler do not see each other's `BADC_PHI_PROMOTE` setting
+    // through the process-global env table.
     #[cfg(feature = "std")]
-    let phi_promote = std::env::var("BADC_PHI_PROMOTE").is_ok();
+    let phi_promote =
+        phi_promote_override().unwrap_or_else(|| std::env::var("BADC_PHI_PROMOTE").is_ok());
     #[cfg(not(feature = "std"))]
     let phi_promote = false;
     // Slots read at one narrow width promote by extending the reaching

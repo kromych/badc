@@ -776,7 +776,18 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     while let Some(frame) = stack.pop() {
         match frame {
             Frame::Restore(saved) => {
-                for (slot, old) in saved {
+                // Saved entries record (slot, current_before_update)
+                // at each StoreLocal / phi insertion point in the
+                // order the updates fired. Walking forward leaves
+                // `current[slot]` at the value that preceded the
+                // *last* update for that slot, not the value that
+                // preceded the *first* update -- so a sibling block
+                // in the dom tree inherits an intra-block
+                // intermediate instead of the pre-block reaching
+                // def. Reverse-walk undoes the updates in LIFO
+                // order: each slot ends at the value it had before
+                // this block's first update.
+                for (slot, old) in saved.into_iter().rev() {
                     match old {
                         Some(v) => {
                             current.insert(slot, v);

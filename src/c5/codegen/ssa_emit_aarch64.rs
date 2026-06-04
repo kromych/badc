@@ -114,7 +114,20 @@ impl Frame {
         // clobbers x19; the prologue / epilogue's store / load
         // already gates on the same condition, so a function that
         // leaves x19 alone needs no slot and can drop the 16 bytes.
-        let uses_x19 = function_clobbers_x19(func);
+        // A spilling function with a modulo may need x19 as a third
+        // scratch when its dividend, divisor and result all spill, so
+        // reserve it in that case too.
+        let mod_under_spill = alloc.spill_count > 0
+            && func.insts.iter().any(|inst| {
+                matches!(
+                    inst,
+                    Inst::Binop {
+                        op: BinOp::Mod | BinOp::Modu,
+                        ..
+                    }
+                )
+            });
+        let uses_x19 = function_clobbers_x19(func) || mod_under_spill;
         let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
@@ -346,6 +359,83 @@ pub(super) fn emit_function(
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
+    // Place the entry `Inst::ParamRef` values from their AAPCS64
+    // argument registers into the allocator's chosen locations. The
+    // per-inst `mov dst, arg_reg` is unsound when one parameter's
+    // destination register is a later parameter's source argument
+    // register: the move clobbers that source before it is read. The
+    // placement is a parallel copy from the (distinct) argument
+    // registers to the parameter homes exactly when those homes are
+    // distinct -- then `schedule_place_moves` sequentializes it and
+    // breaks any cycle through a scratch register. When two ParamRef
+    // values share a home (sequentially-live parameters the allocator
+    // packed into one register), the placement is not a parallel copy
+    // and the in-order per-inst emit is the correct lowering, so the
+    // batch is skipped.
+    let mut param_prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
+    {
+        let mut moves: Vec<(Place, Place)> = Vec::new();
+        let mut exts: Vec<(Place, LoadKind)> = Vec::new();
+        let mut vids: Vec<usize> = Vec::new();
+        let mut homes: Vec<Place> = Vec::new();
+        for (vid, inst) in func.insts.iter().enumerate() {
+            let Inst::ParamRef { idx, kind } = inst else {
+                continue;
+            };
+            let i = *idx as usize;
+            if i >= abi.int_arg_regs.len() {
+                continue;
+            }
+            // A ParamRef with no consumers is dropped by the per-inst
+            // dead-code skip; placing it here would only risk bailing
+            // the batch on an unused FP parameter. Only integer / spill
+            // homes are scheduled as a parallel copy; an FP-register
+            // home (a floating-point parameter) stays on the per-inst
+            // path.
+            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+                continue;
+            }
+            let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
+            if !matches!(dst, Place::IntReg(_) | Place::Spill(_)) {
+                continue;
+            }
+            moves.push((Place::IntReg(abi.int_arg_regs[i]), dst));
+            vids.push(vid);
+            homes.push(dst);
+            if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) {
+                exts.push((dst, *kind));
+            }
+        }
+        let homes_distinct = (0..homes.len())
+            .all(|a| ((a + 1)..homes.len()).all(|b| !place_same_loc(homes[a], homes[b])));
+        if !moves.is_empty() && homes_distinct {
+            if !schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary) {
+                return false;
+            }
+            for (dst, kind) in exts {
+                let ext = |code: &mut Vec<u8>, r: Reg| match kind {
+                    LoadKind::I8 => emit(code, super::aarch64::enc_sxtb(r, r)),
+                    LoadKind::I16 => emit(code, super::aarch64::enc_sxth(r, r)),
+                    LoadKind::I32 => emit(code, super::aarch64::enc_sxtw(r, r)),
+                    _ => {}
+                };
+                match dst {
+                    Place::IntReg(r) => ext(code, Reg(r)),
+                    Place::Spill(slot) => {
+                        let sp_off = spill_off(frame, slot);
+                        emit(code, enc_ldr_imm(scratch.primary, Reg(31), sp_off));
+                        ext(code, scratch.primary);
+                        emit(code, enc_str_imm(scratch.primary, Reg(31), sp_off));
+                    }
+                    Place::None | Place::FpReg(_) => {}
+                }
+            }
+            for vid in vids {
+                param_prebatched[vid] = true;
+            }
+        }
+    }
+
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
     // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
@@ -371,6 +461,10 @@ pub(super) fn emit_function(
             // computation produces no machine code if no one
             // will read it.
             if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            // ParamRef already placed by the entry parallel copy.
+            if param_prebatched[v as usize] {
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
@@ -738,6 +832,15 @@ struct ScratchPool {
     primary: Reg,
     secondary: Reg,
 }
+
+/// FP scratch d-registers for reloading spilled / int-carried FP
+/// operands. The allocator's FP pool is d0..d15, so d16 / d17 are
+/// never assigned to a value; an int-to-FP `fmov` into one cannot
+/// clobber an operand the same instruction still reads. They are
+/// AAPCS64 caller-saved, used only within a single instruction's
+/// lowering, so they need no prologue save.
+const SCRATCH_FP0: u8 = 16;
+const SCRATCH_FP1: u8 = 17;
 
 impl ScratchPool {
     fn new() -> Self {
@@ -1165,7 +1268,7 @@ fn emit_inst(
                 .get(*v as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let dn = match materialize_fp(code, src_place, 0, frame) {
+            let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
                 Some(r) => r,
                 None => return false,
             };
@@ -1210,7 +1313,7 @@ fn emit_inst(
                     true
                 }
                 FpCastKind::FpToInt => {
-                    let dn = match materialize_fp(code, src_place, 0, frame) {
+                    let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
                         Some(r) => r,
                         None => return false,
                     };
@@ -1398,10 +1501,6 @@ fn emit_intrinsic(
                 bail_msg("VaArg: expected 1 arg");
                 return false;
             }
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("VaArg: dst not int reg");
-                return false;
-            };
             let ap_place = alloc
                 .places
                 .get(args[0] as usize)
@@ -1411,20 +1510,39 @@ fn emit_intrinsic(
                 Some(r) => r,
                 None => return false,
             };
-            // rd and ap_r can be the same register when the
-            // allocator picks ap-value's freed slot for the
-            // VaArg result. Route the load through a scratch
-            // register so the cursor address survives the
-            // writeback.
-            if rd.0 == ap_r.0 {
-                emit(code, enc_ldr_imm(scratch.secondary, ap_r, 0));
-                emit(code, enc_add_imm(scratch.primary, scratch.secondary, 16));
-                emit(code, enc_str_imm(scratch.primary, ap_r, 0));
-                emit_mov_reg(code, rd, scratch.secondary);
+            // The result is loaded into a work register, the cursor is
+            // advanced by 16, then the result is delivered to the
+            // destination. The work register and the advance temporary
+            // must each differ from the cursor address `ap_r` so the
+            // writeback stores to the right slot. A spilled destination
+            // stages in a scratch register and stores afterward.
+            let rd = match dst {
+                Place::IntReg(r) if r != ap_r.0 => Reg(r),
+                _ if scratch.secondary.0 != ap_r.0 => scratch.secondary,
+                _ => scratch.primary,
+            };
+            let adv = if scratch.primary.0 != ap_r.0 && scratch.primary.0 != rd.0 {
+                scratch.primary
+            } else if scratch.secondary.0 != ap_r.0 && scratch.secondary.0 != rd.0 {
+                scratch.secondary
             } else {
-                emit(code, enc_ldr_imm(rd, ap_r, 0));
-                emit(code, enc_add_imm(scratch.secondary, rd, 16));
-                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+                // Both scratch registers hold the cursor and the staged
+                // result (cursor and destination both spilled). x19 is
+                // a callee-saved register reserved by the prologue for
+                // any function with an intrinsic -- which a VaArg is --
+                // so it serves as a third scratch here.
+                Reg(19)
+            };
+            emit(code, enc_ldr_imm(rd, ap_r, 0));
+            emit(code, enc_add_imm(adv, rd, 16));
+            emit(code, enc_str_imm(adv, ap_r, 0));
+            match dst {
+                Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
+                Place::Spill(slot) => {
+                    let sp_off = spill_off(frame, slot);
+                    emit(code, enc_str_imm(rd, Reg(31), sp_off));
+                }
+                _ => {}
             }
             true
         }
@@ -1823,11 +1941,20 @@ fn emit_call(
                 .copied()
                 .unwrap_or(Place::None);
             let sp_shift = (i as u32) * 16;
-            let src =
+            // The c5 variadic ABI ferries every argument through the
+            // 16-byte c5 stack stride as a raw 8-byte pattern. An f64
+            // in a d-register bridges through an int register first,
+            // matching the f64-return bridge; the callee's `va_arg`
+            // reads the same eight bytes back.
+            let src = if let Place::FpReg(dn) = arg_place {
+                emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+                scratch.primary
+            } else {
                 match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
                     Some(r) => r,
                     None => return false,
-                };
+                }
+            };
             emit(code, enc_str_pre(src, Reg(31), -16));
         }
         fixups.push(Fixup {
@@ -2831,11 +2958,11 @@ fn emit_binop(
     // operands; the matching int scratch slots aren't disturbed
     // because no int materialisation runs in this branch.
     if let Some(arith) = fp_arith_enc(op) {
-        let dn = match materialize_fp(code, lhs_place, 0, frame) {
+        let dn = match materialize_fp(code, lhs_place, SCRATCH_FP0, frame) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp(code, rhs_place, 1, frame) {
+        let dm = match materialize_fp(code, rhs_place, SCRATCH_FP1, frame) {
             Some(r) => r,
             None => return false,
         };
@@ -2852,11 +2979,11 @@ fn emit_binop(
         return true;
     }
     if let Some(cond) = fp_compare_cond(op) {
-        let dn = match materialize_fp(code, lhs_place, 0, frame) {
+        let dn = match materialize_fp(code, lhs_place, SCRATCH_FP0, frame) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp(code, rhs_place, 1, frame) {
+        let dm = match materialize_fp(code, rhs_place, SCRATCH_FP1, frame) {
             Some(r) => r,
             None => return false,
         };
@@ -2939,13 +3066,28 @@ fn emit_binop(
         return true;
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
+        // rem = rn - (rn / rm) * rm. The msub reads the dividend (rn)
+        // and divisor (rm), so the quotient must occupy a register
+        // distinct from both. A spilled operand was materialised into
+        // a scratch register, so the quotient cannot blindly reuse
+        // `scratch.secondary` -- when the divisor is spilled it sits
+        // there, and the divide would overwrite it before the msub
+        // reads it. Pick a free scratch or the result register that
+        // aliases neither operand.
+        // x19 is reserved by the prologue for a spilling function that
+        // contains a modulo, so it is a safe third scratch when the
+        // dividend, divisor and result all occupy the other registers.
+        let quot = [scratch.secondary, scratch.primary, rd, Reg(19)]
+            .into_iter()
+            .find(|r| r.0 != rn.0 && r.0 != rm.0)
+            .unwrap_or(Reg(19));
         let divider = if matches!(op, BinOp::Mod) {
-            enc_sdiv(scratch.secondary, rn, rm)
+            enc_sdiv(quot, rn, rm)
         } else {
-            enc_udiv(scratch.secondary, rn, rm)
+            enc_udiv(quot, rn, rm)
         };
         emit(code, divider);
-        emit(code, enc_msub(rd, scratch.secondary, rm, rn));
+        emit(code, enc_msub(rd, quot, rm, rn));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -3351,8 +3493,14 @@ fn emit_phi_predecessor_moves(
     for succ in succs {
         let head = func.blocks[succ as usize].inst_range.start;
         let end = func.blocks[succ as usize].inst_range.end;
-        let mut int_moves: Vec<(u8, u8)> = Vec::new();
-        let mut other_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
+        // Collect every phi's predecessor-exit move as one
+        // location-to-location parallel copy. Splitting the set into
+        // a register pass and a separate spill-store pass is unsound:
+        // a register reg-to-reg move can overwrite a register that a
+        // pending spill store still needs as its source. Scheduling
+        // all locations together preserves the parallel-copy
+        // semantics across both register and stack-slot operands.
+        let mut moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
         for id in head..end {
             let inst = &func.insts[id as usize];
             let super::super::ir::Inst::Phi { incoming, .. } = inst else {
@@ -3374,32 +3522,105 @@ fn emit_phi_predecessor_moves(
             use super::ssa_alloc::Place;
             match (src_place, dst_place) {
                 (Place::None, _) | (_, Place::None) => {}
-                (Place::IntReg(s), Place::IntReg(t)) => {
-                    if s != t {
-                        int_moves.push((s, t));
-                    }
-                }
-                _ => other_moves.push((src_place, dst_place)),
+                _ => moves.push((src_place, dst_place)),
             }
         }
-        schedule_int_reg_moves(code, &mut int_moves, scratch.primary);
-        for (src_place, dst_place) in other_moves {
-            use super::ssa_alloc::Place;
-            match dst_place {
-                Place::IntReg(t) => {
-                    if materialize_int(code, src_place, Reg(t), frame).is_none() {
-                        return false;
-                    }
+        if !schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Compare two `Place`s by physical location identity. Distinct
+/// `Place` variants never alias; same-variant places alias when their
+/// register number or spill slot matches.
+fn place_same_loc(a: Place, b: Place) -> bool {
+    match (a, b) {
+        (Place::IntReg(x), Place::IntReg(y)) => x == y,
+        (Place::Spill(x), Place::Spill(y)) => x == y,
+        (Place::FpReg(x), Place::FpReg(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// Emit a single resolved location-to-location move. `stage` is a
+/// scratch register used only for the spill-to-spill case (load then
+/// store); it must lie outside the allocator's bank.
+fn emit_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage: Reg) {
+    match (src, dst) {
+        (Place::IntReg(s), Place::IntReg(t)) => emit_mov_reg(code, Reg(t), Reg(s)),
+        (Place::IntReg(s), Place::Spill(slot)) => {
+            emit(code, enc_str_imm(Reg(s), Reg(31), spill_off(frame, slot)));
+        }
+        (Place::Spill(slot), Place::IntReg(t)) => {
+            emit(code, enc_ldr_imm(Reg(t), Reg(31), spill_off(frame, slot)));
+        }
+        (Place::Spill(ss), Place::Spill(ts)) => {
+            emit(code, enc_ldr_imm(stage, Reg(31), spill_off(frame, ss)));
+            emit(code, enc_str_imm(stage, Reg(31), spill_off(frame, ts)));
+        }
+        // FP and None locations are filtered by the caller before
+        // scheduling; they never reach this point.
+        _ => {}
+    }
+}
+
+/// Sequentialize a parallel copy over physical locations (integer
+/// registers and stack spill slots). Leaves -- destinations that are
+/// not the source of any other pending move -- are emitted first;
+/// when only cycles remain, one cycle source is saved into the
+/// persistent `hold` register and every move reading that location is
+/// redirected to read `hold`, exposing a new leaf. `hold` and `stage`
+/// must both lie outside the allocator's bank so they cannot collide
+/// with any pending source or destination. Returns false if any
+/// operand is an FP or `None` location, which this path does not lower.
+fn schedule_place_moves(
+    code: &mut Vec<u8>,
+    moves: &mut Vec<(Place, Place)>,
+    frame: Frame,
+    hold: Reg,
+    stage: Reg,
+) -> bool {
+    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    if moves.iter().any(|(s, t)| {
+        matches!(s, Place::FpReg(_) | Place::None) || matches!(t, Place::FpReg(_) | Place::None)
+    }) {
+        return false;
+    }
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            if !tgt_still_a_source {
+                emit_place_move(code, s, t, frame, stage);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            // Only cycle members remain. Save one cycle source into
+            // `hold` and redirect every move that reads it. A single
+            // cycle drains completely before the next break, so a
+            // single persistent `hold` register suffices.
+            let cyc = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|s| !place_same_loc(*s, Place::IntReg(hold.0)))
+                .unwrap_or(moves[0].0);
+            // Copy the cycle source into `hold` (a register move or a
+            // spill reload). `materialize_int` is unsuitable here: for
+            // an `IntReg` source it returns the register without
+            // emitting anything, leaving `hold` unloaded.
+            emit_place_move(code, cyc, Place::IntReg(hold.0), frame, stage);
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, cyc) {
+                    m.0 = Place::IntReg(hold.0);
                 }
-                Place::Spill(slot) => {
-                    let src_r = match materialize_int(code, src_place, scratch.primary, frame) {
-                        Some(r) => r,
-                        None => return false,
-                    };
-                    let sp_off = spill_off(frame, slot);
-                    emit(code, enc_str_imm(src_r, Reg(31), sp_off));
-                }
-                Place::FpReg(_) | Place::None => return false,
             }
         }
     }

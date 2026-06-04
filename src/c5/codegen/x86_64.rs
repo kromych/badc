@@ -460,6 +460,57 @@ pub(super) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+// ---- ALU with a memory source: `OP dst, [base + disp]`. The
+//      `r, r/m` family of opcodes (ModR/M.reg=dst, r/m=memory):
+//      ADD=03 SUB=2B AND=23 OR=0B XOR=33 CMP=3B. A spilled second
+//      operand is read in place, avoiding a scratch register the
+//      surrounding allocation may not have free.
+
+fn emit_alu_r_mem(code: &mut Vec<u8>, opcode: u8, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, opcode);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `ADD dst, [base + disp]` -- 64-bit, `dst += [mem]`.
+pub(super) fn emit_add_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x03, dst, base, disp);
+}
+
+/// `SUB dst, [base + disp]` -- 64-bit, `dst -= [mem]`.
+pub(super) fn emit_sub_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x2B, dst, base, disp);
+}
+
+/// `AND dst, [base + disp]` -- 64-bit, `dst &= [mem]`.
+pub(super) fn emit_and_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x23, dst, base, disp);
+}
+
+/// `OR dst, [base + disp]` -- 64-bit, `dst |= [mem]`.
+pub(super) fn emit_or_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x0B, dst, base, disp);
+}
+
+/// `XOR dst, [base + disp]` -- 64-bit, `dst ^= [mem]`.
+pub(super) fn emit_xor_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x33, dst, base, disp);
+}
+
+/// `CMP dst, [base + disp]` -- 64-bit; flags = `dst - [mem]`.
+pub(super) fn emit_cmp_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_alu_r_mem(code, 0x3B, dst, base, disp);
+}
+
+/// `IMUL dst, [base + disp]` -- two-operand signed multiply with a
+/// memory source. Encoding: `REX.W + 0F AF /r`.
+pub(super) fn emit_imul_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xAF);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
 /// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
 /// remainder -> rdx. The caller must sign-extend rax into rdx with
 /// [`emit_cqo`] first.
@@ -476,6 +527,21 @@ pub(super) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
     emit_byte(code, rex(true, false, false, divisor.high()));
     emit_byte(code, 0xF7);
     emit_byte(code, modrm(0b11, 6, divisor.lo()));
+}
+
+/// `IDIV r/m64` with a memory divisor at `[base + disp]`. The reg
+/// field carries the `/7` opcode extension; REX.R is therefore clear.
+pub(super) fn emit_idiv_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, false, false, base.high()));
+    emit_byte(code, 0xF7);
+    emit_modrm_mem(code, Reg(7), base, disp);
+}
+
+/// `DIV r/m64` with a memory divisor at `[base + disp]` (`/6`).
+pub(super) fn emit_div_m(code: &mut Vec<u8>, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, false, false, base.high()));
+    emit_byte(code, 0xF7);
+    emit_modrm_mem(code, Reg(6), base, disp);
 }
 
 // ---- SSE2 floating-point. ----

@@ -622,6 +622,7 @@ pub(super) struct Coloring {
     pub fp_used: Vec<u8>,
 }
 
+#[cfg(feature = "std")]
 thread_local! {
     /// Per-thread override for the register-pressure caps. `Some((g, f))`
     /// forces the integer / FP bank caps; `None` (the default) consults
@@ -634,6 +635,7 @@ thread_local! {
 
 /// Run `f` with the per-thread register-pressure caps set to
 /// `(max_gpr, max_fpr)`, restoring the prior value on return or unwind.
+#[cfg(feature = "std")]
 #[allow(dead_code)]
 pub(crate) fn with_pool_size_override<R>(
     max_gpr: usize,
@@ -658,6 +660,7 @@ pub(crate) fn with_pool_size_override<R>(
 /// `BADC_MAX_GPR` / `BADC_MAX_FPR` environment variables truncate the
 /// integer / FP banks; without the feature they are ignored.
 fn pool_size_limits() -> (usize, usize) {
+    #[cfg(feature = "std")]
     if let Some(caps) = POOL_SIZE_OVERRIDE.with(|cell| cell.get()) {
         return caps;
     }

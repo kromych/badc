@@ -881,8 +881,10 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
             // phi then carries `incoming = (pred, NO_VALUE)` into
             // the inlined IR and the per-arch emit bails on the
             // first downstream operand that resolves to NO_VALUE.
-            // Inst::Phi only appears under BADC_PHI_PROMOTE today,
-            // so default-path inlining is unaffected.
+            // TODO: two-pass remap (populate the full caller/callee
+            // value and block remap, then rewrite phi incomings)
+            // so a caller with loop-head phis can still inline; the
+            // skip leaves loop-carrying callers un-inlined.
             if caller
                 .insts
                 .iter()

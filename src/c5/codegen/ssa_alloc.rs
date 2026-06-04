@@ -259,9 +259,8 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // collapses to today's per-value behaviour. Class-level
     // last-use is the max over all members so the active-list entry
     // expires only when every member is dead.
-    let phi_class_use_counts = compute_use_counts(func);
-    let mut classes =
-        super::ssa_phi_class::PhiClasses::from_func_with_use_counts(func, &phi_class_use_counts);
+    let liveness = super::ssa_liveness::Liveness::compute(func);
+    let mut classes = super::ssa_phi_class::PhiClasses::build(func, &liveness);
     let class_last_use: Vec<u32> = {
         let n = func.insts.len();
         let mut cl = alloc::vec![0u32; n];
@@ -297,278 +296,55 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     populate_call_arg_hints(func, target, &last_use, &calls_after_def, &mut hints);
     populate_call_result_hints(func, target, &calls_after_def, &mut hints);
 
-    // Active intervals: (value id, last-use index, register).
-    let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
-    let mut active_fp: Vec<(ValueId, u32, u8)> = Vec::new();
-    let mut free_int: Vec<u8> = banks
-        .callee_gprs
-        .iter()
-        .chain(banks.caller_gprs.iter())
-        .copied()
+    // Build the interference graph over phi-congruence-class roots and
+    // colour it. Two values ever simultaneously live (per CFG
+    // liveness) get distinct registers; a value with no free register
+    // in its bank spills. Unlike a pc-interval linear scan this models
+    // a value live across a back-edge passthrough block, whose live
+    // range wraps the pc axis.
+    let _ = &class_last_use;
+    let node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
+        .map(|v| classes.find(v))
         .collect();
-    let mut free_fp: Vec<u8> = banks
-        .callee_fprs
-        .iter()
-        .chain(banks.caller_fprs.iter())
-        .copied()
-        .collect();
-    let mut spill_count: u32 = 0;
-    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let pc = idx as u32;
-        // Expire intervals whose last use is strictly before this
-        // pc. We retain values whose last use IS this pc -- the
-        // current inst is reading them.
-        expire(&mut active_int, &mut free_int, pc, &places);
-        expire(&mut active_fp, &mut free_fp, pc, &places);
-
-        let kind = result_kind(inst);
-        if kind == ResultKind::None {
+    let interference = liveness.interference(func, &node_of);
+    let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
+    for (v, inst) in func.insts.iter().enumerate() {
+        if !produces_value(inst) {
             continue;
         }
-        let must_be_callee = calls_after_def[idx];
-
-        // Phi class membership: route every member of v's class to the
-        // place the class root holds. If an earlier member of the class
-        // was already allocated, reuse that place and skip the rest of
-        // the pick path. The class-keyed active-list entry covers the
-        // class's combined live range, so v sharing a register with the
-        // class root requires no additional bookkeeping. Singleton
-        // classes (every value in a function with no phis) bypass this
-        // branch.
-        let class_root = classes.find(idx as ValueId);
-        if places[class_root as usize] != Place::None {
-            // An earlier member of this class already allocated;
-            // route v through the same place. The class-keyed
-            // active-list entry covers the combined live range, so
-            // no additional bookkeeping is needed here.
-            let class_place = places[class_root as usize];
-            places[idx] = class_place;
-            continue;
-        }
-
-        // For a Binop / BinopI / Extend / Fneg whose lhs operand dies
-        // at this very pc, set the dst's hint to lhs's register so the
-        // 2-operand fusion kicks in (x86_64 `add Rd, Rm` with Rd == lhs;
-        // aarch64 `add Rd, Rn, Rm` with Rd == Rn drops the prior mov).
-        // For commutative Binops (Add, Mul, And, Or, Xor) also try rhs
-        // when lhs lives past pc but rhs dies -- x86_64's emit detects
-        // `rhs_aliases_rd && commutative` and folds the staging mov.
-        // Apply only when the hint is still empty and the candidate reg
-        // satisfies the must-be-callee constraint; an already-set hint
-        // (call-result / phi / param-ref / call-arg) takes priority.
-        if hints[idx].is_none() {
-            let coalesce_src = match inst {
-                Inst::Binop { op, lhs, rhs } => {
-                    let lhs_dies =
-                        (*lhs as usize) < last_use.len() && last_use[*lhs as usize] == pc;
-                    let rhs_dies =
-                        (*rhs as usize) < last_use.len() && last_use[*rhs as usize] == pc;
-                    // Set matches the x86_64 emit's `rhs_aliases_rd
-                    // && commutative` fast path. Eq / Ne / Fadd /
-                    // Fmul are mathematically commutative but reach
-                    // the dst via different codegen paths that do
-                    // not collapse the staging mov when dst == rhs.
-                    let commutative = matches!(
-                        op,
-                        BinOp::Add | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor
-                    );
-                    if lhs_dies {
-                        Some(*lhs)
-                    } else if rhs_dies && commutative {
-                        Some(*rhs)
-                    } else {
-                        None
-                    }
-                }
-                Inst::BinopI { lhs, .. } => Some(*lhs),
-                Inst::Extend { value, .. } => Some(*value),
-                Inst::Fneg(v) => Some(*v),
-                // Load's address register is read once at the load and
-                // freed; the load writes the same bank (int) so dst can
-                // reuse the addr's register if it dies here. x86_64
-                // `mov rd, [rd]` and aarch64 `ldr rd, [rd]` both read
-                // the operand before writing the result.
-                Inst::Load { addr, .. } => Some(*addr),
-                // Mcpy returns its `dst` pointer (memcpy contract).
-                // When the dst operand dies at the Mcpy, the result
-                // can reuse its register: the unrolled-copy loop
-                // reads dst_r as the store base but never overwrites
-                // it, so dst_r still carries the same pointer after
-                // the loop. The final `mov result_r, dst_r` then
-                // self-mov-elides.
-                Inst::Mcpy { dst: m_dst, .. } => Some(*m_dst),
-                _ => None,
-            };
-            if let Some(src) = coalesce_src
-                && src != NO_VALUE
-                && (src as usize) < last_use.len()
-                && last_use[src as usize] == pc
-            {
-                let src_place = places[src as usize];
-                let src_reg = match (kind, src_place) {
-                    (ResultKind::Int, Place::IntReg(r)) => Some(r),
-                    (ResultKind::Fp, Place::FpReg(r)) => Some(r),
-                    _ => None,
-                };
-                if let Some(r) = src_reg
-                    && (!must_be_callee || !banks.caller_gprs.contains(&r))
-                {
-                    // Retire src's interval to the free pool early: it
-                    // would expire at pc + 1 anyway, and the dst pick
-                    // below now sees src's reg as free.
-                    let bank_active = match kind {
-                        ResultKind::Int => &mut active_int,
-                        ResultKind::Fp => &mut active_fp,
-                        ResultKind::None => unreachable!(),
-                    };
-                    let bank_free = match kind {
-                        ResultKind::Int => &mut free_int,
-                        ResultKind::Fp => &mut free_fp,
-                        ResultKind::None => unreachable!(),
-                    };
-                    if let Some(pos) = bank_active.iter().position(|(v, _, _)| *v == src) {
-                        bank_active.remove(pos);
-                        bank_free.push(r);
-                        hints[idx] = Some(r);
-                    }
-                }
-            }
-        }
-        // Pick the bank.
-        let (active, free, banks_caller, used) = match kind {
-            ResultKind::Int => (
-                &mut active_int,
-                &mut free_int,
-                banks.caller_gprs,
-                &mut gpr_used,
-            ),
-            ResultKind::Fp => (
-                &mut active_fp,
-                &mut free_fp,
-                banks.caller_fprs,
-                &mut fp_used,
-            ),
-            ResultKind::None => unreachable!(),
-        };
-
-        // Prefer a coalescing hint when one is set, free, and
-        // satisfies the live-across-call constraint. An unsatisfied
-        // hint falls through to the default policy, so a hint never
-        // compromises correctness. Hints are empty until a later
-        // pass populates them (copy / phi congruence / call-arg /
-        // return); until then the path below is unchanged.
-        let hint_choice = match hints[idx] {
-            Some(r) if free.contains(&r) && (!must_be_callee || !banks_caller.contains(&r)) => {
-                Some(r)
-            }
-            _ => None,
-        };
-        let chosen = hint_choice.or_else(|| {
-            if must_be_callee {
-                free.iter().copied().find(|r| !banks_caller.contains(r))
-            } else {
-                free.last().copied()
-            }
+        let root = node_of[v] as usize;
+        let entry = node_cons[root].get_or_insert(NodeConstraints {
+            is_fp: false,
+            must_callee: false,
+            hint: None,
         });
-        if let Some(r) = chosen {
-            // Remove from free pool.
-            if let Some(pos) = free.iter().position(|x| *x == r) {
-                free.swap_remove(pos);
-            }
-            // Use the class's combined last-use so the reg stays
-            // claimed until every member of the class is dead.
-            let class_end = class_last_use[class_root as usize];
-            active.push((pc, class_end, r));
-            // Sort active by last_use ascending so expire() can
-            // pop from the front cheaply.
-            active.sort_by_key(|e| e.1);
-            used.insert(r);
-            places[class_root as usize] = match kind {
-                ResultKind::Int => Place::IntReg(r),
-                ResultKind::Fp => Place::FpReg(r),
-                ResultKind::None => unreachable!(),
-            };
-            places[idx] = match kind {
-                ResultKind::Int => Place::IntReg(r),
-                ResultKind::Fp => Place::FpReg(r),
-                ResultKind::None => unreachable!(),
-            };
-        } else {
-            // Spill the active interval with the furthest next use
-            // whose register satisfies the must-be-callee constraint
-            // for the incoming value. A live-across-call value placed
-            // in a caller-saved register would be clobbered the next
-            // call; restrict the victim search to callee-saved
-            // registers in that case. If no callee-saved victim
-            // exists, spill the new value to memory instead of
-            // parking it in a caller-saved register.
-            let pick_victim = |must_callee: bool| -> Option<usize> {
-                active
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, e)| !must_callee || !banks_caller.contains(&e.2))
-                    .max_by_key(|(_, e)| e.1)
-                    .map(|(i, _)| i)
-            };
-            let victim_pos = pick_victim(must_be_callee);
-            if let Some(pos) = victim_pos {
-                let (victim_id, _victim_end, victim_reg) = active.remove(pos);
-                let slot = spill_count;
-                spill_count += 1;
-                // Mark the victim's class root as spilled, not just
-                // the victim value. The active-list entry's first
-                // tuple element is the PC of the value that first
-                // allocated the class's register; the class root may
-                // be a later-PC phi the realign post-pass walks back
-                // to. Writing `Spill` to the root makes realign
-                // propagate it to every member. Writing only to the
-                // value lets realign copy the unchanged root's stale
-                // `IntReg` over the spill, leaving the new owner's
-                // class and the victim's class both claiming
-                // `victim_reg`.
-                let victim_root = classes.find(victim_id) as usize;
-                places[victim_root] = Place::Spill(slot);
-                places[victim_id as usize] = Place::Spill(slot);
-                let class_end = class_last_use[class_root as usize];
-                active.push((pc, class_end, victim_reg));
-                active.sort_by_key(|e| e.1);
-                places[class_root as usize] = match kind {
-                    ResultKind::Int => Place::IntReg(victim_reg),
-                    ResultKind::Fp => Place::FpReg(victim_reg),
-                    ResultKind::None => unreachable!(),
-                };
-                places[idx] = match kind {
-                    ResultKind::Int => Place::IntReg(victim_reg),
-                    ResultKind::Fp => Place::FpReg(victim_reg),
-                    ResultKind::None => unreachable!(),
-                };
-            } else {
-                // No active interval to spill (rare: pool fully
-                // empty and nothing live). Spill directly. Propagate
-                // to the class root so later members route through it.
-                let slot = spill_count;
-                spill_count += 1;
-                places[idx] = Place::Spill(slot);
-                places[class_root as usize] = Place::Spill(slot);
-            }
+        entry.is_fp = produces_fp_result(inst);
+        // `BADC_BUG_I2` (codegen_test only) suppresses the
+        // cross-call must-callee constraint so a value live across a
+        // call lands in a caller-saved register, to confirm the
+        // verifier's I2 check fires.
+        #[cfg(feature = "codegen_test")]
+        let calls_after = calls_after_def[v] && std::env::var("BADC_BUG_I2").is_err();
+        #[cfg(not(feature = "codegen_test"))]
+        let calls_after = calls_after_def[v];
+        entry.must_callee |= calls_after;
+        if entry.hint.is_none() {
+            entry.hint = hints[v];
         }
     }
-
-    // Realign every value's place with its class root's final place.
-    // A class member's place is set when its pick site routes through
-    // an earlier-allocated root; if that root is later spilled
-    // mid-allocation, the spill writes `Spill(slot)` to the root but
-    // every previously-routed member still holds the now-stale
-    // `IntReg(r)` from before the spill.
-    for v in 0..func.insts.len() {
-        let root = classes.find(v as ValueId) as usize;
-        if root != v {
-            places[v] = places[root];
-        }
-    }
+    let (max_gpr, max_fpr) = pool_size_limits();
+    let coloring = color_graph(
+        &interference,
+        &node_of,
+        &node_cons,
+        &banks,
+        max_gpr,
+        max_fpr,
+    );
+    places = coloring.places;
+    let spill_count = coloring.spill_count;
+    let gpr_used = coloring.gpr_used;
+    let fp_used = coloring.fp_used;
 
     // Only callee-saved registers need prologue / epilogue
     // save and restore. Caller-saved registers are preserved
@@ -694,6 +470,9 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             places[v] = Place::None;
         }
     }
+    #[cfg(feature = "codegen_test")]
+    verify_allocation(func, &places, target, &liveness);
+
     Allocation {
         places,
         spill_count,
@@ -705,6 +484,313 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         sxtw_k,
         branch_fused,
         hints,
+    }
+}
+
+/// Check the register-allocation correctness invariants against the
+/// CFG liveness and report any violation. Enabled only under the
+/// `codegen_test` feature and only when `BADC_VERIFY_ALLOC` is set, so
+/// it never runs in a production or normal test build. The check is a
+/// diagnostic: it prints each violating value, the invariant it broke,
+/// and the function's entry pc, then returns. It is intentionally
+/// O(n^2) within a physical location -- correctness, not speed, is the
+/// goal here.
+///
+/// Invariants checked:
+///
+/// * I1 -- two values that interfere (overlapping live ranges) must
+///   not share a physical location (register or spill slot).
+/// * I2 -- a value whose live range spans a call must be callee-saved
+///   or spilled, never caller-saved (the call clobbers the caller bank).
+/// * I3 -- a value's place must match its register class (FP value in
+///   an FP register, integer value in an integer register or slot).
+#[cfg(feature = "codegen_test")]
+fn verify_allocation(
+    func: &FunctionSsa,
+    places: &[Place],
+    target: Target,
+    liveness: &super::ssa_liveness::Liveness,
+) {
+    if std::env::var("BADC_VERIFY_ALLOC").is_err() {
+        return;
+    }
+    let banks = RegBanks::for_target(target);
+    let report = |msg: alloc::string::String| {
+        eprintln!(
+            "VERIFY-VIOLATION fn={} ent_pc={}: {msg}",
+            func.name, func.ent_pc
+        );
+    };
+
+    // I2: cross-call caller-saved discipline.
+    for (c, inst) in func.insts.iter().enumerate() {
+        if !matches!(
+            inst,
+            Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
+        ) {
+            continue;
+        }
+        let cid = c as ValueId;
+        for v in 0..func.insts.len() {
+            let vid = v as ValueId;
+            if vid == cid || !liveness.live_after(func, vid, cid) {
+                continue;
+            }
+            match places.get(v).copied().unwrap_or(Place::None) {
+                Place::IntReg(r) if banks.caller_gprs.contains(&r) => report(alloc::format!(
+                    "I2 cross-call: v{v} in caller-saved int reg {r} is live across the call at v{c}"
+                )),
+                Place::FpReg(r) if banks.caller_fprs.contains(&r) => report(alloc::format!(
+                    "I2 cross-call: v{v} in caller-saved fp reg {r} is live across the call at v{c}"
+                )),
+                _ => {}
+            }
+        }
+    }
+
+    // I3: register-class correctness.
+    for (v, inst) in func.insts.iter().enumerate() {
+        if !produces_value(inst) {
+            continue;
+        }
+        let is_fp = produces_fp_result(inst);
+        match places.get(v).copied().unwrap_or(Place::None) {
+            Place::FpReg(_) if !is_fp => report(alloc::format!(
+                "I3 class: integer v{v} placed in an fp register"
+            )),
+            Place::IntReg(_) if is_fp => report(alloc::format!(
+                "I3 class: fp v{v} placed in an integer register"
+            )),
+            _ => {}
+        }
+    }
+
+    // I1: interfering values must hold distinct physical locations.
+    // Group by place and check interference only within a group.
+    let key = |p: Place| -> Option<(u8, u32)> {
+        match p {
+            Place::IntReg(r) => Some((0, r as u32)),
+            Place::FpReg(r) => Some((1, r as u32)),
+            Place::Spill(s) => Some((2, s)),
+            Place::None => None,
+        }
+    };
+    let mut by_place: alloc::collections::BTreeMap<(u8, u32), Vec<usize>> =
+        alloc::collections::BTreeMap::new();
+    for (v, p) in places.iter().enumerate() {
+        if let Some(k) = key(*p) {
+            by_place.entry(k).or_default().push(v);
+        }
+    }
+    for (k, vs) in &by_place {
+        for i in 0..vs.len() {
+            for j in (i + 1)..vs.len() {
+                if liveness.interfere(func, vs[i] as ValueId, vs[j] as ValueId) {
+                    report(alloc::format!(
+                        "I1 interference: v{} and v{} share place {k:?} yet interfere",
+                        vs[i],
+                        vs[j]
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Coloring constraints for one allocation node (a phi-congruence
+/// root). Absent for values that are not the root of their class or
+/// that define no placed value.
+#[derive(Clone, Copy)]
+pub(super) struct NodeConstraints {
+    /// The node's value lives in the FP register file.
+    pub is_fp: bool,
+    /// The node's live range crosses a call, so a caller-saved
+    /// register would be clobbered; it must take a callee-saved
+    /// register or spill.
+    pub must_callee: bool,
+    /// Preferred register, honoured when free and bank-legal.
+    pub hint: Option<u8>,
+}
+
+/// Result of coloring the interference graph.
+pub(super) struct Coloring {
+    /// Placement per value. Non-root values inherit their root's
+    /// placement; nodes with no constraint stay `Place::None`.
+    pub places: Vec<Place>,
+    pub spill_count: u32,
+    pub gpr_used: Vec<u8>,
+    pub fp_used: Vec<u8>,
+}
+
+thread_local! {
+    /// Per-thread override for the register-pressure caps. `Some((g, f))`
+    /// forces the integer / FP bank caps; `None` (the default) consults
+    /// the environment. Tests that need a specific pressure level set this
+    /// via [`with_pool_size_override`] so a parallel test on another thread
+    /// does not see the change.
+    static POOL_SIZE_OVERRIDE: core::cell::Cell<Option<(usize, usize)>> =
+        const { core::cell::Cell::new(None) };
+}
+
+/// Run `f` with the per-thread register-pressure caps set to
+/// `(max_gpr, max_fpr)`, restoring the prior value on return or unwind.
+#[allow(dead_code)]
+pub(crate) fn with_pool_size_override<R>(
+    max_gpr: usize,
+    max_fpr: usize,
+    f: impl FnOnce() -> R,
+) -> R {
+    let prior = POOL_SIZE_OVERRIDE.with(|cell| cell.replace(Some((max_gpr, max_fpr))));
+    struct Restore(Option<(usize, usize)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            POOL_SIZE_OVERRIDE.with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(prior);
+    f()
+}
+
+/// Per-bank register count caps. Both default to `usize::MAX` (no cap),
+/// so a production build allocates over the full register file. The
+/// per-thread override (set by [`with_pool_size_override`]) always
+/// takes precedence. Under the `codegen_test` feature the
+/// `BADC_MAX_GPR` / `BADC_MAX_FPR` environment variables truncate the
+/// integer / FP banks; without the feature they are ignored.
+fn pool_size_limits() -> (usize, usize) {
+    if let Some(caps) = POOL_SIZE_OVERRIDE.with(|cell| cell.get()) {
+        return caps;
+    }
+    #[cfg(feature = "codegen_test")]
+    {
+        let read = |name: &str| -> usize {
+            std::env::var(name)
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .map(|n| n.max(1))
+                .unwrap_or(usize::MAX)
+        };
+        (read("BADC_MAX_GPR"), read("BADC_MAX_FPR"))
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        (usize::MAX, usize::MAX)
+    }
+}
+
+/// Assign a register or spill slot to every constrained node so that
+/// no two interfering nodes share a register, then propagate each
+/// node's placement to its class members. Greedy coloring: nodes are
+/// processed in ascending id (roughly definition order); a node takes
+/// its hint when bank-legal and free, otherwise a caller-saved
+/// register (to avoid a prologue save) unless it must be callee-saved,
+/// otherwise a callee-saved register, and spills when its bank offers
+/// no free register. The interference graph (built from CFG liveness)
+/// is the sole source of conflicts, so a value live across a back-edge
+/// passthrough block is never given a register that block reuses.
+pub(super) fn color_graph(
+    interference: &super::ssa_liveness::Interference,
+    node_of: &[ValueId],
+    constraints: &[Option<NodeConstraints>],
+    banks: &RegBanks,
+    max_gpr: usize,
+    max_fpr: usize,
+) -> Coloring {
+    let n = node_of.len();
+    // Fault injection for verifier validation, off unless the
+    // `codegen_test` feature is built and the corresponding env var is
+    // set. `BADC_BUG_I1` ignores the interference constraint (so a node
+    // can take a neighbour's colour); `BADC_BUG_I3` labels a value's
+    // place with the wrong register class. They exist only to confirm
+    // `verify_allocation` actually detects each invariant violation.
+    #[cfg(feature = "codegen_test")]
+    let (bug_i1, bug_i3) = (
+        std::env::var("BADC_BUG_I1").is_ok(),
+        std::env::var("BADC_BUG_I3").is_ok(),
+    );
+    #[cfg(not(feature = "codegen_test"))]
+    let (bug_i1, bug_i3) = (false, false);
+    let mut color: Vec<Place> = vec![Place::None; n];
+    let mut spill_count: u32 = 0;
+    for node in 0..n {
+        let Some(c) = constraints[node] else {
+            continue;
+        };
+        let mut forbidden: [bool; 64] = [false; 64];
+        if !bug_i1 {
+            for &nb in interference.neighbors(node as ValueId) {
+                match color[nb as usize] {
+                    Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
+                    Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                    _ => {}
+                }
+            }
+        }
+        // Bank size cap: BADC_MAX_GPR / BADC_MAX_FPR truncate each bank
+        // to raise register pressure across the suite. Off (usize::MAX)
+        // by default. The first `max` entries of each bank are kept so a
+        // single value still has a non-empty palette to spill out of.
+        let cap = if c.is_fp { max_fpr } else { max_gpr };
+        let (callee_full, caller_full) = if c.is_fp {
+            (banks.callee_fprs, banks.caller_fprs)
+        } else {
+            (banks.callee_gprs, banks.caller_gprs)
+        };
+        let callee = &callee_full[..callee_full.len().min(cap)];
+        let caller = &caller_full[..caller_full.len().min(cap)];
+        let free = |r: u8| !forbidden[r as usize];
+        let pick = c
+            .hint
+            .filter(|&h| {
+                free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+            })
+            .or_else(|| {
+                if c.must_callee {
+                    callee.iter().copied().find(|&r| free(r))
+                } else {
+                    caller
+                        .iter()
+                        .copied()
+                        .find(|&r| free(r))
+                        .or_else(|| callee.iter().copied().find(|&r| free(r)))
+                }
+            });
+        color[node] = match pick {
+            Some(r) if c.is_fp != bug_i3 => Place::FpReg(r),
+            Some(r) => Place::IntReg(r),
+            None => {
+                let slot = spill_count;
+                spill_count += 1;
+                Place::Spill(slot)
+            }
+        };
+    }
+
+    let mut places: Vec<Place> = vec![Place::None; n];
+    for v in 0..n {
+        let root = node_of[v] as usize;
+        if constraints[root].is_some() {
+            places[v] = color[root];
+        }
+    }
+    let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    for c in &color {
+        match c {
+            Place::IntReg(r) => {
+                gpr_used.insert(*r);
+            }
+            Place::FpReg(r) => {
+                fp_used.insert(*r);
+            }
+            _ => {}
+        }
+    }
+    Coloring {
+        places,
+        spill_count,
+        gpr_used: gpr_used.into_iter().collect(),
+        fp_used: fp_used.into_iter().collect(),
     }
 }
 
@@ -859,6 +945,13 @@ enum ResultKind {
 /// only when its stored values are integer-classed too.
 pub(super) fn produces_fp_result(inst: &Inst) -> bool {
     matches!(result_kind(inst), ResultKind::Fp)
+}
+
+/// Whether an instruction defines a value that needs a register or
+/// spill slot. `Store` / `AllocaInit` and other side-effect-only insts
+/// produce no placed value.
+pub(super) fn produces_value(inst: &Inst) -> bool {
+    !matches!(result_kind(inst), ResultKind::None)
 }
 
 fn result_kind(inst: &Inst) -> ResultKind {
@@ -1500,6 +1593,123 @@ mod tests {
             .expect("produce_ssa_funcs")
     }
 
+    use super::super::ssa_liveness::Interference;
+
+    // A tiny register file for coloring tests: two callee-saved and
+    // two caller-saved integer registers, no FP.
+    fn tiny_banks() -> RegBanks {
+        RegBanks {
+            callee_gprs: &[20, 21],
+            caller_gprs: &[0, 1],
+            callee_fprs: &[],
+            caller_fprs: &[],
+        }
+    }
+
+    fn int_node(must_callee: bool, hint: Option<u8>) -> Option<NodeConstraints> {
+        Some(NodeConstraints {
+            is_fp: false,
+            must_callee,
+            hint,
+        })
+    }
+
+    #[test]
+    fn interfering_nodes_get_distinct_registers() {
+        // Triangle: nodes 0,1,2 mutually interfere -> three colors.
+        let g = Interference::from_edges(3, &[(0, 1), (1, 2), (0, 2)]);
+        let node_of = [0u32, 1, 2];
+        let cons = [
+            int_node(false, None),
+            int_node(false, None),
+            int_node(false, None),
+        ];
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert_eq!(r.spill_count, 0);
+        let regs: Vec<Place> = r.places.clone();
+        assert_ne!(regs[0], regs[1]);
+        assert_ne!(regs[1], regs[2]);
+        assert_ne!(regs[0], regs[2]);
+    }
+
+    #[test]
+    fn over_pressure_spills_one_node() {
+        // Five mutually interfering nodes, four registers -> one spill.
+        let edges: Vec<(u32, u32)> = (0..5u32)
+            .flat_map(|a| (a + 1..5u32).map(move |b| (a, b)))
+            .collect();
+        let g = Interference::from_edges(5, &edges);
+        let node_of = [0u32, 1, 2, 3, 4];
+        let cons: Vec<Option<NodeConstraints>> = (0..5).map(|_| int_node(false, None)).collect();
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert_eq!(
+            r.spill_count, 1,
+            "four registers, five live values -> one spill"
+        );
+        let spilled = r
+            .places
+            .iter()
+            .filter(|p| matches!(p, Place::Spill(_)))
+            .count();
+        assert_eq!(spilled, 1);
+    }
+
+    #[test]
+    fn must_callee_node_avoids_caller_saved() {
+        // A single call-crossing node must land in a callee-saved
+        // register even though caller-saved are free and preferred.
+        let g = Interference::from_edges(1, &[]);
+        let node_of = [0u32];
+        let cons = [int_node(true, None)];
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert!(
+            matches!(r.places[0], Place::IntReg(20) | Place::IntReg(21)),
+            "call-crossing value must take a callee-saved register, got {:?}",
+            r.places[0],
+        );
+    }
+
+    #[test]
+    fn caller_saved_preferred_when_no_call_crossing() {
+        // No constraint forces callee-saved, so a caller-saved
+        // register is chosen to avoid a prologue save.
+        let g = Interference::from_edges(1, &[]);
+        let node_of = [0u32];
+        let cons = [int_node(false, None)];
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert!(
+            matches!(r.places[0], Place::IntReg(0) | Place::IntReg(1)),
+            "non-crossing value should prefer caller-saved, got {:?}",
+            r.places[0],
+        );
+    }
+
+    #[test]
+    fn hint_is_honoured_when_free() {
+        let g = Interference::from_edges(2, &[(0, 1)]);
+        let node_of = [0u32, 1];
+        let cons = [int_node(false, Some(21)), int_node(false, None)];
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert_eq!(
+            r.places[0],
+            Place::IntReg(21),
+            "free hinted register must be used"
+        );
+        assert_ne!(r.places[1], Place::IntReg(21));
+    }
+
+    #[test]
+    fn coalesced_members_inherit_root_placement() {
+        // Values 0 and 1 share one node (root 0); both get the same
+        // register, value 2 interferes and gets a different one.
+        let g = Interference::from_edges(3, &[(0, 2)]);
+        let node_of = [0u32, 0, 2];
+        let cons = [int_node(false, None), None, int_node(false, None)];
+        let r = color_graph(&g, &node_of, &cons, &tiny_banks(), usize::MAX, usize::MAX);
+        assert_eq!(r.places[0], r.places[1], "class members share a register");
+        assert_ne!(r.places[0], r.places[2]);
+    }
+
     /// Allocate every function in quicksort.c on aarch64. The
     /// fixture has straight-line control flow and short
     /// expressions; the allocator should never spill.
@@ -1854,7 +2064,8 @@ mod tests {
         ] {
             for f in &funcs {
                 let alloc = allocate(f, target);
-                let mut classes = crate::c5::codegen::ssa_phi_class::PhiClasses::from_func(f);
+                let live = crate::c5::codegen::ssa_liveness::Liveness::compute(f);
+                let mut classes = crate::c5::codegen::ssa_phi_class::PhiClasses::build(f, &live);
                 let mut non_singleton_root = alloc::vec![false; f.insts.len()];
                 for v in 0..f.insts.len() {
                     let root = classes.find(v as ValueId) as usize;

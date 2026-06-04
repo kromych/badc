@@ -31,6 +31,13 @@ std = []
 # with `default-features = false, features = ["std"]` to keep the
 # library footprint slim.
 linker = []
+# Exposes the register-allocator pressure knobs (per-bank GPR / FP
+# count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
+# `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment
+# variables). Used to force spilling at arbitrary pressure for
+# codegen validation. Off by default: a production build ignores the
+# caps entirely and the allocator always sees the full register file.
+codegen_test = []
 
 [dependencies]
 # `hashbrown` is the no_std-friendly hash table the preprocessor uses

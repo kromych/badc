@@ -244,6 +244,30 @@ fn main() {
                     }
                 }
             }
+            // Register-allocator pressure caps, gated behind the
+            // `codegen_test` feature. Each truncates one allocator
+            // bank to N entries so the allocator spills as if the
+            // target had fewer registers. The value is published
+            // through the same `BADC_MAX_GPR` / `BADC_MAX_FPR`
+            // environment variables the allocator reads. Setting an
+            // environment variable is sound here: it runs during
+            // argument parsing before any worker thread starts.
+            #[cfg(feature = "codegen_test")]
+            s if s.starts_with("--max-gpr=") || s.starts_with("--max-fpr=") => {
+                let (flag, var) = if s.starts_with("--max-gpr=") {
+                    ("--max-gpr=", "BADC_MAX_GPR")
+                } else {
+                    ("--max-fpr=", "BADC_MAX_FPR")
+                };
+                let body = &s[flag.len()..];
+                match body.parse::<usize>() {
+                    Ok(n) if n >= 1 => unsafe { std::env::set_var(var, n.to_string()) },
+                    _ => {
+                        eprint_diagnostic(format!("badc: error: {flag}N requires an integer >= 1"));
+                        std::process::exit(1);
+                    }
+                }
+            }
             "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--jit" => claim(&mut mode, Mode::Jit),

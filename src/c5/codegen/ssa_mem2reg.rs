@@ -225,13 +225,21 @@ pub(crate) fn phi_placement(
             }
         }
     }
+    // Pruned SSA: a phi is placed at an iterated-dominance-frontier
+    // block only where the slot is live on entry. Minimal SSA (the
+    // frontier walk alone) also places a phi at a join a body-local
+    // value reaches but does not escape; that phi has a predecessor
+    // where the slot is undefined, so it carries an incomplete
+    // `incoming` and the per-arch lowering reads stack residue on the
+    // first traversal of that edge.
+    let slot_live_in = slot_live_in_sets(func, promotable);
     let mut result: BTreeMap<i64, BTreeSet<BlockId>> = BTreeMap::new();
     for (slot, defs) in &def_blocks {
         let mut worklist: Vec<BlockId> = defs.iter().copied().collect();
         let mut phis: BTreeSet<BlockId> = BTreeSet::new();
         while let Some(b) = worklist.pop() {
             for &frontier in &df[b as usize] {
-                if phis.insert(frontier) {
+                if slot_live_in[frontier as usize].contains(slot) && phis.insert(frontier) {
                     worklist.push(frontier);
                 }
             }
@@ -241,6 +249,59 @@ pub(crate) fn phi_placement(
         }
     }
     result
+}
+
+/// Per-block live-in sets over promotable slots. A slot is live on
+/// entry to a block when some path from there reaches a `LoadLocal` of
+/// the slot before a `StoreLocal` overwrites it. Standard backward
+/// live-variable dataflow with each store treated as a full
+/// definition. Promotable slots are address-free, so `LoadLocal` /
+/// `StoreLocal` are their only accesses and this captures every use.
+fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> Vec<BTreeSet<i64>> {
+    let nblocks = func.blocks.len();
+    // gen_set[B]: slots with an upward-exposed load (loaded before any
+    // store of that slot in B). kill[B]: slots stored in B.
+    let mut gen_set: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
+    let mut kill: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let mut stored: BTreeSet<i64> = BTreeSet::new();
+        for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
+            match inst {
+                Inst::LoadLocal { off, .. } if promotable.contains(off) => {
+                    if !stored.contains(off) {
+                        gen_set[b].insert(*off);
+                    }
+                }
+                Inst::StoreLocal { off, .. } if promotable.contains(off) => {
+                    stored.insert(*off);
+                    kill[b].insert(*off);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut live_in: Vec<BTreeSet<i64>> = alloc::vec![BTreeSet::new(); nblocks];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for b in (0..nblocks).rev() {
+            let mut live_out: BTreeSet<i64> = BTreeSet::new();
+            for s in successors(&func.blocks[b].terminator) {
+                live_out.extend(live_in[s as usize].iter().copied());
+            }
+            let mut ni = gen_set[b].clone();
+            for &s in &live_out {
+                if !kill[b].contains(&s) {
+                    ni.insert(s);
+                }
+            }
+            if ni != live_in[b] {
+                live_in[b] = ni;
+                changed = true;
+            }
+        }
+    }
+    live_in
 }
 
 // TODO: per-arch lowering of `Inst::Phi`: IR position is a no-op;
@@ -340,6 +401,20 @@ pub(crate) fn insert_phis(
             }
             Terminator::Jmp(_) | Terminator::FallThrough(_) | Terminator::TailExt(_) => {}
         }
+    }
+    // The per-site cross-TU relocation tables key on the value-id of
+    // the `ImmData` / `ImmCode` / `TlsAddr` that names the symbol.
+    // Phi insertion shifts every id, so these references must move
+    // with the operands above; otherwise the linker patches the wrong
+    // instruction and the symbol resolves to unrelated data.
+    for (v, _) in func.extern_imm_data_refs.iter_mut() {
+        remap(v);
+    }
+    for (v, _) in func.extern_imm_code_refs.iter_mut() {
+        remap(v);
+    }
+    for (v, _) in func.extern_tls_refs.iter_mut() {
+        remap(v);
     }
 
     func.insts = new_insts;
@@ -573,12 +648,11 @@ fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
 
 #[cfg(feature = "std")]
 thread_local! {
-    /// Per-thread override for `BADC_PHI_PROMOTE`. `Some(true)` and
+    /// Per-thread override for phi promotion. `Some(true)` and
     /// `Some(false)` force promotion on / off respectively; `None`
-    /// (the default) falls back to the process-global env var.
-    /// Tests that need to drive promotion deterministically set
-    /// this via [`with_phi_promote_override`] so a parallel test on
-    /// a different thread does not see the change.
+    /// (the default) leaves promotion on. Tests that need the
+    /// pre-promotion lowering set this via [`with_phi_promote_override`]
+    /// so a parallel test on a different thread does not see the change.
     static PHI_PROMOTE_OVERRIDE: core::cell::Cell<Option<bool>> = const { core::cell::Cell::new(None) };
 }
 
@@ -663,18 +737,17 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let idom = dominators(func);
     let df = dominance_frontiers(func, &idom);
     let phi_blocks = phi_placement(func, &promotable, &df);
-    // Multi-block merges promote through an SSA phi at each join only
-    // when the gate is set; the per-arch emit reads `Inst::Phi` and
-    // emits the predecessor-exit moves the parallel-copy lowering
-    // expects. The per-thread override takes precedence over the
-    // env-var so concurrent tests under cargo test's parallel
-    // scheduler do not see each other's `BADC_PHI_PROMOTE` setting
-    // through the process-global env table.
+    // Multi-block merges promote through an SSA phi at each join: the
+    // per-arch emit reads `Inst::Phi` and emits the predecessor-exit
+    // moves the parallel-copy lowering expects, and the allocator
+    // coalesces each phi class through the interference-checked
+    // congruence. The per-thread override lets a test force the
+    // pre-promotion frame-slot lowering for an A/B comparison without
+    // touching a sibling test on another thread.
     #[cfg(feature = "std")]
-    let phi_promote =
-        phi_promote_override().unwrap_or_else(|| std::env::var("BADC_PHI_PROMOTE").is_ok());
+    let phi_promote = phi_promote_override().unwrap_or(true);
     #[cfg(not(feature = "std"))]
-    let phi_promote = false;
+    let phi_promote = true;
     // Slots read at one narrow width promote by extending the reaching
     // value at each load; full-width I64 slots redirect the load to
     // the value directly.
@@ -1489,17 +1562,97 @@ mod tests {
         assert_eq!(f.blocks[3].exit_acc, 6);
     }
 
+    /// `insert_phis` renumbers every value when it prepends phis. The
+    /// cross-TU relocation tables key on value-ids, so they must be
+    /// remapped too -- otherwise the linker patches the wrong
+    /// instruction and an extern symbol resolves to unrelated data.
+    #[test]
+    fn insert_phis_remaps_extern_reloc_value_ids() {
+        // Same diamond as above, with an `ImmData` in block 3 that
+        // carries an extern data relocation. The phi prepended at
+        // block 3's head shifts the LoadLocal from id 5 to 6 and the
+        // ImmData from id 6 to 7; the extern ref must follow to 7.
+        let insts = alloc::vec![
+            Inst::Imm(0),
+            Inst::Imm(1),
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+            },
+            Inst::Imm(2),
+            Inst::StoreLocal {
+                off: -1,
+                value: 3,
+                kind: StoreKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+            },
+            Inst::ImmData(0),
+        ];
+        let blocks = alloc::vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 3,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..7,
+                terminator: Terminator::Return(6),
+                exit_acc: 6,
+            },
+        ];
+        let mut f = func_with(insts, blocks);
+        // Extern data reloc on the ImmData at id 6 (parser symbol 42).
+        f.extern_imm_data_refs = alloc::vec![(6, 42)];
+        let promotable = BTreeSet::from([-1i64]);
+        let idom = dominators(&f);
+        let df = dominance_frontiers(&f, &idom);
+        let phi_blocks = phi_placement(&f, &promotable, &df);
+        let mut slot_kind = alloc::collections::BTreeMap::new();
+        slot_kind.insert(-1i64, LoadKind::I64);
+        insert_phis(&mut f, &phi_blocks, &slot_kind);
+        // The ImmData slid from id 6 to id 7 behind the prepended phi.
+        assert!(
+            matches!(f.insts[7], Inst::ImmData(0)),
+            "ImmData should sit at id 7 after the phi prepend, got {:?}",
+            f.insts[7]
+        );
+        assert_eq!(
+            f.extern_imm_data_refs,
+            alloc::vec![(7, 42)],
+            "extern data reloc value-id must remap with the renumbering",
+        );
+    }
+
     #[test]
     #[cfg(feature = "std")]
     fn run_under_phi_promote_fills_phi_incoming_at_join() {
         // Diamond: 0 -> {1, 2} -> 3.
         // Slot -1: stored in both arms with distinct values.
         // The join load reads the merged value through the phi.
-        // Under BADC_PHI_PROMOTE the rename fills the phi's
-        // `incoming` with one (pred, value) entry per CFG edge.
-        unsafe {
-            std::env::set_var("BADC_PHI_PROMOTE", "1");
-        }
+        // The rename fills the phi's `incoming` with one
+        // (pred, value) entry per CFG edge.
         let insts = alloc::vec![
             // block 0: id 0
             Inst::Imm(0),
@@ -1554,10 +1707,7 @@ mod tests {
             },
         ];
         let mut f = func_with(insts, blocks);
-        let promoted = run(&mut f);
-        unsafe {
-            std::env::remove_var("BADC_PHI_PROMOTE");
-        }
+        let promoted = with_phi_promote_override(true, || run(&mut f));
         assert!(
             promoted.contains(&-1),
             "phi-promoted slot must appear in the returned list"

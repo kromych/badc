@@ -1,19 +1,20 @@
-//! Phi-class union-find for the SSA register allocator.
+//! Phi-congruence classes for the SSA register allocator.
 //!
-//! Each phi instruction joins its result with every incoming source
-//! into a single equivalence class. The register allocator must place
-//! every member of a class in the same physical location, since the
-//! per-arch emit lowers `Inst::Phi` to a predecessor-exit move from
-//! source to result -- a self-mov when source and result share a
-//! register, which `schedule_int_reg_moves` drops.
+//! Each phi joins its result with its incoming sources. The register
+//! allocator places every member of a congruence class in one
+//! location, so the predecessor-exit move that lowers the phi becomes
+//! a self-move and is dropped. A class may hold a value only if no two
+//! members are simultaneously live -- otherwise one member's emit
+//! would overwrite a value another member still needs.
 //!
-//! The classes are computed once per function before allocation. The
-//! `find` operation walks parent pointers with path compression; the
-//! `union` step runs over every `Inst::Phi` and merges the phi result
-//! with each incoming source. Path compression alone keeps the amortised
-//! cost near constant per call; no rank heuristic is needed for SSA
-//! shapes observed in practice (a function rarely has more than a
-//! few hundred phi classes).
+//! Construction follows the out-of-SSA coalescing of Boissinot et al.:
+//! start with every value in its own class, then for each phi attempt
+//! to merge the result's class with each operand's class, allowing the
+//! merge only when no member of one class interferes with any member of
+//! the other. The interference test is the value-liveness query in
+//! [`super::ssa_liveness`]. An operand whose class cannot merge keeps
+//! its own location, and the per-arch emit materialises it with a real
+//! move on the phi's predecessor edge.
 //!
 //! Output is consumed by `ssa_alloc::allocate`, which indexes its
 //! per-class `places` table through `find`.
@@ -21,104 +22,67 @@
 use alloc::vec::Vec;
 
 use super::super::ir::{FunctionSsa, Inst, NO_VALUE, ValueId};
+use super::ssa_liveness::Liveness;
 
-/// Union-find over `ValueId`s. Two values are in the same class if
-/// they appear together as the result and an incoming source of any
-/// `Inst::Phi` in the function (transitive closure).
+/// Union-find over `ValueId`s. Two values share a class when a chain
+/// of non-interfering phi merges connects them.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(super) struct PhiClasses {
-    /// Parent pointer per value. `parent[v] == v` marks `v` as the
-    /// root of its class.
+    /// Parent pointer per value. `parent[v] == v` marks `v` as a root.
     parent: Vec<ValueId>,
 }
 
 #[allow(dead_code)]
 impl PhiClasses {
-    /// Build the union-find from `func`. Every value starts as its
-    /// own singleton class; each phi instruction unions the result
-    /// with every incoming source whose current class is still a
-    /// singleton.
-    ///
-    /// The singleton check is what keeps two distinct phi classes
-    /// from accidentally merging through a shared constant source.
-    /// In SSA emitted by mem2reg, two parallel `for`-loop locals
-    /// often both initialise from the same `Imm(0)`. Unioning every
-    /// source unconditionally would put both phi results in the same
-    /// class -- forcing them to share a register, which then forces
-    /// one of their live ranges to alias the other and miscompile.
-    /// The first phi to reach a source claims it; subsequent phis
-    /// reading the same source pick a different register for their
-    /// result, and the per-arch predecessor exit-move handles the
-    /// source-to-result load.
-    pub(super) fn from_func(func: &FunctionSsa) -> Self {
-        Self::from_func_with_use_counts(func, &[])
-    }
-
-    /// Build the union-find with a single-use safety guard. The
-    /// optional `use_counts` slice (one entry per `ValueId`) lets
-    /// the pass refuse to union a phi source that has more than
-    /// one consumer.
-    ///
-    /// Joining a phi source `v_src` with the phi result `v_phi`
-    /// forces every class member to share one register. That is
-    /// safe only when this phi is the *only* consumer of `v_src`
-    /// -- otherwise another consumer of `v_src` reads the shared
-    /// register after some other class member's emit has
-    /// overwritten it. `use_counts[v_src] == 1` proves single-use
-    /// (the one consumer must be this phi since the phi names
-    /// `v_src` as an incoming). An empty slice disables the
-    /// guard for the unit tests, which build minimal IRs by hand.
-    ///
-    /// A position-based check (`last_use[src] > phi_pc`) would be
-    /// strictly wrong here: loop back-edge sources have their
-    /// per-value last-use bumped to the predecessor block's end by
-    /// the cross-block liveness pass, so a position check rejects
-    /// the exact case the union-find exists to handle. The
-    /// use-count check is unaffected by that bump.
-    pub(super) fn from_func_with_use_counts(func: &FunctionSsa, use_counts: &[u32]) -> Self {
+    /// Build phi-congruence classes for `func` under the interference
+    /// relation in `live`. Each phi result is merged with each of its
+    /// operands when, and only when, the combined class stays
+    /// interference-free. Processing preserves the invariant that every
+    /// class is internally interference-free, so the allocator may
+    /// assign one location per class.
+    pub(super) fn build(func: &FunctionSsa, live: &Liveness) -> Self {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
         };
-        for (idx, inst) in func.insts.iter().enumerate() {
-            let Inst::Phi { incoming, .. } = inst else {
+        // Per-root member lists. A value's list is meaningful only when
+        // it is a root; a non-root's list is emptied into its new root
+        // on merge.
+        let mut members: Vec<Vec<ValueId>> = (0..n as ValueId).map(|v| alloc::vec![v]).collect();
+
+        for idx in 0..n {
+            let Inst::Phi { incoming, .. } = &func.insts[idx] else {
                 continue;
             };
-            let phi_root = classes.find(idx as ValueId);
-            for (_, src) in incoming {
-                if *src == NO_VALUE || (*src as usize) >= n {
+            // Collect operands first so the borrow of `func.insts` ends
+            // before the merge loop mutates nothing in `func` but keeps
+            // the borrow checker satisfied.
+            let operands: Vec<ValueId> = incoming
+                .iter()
+                .map(|(_, s)| *s)
+                .filter(|s| *s != NO_VALUE && (*s as usize) < n)
+                .collect();
+            for src in operands {
+                let rr = classes.find(idx as ValueId);
+                let rs = classes.find(src);
+                if rr == rs {
                     continue;
                 }
-                let src_root = classes.find(*src);
-                if src_root == phi_root {
+                if classes_interfere(func, live, &members[rr as usize], &members[rs as usize]) {
                     continue;
                 }
-                // Only union if `src` is still its own root -- i.e.
-                // no earlier phi has claimed it. If `src_root != src`
-                // then `src` is already a non-root member of some
-                // other phi class, and joining the two classes would
-                // collapse their live ranges.
-                if src_root != *src {
-                    continue;
-                }
-                // Refuse to join when `src` has more than one
-                // consumer. In that case some other instruction
-                // also reads `src`, and giving the class one shared
-                // register lets another class member's emit
-                // overwrite `src`'s register before that other
-                // consumer reads it.
-                if let Some(&uc) = use_counts.get(*src as usize)
-                    && uc != 1
-                {
-                    continue;
-                }
-                // Make phi_root the parent of src_root. The order
-                // is arbitrary for correctness; picking phi_root
-                // keeps the root closer to the phi PC so a later
-                // `find` from a phi member's pick site walks a
-                // shorter path before compression kicks in.
-                classes.parent[src_root as usize] = phi_root;
+                // Attach the smaller member list to the larger to keep
+                // the union-find shallow. The retained root owns the
+                // combined member list.
+                let (keep, drop) = if members[rr as usize].len() >= members[rs as usize].len() {
+                    (rr, rs)
+                } else {
+                    (rs, rr)
+                };
+                let moved = core::mem::take(&mut members[drop as usize]);
+                members[keep as usize].extend(moved);
+                classes.parent[drop as usize] = keep;
             }
         }
         classes
@@ -127,7 +91,6 @@ impl PhiClasses {
     /// Find the root of `v`'s class, compressing the path on the way.
     /// Iterative to avoid recursion overflow on deeply chained phis.
     pub(super) fn find(&mut self, v: ValueId) -> ValueId {
-        // Two-pass: walk to the root, then re-walk with assignment.
         let mut cur = v;
         while self.parent[cur as usize] != cur {
             cur = self.parent[cur as usize];
@@ -147,6 +110,18 @@ impl PhiClasses {
     pub(super) fn len(&self) -> usize {
         self.parent.len()
     }
+}
+
+/// Whether any member of `a` interferes with any member of `b`.
+fn classes_interfere(func: &FunctionSsa, live: &Liveness, a: &[ValueId], b: &[ValueId]) -> bool {
+    for &x in a {
+        for &y in b {
+            if live.interfere(func, x, y) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -177,6 +152,7 @@ mod tests {
 
     #[test]
     fn every_value_is_its_own_singleton_class_when_no_phi() {
+        // b0: v0=Imm(7), v1=Imm(11); return v1.
         let insts = vec![Inst::Imm(7), Inst::Imm(11)];
         let blocks = vec![Block {
             start_pc: 0,
@@ -185,125 +161,75 @@ mod tests {
             exit_acc: 1,
         }];
         let func = func_with(insts, blocks);
-        let mut classes = PhiClasses::from_func(&func);
+        let live = Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &live);
         assert_eq!(classes.find(0), 0);
         assert_eq!(classes.find(1), 1);
     }
 
     #[test]
-    fn phi_result_and_all_incoming_sources_share_one_class() {
-        // v0 = Imm(0)
-        // v1 = Imm(1)
-        // v2 = Phi { incoming = [(0, v0), (1, v1)], kind = I64 }
+    fn diamond_phi_merges_non_interfering_operands_with_result() {
+        // b0: v0=Imm(0); Bz v0 -> b1 else b2
+        // b1: v1=Imm(1); Jmp b3
+        // b2: v2=Imm(2); Jmp b3
+        // b3: v3=Phi[b1:v1, b2:v2]; Return v3
+        // v1 dies on the b1->b3 edge, v2 on the b2->b3 edge; neither
+        // interferes with v3, so all three join one class.
         let insts = vec![
             Inst::Imm(0),
             Inst::Imm(1),
+            Inst::Imm(2),
             Inst::Phi {
-                incoming: vec![(0, 0), (1, 1)],
+                incoming: vec![(1, 1), (2, 2)],
                 kind: LoadKind::I64,
             },
         ];
-        let blocks = vec![Block {
-            start_pc: 0,
-            inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
-        }];
-        let func = func_with(insts, blocks);
-        let mut classes = PhiClasses::from_func(&func);
-        let root = classes.find(2);
-        assert_eq!(classes.find(0), root);
-        assert_eq!(classes.find(1), root);
-    }
-
-    #[test]
-    fn chain_of_phis_merges_into_a_single_class() {
-        // v0 = Imm(0)
-        // v1 = Imm(1)
-        // v2 = Phi(v0, v1)
-        // v3 = Phi(v0, v2)  -- pulls v2's class in via the v2 incoming
-        let insts = vec![
-            Inst::Imm(0),
-            Inst::Imm(1),
-            Inst::Phi {
-                incoming: vec![(0, 0), (1, 1)],
-                kind: LoadKind::I64,
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
             },
-            Inst::Phi {
-                incoming: vec![(0, 0), (2, 2)],
-                kind: LoadKind::I64,
+            Block {
+                start_pc: 0,
+                inst_range: 1..2,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
             },
         ];
-        let blocks = vec![Block {
-            start_pc: 0,
-            inst_range: 0..4,
-            terminator: Terminator::Return(3),
-            exit_acc: 3,
-        }];
         let func = func_with(insts, blocks);
-        let mut classes = PhiClasses::from_func(&func);
+        let live = Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &live);
         let root = classes.find(3);
-        for v in 0..4 {
-            assert_eq!(classes.find(v), root, "v{v} should share v3's class");
-        }
+        assert_eq!(classes.find(1), root, "v1 operand must join the phi class");
+        assert_eq!(classes.find(2), root, "v2 operand must join the phi class");
     }
 
     #[test]
-    fn shared_constant_source_does_not_merge_two_phi_classes() {
-        // Two parallel loops in one function: phi_a at b1 head
-        // sees v0 (Imm(0)) and v_back_a; phi_b at b2 head sees the
-        // same v0 and v_back_b. Both phis share v0 as the b0-edge
-        // source. Joining unconditionally would put phi_a and
-        // phi_b in one class, forcing them to share a register and
-        // miscompiling whichever loop runs second. The first phi
-        // claims v0; the second phi's class excludes v0 and
-        // contains only itself + its own back-edge source.
-        let insts = vec![
-            Inst::Imm(0),
-            Inst::Phi {
-                incoming: vec![(0, 0), (1, 3)],
-                kind: LoadKind::I64,
-            },
-            Inst::Phi {
-                incoming: vec![(0, 0), (2, 4)],
-                kind: LoadKind::I64,
-            },
-            Inst::BinopI {
-                op: super::super::super::ir::BinOp::Add,
-                lhs: 1,
-                rhs_imm: 1,
-            },
-            Inst::BinopI {
-                op: super::super::super::ir::BinOp::Add,
-                lhs: 2,
-                rhs_imm: 1,
-            },
-        ];
-        let blocks = vec![Block {
-            start_pc: 0,
-            inst_range: 0..5,
-            terminator: Terminator::Return(1),
-            exit_acc: 1,
-        }];
-        let func = func_with(insts, blocks);
-        let mut classes = PhiClasses::from_func(&func);
-        let root_a = classes.find(1);
-        let root_b = classes.find(2);
-        assert_ne!(
-            root_a, root_b,
-            "two phis sharing a constant init source must remain in distinct classes"
-        );
-        assert_eq!(classes.find(3), root_a, "phi_a back-edge must join phi_a");
-        assert_eq!(classes.find(4), root_b, "phi_b back-edge must join phi_b");
-    }
-
-    #[test]
-    fn back_edge_phi_source_defined_after_the_phi_still_joins() {
-        // Loop-shaped:
-        //   v0 = Imm(0)
-        //   v1 = Phi { incoming = [(0, v0), (1, v2)] }  -- back-edge from v2
-        //   v2 = BinopI add v1, 1                       -- defined AFTER v1
-        // The union must reach v2 via the (1, v2) incoming entry.
+    fn interfering_operand_stays_out_of_the_phi_class() {
+        // b0: v0=Imm(0); Jmp b1
+        // b1: v1=Phi[b0:v0, b1:v2]; v2=BinopI add v1,1; v3=Binop add v1,v2
+        //     ; Bz v3 -> b1 else b2     (v1 used after v2's def -> they
+        //     interfere; the back-edge operand v2 must NOT join v1)
+        // b2: Return v1
+        use super::super::super::ir::BinOp;
         let insts = vec![
             Inst::Imm(0),
             Inst::Phi {
@@ -311,21 +237,143 @@ mod tests {
                 kind: LoadKind::I64,
             },
             Inst::BinopI {
-                op: super::super::super::ir::BinOp::Add,
+                op: BinOp::Add,
                 lhs: 1,
                 rhs_imm: 1,
             },
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs: 2,
+            },
         ];
-        let blocks = vec![Block {
-            start_pc: 0,
-            inst_range: 0..3,
-            terminator: Terminator::Return(1),
-            exit_acc: 1,
-        }];
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..4,
+                terminator: Terminator::Bz {
+                    cond: 3,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 3,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 4..4,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            },
+        ];
         let func = func_with(insts, blocks);
-        let mut classes = PhiClasses::from_func(&func);
-        let root = classes.find(1);
-        assert_eq!(classes.find(0), root, "init source must join");
-        assert_eq!(classes.find(2), root, "back-edge source must join");
+        let live = Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &live);
+        // v1 is live past v2's definition (v3 reads both), so v1 and
+        // v2 interfere and must occupy distinct classes.
+        assert_ne!(
+            classes.find(1),
+            classes.find(2),
+            "interfering back-edge operand must not coalesce with the phi result"
+        );
+        // The init operand v0 dies into the phi and does join.
+        assert_eq!(classes.find(0), classes.find(1));
+    }
+
+    #[test]
+    fn no_congruence_class_contains_interfering_values() {
+        // Two loops chained through one Imm(0): the first loop's phi
+        // reads it on the entry edge, and the constant is also the
+        // entry value of the second loop's phi (incoming b1:v0), so it
+        // stays live across the first loop. The builder must never put
+        // two simultaneously-live values in one class regardless of
+        // merge order; verify the invariant directly.
+        use super::super::super::ir::BinOp;
+        // b0: v0=Imm(0); Jmp b1
+        // b1: v1=Phi[b0:v0, b1:v2]; v2=BinopI add v1,1; Bz v2 -> b2 else b1
+        // b2: v3=Phi[b1:v0, b2:v4]; v4=BinopI add v3,1; Bz v4 -> b3 else b2
+        // b3: Return v3
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+            Inst::Phi {
+                incoming: vec![(1, 0), (2, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs_imm: 1,
+            },
+        ];
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..3,
+                terminator: Terminator::Bz {
+                    cond: 2,
+                    target: 2,
+                    fall_through: 1,
+                },
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..5,
+                terminator: Terminator::Bz {
+                    cond: 4,
+                    target: 3,
+                    fall_through: 2,
+                },
+                exit_acc: 4,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 5..5,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            },
+        ];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &live);
+        // Core invariant: every congruence class is interference-free.
+        let n = func.insts.len();
+        for a in 0..n as ValueId {
+            for b in (a + 1)..n as ValueId {
+                if classes.find(a) == classes.find(b) {
+                    assert!(
+                        !live.interfere(&func, a, b),
+                        "v{a} and v{b} interfere yet share a congruence class"
+                    );
+                }
+            }
+        }
+        // The constant is live across the first phi (the second loop
+        // reads it), so it must not coalesce with that phi.
+        assert_ne!(
+            classes.find(0),
+            classes.find(1),
+            "a value live past the phi must not coalesce with it"
+        );
     }
 }

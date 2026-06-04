@@ -13,17 +13,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, #0xffff            // =65535
-               	movk	x15, #0xffff, lsl #16
-               	movk	x15, #0xffff, lsl #32
-               	movk	x15, #0xffff, lsl #48
+               	mov	x0, #0xffff             // =65535
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	eor	x14, x15, x17
+               	eor	x1, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
-               	cmp	x14, #0x0
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -31,11 +31,11 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	eor	x14, x15, x17
+               	eor	x1, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x14, x14, x17
-               	cmp	x14, #0x0
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
@@ -43,16 +43,15 @@ Disassembly of section .text:
                	ret
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	cmp	x15, x17
-               	cset	x15, ne
-               	cmp	x15, #0x0
+               	cmp	x0, x17
+               	cset	x0, ne
+               	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

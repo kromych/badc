@@ -13,10 +13,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	add	x15, x15, #0x5
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
+               	add	x0, x0, #0x5
+               	ldrb	w0, [x0]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

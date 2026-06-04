@@ -12,11 +12,11 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movl	$0x64, %r11d
-               	movl	%r11d, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %r9
-               	movl	$0xc8, %r11d
-               	movl	%r11d, (%r9)
+               	movl	$0x64, %eax
+               	movl	%eax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movl	$0xc8, %ecx
+               	movl	%ecx, (%rax)
                	movslq	-0x8(%rbp), %rax
                	addq	$0x10, %rsp
                	popq	%rbp

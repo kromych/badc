@@ -23,25 +23,23 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	add	x0, x20, #0x4
-               	mov	x2, #0x0                // =0
-               	strb	w2, [x0]
-               	ldrb	w20, [x20]
+               	mov	x1, #0x0                // =0
+               	strb	w1, [x0]
+               	ldrb	w0, [x20]
                	mov	x17, #0x41              // =65
-               	eor	x20, x20, x17
+               	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x20, x20, x17
-               	cmp	x20, #0x0
+               	and	x0, x0, x17
+               	cmp	x0, #0x0
                	b.ne	<addr>
-               	mov	x1, #0x2a               // =42
-               	mov	x0, x1
+               	mov	x0, #0x2a               // =42
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x20, #0x0               // =0
-               	mov	x0, x20
+               	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x40

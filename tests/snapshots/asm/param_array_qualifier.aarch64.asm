@@ -10,142 +10,136 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	ret
-               	mov	x15, x0
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x0, w14
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	sub	x15, x29, #0x10
-               	adrp	x14, <page>
-               	add	x14, x14, #0xd0
+               	sub	x0, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, #0xd0
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x14]
-               	str	x10, [x15]
-               	ldrb	w10, [x14, #0x8]
-               	strb	w10, [x15, #0x8]
-               	ldrb	w10, [x14, #0x9]
-               	strb	w10, [x15, #0x9]
-               	ldrb	w10, [x14, #0xa]
-               	strb	w10, [x15, #0xa]
-               	ldrb	w10, [x14, #0xb]
-               	strb	w10, [x15, #0xb]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldrb	w10, [x1, #0x8]
+               	strb	w10, [x0, #0x8]
+               	ldrb	w10, [x1, #0x9]
+               	strb	w10, [x0, #0x9]
+               	ldrb	w10, [x1, #0xa]
+               	strb	w10, [x0, #0xa]
+               	ldrb	w10, [x1, #0xb]
+               	strb	w10, [x0, #0xb]
                	ldr	x10, [sp], #0x10
-               	sub	x15, x29, #0x10
-               	ldrsw	x14, [x15]
-               	add	x13, x15, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	add	x14, x14, x15
-               	sxtw	x14, w14
-               	cmp	x14, #0x6
+               	sub	x0, x29, #0x10
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
+               	sxtw	x0, w0
+               	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x14, x29, #0x10
-               	ldrsw	x0, [x14]
-               	add	x13, x14, #0x4
-               	ldrsw	x13, [x13]
-               	add	x0, x0, x13
-               	sxtw	x0, w0
-               	add	x14, x14, #0x8
-               	ldrsw	x14, [x14]
-               	add	x0, x0, x14
+               	sub	x0, x29, #0x10
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0x6
                	b.eq	<addr>
-               	mov	x14, #0x2               // =2
-               	mov	x0, x14
+               	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	ldrsw	x14, [x0]
-               	add	x13, x0, #0x4
-               	ldrsw	x13, [x13]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
                	add	x0, x0, #0x8
                	ldrsw	x0, [x0]
-               	add	x14, x14, x0
-               	sxtw	x14, w14
-               	cmp	x14, #0x6
+               	add	x0, x1, x0
+               	sxtw	x0, w0
+               	cmp	x0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x14, x29, #0x28
-               	adrp	x0, <page>
-               	add	x0, x0, #0xdc
+               	sub	x0, x29, #0x28
+               	adrp	x1, <page>
+               	add	x1, x1, #0xdc
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x14]
-               	ldr	x10, [x0, #0x8]
-               	str	x10, [x14, #0x8]
-               	ldr	x10, [x0, #0x10]
-               	str	x10, [x14, #0x10]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [x1, #0x10]
+               	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
-               	sub	x14, x29, #0x28
-               	ldrsw	x0, [x14]
-               	add	x13, x14, #0x4
-               	ldrsw	x13, [x13]
-               	add	x0, x0, x13
-               	sxtw	x0, w0
-               	add	x14, x14, #0x8
-               	ldrsw	x14, [x14]
-               	add	x0, x0, x14
+               	sub	x0, x29, #0x28
+               	ldrsw	x1, [x0]
+               	add	x2, x0, #0x4
+               	ldrsw	x2, [x2]
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0xf
                	b.eq	<addr>
-               	mov	x14, #0x4               // =4
-               	mov	x0, x14
+               	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -12,64 +12,59 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	movl	$0x12c, %r11d           # imm = 0x12C
-               	movl	$0xc8, %r9d
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x20(%rbp)
-               	movl	%r8d, -0x28(%rbp)
+               	movl	$0x12c, %eax            # imm = 0x12C
+               	movl	$0xc8, %ecx
+               	xorq	%rsi, %rsi
+               	movq	%rsi, %rdx
                	jmp	<addr>
-               	movslq	-0x20(%rbp), %r8
-               	cmpq	$0x4, %r8
+               	movslq	%edx, %rdi
+               	cmpq	$0x4, %rdi
                	jge	<addr>
-               	movslq	-0x28(%rbp), %rdi
-               	movsbq	%r11b, %r8
-               	addq	%r8, %rdi
-               	movslq	%edi, %rdi
-               	movl	%edi, -0x28(%rbp)
-               	movslq	-0x20(%rbp), %r8
-               	addq	$0x1, %r8
-               	movslq	%r8d, %r8
-               	movl	%r8d, -0x20(%rbp)
+               	movslq	%esi, %rsi
+               	movsbq	%al, %rdi
+               	addq	%rdi, %rsi
+               	movslq	%esi, %rsi
+               	movslq	%edx, %rdx
+               	addq	$0x1, %rdx
+               	movslq	%edx, %rdx
                	jmp	<addr>
-               	xorq	%r8, %r8
-               	movl	%r8d, -0x30(%rbp)
-               	movsbq	%r11b, %rdi
-               	cmpq	$0x2c, %rdi
+               	xorq	%rdi, %rdi
+               	movsbq	%al, %rdx
+               	cmpq	$0x2c, %rdx
                	je	<addr>
-               	movslq	-0x30(%rbp), %r8
-               	addq	$0x1, %r8
-               	movslq	%r8d, %r8
-               	movl	%r8d, -0x30(%rbp)
+               	movq	%rdi, %rdx
+               	addq	$0x1, %rdx
+               	movslq	%edx, %rdi
                	jmp	<addr>
-               	andq	$0xff, %r11
-               	xorq	$0x2c, %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
-               	cmpq	$0x0, %r11
+               	andq	$0xff, %rax
+               	xorq	$0x2c, %rax
+               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
+               	andq	%r11, %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
-               	movslq	-0x30(%rbp), %rdi
-               	addq	$0x2, %rdi
-               	movslq	%edi, %rdi
-               	movl	%edi, -0x30(%rbp)
+               	movslq	%edi, %rax
+               	addq	$0x2, %rax
+               	movslq	%eax, %rdi
                	jmp	<addr>
-               	movsbq	%r9b, %r9
-               	cmpq	$-0x38, %r9
+               	movsbq	%cl, %rax
+               	cmpq	$-0x38, %rax
                	je	<addr>
-               	movslq	-0x30(%rbp), %r11
-               	addq	$0x4, %r11
-               	movslq	%r11d, %r11
-               	movl	%r11d, -0x30(%rbp)
+               	movslq	%edi, %rax
+               	addq	$0x4, %rax
+               	movslq	%eax, %rdi
                	jmp	<addr>
-               	movslq	-0x28(%rbp), %r11
-               	cmpq	$0xb0, %r11
+               	movslq	%esi, %rax
+               	cmpq	$0xb0, %rax
                	je	<addr>
-               	movslq	-0x30(%rbp), %r9
-               	addq	$0x8, %r9
-               	movslq	%r9d, %r9
-               	movl	%r9d, -0x30(%rbp)
+               	movslq	%edi, %rax
+               	addq	$0x8, %rax
+               	movslq	%eax, %rdi
                	jmp	<addr>
-               	movslq	-0x30(%rbp), %rax
+               	movslq	%edi, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+               	jmp	<addr>

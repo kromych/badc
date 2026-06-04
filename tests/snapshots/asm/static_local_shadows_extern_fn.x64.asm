@@ -9,38 +9,39 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movq	%rdi, %r11
-               	movzbq	(%r11), %r9
-               	addq	$0x1, %r11
-               	movzbq	(%r11), %r11
-               	addq	%r11, %r9
-               	movslq	%r9d, %rax
+               	movq	%rdi, %rax
+               	movzbq	(%rax), %rcx
+               	addq	$0x1, %rax
+               	movzbq	(%rax), %rax
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %r11
-               	xorq	%r9, %r9
-               	movl	%r9d, -0x8(%rbp)
+               	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
+               	xorq	%r12, %r12
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%r12d, %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	<rip>, %r9
-               	movzbq	(%r9), %rax
-               	addq	$0x1, %r9
-               	movzbq	(%r9), %r9
-               	addq	%r9, %rax
-               	movslq	%eax, %rax
-               	movl	%eax, -0x8(%rbp)
+               	leaq	<rip>, %rdi
+               	callq	<addr>
+               	movq	%rax, %r12
                	jmp	<addr>
-               	movabsq	$-0x1, %rax
-               	movl	%eax, -0x8(%rbp)
+               	movabsq	$-0x1, %r12
                	jmp	<addr>
-               	cmpq	$0x1, %r11
+               	cmpq	$0x1, %rbx
                	je	<addr>
-               	cmpq	$0x2, %r11
+               	cmpq	$0x2, %rbx
                	je	<addr>
                	jmp	<addr>
                	pushq	%rbp
@@ -48,3 +49,4 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

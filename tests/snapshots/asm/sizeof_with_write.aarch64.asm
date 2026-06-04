@@ -21,17 +21,16 @@ Disassembly of section .text:
                	mov	x1, x0
                	mov	x0, #0x1                // =1
                	str	w0, [x1]
-               	add	x12, x1, #0x4
-               	mov	x11, #0x2               // =2
-               	str	w11, [x12]
-               	add	x10, x1, #0x8
-               	adrp	x11, <page>
-               	add	x11, x11, #0xf8
-               	str	x11, [x10]
+               	add	x2, x1, #0x4
+               	mov	x3, #0x2                // =2
+               	str	w3, [x2]
+               	add	x2, x1, #0x8
+               	adrp	x3, <page>
+               	add	x3, x3, #0xf8
+               	str	x3, [x2]
                	mov	x2, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x12, x0
                	mov	x0, x20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

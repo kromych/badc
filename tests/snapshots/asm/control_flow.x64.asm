@@ -9,31 +9,19 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	xorq	%r11, %r11
-               	movl	%r11d, -0x8(%rbp)
+               	xorq	%rcx, %rcx
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %r11
-               	cmpq	$0x5, %r11
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
                	jge	<addr>
-               	movslq	-0x8(%rbp), %r9
-               	addq	$0x1, %r9
-               	movslq	%r9d, %r9
-               	movl	%r9d, -0x8(%rbp)
+               	movslq	%ecx, %rax
+               	addq	$0x1, %rax
+               	movslq	%eax, %rcx
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %r9
-               	cmpq	$0x5, %r9
+               	movslq	%ecx, %rax
+               	cmpq	$0x5, %rax
                	jne	<addr>
                	movl	$0x1, %eax
-               	addq	$0x10, %rsp
-               	popq	%rbp
                	retq
-               	xorq	%r9, %r9
-               	movq	%r9, %rax
-               	addq	$0x10, %rsp
-               	popq	%rbp
+               	xorq	%rax, %rax
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

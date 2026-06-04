@@ -15,15 +15,13 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ret
                	ret
-               	sxtw	x15, w0
-               	add	x15, x15, #0x1
-               	sxtw	x0, w15
+               	sxtw	x0, w0
+               	add	x0, x0, #0x1
+               	sxtw	x0, w0
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	mov	x14, x0
-               	mov	x0, x14
                	ldp	x29, x30, [sp], #0x10
                	ret

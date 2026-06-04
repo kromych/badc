@@ -13,53 +13,47 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sxtw	x15, w0
-               	mov	x14, #0x0               // =0
-               	stur	w14, [x29, #-0x18]
-               	stur	w14, [x29, #-0x8]
+               	sxtw	x0, w0
+               	mov	x2, #0x0                // =0
+               	stur	w2, [x29, #-0x8]
                	b	<addr>
-               	ldursw	x14, [x29, #-0x8]
-               	cmp	x14, x15
+               	ldursw	x1, [x29, #-0x8]
+               	cmp	x1, x0
                	b.ge	<addr>
                	b	<addr>
-               	sub	x13, x29, #0x8
-               	ldrsw	x14, [x13]
-               	add	x14, x14, #0x1
-               	str	w14, [x13]
+               	sub	x1, x29, #0x8
+               	ldrsw	x3, [x1]
+               	add	x3, x3, #0x1
+               	str	w3, [x1]
                	b	<addr>
-               	mov	x14, #0x0               // =0
-               	stur	w14, [x29, #-0x20]
-               	stur	w14, [x29, #-0x10]
+               	mov	x3, #0x0                // =0
+               	stur	w3, [x29, #-0x10]
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
+               	sxtw	x0, w2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x14, [x29, #-0x10]
-               	cmp	x14, x15
+               	ldursw	x1, [x29, #-0x10]
+               	cmp	x1, x0
                	b.ge	<addr>
                	b	<addr>
-               	sub	x12, x29, #0x10
-               	ldrsw	x14, [x12]
-               	add	x14, x14, #0x1
-               	str	w14, [x12]
+               	sub	x1, x29, #0x10
+               	ldrsw	x4, [x1]
+               	add	x4, x4, #0x1
+               	str	w4, [x1]
                	b	<addr>
-               	ldursw	x14, [x29, #-0x20]
-               	add	x14, x14, #0x1
-               	sxtw	x14, w14
-               	stur	w14, [x29, #-0x20]
+               	sxtw	x1, w3
+               	add	x1, x1, #0x1
+               	sxtw	x3, w1
                	b	<addr>
-               	ldursw	x14, [x29, #-0x18]
-               	ldursw	x13, [x29, #-0x20]
-               	add	x14, x14, x13
-               	sxtw	x14, w14
-               	stur	w14, [x29, #-0x18]
+               	sxtw	x1, w2
+               	sxtw	x2, w3
+               	add	x1, x1, x2
+               	sxtw	x2, w1
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x7                // =7
                	bl	<addr>
-               	mov	x14, x0
-               	mov	x0, x14
                	ldp	x29, x30, [sp], #0x10
                	ret

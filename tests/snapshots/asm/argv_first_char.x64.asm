@@ -9,14 +9,15 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movslq	%edi, %r11
-               	movq	%rsi, %r9
-               	cmpq	$0x2, %r11
+               	movq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	movslq	%eax, %rax
+               	cmpq	$0x2, %rax
                	jge	<addr>
                	xorq	%rax, %rax
                	retq
-               	addq	$0x8, %r9
-               	movq	(%r9), %r9
-               	movzbq	(%r9), %rax
+               	movq	%rcx, %rax
+               	addq	$0x8, %rax
+               	movq	(%rax), %rax
+               	movzbq	(%rax), %rax
                	retq
-               	addb	%al, (%rax)

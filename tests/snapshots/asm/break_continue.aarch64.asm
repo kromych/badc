@@ -13,38 +13,36 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, #0x0               // =0
-               	stur	w15, [x29, #-0x10]
-               	stur	w15, [x29, #-0x8]
+               	mov	x1, #0x0                // =0
+               	stur	w1, [x29, #-0x8]
                	b	<addr>
-               	ldursw	x15, [x29, #-0x8]
-               	cmp	x15, #0xa
+               	ldursw	x0, [x29, #-0x8]
+               	cmp	x0, #0xa
                	b.ge	<addr>
                	b	<addr>
-               	sub	x14, x29, #0x8
-               	ldrsw	x15, [x14]
-               	add	x15, x15, #0x1
-               	str	w15, [x14]
+               	sub	x0, x29, #0x8
+               	ldrsw	x2, [x0]
+               	add	x2, x2, #0x1
+               	str	w2, [x0]
                	b	<addr>
-               	ldursw	x15, [x29, #-0x8]
-               	cmp	x15, #0x5
+               	ldursw	x0, [x29, #-0x8]
+               	cmp	x0, #0x5
                	b.ne	<addr>
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
-               	ldursw	x13, [x29, #-0x8]
-               	mov	x15, #0x2               // =2
-               	sdiv	x17, x13, x15
-               	msub	x13, x17, x15, x13
-               	cmp	x13, #0x0
+               	ldursw	x0, [x29, #-0x8]
+               	mov	x2, #0x2                // =2
+               	sdiv	x17, x0, x2
+               	msub	x0, x17, x2, x0
+               	cmp	x0, #0x0
                	b.ne	<addr>
                	b	<addr>
-               	ldursw	x15, [x29, #-0x10]
-               	ldursw	x13, [x29, #-0x8]
-               	add	x15, x15, x13
-               	sxtw	x15, w15
-               	stur	w15, [x29, #-0x10]
+               	sxtw	x0, w1
+               	ldursw	x1, [x29, #-0x8]
+               	add	x0, x0, x1
+               	sxtw	x1, w0
                	b	<addr>

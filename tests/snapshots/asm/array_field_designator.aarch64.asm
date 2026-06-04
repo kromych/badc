@@ -10,37 +10,36 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	ldrsw	x14, [x15]
-               	cmp	x14, #0xa
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
+               	ldrsw	x1, [x0]
+               	cmp	x1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x14, x15, #0x4
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x0
+               	add	x1, x0, #0x4
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x14, x15, #0x8
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x1e
+               	add	x1, x0, #0x8
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	add	x14, x15, #0xc
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x0
+               	add	x1, x0, #0xc
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x15, x15, #0x10
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x32
+               	add	x0, x0, #0x10
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x32
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	ret

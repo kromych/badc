@@ -12,83 +12,81 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movabsq	$0x14006f000, %r11      # imm = 0x14006F000
-               	xorq	%r9, %r9
-               	movq	%r11, %r8
-               	orq	%r9, %r8
-               	addq	$0x1, %r8
-               	movabsq	$0x14006f001, %r10      # imm = 0x14006F001
-               	cmpq	%r10, %r8
+               	movabsq	$0x14006f000, %rax      # imm = 0x14006F000
+               	xorq	%rcx, %rcx
+               	movq	%rax, %rdx
+               	orq	%rcx, %rdx
+               	addq	$0x1, %rdx
+               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%r9, %r8
-               	xorq	$-0x1, %r8
-               	andq	%r11, %r8
-               	addq	$0x1, %r8
-               	movabsq	$0x14006f001, %r10      # imm = 0x14006F001
-               	cmpq	%r10, %r8
+               	movq	%rcx, %rdx
+               	xorq	$-0x1, %rdx
+               	andq	%rax, %rdx
+               	addq	$0x1, %rdx
+               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%r11, %r8
-               	xorq	%r9, %r8
-               	addq	$0x1, %r8
-               	movabsq	$0x14006f001, %r10      # imm = 0x14006F001
-               	cmpq	%r10, %r8
+               	movq	%rax, %rdx
+               	xorq	%rcx, %rdx
+               	addq	$0x1, %rdx
+               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x14006f001, %r8       # imm = 0x14006F001
-               	subq	$0x1, %r8
-               	orq	$0xf, %r8
-               	addq	$0x1, %r8
-               	movabsq	$0x14006f010, %r10      # imm = 0x14006F010
-               	cmpq	%r10, %r8
+               	movabsq	$0x14006f001, %rdx      # imm = 0x14006F001
+               	subq	$0x1, %rdx
+               	orq	$0xf, %rdx
+               	addq	$0x1, %rdx
+               	movabsq	$0x14006f010, %r11      # imm = 0x14006F010
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%r11, %r8
-               	orq	%r9, %r8
-               	movabsq	$0x14006f000, %r10      # imm = 0x14006F000
-               	cmpq	%r10, %r8
+               	movq	%rax, %rdx
+               	orq	%rcx, %rdx
+               	movabsq	$0x14006f000, %r11      # imm = 0x14006F000
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%r11, %r8
-               	orq	%r9, %r8
-               	movabsq	$0x14006f000, %r10      # imm = 0x14006F000
-               	cmpq	%r10, %r8
+               	movq	%rax, %rdx
+               	orq	%rcx, %rdx
+               	movabsq	$0x14006f000, %r11      # imm = 0x14006F000
+               	cmpq	%r11, %rdx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	orq	%r9, %r11
-               	movabsq	$0x100000000, %r10      # imm = 0x100000000
-               	cmpq	%r10, %r11
-               	seta	%r11b
-               	movzbq	%r11b, %r11
-               	cmpq	$0x0, %r11
+               	orq	%rcx, %rax
+               	movabsq	$0x100000000, %r11      # imm = 0x100000000
+               	cmpq	%r11, %rax
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movl	$0x7, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	xorq	%r11, %r11
-               	movq	%r11, %rax
+               	xorq	%rax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

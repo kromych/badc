@@ -11,10 +11,9 @@ Disassembly of section .text:
                	callq	*<rip>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
+               	subq	$0x40, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
                	xorq	%rdi, %rdi
                	movl	$0x2, %esi
                	xorl	%eax, %eax
@@ -22,13 +21,12 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	cmpq	$0x0, %rbx
                	jne	<addr>
-               	movl	$0x1, %edi
-               	movq	%rdi, %rcx
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rsi
@@ -46,26 +44,24 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	leaq	<rip>, %rdi
                	movq	%r12, %r11
                	callq	*%r11
-               	movq	%rax, %r14
+               	movq	%rax, %r12
                	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	movslq	%r14d, %r14
-               	movq	%r14, %rcx
+               	movslq	%r12d, %rax
+               	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x50, %rsp
+               	addq	$0x40, %rsp
                	popq	%rbp
                	retq
                	addb	%al, 0x41(%rdx)

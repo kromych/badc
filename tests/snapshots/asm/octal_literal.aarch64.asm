@@ -34,6 +34,5 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x8                // =8
                	ret
-               	mov	x15, #0x2a              // =42
-               	mov	x0, x15
+               	mov	x0, #0x2a               // =42
                	ret

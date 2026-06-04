@@ -10,117 +10,116 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	ldrsw	x14, [x15]
-               	cmp	x14, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
+               	ldrsw	x1, [x0]
+               	cmp	x1, #0x10
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	ret
-               	add	x14, x15, #0x4
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x80
+               	add	x1, x0, #0x4
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x80
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	ret
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x4
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe0
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x90
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe0
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x90
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe0
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x94
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe0
+               	add	x0, x0, #0x4
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x94
                	b.eq	<addr>
                	mov	x0, #0xf                // =15
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe0
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe0
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xf0
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x100
+               	adrp	x0, <page>
+               	add	x0, x0, #0xf0
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x100
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xf0
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x40
+               	adrp	x0, <page>
+               	add	x0, x0, #0xf0
+               	add	x0, x0, #0x4
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x40
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xf8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x11
+               	adrp	x0, <page>
+               	add	x0, x0, #0xf8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x11
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xf8
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x70
+               	adrp	x0, <page>
+               	add	x0, x0, #0xf8
+               	add	x0, x0, #0x4
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x70
                	b.eq	<addr>
                	mov	x0, #0x14               // =20
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xf8
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x30
+               	adrp	x0, <page>
+               	add	x0, x0, #0xf8
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x30
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0x108
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x90
+               	adrp	x0, <page>
+               	add	x0, x0, #0x108
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x90
                	b.eq	<addr>
                	mov	x0, #0x16               // =22
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0x108
-               	add	x15, x15, #0x4
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x10
+               	adrp	x0, <page>
+               	add	x0, x0, #0x108
+               	add	x0, x0, #0x4
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x17               // =23
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0x108
-               	add	x15, x15, #0x8
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x4
+               	adrp	x0, <page>
+               	add	x0, x0, #0x108
+               	add	x0, x0, #0x8
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x18               // =24
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0x108
-               	add	x15, x15, #0xc
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0x14
+               	adrp	x0, <page>
+               	add	x0, x0, #0x108
+               	add	x0, x0, #0xc
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0x14
                	b.eq	<addr>
                	mov	x0, #0x19               // =25
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	ret

@@ -9,44 +9,45 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movslq	%edi, %r11
-               	movabsq	$-0x1, %rax
+               	movq	%rdi, %rax
+               	movslq	%eax, %rax
+               	movabsq	$-0x1, %r11
                	imulq	%r11, %rax
                	retq
-               	movslq	%edi, %r11
-               	movabsq	$-0x1, %rax
+               	movq	%rdi, %rax
+               	movslq	%eax, %rax
+               	movabsq	$-0x1, %r11
                	imulq	%r11, %rax
                	retq
-               	movabsq	$-0x5, %r11
-               	movabsq	$-0x1, %r10
-               	imulq	%r10, %r11
-               	cmpq	$0x5, %r11
+               	movabsq	$-0x5, %rax
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %rax
+               	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movl	$0x7, %r11d
-               	movabsq	$-0x1, %r10
-               	imulq	%r10, %r11
-               	cmpq	$-0x7, %r11
+               	movl	$0x7, %eax
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %rax
+               	cmpq	$-0x7, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	movl	$0x3, %r11d
-               	movabsq	$-0x1, %r10
-               	imulq	%r10, %r11
-               	cmpq	$-0x3, %r11
+               	movl	$0x3, %eax
+               	movabsq	$-0x1, %r11
+               	imulq	%r11, %rax
+               	cmpq	$-0x3, %rax
                	je	<addr>
                	movl	$0xd, %eax
                	retq
-               	movabsq	$-0x1, %r11
                	movabsq	$-0x1, %rax
+               	movabsq	$-0x1, %rcx
+               	imulq	%rax, %rcx
+               	movabsq	$-0x1, %r11
                	imulq	%r11, %rax
-               	movabsq	$-0x1, %r10
-               	imulq	%r10, %r11
-               	cmpq	%r11, %rax
+               	cmpq	%rax, %rcx
                	je	<addr>
-               	movl	$0xe, %r11d
-               	movq	%r11, %rax
+               	movl	$0xe, %eax
                	retq
                	xorq	%rax, %rax
                	retq

@@ -15,6 +15,5 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
-               	mov	x15, #0x3               // =3
-               	mov	x0, x15
+               	mov	x0, #0x3                // =3
                	ret

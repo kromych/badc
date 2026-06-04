@@ -13,13 +13,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x150
-               	mov	x15, #0xfffc            // =65532
-               	movk	x15, #0xffff, lsl #16
-               	movk	x15, #0xffff, lsl #32
-               	movk	x15, #0xffff, lsl #48
-               	stur	x15, [x29, #-0x20]
-               	mov	x14, #0x4               // =4
-               	stur	x14, [x29, #-0x40]
+               	mov	x0, #0xfffc             // =65532
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	stur	x0, [x29, #-0x20]
+               	mov	x0, #0x4                // =4
+               	stur	x0, [x29, #-0x40]
                	b	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x150
@@ -80,409 +80,339 @@ Disassembly of section .text:
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd0
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
+               	ldrb	w1, [x0]
                	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xb8]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x6c              // =108
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	stur	x13, [x29, #-0xb8]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x13, [x29, #-0xb8]
-               	stur	x13, [x29, #-0xb0]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xb0]
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x0, [x29, #-0xb0]
-               	stur	x0, [x29, #-0xa8]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	stur	x15, [x29, #-0xa8]
-               	b	<addr>
-               	ldur	x15, [x29, #-0xa8]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x1e               // =30
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd4
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd4
+               	ldrb	w1, [x0]
                	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xd0]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x6c              // =108
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	stur	x13, [x29, #-0xd0]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x13, [x29, #-0xd0]
-               	stur	x13, [x29, #-0xc8]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x75              // =117
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xc8]
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x0, [x29, #-0xc8]
-               	stur	x0, [x29, #-0xc0]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	stur	x15, [x29, #-0xc0]
-               	b	<addr>
-               	ldur	x15, [x29, #-0xc0]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x1f               // =31
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xd8
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd8
+               	ldrb	w1, [x0]
                	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xe8]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x6c              // =108
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	stur	x13, [x29, #-0xe8]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x13, [x29, #-0xe8]
-               	stur	x13, [x29, #-0xe0]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x78              // =120
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xe0]
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x0, [x29, #-0xe0]
-               	stur	x0, [x29, #-0xd8]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	stur	x15, [x29, #-0xd8]
-               	b	<addr>
-               	ldur	x15, [x29, #-0xd8]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x20               // =32
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xdc
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xdc
+               	ldrb	w1, [x0]
                	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x1
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0xf0]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x1
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	stur	x15, [x29, #-0xf0]
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x15, [x29, #-0xf0]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x21               // =33
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xde
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xde
+               	ldrb	w1, [x0]
                	mov	x17, #0x68              // =104
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x108
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x68              // =104
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	sub	x17, x29, #0x108
-               	str	x13, [x17]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x108
-               	ldr	x13, [x16]
-               	stur	x13, [x29, #-0x100]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	stur	x0, [x29, #-0x100]
+               	cset	x2, ne
                	b	<addr>
-               	ldur	x0, [x29, #-0x100]
-               	stur	x0, [x29, #-0xf8]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	stur	x15, [x29, #-0xf8]
-               	b	<addr>
-               	ldur	x15, [x29, #-0xf8]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x22               // =34
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe2
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe2
+               	ldrb	w1, [x0]
                	mov	x17, #0x68              // =104
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x118
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	sub	x17, x29, #0x118
-               	str	x13, [x17]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x118
-               	ldr	x13, [x16]
-               	sub	x17, x29, #0x110
-               	str	x13, [x17]
-               	cbnz	x13, <addr>
-               	add	x15, x15, #0x2
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	sub	x17, x29, #0x110
-               	str	x15, [x17]
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x2
+               	ldrb	w0, [x0]
+               	cmp	x0, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x110
-               	ldr	x15, [x16]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x23               // =35
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe5
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe5
+               	ldrb	w1, [x0]
                	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x130
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x6c              // =108
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	sub	x17, x29, #0x130
-               	str	x13, [x17]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x130
-               	ldr	x13, [x16]
-               	sub	x17, x29, #0x128
-               	str	x13, [x17]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x128
-               	str	x0, [x17]
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x128
-               	ldr	x0, [x16]
-               	sub	x17, x29, #0x120
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	sub	x17, x29, #0x120
-               	str	x15, [x17]
-               	b	<addr>
-               	sub	x16, x29, #0x120
-               	ldr	x15, [x16]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x24               // =36
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe9
-               	ldrb	w0, [x15]
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe9
+               	ldrb	w1, [x0]
                	mov	x17, #0x6c              // =108
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
-               	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x148
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x13, x15, #0x1
-               	ldrb	w13, [x13]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x1
+               	ldrb	w1, [x1]
                	mov	x17, #0x6c              // =108
-               	eor	x13, x13, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x13, x13, x17
-               	cmp	x13, #0x0
-               	cset	x13, ne
-               	sub	x17, x29, #0x148
-               	str	x13, [x17]
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x148
-               	ldr	x13, [x16]
-               	sub	x17, x29, #0x140
-               	str	x13, [x17]
-               	cbnz	x13, <addr>
-               	add	x0, x15, #0x2
-               	ldrb	w0, [x0]
+               	cbnz	x2, <addr>
+               	add	x1, x0, #0x2
+               	ldrb	w1, [x1]
                	mov	x17, #0x64              // =100
-               	eor	x0, x0, x17
+               	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	and	x1, x1, x17
+               	cmp	x1, #0x0
+               	cset	x2, ne
+               	b	<addr>
+               	cbnz	x2, <addr>
+               	add	x0, x0, #0x3
+               	ldrb	w0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	sub	x17, x29, #0x140
-               	str	x0, [x17]
+               	cset	x2, ne
                	b	<addr>
-               	sub	x16, x29, #0x140
-               	ldr	x0, [x16]
-               	sub	x17, x29, #0x138
-               	str	x0, [x17]
-               	cbnz	x0, <addr>
-               	add	x15, x15, #0x3
-               	ldrb	w15, [x15]
-               	cmp	x15, #0x0
-               	cset	x15, ne
-               	sub	x17, x29, #0x138
-               	str	x15, [x17]
-               	b	<addr>
-               	sub	x16, x29, #0x138
-               	ldr	x15, [x16]
-               	cbz	x15, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x25               // =37
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>
+               	b	<addr>

@@ -13,8 +13,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, #0x64              // =100
-               	add	x0, x15, #0x4
+               	mov	x0, #0x64               // =100
+               	add	x0, x0, #0x4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

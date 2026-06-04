@@ -33,7 +33,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	$0x8, %eax
                	retq
-               	movl	$0x2a, %r11d
-               	movq	%r11, %rax
+               	movl	$0x2a, %eax
                	retq
                	addb	%al, (%rax)

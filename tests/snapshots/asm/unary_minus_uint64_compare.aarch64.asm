@@ -13,62 +13,58 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	mov	x15, #0xa8              // =168
+               	mov	x0, #0xa8               // =168
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x15, x15, x17
+               	mul	x0, x0, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x15, x17
+               	cmp	x0, x17
                	b.hs	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x15, x29, #0x10
-               	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	sub	x0, x29, #0x10
+               	adrp	x1, <page>
+               	add	x1, x1, #0xd0
                	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x15]
+               	ldr	x10, [x1]
+               	str	x10, [x0]
                	ldr	x10, [sp], #0x10
-               	sub	x15, x29, #0x10
-               	ldr	x15, [x15]
-               	sxtw	x15, w15
+               	sub	x0, x29, #0x10
+               	ldr	x0, [x0]
+               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x15, x15, x17
+               	mul	x0, x0, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x15, x17
+               	cmp	x0, x17
                	b.hs	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x15, #0xa8              // =168
+               	mov	x0, #0xa8               // =168
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x15, x15, x17
+               	mul	x0, x0, x17
                	mov	x17, #0x1000            // =4096
-               	cmp	x15, x17
+               	cmp	x0, x17
                	b.hs	<addr>
-               	mov	x0, #0x1                // =1
-               	stur	x0, [x29, #-0x38]
+               	mov	x1, #0x1                // =1
                	b	<addr>
-               	mov	x0, #0x2                // =2
-               	stur	x0, [x29, #-0x38]
+               	mov	x1, #0x2                // =2
                	b	<addr>
-               	ldur	x0, [x29, #-0x38]
-               	sxtw	x0, w0
+               	sxtw	x0, w1
                	cmp	x0, #0x2
                	b.eq	<addr>
-               	mov	x15, #0xd               // =13
-               	mov	x0, x15
+               	mov	x0, #0xd                // =13
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -81,8 +77,7 @@ Disassembly of section .text:
                	mov	x17, #0x1000            // =4096
                	cmp	x0, x17
                	b.hs	<addr>
-               	mov	x15, #0xe               // =14
-               	mov	x0, x15
+               	mov	x0, #0xe                // =14
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

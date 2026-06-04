@@ -10,24 +10,23 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xd0]
                	blr	x16
-               	adrp	x15, <page>
-               	add	x15, x15, #0xe8
-               	ldr	x14, [x15]
-               	ldrsw	x14, [x14]
-               	cmp	x14, #0x7
+               	adrp	x0, <page>
+               	add	x0, x0, #0xe8
+               	ldr	x1, [x0]
+               	ldrsw	x1, [x1]
+               	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x14, <page>
-               	add	x14, x14, #0xe0
-               	mov	x0, #0xb                // =11
-               	str	w0, [x14]
-               	ldr	x15, [x15]
-               	ldrsw	x15, [x15]
-               	cmp	x15, #0xb
+               	adrp	x1, <page>
+               	add	x1, x1, #0xe0
+               	mov	x2, #0xb                // =11
+               	str	w2, [x1]
+               	ldr	x0, [x0]
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	mov	x15, #0x0               // =0
-               	mov	x0, x15
+               	mov	x0, #0x0                // =0
                	ret

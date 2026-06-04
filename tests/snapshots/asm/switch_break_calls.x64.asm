@@ -20,31 +20,34 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movslq	%edi, %r11
-               	xorq	%r9, %r9
-               	movl	%r9d, -0x8(%rbp)
+               	movq	%rbx, (%rsp)
+               	movq	%rdi, %rbx
+               	movslq	%ebx, %rbx
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movslq	%ebx, %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0x64, %r9d
-               	movl	%r9d, -0x8(%rbp)
+               	callq	<addr>
+               	movq	%rax, %rbx
                	jmp	<addr>
-               	movl	$0xc8, %r9d
-               	movl	%r9d, -0x8(%rbp)
+               	callq	<addr>
+               	movq	%rax, %rbx
                	jmp	<addr>
-               	movl	$0x12c, %r9d            # imm = 0x12C
-               	movl	%r9d, -0x8(%rbp)
+               	callq	<addr>
+               	movq	%rax, %rbx
                	jmp	<addr>
-               	movl	$0x190, %r9d            # imm = 0x190
-               	movl	%r9d, -0x8(%rbp)
+               	callq	<addr>
+               	movq	%rax, %rbx
                	jmp	<addr>
-               	cmpq	$0x0, %r11
+               	cmpq	$0x0, %rbx
                	je	<addr>
-               	cmpq	$0x1, %r11
+               	cmpq	$0x1, %rbx
                	je	<addr>
-               	cmpq	$0x2, %r11
+               	cmpq	$0x2, %rbx
                	je	<addr>
                	jmp	<addr>
                	pushq	%rbp
@@ -52,4 +55,4 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

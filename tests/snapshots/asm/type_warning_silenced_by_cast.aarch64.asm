@@ -13,8 +13,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x15, #0x5               // =5
-               	cmp	x15, #0x0
+               	mov	x0, #0x5                // =5
+               	cmp	x0, #0x0
                	cset	x0, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

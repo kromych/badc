@@ -17,8 +17,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x0, %rax
                	jne	<addr>
-               	movl	$0x1, %r8d
-               	movq	%r8, %rax
+               	movl	$0x1, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

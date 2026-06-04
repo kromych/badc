@@ -18,21 +18,21 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rsi
                	xorq	%rbx, %rbx
-               	movl	$0x68, %r8d
-               	movb	%r8b, (%rsi)
+               	movl	$0x68, %eax
+               	movb	%al, (%rsi)
                	movl	$0x1, %edi
-               	movq	%rsi, %r8
-               	addq	$0x1, %r8
-               	movl	$0x69, %r9d
-               	movb	%r9b, (%r8)
-               	movq	%rsi, %rdx
-               	addq	$0x2, %rdx
-               	movl	$0xa, %r9d
-               	movb	%r9b, (%rdx)
+               	movq	%rsi, %rax
+               	addq	$0x1, %rax
+               	movl	$0x69, %ecx
+               	movb	%cl, (%rax)
+               	movq	%rsi, %rax
+               	addq	$0x2, %rax
+               	movl	$0xa, %ecx
+               	movb	%cl, (%rax)
                	movl	$0x3, %edx
-               	movq	%rsi, %r9
-               	addq	$0x3, %r9
-               	movb	%bl, (%r9)
+               	movq	%rsi, %rax
+               	addq	$0x3, %rax
+               	movb	%bl, (%rax)
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -42,3 +42,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -93,7 +93,7 @@ fn while_loop_terminates() {
 /// Cross-block reassigned loop counter: `i` is stored at the for-
 /// init block and re-stored in the post (step) block; its load in
 /// the head block sees two reaching defs and would otherwise stay
-/// in the frame slot. Under `BADC_PHI_PROMOTE=1` the slot promotes
+/// in the frame slot. With phi promotion the slot promotes
 /// through an `Inst::Phi` at the head block; the per-arch emit
 /// places the predecessor-exit moves before each branch so the
 /// counter survives in a register.
@@ -144,13 +144,10 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
             .filter(|i| matches!(i, crate::c5::ir::Inst::Phi { .. }))
             .count()
     };
-    let phis_off = count_phis_in_main();
     // Scope the promotion flag to the current test thread so a
-    // concurrent test on a different thread is not affected. The
-    // earlier `std::env::set_var` race made every test that ran
-    // mem2reg between this test's set and remove see promotion
-    // enabled, which deterministically miscompiled fixtures whose
-    // SSA contains a multi-source phi class.
+    // concurrent test on a different thread is not affected.
+    let phis_off =
+        crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(false, count_phis_in_main);
     let (phis_on, result) =
         crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(true, || {
             (
@@ -160,14 +157,14 @@ fn while_loop_promotes_counter_through_phi_under_phi_promote() {
         });
     assert_eq!(
         phis_off, 0,
-        "no Inst::Phi expected in main's IR with BADC_PHI_PROMOTE unset"
+        "no Inst::Phi expected in main's IR with phi promotion forced off"
     );
     // The loop has two cross-block reassigned scalars (`i` and
     // `s`); the IDF places exactly one phi per slot at the loop
     // header, so the post-rename count is two.
     assert_eq!(
         phis_on, 2,
-        "BADC_PHI_PROMOTE=1 expected exactly 2 Inst::Phi in main \
+        "phi promotion expected exactly 2 Inst::Phi in main \
          (one each for `i` and `s` at the loop header); got {phis_on}",
     );
     assert_eq!(result, 45);
@@ -192,6 +189,142 @@ fn recursion_factorial() {
         int main() { return fact(5); }
     "#;
     assert_eq!(jit_exit(src, &["jit-fact"]), 120);
+}
+
+/// Regression for the dead-phi predecessor-exit move collision under
+/// phi promotion. This is the reduced shape of sqlite's
+/// `local_getline`: a loop with several loop-carried scalars (`zLine`
+/// pointer, `nLine`, `n`) and multiple exit edges, so the
+/// function-exit block is a join carrying a phi for every scalar.
+/// Only `zLine` is returned; the phis for `nLine` and `n` at the join
+/// are dead. A naive allocator reuses one register across those dead
+/// phis and the live `zLine` phi (the dead ranges are empty), so their
+/// predecessor-exit moves clobber the return register -- the function
+/// returns `nLine` (100) instead of `zLine`. The interference-checked
+/// phi congruence coalesces each dead phi into its own operand class
+/// (a dead phi interferes with nothing), turning its exit-moves into
+/// dropped self-moves, so the return register is never clobbered.
+/// Without the fix the returned pointer is the small integer 100 and
+/// the guard below returns 2; with it the round-trip returns 0.
+#[test]
+#[cfg(feature = "std")]
+fn dead_phi_exit_move_does_not_clobber_return_under_phi_promote() {
+    let src = r#"
+        char *getline_like(char *zLine, char *src) {
+            int nLine = zLine == 0 ? 0 : 100;
+            int n = 0;
+            int slen = 0;
+            while (src[slen]) slen++;
+            while (1) {
+                if (n + 100 > nLine) {
+                    nLine = nLine * 2 + 100;
+                    zLine = realloc(zLine, nLine);
+                    if (zLine == 0) return 0;
+                }
+                int k = 0;
+                while (src[n + k] && k < 99) { zLine[n + k] = src[n + k]; k++; }
+                zLine[n + k] = 0;
+                if (n + k >= slen) { n += k; break; }
+                n += k;
+            }
+            return zLine;
+        }
+        int main() {
+            char *r = getline_like(0, "abcdefghij");
+            if (r == 0) return 1;
+            if (((long)r) < 4096) return 2;
+            if (r[0] != 'a') return 3;
+            if (r[9] != 'j') return 4;
+            return 0;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_mem2reg::with_phi_promote_override(true, || {
+        jit_exit_native_optimized(src, &["jit-dead-phi"])
+    });
+    assert_eq!(result, 0, "dead-phi exit-move clobbered the return value");
+}
+
+#[test]
+fn phi_predecessor_parallel_copy_handles_reg_spill_conflict() {
+    // The phi predecessor-exit copy must schedule register and
+    // spill-slot operands as one parallel copy. A phi whose
+    // destination is a spill slot and whose source is a register can
+    // otherwise have that source register clobbered by a sibling phi's
+    // reg-to-reg move emitted in a separate pass. The SHA-512-shaped
+    // loop in ssa_call_result_spill.c, compiled with the integer bank
+    // capped to three registers per class, forces eight loop-carried
+    // u64 phis to span both registers and spill slots and reproduces
+    // the conflict on both backends.
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("fixtures");
+    path.push("c");
+    path.push("ssa_call_result_spill.c");
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(3, 2, || {
+        jit_exit(&src, &["phi-parallel-copy"])
+    });
+    assert_eq!(
+        result, 0,
+        "phi parallel copy clobbered a spilled loop-carried value under register pressure"
+    );
+}
+
+#[test]
+fn modulo_with_spilled_divisor_under_pressure() {
+    // The modulo lowering computes `rem = n - (n / d) * d`. The
+    // quotient must occupy a register distinct from the divisor; when
+    // the divisor spills and is reloaded into a scratch register, the
+    // divide must not reuse that same register for the quotient, or the
+    // multiply reads the quotient as the divisor and computes
+    // `n - (n/d) * (n/d)`. With the integer bank capped to one register
+    // per class the constant divisor spills, reproducing the conflict.
+    let src = r#"
+        int main() {
+            int s = 0;
+            int i;
+            for (i = 0; i < 6; i++) {
+                if (i % 2 == 1) s = s + i;
+            }
+            return s; // 1 + 3 + 5 = 9
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["mod-spill"])
+    });
+    assert_eq!(
+        result, 9,
+        "modulo lowering reused the divisor's reload register for the quotient under pressure"
+    );
+}
+
+#[test]
+fn division_with_spilled_dividend_under_pressure() {
+    // On x86_64 the divmod lowering stages the dividend into the
+    // destination register; when the allocator reuses the divisor's
+    // register for the result and the dividend spills, that store
+    // overwrites the divisor before IDIV reads it -- computing
+    // `dividend / dividend`. With the integer bank capped to one
+    // register per class the operands spill and the destination
+    // reuses an operand register, reproducing the conflict.
+    let src = r#"
+        int main() {
+            int s = 0;
+            int i;
+            for (i = 1; i <= 6; i++) {
+                s = s + 100 / i;
+            }
+            return s; // 100+50+33+25+20+16 = 244
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["div-spill"])
+    });
+    assert_eq!(
+        result, 244,
+        "division lowering took the dividend register as the divisor under pressure"
+    );
 }
 
 #[test]
@@ -263,6 +396,11 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("comparison_imm_lhs_swap.c", 0),
     ("binop_imm_chain_fold.c", 0),
     ("binop_spill_lhs_rhs_in_dst.c", 59),
+    // Entry ParamRef placement must be a parallel copy when the
+    // allocator's chosen home registers cycle with the incoming
+    // argument registers (a parameter swap). The independent per-inst
+    // `mov dst, arg_reg` order clobbered a source before it was read.
+    ("param_reg_swap.c", 77),
     ("mul_pow2_to_shift.c", 0),
     ("pointers.c", 200),
     ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4

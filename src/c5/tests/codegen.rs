@@ -353,12 +353,19 @@ fn dead_local_only_function_skips_frame_sub_sp() {
     let program = Compiler::new(crate::c5::tests::with_prelude(src))
         .compile()
         .expect("compile");
-    let bytes = emit_native_with_options(
-        &program,
-        Target::MacOSAarch64,
-        NativeOptions::new().with_optimize(),
-    )
-    .expect("emit_native");
+    // This asserts an exact frame-elision shape, which holds only with
+    // the full register file; pin the allocator to the full pool so the
+    // codegen_test pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not
+    // perturb it.
+    let bytes =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(
+                &program,
+                Target::MacOSAarch64,
+                NativeOptions::new().with_optimize(),
+            )
+        })
+        .expect("emit_native");
     // Foo's fully-elided shape is exactly two consecutive words:
     //   movz x0, #1                   -> 0xd2800020
     //   ret                           -> 0xd65f03c0

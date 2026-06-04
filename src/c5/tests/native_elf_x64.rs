@@ -252,6 +252,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("array_initializers.c", 0),
     ("local_array_partial_init_zero.c", 0),
     ("ssa_call_result_spill.c", 0),
+    ("param_reg_swap.c", 77),
     ("struct_field_assign_from_call.c", 0),
     ("struct_byval_param_followed_by_ptr.c", 0),
     ("tail_call_no_address_escape.c", 0),

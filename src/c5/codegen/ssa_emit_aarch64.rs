@@ -1402,7 +1402,11 @@ fn emit_inst(
             };
             let dd = match dst {
                 Place::FpReg(r) => r,
-                Place::Spill(_) => 0u8,
+                // Stage a spilled result through a reserved scratch
+                // d-reg outside the allocator's d0..d15 pool; d0 may
+                // hold a live value the caller still needs. The source
+                // may already occupy SCRATCH_FP0, so use SCRATCH_FP1.
+                Place::Spill(_) => SCRATCH_FP1,
                 _ => return false,
             };
             emit(code, enc_fneg_d(dd, dn));
@@ -1430,7 +1434,10 @@ fn emit_inst(
                     };
                     let dd = match dst {
                         Place::FpReg(r) => r,
-                        Place::Spill(_) => 0u8,
+                        // Stage a spilled result through a reserved scratch
+                        // d-reg outside the allocator's d0..d15 pool; d0
+                        // may hold a live value the caller still needs.
+                        Place::Spill(_) => SCRATCH_FP0,
                         _ => return false,
                     };
                     emit(code, enc_scvtf_d_x(dd, rn));
@@ -2558,9 +2565,10 @@ fn emit_load(
     if let LoadKind::F32 = kind {
         let dd = match dst {
             Place::FpReg(r) => r,
-            // The allocator never spills f64 into a GPR slot;
-            // bail and let the caller report.
-            Place::Spill(_) => 0u8, // scratch d0
+            // A spilled f64 stages through a reserved scratch d-reg
+            // outside the allocator's d0..d15 pool; d0 may hold a
+            // live value the caller still needs.
+            Place::Spill(_) => SCRATCH_FP0,
             _ => {
                 bail_msg("Load F32: dst not fp reg / spill");
                 return false;
@@ -2578,7 +2586,7 @@ fn emit_load(
         // `double` lvalue: a single 8-byte FP load into a d-reg.
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => 0u8, // scratch d0
+            Place::Spill(_) => SCRATCH_FP0,
             _ => {
                 bail_msg("Load F64: dst not fp reg / spill");
                 return false;
@@ -2630,7 +2638,10 @@ fn emit_load_local(
     if matches!(kind, LoadKind::F32) {
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => 0u8,
+            // Stage a spilled load through a reserved scratch d-reg
+            // outside the allocator's d0..d15 pool; d0 may hold a
+            // live value the caller still needs.
+            Place::Spill(_) => SCRATCH_FP0,
             _ => {
                 bail_msg("LoadLocal F32: dst not fp reg / spill");
                 return false;
@@ -2662,7 +2673,7 @@ fn emit_load_local(
         // `double` local: a single 8-byte FP load; no widen.
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => 0u8,
+            Place::Spill(_) => SCRATCH_FP0,
             _ => {
                 bail_msg("LoadLocal F64: dst not fp reg / spill");
                 return false;
@@ -3206,7 +3217,12 @@ fn emit_binop(
         };
         let dd = match dst {
             Place::FpReg(r) => r,
-            Place::Spill(_) => 0u8,
+            // Stage a spilled result through a reserved scratch d-reg
+            // outside the allocator's d0..d15 pool; d0 may hold a live
+            // value the caller still needs. `arith` reads dn / dm
+            // before writing dd, so reusing SCRATCH_FP0 (a possible
+            // operand source) is safe.
+            Place::Spill(_) => SCRATCH_FP0,
             _ => return false,
         };
         emit(code, arith(dd, dn, dm));

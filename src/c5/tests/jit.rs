@@ -768,6 +768,108 @@ fn fp_store_f32_preserves_live_numerator() {
 }
 
 #[test]
+fn fp_load_into_spill_preserves_live_operand_under_pressure() {
+    // `a*b - c*d`: the first product is live in a pooled d-register
+    // across the loads of the second multiply's operands. On aarch64 a
+    // `float`/`double` load whose allocator destination is a spill slot
+    // stages through a d-register before storing to the slot; staging
+    // through d0 (inside the allocator's d0..d15 pool) overwrites the
+    // still-live first product. The staging register must be a reserved
+    // scratch (d16/d17) outside the pool. With the FP bank capped to one
+    // register the second operand spills, reproducing the clobber (this
+    // is the kissfft C_MUL butterfly `(a).r*(b).r - (a).i*(b).i`).
+    let src = r#"
+        float mul_sub(float a, float b, float c, float d) {
+            return a * b - c * d;
+        }
+        int main() {
+            // 10*3 - 2*4 = 30 - 8 = 22
+            float r = mul_sub(10.0f, 3.0f, 2.0f, 4.0f);
+            return (int)r;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["fp-load-spill-operand"])
+    });
+    assert_eq!(
+        result, 22,
+        "an FP load into a spill slot staged through a pooled d-register and clobbered a live operand"
+    );
+    let result_opt = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit_native_optimized(src, &["fp-load-spill-operand-opt"])
+    });
+    assert_eq!(
+        result_opt, 22,
+        "FP load-into-spill clobbered a live operand under pressure (-O)"
+    );
+}
+
+#[test]
+fn fp_load_f64_into_spill_preserves_live_operand_under_pressure() {
+    // Same shape as the f32 case but with `double`, exercising the
+    // F64 (no-widen) branch of the spill-staging load.
+    let src = r#"
+        double mul_sub(double a, double b, double c, double d) {
+            return a * b - c * d;
+        }
+        int main() {
+            double r = mul_sub(10.0, 3.0, 2.0, 4.0); // 22
+            return (int)r;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["fp-load-f64-spill-operand"])
+    });
+    assert_eq!(
+        result, 22,
+        "an F64 load into a spill slot staged through a pooled d-register and clobbered a live operand"
+    );
+}
+
+#[test]
+fn fp_inttofp_cast_into_spill_preserves_live_operand_under_pressure() {
+    // `-PI * ((double)(i+1)/n + 0.5)`: the negated constant is live in
+    // a pooled d-register while the `(double)(i+1)` and `(double)n`
+    // IntToFp casts run. On aarch64 an `scvtf` whose allocator
+    // destination is a spill slot stages through a d-register; staging
+    // through d0 (inside the allocator's d0..d15 pool) overwrites the
+    // negated constant before the final multiply. The staging register
+    // must be a reserved scratch (d16) outside the pool. With the FP
+    // bank capped to one register the second cast spills, reproducing
+    // the clobber (this is the kissfft super-twiddle phase build
+    // `-PI * ((double)(i+1)/nfft + .5)`).
+    let src = r#"
+        double g_phase[4];
+        void build(int n) {
+            int i;
+            for (i = 0; i < n / 2; ++i) {
+                g_phase[i] = -3.141592653589793 * ((double)(i + 1) / n + 0.5);
+            }
+        }
+        int main() {
+            build(8);
+            // phase[2] = -PI * (3/8 + 0.5) = -PI * 0.875 = -2.74889...
+            // *(-1000) truncated = 2748
+            return (int)(g_phase[2] * -1000.0);
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["fp-inttofp-spill-operand"])
+    });
+    assert_eq!(
+        result, 2748,
+        "an IntToFp cast into a spill slot staged through a pooled d-register and clobbered a live operand"
+    );
+    let result_opt = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit_native_optimized(src, &["fp-inttofp-spill-operand-opt"])
+    });
+    assert_eq!(
+        result_opt, 2748,
+        "IntToFp cast into spill clobbered a live operand under pressure (-O)"
+    );
+}
+
+#[test]
 fn printf_through_libc_got() {
     // printf's libc address is dlsym'd at JIT time and patched into
     // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or

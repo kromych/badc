@@ -4215,28 +4215,43 @@ fn emit_intrinsic(
                 bail_msg("VaStart: expected 2 args");
                 return false;
             }
-            let ap = match alloc.places.get(args[0] as usize).copied() {
-                Some(Place::IntReg(r)) => Reg(r),
-                _ => {
-                    bail_msg("VaStart: &ap not in int reg");
+            // Both pointer operands can land in spill slots under
+            // register pressure, so materialize each into a reserved
+            // scratch. r10 / r13 sit outside both allocator banks, so
+            // they never alias an allocator-chosen `ap` / `last`. The
+            // `last + 16` advance reuses the `last` register, so the peak
+            // register need is two.
+            let ap_place = match alloc.places.get(args[0] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaStart: &ap value id out of range");
                     return false;
                 }
             };
-            let last = match alloc.places.get(args[1] as usize).copied() {
-                Some(Place::IntReg(r)) => Reg(r),
-                _ => {
-                    bail_msg("VaStart: &last not in int reg");
+            let last_place = match alloc.places.get(args[1] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaStart: &last value id out of range");
                     return false;
                 }
             };
-            // scratch = &last + 16 ; mov [ap], scratch. r10 is
-            // reserved outside both allocator banks, so it never
-            // aliases the allocator-chosen `ap` / `last` and holds
-            // nothing live -- a caller-saved pick can come up empty
-            // under saturation.
-            let scratch = SCRATCH_R10;
-            emit_lea_r_mem(code, scratch, last, 16);
-            emit_mov_mem_r(code, ap, 0, scratch);
+            let Some(ap) = materialize_int(code, ap_place, SCRATCH_R13, frame) else {
+                bail_msg("VaStart: &ap not in int reg / spill");
+                return false;
+            };
+            let Some(last) = materialize_int(code, last_place, SCRATCH_R10, frame) else {
+                bail_msg("VaStart: &last not in int reg / spill");
+                return false;
+            };
+            // advance = last + 16 ; mov [ap], advance. When `last` is an
+            // allocator register it may still be live after VaStart, so
+            // the advance lands in r10 rather than clobbering it; when
+            // `last` was spilled it already sits in the throwaway r10
+            // copy, which is reused. r10 is outside both pools, so it
+            // never aliases `ap` or the allocator-chosen `last`.
+            let advance = SCRATCH_R10;
+            emit_lea_r_mem(code, advance, last, 16);
+            emit_mov_mem_r(code, ap, 0, advance);
             true
         }
         I::VaArg => {
@@ -4245,38 +4260,75 @@ fn emit_intrinsic(
                 bail_msg("VaArg: expected 1 arg");
                 return false;
             }
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("VaArg: dst not int reg");
-                return false;
-            };
-            let ap = match alloc.places.get(args[0] as usize).copied() {
-                Some(Place::IntReg(r)) => Reg(r),
-                _ => {
-                    bail_msg("VaArg: &ap not in int reg");
+            // The cursor address `ap`, the loaded result, and the
+            // advance temporary must each occupy a distinct register so
+            // the writeback stores through the cursor rather than through
+            // the just-loaded value. Both the `&ap` operand and the
+            // result can land in spill slots under register pressure, and
+            // the allocator may even pick the same physical register for
+            // the result and `&ap`. r10 / r13 sit outside both allocator
+            // banks, so they never alias an allocator-chosen place; the
+            // cursor is held in r13 (forced there whenever it would
+            // otherwise alias the work register), the value is loaded
+            // into a work register, the advance into r10, and the value
+            // is then delivered to the destination.
+            let ap_place = match alloc.places.get(args[0] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaArg: &ap value id out of range");
                     return false;
                 }
             };
-            // rd = *ap (old cursor) ; r13 = rd + 16 ; *ap = r13.
-            // `ap` and `rd` can land on the same physical register
-            // when the LocalAddr feeding `&ap` and the VaArg dst
-            // share a slot. The advance/store sequence then needs
-            // `&ap` preserved across `mov rd, [ap]`. r13 is outside
-            // the allocator pool so it cannot collide with `ap`,
-            // `rd`, or any other live SSA value.
-            // r13 is reserved outside both allocator banks, so it
-            // cannot alias `ap`, `rd`, or any live SSA value -- a
-            // caller-saved pick can come up empty under saturation.
-            let scratch = SCRATCH_R13;
-            if rd.0 == ap.0 {
-                emit_mov_rr(code, scratch, ap);
-                emit_mov_r_mem(code, rd, scratch, 0);
-                emit_lea_r_mem(code, rd, rd, 16);
-                emit_mov_mem_r(code, scratch, 0, rd);
-                emit_lea_r_mem(code, rd, rd, -16);
+            // Cursor address. A spilled `&ap` loads into r13; a register
+            // operand is moved into r13 when it would alias the work
+            // register so the load can't clobber it.
+            let ap = match ap_place {
+                Place::IntReg(r) => {
+                    let work_aliases = match dst {
+                        Place::IntReg(d) => d == r,
+                        _ => false,
+                    };
+                    if work_aliases {
+                        emit_mov_rr(code, SCRATCH_R13, Reg(r));
+                        SCRATCH_R13
+                    } else {
+                        Reg(r)
+                    }
+                }
+                Place::Spill(slot) => {
+                    let sp_off = spill_slot_sp_offset(frame, slot);
+                    emit_mov_r_mem(code, SCRATCH_R13, Reg::RSP, sp_off);
+                    SCRATCH_R13
+                }
+                _ => {
+                    bail_msg("VaArg: &ap not in int reg / spill");
+                    return false;
+                }
+            };
+            // Work register holding the loaded result: the destination
+            // register when distinct from the cursor, otherwise r10. The
+            // cursor was forced to r13 above whenever the destination
+            // register aliased it, so `work` here never equals `ap`.
+            let work = match dst {
+                Place::IntReg(d) if Reg(d).0 != ap.0 => Reg(d),
+                _ => SCRATCH_R10,
+            };
+            // work = *ap (old cursor) ; r10 = work + 16 ; *ap = r10. r10
+            // is the advance temporary; it differs from `ap` (r13 or an
+            // allocator reg) and from `work` (only r10 when the dst is
+            // spilled, in which case `work` is dead after the store back).
+            emit_mov_r_mem(code, work, ap, 0);
+            let advance = SCRATCH_R10;
+            if advance.0 == work.0 {
+                // Destination spilled: store the result before reusing
+                // r10 for the advance.
+                spill_dst_to_slot(code, dst, work, frame);
+                emit_lea_r_mem(code, advance, work, 16);
+                emit_mov_mem_r(code, ap, 0, advance);
             } else {
-                emit_mov_r_mem(code, rd, ap, 0);
-                emit_lea_r_mem(code, scratch, rd, 16);
-                emit_mov_mem_r(code, ap, 0, scratch);
+                emit_lea_r_mem(code, advance, work, 16);
+                emit_mov_mem_r(code, ap, 0, advance);
+                spill_dst_to_slot(code, dst, work, frame);
             }
             true
         }
@@ -4290,26 +4342,37 @@ fn emit_intrinsic(
                 bail_msg("VaCopy: expected 2 args");
                 return false;
             }
-            let dst_p = match alloc.places.get(args[0] as usize).copied() {
-                Some(Place::IntReg(r)) => Reg(r),
-                _ => {
-                    bail_msg("VaCopy: &dst not in int reg");
+            // Both pointer operands can land in spill slots under
+            // register pressure. Load the source value into r10 before
+            // materializing the destination pointer, so r13 can hold the
+            // source pointer and then be reused for the destination
+            // pointer -- the peak register need is two. r10 / r13 sit
+            // outside both allocator banks, so they never alias an
+            // allocator-chosen place.
+            let dst_place = match alloc.places.get(args[0] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaCopy: &dst value id out of range");
                     return false;
                 }
             };
-            let src_p = match alloc.places.get(args[1] as usize).copied() {
-                Some(Place::IntReg(r)) => Reg(r),
-                _ => {
-                    bail_msg("VaCopy: &src not in int reg");
+            let src_place = match alloc.places.get(args[1] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaCopy: &src value id out of range");
                     return false;
                 }
             };
-            // r10 is reserved outside both allocator banks, so it is
-            // disjoint from the allocator-chosen `dst_p` / `src_p` and
-            // holds nothing live -- a caller-saved pick can come up
-            // empty under saturation.
+            let Some(src_p) = materialize_int(code, src_place, SCRATCH_R13, frame) else {
+                bail_msg("VaCopy: &src not in int reg / spill");
+                return false;
+            };
             let scratch = SCRATCH_R10;
             emit_mov_r_mem(code, scratch, src_p, 0);
+            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_R13, frame) else {
+                bail_msg("VaCopy: &dst not in int reg / spill");
+                return false;
+            };
             emit_mov_mem_r(code, dst_p, 0, scratch);
             true
         }

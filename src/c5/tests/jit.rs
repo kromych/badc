@@ -328,6 +328,52 @@ fn division_with_spilled_dividend_under_pressure() {
 }
 
 #[test]
+fn variadic_va_list_survives_spilled_operands_under_pressure() {
+    // VaStart / VaArg / VaCopy each take their `va_list` pointer
+    // operands -- and VaArg its result -- from the allocator. With
+    // the integer bank capped to one register per class the cursor
+    // pointer (`&ap`), the source / destination pointers (VaCopy),
+    // the `&last` pointer (VaStart) and the VaArg result all land in
+    // spill slots. The x86_64 emit previously required each to be a
+    // register and bailed the whole function to an ICE otherwise.
+    // The handlers must instead materialize a spilled operand into a
+    // reserved scratch (r10 / r13, outside both pools) and store a
+    // spilled result back to its slot. `sum` walks three ints twice
+    // (once through the original list, once through a va_copy) and
+    // returns 2 * (11 + 22 + 33) = 132.
+    let src = r#"
+        #include <stdarg.h>
+        static int sum(int n, ...) {
+            va_list ap;
+            va_list bp;
+            int total = 0;
+            int i;
+            va_start(ap, n);
+            va_copy(bp, ap);
+            for (i = 0; i < n; i++) {
+                total = total + va_arg(ap, int);
+            }
+            for (i = 0; i < n; i++) {
+                total = total + va_arg(bp, int);
+            }
+            va_end(ap);
+            va_end(bp);
+            return total;
+        }
+        int main() {
+            return sum(3, 11, 22, 33); // 2 * 66 = 132
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["va-spill"])
+    });
+    assert_eq!(
+        result, 132,
+        "variadic emit bailed or miscompiled when va_list operands / result spilled under pressure"
+    );
+}
+
+#[test]
 fn paramref_pointer_arg_survives_shared_register_packing() {
     // A `ParamRef` materialises its parameter from the incoming host
     // argument register. When the allocator packs several

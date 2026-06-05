@@ -816,7 +816,9 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
-        Inst::Call { target_pc, args } => {
+        Inst::Call {
+            target_pc, args, ..
+        } => {
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
@@ -828,7 +830,7 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = ret;
             return Ok(());
         }
-        Inst::CallIndirect { target, args } => {
+        Inst::CallIndirect { target, args, .. } => {
             let raw = frame.regs[*target as usize];
             // Code pointers may be tagged two ways: SSA-VM bit 62
             // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
@@ -1401,7 +1403,7 @@ fn run_intrinsic(
 /// pointer doesn't read uninitialised state.
 fn load_width(kind: LoadKind) -> usize {
     match kind {
-        LoadKind::I64 => 8,
+        LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
@@ -1410,7 +1412,7 @@ fn load_width(kind: LoadKind) -> usize {
 
 fn store_width(kind: StoreKind) -> usize {
     match kind {
-        StoreKind::I64 => 8,
+        StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
@@ -1432,6 +1434,9 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
             let bits = u32::from_le_bytes(slice.try_into().unwrap());
             (f32::from_bits(bits) as f64).to_bits() as i64
         }
+        // `double` is already 8 bytes; the c5 accumulator carries
+        // f64 bit patterns, so the load returns the raw 64-bit value.
+        LoadKind::F64 => i64::from_le_bytes(slice.try_into().unwrap()),
         LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
@@ -1462,6 +1467,8 @@ fn store_to_memory(
             let f = f64::from_bits(value as u64) as f32;
             mem.write_bytes(addr, &f.to_le_bytes())
         }
+        // `double` is 8 bytes; write the raw f64 bit pattern.
+        StoreKind::F64 => mem.write_bytes(addr, &value.to_le_bytes()),
     }
 }
 
@@ -1473,7 +1480,7 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I32 => (value as i32) as i64,
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
-        StoreKind::F32 => value,
+        StoreKind::F32 | StoreKind::F64 => value,
     }
 }
 

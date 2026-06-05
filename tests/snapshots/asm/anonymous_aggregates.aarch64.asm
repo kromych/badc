@@ -212,7 +212,8 @@ Disassembly of section .text:
                	movk	x1, #0x51eb, lsl #16
                	movk	x1, #0x1eb8, lsl #32
                	movk	x1, #0x4009, lsl #48
-               	str	x1, [x0]
+               	fmov	d16, x1
+               	str	d16, [x0]
                	sub	x0, x29, #0x20
                	ldrsw	x0, [x0]
                	cmp	x0, #0x1

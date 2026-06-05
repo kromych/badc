@@ -75,7 +75,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=6
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(2)                                           -> x7
-    v9   Call { target_pc=0, args=[v8] }                  -> x7
+    v9   Call { target_pc=0, args=[v8], fp_return=false } -> x7
     v10  ImmData(90)                                      -> x6
     v11  LoadLocal { off=-1, kind=I64 }                   -> x0
     v12  Load { addr=v1, kind=I64 }                       -> x2
@@ -119,7 +119,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=6
     terminator Bz { cond=v39, target=b8, fall=b7 }   (exit_acc=v39)
   block 7  start_pc=0
     v40  Imm(2)                                           -> x7
-    v41  Call { target_pc=0, args=[v40] }                 -> x7
+    v41  Call { target_pc=0, args=[v40], fp_return=false } -> x7
     v42  ImmData(156)                                     -> x6
     v43  LoadLocal { off=-2, kind=I64 }                   -> x0
     v44  LoadLocal { off=-1, kind=I64 }                   -> x0

@@ -114,7 +114,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=5
     v3   Imm(11)                                          -> x2
     v4   Imm(22)                                          -> x1
     v5   Imm(33)                                          -> x8
-    v6   Call { target_pc=14, args=[v1, v2, v3, v4, v5] } -> x0
+    v6   Call { target_pc=14, args=[v1, v2, v3, v4, v5], fp_return=false } -> x0
     v7   Imm(0)                                           -> x0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=0 ---

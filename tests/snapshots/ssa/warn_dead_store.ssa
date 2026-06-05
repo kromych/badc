@@ -81,11 +81,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v13  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x0
     v14  BinopI { op=shr, lhs=v13, rhs_imm=32 }           -> x3
     v15  Imm(1)                                           -> x7
-    v16  Call { target_pc=2, args=[v15] }                 -> x0
+    v16  Call { target_pc=2, args=[v15], fp_return=false } -> x0
     v17  Binop { op=add, lhs=v14, rhs=v16 }               -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x0
     v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x3
-    v20  Call { target_pc=3, args=[] }                    -> x0
+    v20  Call { target_pc=3, args=[], fp_return=false }   -> x0
     v21  Binop { op=add, lhs=v19, rhs=v20 }               -> x0
     v22  BinopI { op=shl, lhs=v21, rhs_imm=32 }           -> x0
     v23  BinopI { op=shr, lhs=v22, rhs_imm=32 }           -> x0

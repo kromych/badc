@@ -12,34 +12,31 @@ Disassembly of section .text:
                	blr	x16
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
-               	ldr	x0, [x0]
-               	mov	x1, #0x4059000000000000 // =4636737291354636288
-               	fmov	d16, x0
-               	fmov	d17, x1
-               	fcmp	d16, d17
+               	ldr	d0, [x0]
+               	mov	x0, #0x4059000000000000 // =4636737291354636288
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xd8
-               	ldr	x0, [x0]
-               	mov	x1, #0x4014000000000000 // =4617315517961601024
-               	fmov	d16, x1
-               	fneg	d0, d16
+               	ldr	d0, [x0]
+               	mov	x0, #0x4014000000000000 // =4617315517961601024
                	fmov	d16, x0
-               	fcmp	d16, d0
+               	fneg	d1, d16
+               	fcmp	d0, d1
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xe0
-               	ldr	x0, [x0]
-               	mov	x1, #0x4014000000000000 // =4617315517961601024
-               	fmov	d16, x0
-               	fmov	d17, x1
-               	fcmp	d16, d17
+               	ldr	d0, [x0]
+               	mov	x0, #0x4014000000000000 // =4617315517961601024
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3

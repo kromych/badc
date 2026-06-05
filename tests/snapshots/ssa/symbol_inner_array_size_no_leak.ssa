@@ -53,7 +53,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-2)                                    -> x7
     v2   Imm(8)                                           -> x6
-    v3   Call { target_pc=0, args=[v1, v2] }              -> x0
+    v3   Call { target_pc=0, args=[v1, v2], fp_return=false } -> x0
     v4   Imm(0)                                           -> x1
     v5   Extend { value=v3, kind=I32 }                    -> x0
     v6   BinopI { op=ne, lhs=v5, rhs_imm=21 }             -> x0

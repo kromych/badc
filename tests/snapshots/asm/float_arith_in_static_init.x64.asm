@@ -131,11 +131,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x400f5c28f5c28f5c, %rcx # imm = 0x400F5C28F5C28F5C
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x400f5c28f5c28f5c, %rax # imm = 0x400F5C28F5C28F5C
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setb	%cl
                	movzbq	%cl, %rcx
                	setnp	%r11b
@@ -144,11 +143,10 @@ Disassembly of section .text:
                	cmpq	$0x0, %rcx
                	jne	<addr>
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x400f70a3d70a3d71, %rcx # imm = 0x400F70A3D70A3D71
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x400f70a3d70a3d71, %rax # imm = 0x400F70A3D70A3D71
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	seta	%cl
                	movzbq	%cl, %rcx
                	jmp	<addr>
@@ -160,14 +158,13 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	addq	$0x8, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x3fe8000000000000, %rcx # imm = 0x3FE8000000000000
-               	movq	%rcx, %xmm0
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x3fe8000000000000, %rax # imm = 0x3FE8000000000000
+               	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movq	%rax, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	xorpd	%xmm15, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -184,3 +181,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

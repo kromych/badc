@@ -114,26 +114,24 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0x158
-               	ldr	x0, [x0]
-               	mov	x1, #0x8f5c             // =36700
-               	movk	x1, #0xf5c2, lsl #16
-               	movk	x1, #0x5c28, lsl #32
-               	movk	x1, #0x400f, lsl #48
-               	fmov	d16, x0
-               	fmov	d17, x1
-               	fcmp	d16, d17
+               	ldr	d0, [x0]
+               	mov	x0, #0x8f5c             // =36700
+               	movk	x0, #0xf5c2, lsl #16
+               	movk	x0, #0x5c28, lsl #32
+               	movk	x0, #0x400f, lsl #48
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x1, mi
                	cbnz	x1, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x158
-               	ldr	x0, [x0]
-               	mov	x1, #0x3d71             // =15729
-               	movk	x1, #0xd70a, lsl #16
-               	movk	x1, #0x70a3, lsl #32
-               	movk	x1, #0x400f, lsl #48
-               	fmov	d16, x0
-               	fmov	d17, x1
-               	fcmp	d16, d17
+               	ldr	d0, [x0]
+               	mov	x0, #0x3d71             // =15729
+               	movk	x0, #0xd70a, lsl #16
+               	movk	x0, #0x70a3, lsl #32
+               	movk	x0, #0x400f, lsl #48
+               	fmov	d17, x0
+               	fcmp	d0, d17
                	cset	x1, gt
                	b	<addr>
                	cbz	x1, <addr>
@@ -144,12 +142,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0x158
                	add	x0, x0, #0x8
-               	ldr	x0, [x0]
-               	mov	x1, #0x3fe8000000000000 // =4604930618986332160
-               	fmov	d16, x1
-               	fneg	d0, d16
+               	ldr	d0, [x0]
+               	mov	x0, #0x3fe8000000000000 // =4604930618986332160
                	fmov	d16, x0
-               	fcmp	d16, d0
+               	fneg	d1, d16
+               	fcmp	d0, d1
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x5                // =5

@@ -21,10 +21,12 @@ Disassembly of section .text:
                	movq	(%rsp), %r10
                	addq	$0x10, %rsp
                	movq	%r10, %rax
-               	movabsq	$0x45f0000000000000, %rcx # imm = 0x45F0000000000000
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x45f0000000000000, %rax # imm = 0x45F0000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -45,10 +47,12 @@ Disassembly of section .text:
                	movq	(%rsp), %r10
                	addq	$0x10, %rsp
                	movq	%r10, %rax
-               	movabsq	$0x43f0000000000000, %rcx # imm = 0x43F0000000000000
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movsd	-0x10(%rbp,%riz), %xmm0
+               	movabsq	$0x43f0000000000000, %rax # imm = 0x43F0000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -67,10 +71,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%xmm0, %rax
-               	movabsq	$0x4340000000000000, %rcx # imm = 0x4340000000000000
                	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	movsd	-0x18(%rbp,%riz), %xmm0
+               	movabsq	$0x4340000000000000, %rax # imm = 0x4340000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -87,4 +93,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

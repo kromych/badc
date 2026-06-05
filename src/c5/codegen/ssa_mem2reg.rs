@@ -466,7 +466,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
                 f(a);
             }
         }
-        Inst::CallIndirect { target, args } => {
+        Inst::CallIndirect { target, args, .. } => {
             f(target);
             for a in args {
                 f(a);
@@ -555,7 +555,7 @@ fn load_byte_width(kind: LoadKind) -> Option<u8> {
         LoadKind::I8 | LoadKind::U8 => Some(1),
         LoadKind::I16 | LoadKind::U16 => Some(2),
         LoadKind::I32 | LoadKind::U32 => Some(4),
-        LoadKind::I64 => Some(8),
+        LoadKind::I64 | LoadKind::F64 => Some(8),
         LoadKind::F32 => None,
     }
 }
@@ -565,7 +565,7 @@ fn store_byte_width(kind: StoreKind) -> Option<u8> {
         StoreKind::I8 => Some(1),
         StoreKind::I16 => Some(2),
         StoreKind::I32 => Some(4),
-        StoreKind::I64 => Some(8),
+        StoreKind::I64 | StoreKind::F64 => Some(8),
         StoreKind::F32 => None,
     }
 }
@@ -588,7 +588,7 @@ fn imm_fits_load_kind(k: i64, kind: LoadKind) -> bool {
         LoadKind::U8 => (0..=0xff).contains(&k),
         LoadKind::U16 => (0..=0xffff).contains(&k),
         LoadKind::U32 => (0..=0xffff_ffff).contains(&k),
-        LoadKind::I64 | LoadKind::F32 => false,
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => false,
     }
 }
 
@@ -610,7 +610,7 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
             rhs_imm: 0xffff_ffff,
         },
         LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value, kind },
-        LoadKind::I64 | LoadKind::F32 => unreachable!("not a narrow load kind"),
+        LoadKind::I64 | LoadKind::F32 | LoadKind::F64 => unreachable!("not a narrow load kind"),
     }
 }
 

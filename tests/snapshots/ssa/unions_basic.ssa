@@ -47,10 +47,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
   block 6  start_pc=0
     v30  LocalAddr(-1)                                    -> x0
     v31  Imm(4615063718147915776)                         -> x1
-    v32  Store { addr=v30, value=v31, kind=I64 }          -> -
+    v32  Store { addr=v30, value=v31, kind=F64 }          -> -
     v33  LocalAddr(-1)                                    -> x0
-    v34  Load { addr=v33, kind=I64 }                      -> x0
-    v35  Imm(4614838538166547251)                         -> x1
+    v34  Load { addr=v33, kind=F64 }                      -> d0
+    v35  Imm(4614838538166547251)                         -> x0
     v36  Binop { op=flt, lhs=v34, rhs=v35 }               -> x0
     terminator Bz { cond=v36, target=b8, fall=b7 }   (exit_acc=v36)
   block 7  start_pc=0
@@ -58,8 +58,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v37)   (exit_acc=v37)
   block 8  start_pc=0
     v38  LocalAddr(-1)                                    -> x0
-    v39  Load { addr=v38, kind=I64 }                      -> x0
-    v40  Imm(4615288898129284301)                         -> x1
+    v39  Load { addr=v38, kind=F64 }                      -> d0
+    v40  Imm(4615288898129284301)                         -> x0
     v41  Binop { op=fgt, lhs=v39, rhs=v40 }               -> x0
     terminator Bz { cond=v41, target=b10, fall=b9 }   (exit_acc=v41)
   block 9  start_pc=0

@@ -117,7 +117,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     terminator Jmp(b2)
   block 9  start_pc=0
     v30  Imm(2)                                           -> x7
-    v31  Call { target_pc=0, args=[v30] }                 -> x7
+    v31  Call { target_pc=0, args=[v30], fp_return=false } -> x7
     v32  ImmData(472)                                     -> x6
     v33  LoadLocal { off=-1, kind=I32 }                   -> x2
     v34  LoadLocal { off=-2, kind=I32 }                   -> x1
@@ -174,7 +174,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=8
     terminator Bz { cond=v78, target=b16, fall=b15 }   (exit_acc=v78)
   block 15  start_pc=0
     v79  Imm(2)                                           -> x3
-    v80  Call { target_pc=0, args=[v79] }                 -> x7
+    v80  Call { target_pc=0, args=[v79], fp_return=false } -> x7
     v81  ImmData(502)                                     -> x6
     v82  LoadLocal { off=-3, kind=F32 }                   -> d0
     v83  CallExt { binding_idx=1, args=[v80, v81, v82], fp_arg_mask=0x4 } -> x0

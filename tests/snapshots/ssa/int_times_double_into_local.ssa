@@ -71,16 +71,16 @@ fn ent_pc=14 n_params=2 variadic=false locals=3
     v3   ParamRef(1, kind=I32)                            -> x0
     v4   Imm(0)                                           -> x1
     v5   Imm(4614256656552045848)                         -> x1
-    v6   Imm(0)                                           -> x2
-    v7   Imm(-2)                                          -> x2
+    v6   StoreLocal { off=-1, value=v5, kind=F64 }        -> -
+    v7   Imm(-2)                                          -> x1
     v8   FpCast { kind=IntToFp, value=v7 }                -> d0
-    v9   LoadLocal { off=-1, kind=I64 }                   -> x2
-    v10  Binop { op=fmul, lhs=v8, rhs=v5 }                -> d0
+    v9   LoadLocal { off=-1, kind=F64 }                   -> d1
+    v10  Binop { op=fmul, lhs=v8, rhs=v9 }                -> d0
     v11  LoadLocal { off=3, kind=I32 }                    -> x1
     v12  FpCast { kind=IntToFp, value=v3 }                -> d1
     v13  Binop { op=fmul, lhs=v10, rhs=v12 }              -> d0
-    v14  StoreLocal { off=-2, value=v13, kind=I64 }       -> -
-    v15  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v14  StoreLocal { off=-2, value=v13, kind=F64 }       -> -
+    v15  LoadLocal { off=-2, kind=F64 }                   -> d0
     terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
@@ -90,7 +90,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   Imm(8)                                           -> x7
     v2   Imm(0)                                           -> x3
-    v3   Call { target_pc=14, args=[v1, v2] }             -> x0
+    v3   Call { target_pc=14, args=[v1, v2], fp_return=true } -> d0
     v4   Binop { op=fne, lhs=v3, rhs=v2 }                 -> x0
     terminator Bz { cond=v4, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
@@ -99,11 +99,11 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
   block 2  start_pc=0
     v6   Imm(8)                                           -> x7
     v7   Imm(1)                                           -> x6
-    v8   Call { target_pc=14, args=[v6, v7] }             -> x0
-    v9   Imm(4611686018427387904)                         -> x1
-    v10  Fneg(v9)                                         -> d0
-    v11  Imm(4614256656552045848)                         -> x1
-    v12  Binop { op=fmul, lhs=v10, rhs=v11 }              -> d0
+    v8   Call { target_pc=14, args=[v6, v7], fp_return=true } -> d0
+    v9   Imm(4611686018427387904)                         -> x0
+    v10  Fneg(v9)                                         -> d1
+    v11  Imm(4614256656552045848)                         -> x0
+    v12  Binop { op=fmul, lhs=v10, rhs=v11 }              -> d1
     v13  Binop { op=fne, lhs=v8, rhs=v12 }                -> x0
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
@@ -112,11 +112,11 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
   block 4  start_pc=0
     v15  Imm(8)                                           -> x7
     v16  Imm(2)                                           -> x6
-    v17  Call { target_pc=14, args=[v15, v16] }           -> x0
-    v18  Imm(4616189618054758400)                         -> x1
-    v19  Fneg(v18)                                        -> d0
-    v20  Imm(4614256656552045848)                         -> x1
-    v21  Binop { op=fmul, lhs=v19, rhs=v20 }              -> d0
+    v17  Call { target_pc=14, args=[v15, v16], fp_return=true } -> d0
+    v18  Imm(4616189618054758400)                         -> x0
+    v19  Fneg(v18)                                        -> d1
+    v20  Imm(4614256656552045848)                         -> x0
+    v21  Binop { op=fmul, lhs=v19, rhs=v20 }              -> d1
     v22  Binop { op=fne, lhs=v17, rhs=v21 }               -> x0
     terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
   block 5  start_pc=0

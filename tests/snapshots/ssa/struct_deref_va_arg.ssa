@@ -85,7 +85,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
     v2   ImmData(104)                                     -> x6
-    v3   Call { target_pc=14, args=[v1, v2] }             -> x0
+    v3   Call { target_pc=14, args=[v1, v2], fp_return=false } -> x0
     v4   ImmData(88)                                      -> x0
     v5   Load { addr=v4, kind=I32 }                       -> x1
     v6   BinopI { op=ne, lhs=v5, rhs_imm=11 }             -> x1

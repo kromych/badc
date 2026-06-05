@@ -77,7 +77,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
   block 2  start_pc=0
     v14  LoadLocal { off=-6, kind=I64 }                   -> x0
     v15  Imm(1)                                           -> x6
-    v16  Call { target_pc=1, args=[v3, v15] }             -> x0
+    v16  Call { target_pc=1, args=[v3, v15], fp_return=false } -> x0
     v17  BinopI { op=ne, lhs=v16, rhs_imm=7 }             -> x0
     terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0

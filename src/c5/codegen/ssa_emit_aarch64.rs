@@ -1214,7 +1214,11 @@ fn emit_inst(
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
-        Inst::Call { target_pc, args } => emit_call(
+        Inst::Call {
+            target_pc,
+            args,
+            fp_return,
+        } => emit_call(
             code,
             dst,
             *target_pc,
@@ -1225,6 +1229,7 @@ fn emit_inst(
             abi,
             fixups,
             variadic_targets.contains(target_pc),
+            *fp_return,
         ),
         Inst::CallExt {
             binding_idx,
@@ -1244,9 +1249,13 @@ fn emit_inst(
             plt_call_fixups,
             imports,
         ),
-        Inst::CallIndirect { target, args } => {
-            emit_call_indirect(code, dst, *target, args, alloc, frame, scratch, abi)
-        }
+        Inst::CallIndirect {
+            target,
+            args,
+            fp_return,
+        } => emit_call_indirect(
+            code, dst, *target, args, alloc, frame, scratch, abi, *fp_return,
+        ),
         Inst::Mcpy {
             dst: d,
             src: s,
@@ -1909,6 +1918,7 @@ fn target_for_ext(abi: super::Abi) -> Target {
 /// placeholder, and records a `Fixup::Bl` for the outer fixup
 /// pass to resolve. Result lands in x0; the SSA emit moves it to
 /// the inst's `dst` if needed.
+#[allow(clippy::too_many_arguments)]
 fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -1920,6 +1930,7 @@ fn emit_call(
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
     callee_is_variadic: bool,
+    fp_return: bool,
 ) -> bool {
     if callee_is_variadic {
         // The variadic c5 ABI keeps the c5 stack: every arg is
@@ -1969,14 +1980,7 @@ fn emit_call(
                 enc_add_imm(Reg(31), Reg(31), (args.len() as u32) * 16),
             );
         }
-        if let Some(rd) = int_reg(dst) {
-            if rd.0 != 0 {
-                emit_mov_reg(code, rd, Reg(0));
-            }
-        } else if let Place::Spill(slot) = dst {
-            let sp_off = spill_off(frame, slot);
-            emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
-        }
+        move_call_result(code, dst, frame, fp_return);
         return true;
     }
     // Non-variadic: marshal through the host ABI. Compute the
@@ -2011,20 +2015,23 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // Move the return value into the call's dst Place. AAPCS64
-    // returns f64 in d0 and ints / pointers in x0. The dst's
-    // Place tells which bank the SSA allocator wants the value
-    // in.
-    move_call_result(code, dst, frame);
+    // Move the return value into the call's dst Place. The
+    // c5-internal convention returns every value (including an f64
+    // bit pattern) in x0; `move_call_result` reinterprets it into
+    // the FP register file when `fp_return`.
+    move_call_result(code, dst, frame, fp_return);
     true
 }
 
-/// Common return-value bridge shared by `emit_call`,
-/// `emit_call_ext`, and `emit_call_indirect`. Copies the AAPCS64
-/// return register into the call's SSA dst place. Returns are in
-/// d0 for f64, x0 otherwise; this routine handles both plus a
-/// spill destination.
-fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
+/// Common return-value bridge shared by `emit_call` and
+/// `emit_call_indirect`. The c5-internal calling convention ferries
+/// every return value -- including an f64 bit pattern -- through the
+/// integer return register x0 (see `emit_return`, which moves an
+/// FP-placed return value into x0 via `fmov x0, d`). When the callee
+/// returns a floating-point scalar (`fp_return`) the call's result is
+/// FP-classed, so the x0 bit pattern is reinterpreted into the FP
+/// register file via `fmov d, x0`.
+fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
     match dst {
         Place::IntReg(r) => {
             if r != 0 {
@@ -2032,12 +2039,10 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
             }
         }
         Place::FpReg(r) => {
-            if r != 0 {
-                // d-reg copy via x16 since we have no fmov.d
-                // direct.
-                emit(code, enc_fmov_d_to_x(Reg(16), 0));
-                emit(code, enc_fmov_x_to_d(r, Reg(16)));
-            }
+            // The result is in x0 (c5 convention). Reinterpret the
+            // 8-byte pattern as an f64 in the allocator's d-register.
+            debug_assert!(fp_return, "FP-classed call result requires fp_return");
+            emit(code, enc_fmov_x_to_d(r, Reg(0)));
         }
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
@@ -2057,6 +2062,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
 /// the return value.
 /// FP args and variadic indirect callees aren't part of the thin
 /// slice; either case returns false.
+#[allow(clippy::too_many_arguments)]
 fn emit_call_indirect(
     code: &mut Vec<u8>,
     dst: Place,
@@ -2066,6 +2072,7 @@ fn emit_call_indirect(
     frame: Frame,
     scratch: &ScratchPool,
     abi: super::Abi,
+    fp_return: bool,
 ) -> bool {
     let target_place = alloc
         .places
@@ -2185,14 +2192,7 @@ fn emit_call_indirect(
     if pushed_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), pushed_bytes));
     }
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != 0 {
-            emit_mov_reg(code, rd, Reg(0));
-        }
-    } else if let Place::Spill(slot) = dst {
-        let sp_off = spill_off(frame, slot);
-        emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
-    }
+    move_call_result(code, dst, frame, fp_return);
     true
 }
 
@@ -2451,6 +2451,23 @@ fn emit_load(
         }
         return true;
     }
+    if let LoadKind::F64 = kind {
+        // `double` lvalue: a single 8-byte FP load into a d-reg.
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => 0u8, // scratch d0
+            _ => {
+                bail_msg("Load F64: dst not fp reg / spill");
+                return false;
+            }
+        };
+        emit(code, enc_ldr_d_imm(dd, rn, 0));
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
+        }
+        return true;
+    }
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => scratch.secondary,
@@ -2464,7 +2481,7 @@ fn emit_load(
         LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, 0)),
         LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, 0)),
         LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
-        LoadKind::F32 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
@@ -2518,6 +2535,37 @@ fn emit_load_local(
         }
         return true;
     }
+    if matches!(kind, LoadKind::F64) {
+        // `double` local: a single 8-byte FP load; no widen.
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => 0u8,
+            _ => {
+                bail_msg("LoadLocal F64: dst not fp reg / spill");
+                return false;
+            }
+        };
+        let bytes = c5_slot_to_fp_offset(off);
+        if let Ok(disp) = i32::try_from(bytes)
+            && disp >= 0
+            && (disp as u32).is_multiple_of(8)
+            && (disp as u32) < 32760
+        {
+            emit(
+                code,
+                super::aarch64::enc_ldr_d_imm(dd, Reg(29), disp as u32),
+            );
+        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+            return false;
+        } else {
+            emit(code, super::aarch64::enc_ldr_d_imm(dd, scratch.primary, 0));
+        }
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit(code, super::aarch64::enc_str_d_imm(dd, Reg(31), sp_off));
+        }
+        return true;
+    }
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => scratch.secondary,
@@ -2537,7 +2585,7 @@ fn emit_load_local(
             LoadKind::U16 => super::aarch64::enc_ldurh(rd, Reg(29), disp),
             LoadKind::I8 => super::aarch64::enc_ldursb(rd, Reg(29), disp),
             LoadKind::U8 => super::aarch64::enc_ldurb(rd, Reg(29), disp),
-            LoadKind::F32 => unreachable!(),
+            LoadKind::F32 | LoadKind::F64 => unreachable!(),
         };
         emit(code, word);
         if let Place::Spill(slot) = dst {
@@ -2560,7 +2608,7 @@ fn emit_load_local(
         LoadKind::U16 => super::aarch64::enc_ldrh_imm(rd, scratch.primary, 0),
         LoadKind::I8 => super::aarch64::enc_ldrsb_imm(rd, scratch.primary, 0),
         LoadKind::U8 => super::aarch64::enc_ldrb_imm(rd, scratch.primary, 0),
-        LoadKind::F32 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
     if let Place::Spill(slot) = dst {
@@ -2585,6 +2633,49 @@ fn emit_store_local(
     if matches!(kind, StoreKind::F32) {
         bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
         return false;
+    }
+    if matches!(kind, StoreKind::F64) {
+        // `double` local store: a single 8-byte FP store; no narrow.
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+            bail_msg("StoreLocal F64: value not fp reg / spill / int reg");
+            return false;
+        };
+        let bytes = c5_slot_to_fp_offset(off);
+        if let Ok(disp) = i32::try_from(bytes)
+            && disp >= 0
+            && (disp as u32).is_multiple_of(8)
+            && (disp as u32) < 32760
+        {
+            emit(
+                code,
+                super::aarch64::enc_str_d_imm(dn, Reg(29), disp as u32),
+            );
+        } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+            return false;
+        } else {
+            emit(
+                code,
+                super::aarch64::enc_str_d_imm(dn, scratch.secondary, 0),
+            );
+        }
+        // c5 store-op leaves the value in the accumulator; propagate
+        // to dst if the allocator parked it elsewhere.
+        match dst {
+            Place::FpReg(r) if r != dn => {
+                emit(code, super::aarch64::enc_fmov_d_d(r, dn));
+            }
+            Place::Spill(slot) => {
+                let sp_off = spill_off(frame, slot);
+                emit(code, super::aarch64::enc_str_d_imm(dn, Reg(31), sp_off));
+            }
+            _ => {}
+        }
+        return true;
     }
     let value_place = alloc
         .places
@@ -2620,7 +2711,7 @@ fn emit_store_local(
                 StoreKind::I32 => super::aarch64::enc_stur32(rv, Reg(29), disp),
                 StoreKind::I16 => super::aarch64::enc_sturh(rv, Reg(29), disp),
                 StoreKind::I8 => super::aarch64::enc_sturb(rv, Reg(29), disp),
-                StoreKind::F32 => unreachable!(),
+                StoreKind::F32 | StoreKind::F64 => unreachable!(),
             };
             emit(code, enc);
         } else if !emit_store_local_large_disp(code, off, rv, kind, scratch, frame) {
@@ -2666,7 +2757,7 @@ fn emit_store_local_large_disp(
         StoreKind::I32 => super::aarch64::enc_str32_imm(rv, scratch.secondary, 0),
         StoreKind::I16 => super::aarch64::enc_strh_imm(rv, scratch.secondary, 0),
         StoreKind::I8 => super::aarch64::enc_strb_imm(rv, scratch.secondary, 0),
-        StoreKind::F32 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 => unreachable!(),
     };
     emit(code, enc);
     true
@@ -2690,8 +2781,8 @@ fn emit_load_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if matches!(kind, LoadKind::F32) {
-        bail_msg("LoadIndexed: F32 not implemented");
+    if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+        bail_msg("LoadIndexed: FP not implemented");
         return false;
     }
     let base_place = alloc
@@ -2722,7 +2813,7 @@ fn emit_load_indexed(
         LoadKind::I32 | LoadKind::U32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-        LoadKind::F32 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     if scale != expected_scale {
         bail_msg("LoadIndexed: scale doesn't match access width");
@@ -2736,7 +2827,7 @@ fn emit_load_indexed(
         LoadKind::U16 => super::aarch64::enc_ldrh_reg_lsl1(rd, rn, rm),
         LoadKind::I8 => super::aarch64::enc_ldrsb_reg(rd, rn, rm),
         LoadKind::U8 => super::aarch64::enc_ldrb_reg(rd, rn, rm),
-        LoadKind::F32 => unreachable!(),
+        LoadKind::F32 | LoadKind::F64 => unreachable!(),
     };
     emit(code, word);
     if let Place::Spill(slot) = dst {
@@ -2760,8 +2851,8 @@ fn emit_store_indexed(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if matches!(kind, StoreKind::F32) {
-        bail_msg("StoreIndexed: F32 not implemented");
+    if matches!(kind, StoreKind::F32 | StoreKind::F64) {
+        bail_msg("StoreIndexed: FP not implemented");
         return false;
     }
     let base_place = alloc
@@ -2805,7 +2896,7 @@ fn emit_store_indexed(
         StoreKind::I32 => 4,
         StoreKind::I16 => 2,
         StoreKind::I8 => 1,
-        StoreKind::F32 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 => unreachable!(),
     };
     if scale != expected_scale {
         bail_msg("StoreIndexed: scale doesn't match access width");
@@ -2816,7 +2907,7 @@ fn emit_store_indexed(
         StoreKind::I32 => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
         StoreKind::I16 => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
         StoreKind::I8 => super::aarch64::enc_strb_reg(rv, rn, rm),
-        StoreKind::F32 => unreachable!(),
+        StoreKind::F32 | StoreKind::F64 => unreachable!(),
     };
     emit(code, word);
     // c5 store-op leaves the stored value in the accumulator.
@@ -2897,6 +2988,22 @@ fn emit_store(
         }
         return true;
     }
+    if let StoreKind::F64 = kind {
+        // `double` lvalue store: a single 8-byte FP store; no narrow.
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
+            return false;
+        };
+        emit(code, super::aarch64::enc_str_d_imm(dn, rn, 0));
+        if let Some(rd) = fp_reg(dst) {
+            if rd != dn {
+                emit(code, super::aarch64::enc_fmov_d_d(rd, dn));
+            }
+        } else if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_d_imm(dn, Reg(31), sp_off));
+        }
+        return true;
+    }
     // For an I64 store whose value lives in an FpReg (c5's f64
     // store path uses StoreKind::I64 to write 8 raw bytes), bridge
     // d-reg -> GPR via fmov. Lower-width stores from an FpReg
@@ -2917,7 +3024,9 @@ fn emit_store(
         StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
         StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
         StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
-        StoreKind::F32 => unreachable!("F32 store handled in the F32 branch above"),
+        StoreKind::F32 | StoreKind::F64 => {
+            unreachable!("FP store handled in the FP branch above")
+        }
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != rs.0 {
@@ -3455,6 +3564,42 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
     }
 }
 
+/// Sequentialize a parallel copy over d-registers. Mirrors
+/// [`schedule_int_reg_moves`] with `fmov d, d` for the register
+/// copies. `scratch_d` must lie outside the allocator's d-register
+/// pool so it collides with no pending source or target.
+fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
+    moves.retain(|(s, t)| s != t);
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(other_s, _)| *other_s == t);
+            if !tgt_still_a_source {
+                emit(code, super::aarch64::enc_fmov_d_d(t, s));
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            let cycle_src = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|&s| s != scratch_d)
+                .unwrap_or(moves[0].0);
+            emit(code, super::aarch64::enc_fmov_d_d(scratch_d, cycle_src));
+            for m in moves.iter_mut() {
+                if m.0 == cycle_src {
+                    m.0 = scratch_d;
+                }
+            }
+        }
+    }
+}
+
 /// Emit the predecessor-exit moves for each `Inst::Phi` at the head
 /// of every CFG successor of `self_block`. The phi's incoming entry
 /// for `self_block` names the reaching value at this block's exit;
@@ -3503,7 +3648,7 @@ fn emit_phi_predecessor_moves(
         let mut moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
         for id in head..end {
             let inst = &func.insts[id as usize];
-            let super::super::ir::Inst::Phi { incoming, .. } = inst else {
+            let super::super::ir::Inst::Phi { incoming, kind } = inst else {
                 break;
             };
             let Some((_, src_v)) = incoming.iter().find(|(b, _)| *b == self_block) else {
@@ -3520,6 +3665,24 @@ fn emit_phi_predecessor_moves(
                 .copied()
                 .unwrap_or(super::ssa_alloc::Place::None);
             use super::ssa_alloc::Place;
+            // The predecessor-exit move must stay within one register
+            // file: an FP value copied into a GPR phi home (or the
+            // reverse) by an integer mov would reinterpret the bits.
+            // The scheduler below lowers only d-register and stack-slot
+            // moves for the integer file; an FP phi (kind F32 / F64)
+            // would need a separate FP move path. Bail loudly rather
+            // than emit a class-crossing copy.
+            let phi_is_fp = matches!(
+                kind,
+                super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
+            );
+            if phi_is_fp
+                || matches!(src_place, Place::FpReg(_))
+                || matches!(dst_place, Place::FpReg(_))
+            {
+                bail_msg("Phi: FP-classed phi predecessor move not lowered");
+                return false;
+            }
             match (src_place, dst_place) {
                 (Place::None, _) | (_, Place::None) => {}
                 _ => moves.push((src_place, dst_place)),
@@ -3697,20 +3860,38 @@ fn marshal_args(
     // below may overwrite arg-target integer registers, including
     // the source register of such a value, so the FP fmov must
     // snapshot it into the destination d-reg first.
+    // FP arguments. A value already in a d-register may sit in
+    // another FP argument's target d-register (AAPCS64 passes
+    // successive FP args in d0, d1, ...), so the d-to-d moves form a
+    // parallel copy. Schedule those first so every d-register source
+    // is consumed before any Spill / IntReg source materialises into
+    // its target d-register. SCRATCH_FP1 breaks any cycle and lies
+    // outside the allocator's d-register pool.
+    let mut fp_moves: Vec<(u8, u8)> = Vec::new();
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::FpReg(r) = placement
+            && let Place::FpReg(s) = arg_place(i)
+            && s != r
+        {
+            fp_moves.push((s, r));
+        }
+    }
+    schedule_dreg_moves(code, &mut fp_moves, SCRATCH_FP1);
     for (i, &placement) in plan.placements.iter().enumerate() {
         if let super::ArgPlacement::FpReg(r) = placement {
             let ap = arg_place(i);
-            // Pass the target d-reg as the materialise scratch so
-            // Spill / IntReg sources land directly in the target
-            // and earlier FP args already sitting in d0..d_{r-1}
-            // are not overwritten by a generic d-scratch reload.
-            let src = match materialize_fp_shifted(code, ap, r, frame, plan.scratch_bytes) {
-                Some(rr) => rr,
-                None => return false,
-            };
-            if src != r {
-                emit(code, enc_fmov_d_to_x(scratch.primary, src));
-                emit(code, enc_fmov_x_to_d(r, scratch.primary));
+            match ap {
+                // Register-to-register moves were scheduled above.
+                Place::FpReg(_) => {}
+                Place::Spill(_) | Place::IntReg(_) | Place::None => {
+                    let src = match materialize_fp_shifted(code, ap, r, frame, plan.scratch_bytes) {
+                        Some(rr) => rr,
+                        None => return false,
+                    };
+                    if src != r {
+                        emit(code, super::aarch64::enc_fmov_d_d(r, src));
+                    }
+                }
             }
         }
     }

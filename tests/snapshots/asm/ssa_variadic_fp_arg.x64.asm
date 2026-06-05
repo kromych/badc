@@ -79,29 +79,28 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rbx
-               	movq	(%rbx), %rsi
-               	movq	%rsi, %xmm0
+               	movsd	(%rbx,%riz), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	movabsq	$0x407f900000000000, %r12 # imm = 0x407F900000000000
+               	movq	%r12, %xmm14
+               	movsd	%xmm14, -0x8(%rbp,%riz)
                	leaq	<rip>, %rdi
-               	movq	%r12, %xmm0
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movslq	%eax, %rax
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rax
-               	movq	(%rax), %rsi
-               	movq	(%rbx), %rdx
-               	movq	%rsi, %xmm0
-               	movq	%rdx, %xmm1
+               	movsd	(%rax,%riz), %xmm0
+               	movsd	(%rbx,%riz), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	%r12, %xmm14
+               	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%r12, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -117,11 +116,10 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rbx), %rax
-               	movabsq	$0x407f900000000000, %rcx # imm = 0x407F900000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	(%rbx,%riz), %xmm0
+               	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -146,3 +144,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -14,51 +14,59 @@ Disassembly of section .text:
                	subq	$0x30, %rsp
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movsd	%xmm14, -0x8(%rbp,%riz)
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x10(%rbp,%riz)
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x18(%rbp,%riz)
+               	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x20(%rbp,%riz)
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x10(%rbp,%riz), %xmm1
+               	ucomisd	%xmm1, %xmm0
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r11b
                	movzbq	%r11b, %r11
-               	orq	%r11, %rcx
-               	cmpq	$0x0, %rcx
+               	orq	%r11, %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x18(%rbp,%riz), %xmm1
+               	ucomisd	%xmm1, %xmm0
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r11b
                	movzbq	%r11b, %r11
-               	orq	%r11, %rcx
-               	cmpq	$0x0, %rcx
+               	orq	%r11, %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0xc, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %xmm14
-               	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movsd	-0x20(%rbp,%riz), %xmm1
+               	ucomisd	%xmm1, %xmm0
+               	setne	%al
+               	movzbq	%al, %rax
                	setp	%r11b
                	movzbq	%r11b, %r11
-               	orq	%r11, %rcx
-               	cmpq	$0x0, %rcx
+               	orq	%r11, %rax
+               	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0xd, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	-0x8(%rbp,%riz), %xmm0
+               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -72,8 +80,10 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x420bf08eb0000000, %rax # imm = 0x420BF08EB0000000
                	movq	%rax, %xmm14
+               	movsd	%xmm14, -0x28(%rbp,%riz)
+               	movsd	-0x28(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b

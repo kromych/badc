@@ -398,6 +398,14 @@ pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
     0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
 
+/// `FMOV <Dd>, <Dn>` -- copy a double-precision register. Used to
+/// move a `double` value into the allocator's chosen d-register
+/// when the producer wrote a different one.
+pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32);
+    0x1E60_4000 | ((dn as u32) << 5) | (dd as u32)
+}
+
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
 pub(super) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
     debug_assert!(dd < 32 && dn < 32 && dm < 32);

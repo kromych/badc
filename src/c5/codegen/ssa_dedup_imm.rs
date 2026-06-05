@@ -171,7 +171,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
                 f(a);
             }
         }
-        Inst::CallIndirect { target, args } => {
+        Inst::CallIndirect { target, args, .. } => {
             f(target);
             for a in args {
                 f(a);

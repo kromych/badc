@@ -76,8 +76,11 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
                	fmov	d16, x0
-               	fmov	d17, x0
-               	fdiv	d0, d16, d17
+               	sub	x17, x29, #0x8
+               	str	d16, [x17]
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
+               	fdiv	d0, d0, d0
                	fmov	x0, d0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -86,12 +89,14 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	str	x19, [sp]
-               	mov	x0, #0x0                // =0
-               	fmov	d16, x0
-               	fmov	d17, x0
-               	fdiv	d0, d16, d17
+               	bl	<addr>
+               	fmov	d0, x0
+               	sub	x17, x29, #0x8
+               	str	d0, [x17]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
@@ -102,6 +107,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -113,6 +120,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -124,6 +133,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -135,6 +146,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -146,6 +159,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -158,6 +173,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	fcmp	d0, d0
                	cset	x0, mi
                	cbz	x0, <addr>
@@ -167,6 +184,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
+               	sub	x16, x29, #0x8
+               	ldr	d0, [x16]
                	fcmp	d0, d0
                	cset	x0, eq
                	cbz	x0, <addr>

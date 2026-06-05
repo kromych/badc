@@ -150,8 +150,17 @@ pub(crate) fn walk_function(
             if is_struct_value {
                 continue;
             }
+            // Floating-point params are read back through the FP
+            // register class (`LoadLocal { F32 / F64 }`); seeding the
+            // slot with an integer `ParamRef` + `StoreLocal { I64 }`
+            // would cross register files. The prologue already spills
+            // the incoming argument register into the cdecl slot, and
+            // the body reads it as FP. `float` additionally needs the
+            // entry-copy below to narrow the widened slot bits; `double`
+            // shares the 8-byte storage width and needs no entry copy.
             let is_float = stripped == crate::c5::token::Ty::Float as i64;
-            if is_float {
+            let is_double = stripped == crate::c5::token::Ty::Double as i64;
+            if is_float || is_double {
                 continue;
             }
             // Pointer-typed parameters carry the pointer marker
@@ -1366,28 +1375,35 @@ impl<'a> Walker<'a> {
                 b.branch_zero(cond_v, else_blk, then_blk);
                 let slot = b.alloc_synthetic_local();
                 let load_kind = load_kind_for(*ty, self.target);
-                let is_fp = matches!(load_kind, super::super::ir::LoadKind::F32);
                 let store_kind = store_kind_for(*ty, self.target);
+                // `float` keeps the value in an FP register but its
+                // 4-byte storage width forces the `LocalAddr` + `Store`
+                // path (the fused `StoreLocal { F32 }` is not lowered).
+                // `double` rides the FP register class at its full
+                // 8-byte width, so the fused `StoreLocal` / `LoadLocal`
+                // F64 path lowers it in a single `movsd` / `ldr d`.
+                let is_f32 = matches!(load_kind, super::super::ir::LoadKind::F32);
+                let is_f64 = matches!(load_kind, super::super::ir::LoadKind::F64);
+                let arm_store = |b: &mut super::super::codegen::ssa_build::SsaBuilder, v| {
+                    if is_f32 {
+                        let addr = b.local_addr(slot);
+                        b.store(addr, v, store_kind);
+                    } else if is_f64 {
+                        b.store_local(slot, v, store_kind);
+                    } else {
+                        b.store_local(slot, v, super::super::ir::StoreKind::I64);
+                    }
+                };
                 b.switch_to(then_blk);
                 let then_v = self.walk_expr_rvalue(b, *then_e)?;
-                if is_fp {
-                    let addr = b.local_addr(slot);
-                    b.store(addr, then_v, store_kind);
-                } else {
-                    b.store_local(slot, then_v, super::super::ir::StoreKind::I64);
-                }
+                arm_store(b, then_v);
                 b.jmp(after_blk);
                 b.switch_to(else_blk);
                 let else_v = self.walk_expr_rvalue(b, *else_e)?;
-                if is_fp {
-                    let addr = b.local_addr(slot);
-                    b.store(addr, else_v, store_kind);
-                } else {
-                    b.store_local(slot, else_v, super::super::ir::StoreKind::I64);
-                }
+                arm_store(b, else_v);
                 b.jmp(after_blk);
                 b.switch_to(after_blk);
-                if is_fp {
+                if is_f32 || is_f64 {
                     Ok(b.load_local(slot, load_kind))
                 } else {
                     Ok(b.load_local(slot, super::super::ir::LoadKind::I64))
@@ -1423,10 +1439,13 @@ impl<'a> Walker<'a> {
                         all_args.push(self.walk_expr_rvalue(b, *a)?);
                     }
                     let target_pc = self.live_fun_val(*sym, *val);
+                    // Struct-returning callee: the result is an
+                    // address (the c5 address-as-value rule), never
+                    // an FP scalar, so `fp_return` is false.
                     if target_pc == 0 {
-                        let _ = b.call_extern(*sym, all_args);
+                        let _ = b.call_extern(*sym, all_args, false);
                     } else {
-                        let _ = b.call(target_pc as usize, all_args);
+                        let _ = b.call(target_pc as usize, all_args, false);
                     }
                     return Ok(b.local_addr(result_slot));
                 }
@@ -1510,11 +1529,17 @@ impl<'a> Walker<'a> {
                                 arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
                             }
                         }
+                        // C99 6.2.5p10: a call to a function whose
+                        // return type is a floating-point scalar
+                        // yields its value in the FP return register.
+                        // Tag the call so the codegen reads the result
+                        // from there and FP-classes the value.
+                        let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
                         if target_pc == 0 {
-                            return Ok(b.call_extern(*sym, arg_vals));
+                            return Ok(b.call_extern(*sym, arg_vals, fp_return));
                         }
-                        return Ok(b.call(target_pc as usize, arg_vals));
+                        return Ok(b.call(target_pc as usize, arg_vals, fp_return));
                     }
                     if *class == Token::Sys as i64 {
                         // The Ident's `val` is the binding's
@@ -1530,7 +1555,8 @@ impl<'a> Walker<'a> {
                     Some(t) => t,
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
-                Ok(b.call_indirect(target, arg_vals))
+                let fp_return = is_floating_scalar(*ty);
+                Ok(b.call_indirect(target, arg_vals, fp_return))
             }
             Expr::Member {
                 obj,
@@ -2136,6 +2162,8 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
         }
     } else if stripped == Ty::Float as i64 {
         LoadKind::F32
+    } else if stripped == Ty::Double as i64 {
+        LoadKind::F64
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         if unsigned {
             LoadKind::U32
@@ -2161,6 +2189,8 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
         StoreKind::I32
     } else if stripped == Ty::Float as i64 {
         StoreKind::F32
+    } else if stripped == Ty::Double as i64 {
+        StoreKind::F64
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         StoreKind::I32
     } else {

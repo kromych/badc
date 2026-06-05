@@ -191,7 +191,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=28
   block 16  start_pc=0
     v59  LoadLocal { off=-8, kind=I16 }                   -> x0
     v60  BinopI { op=shl, lhs=v51, rhs_imm=16 }           -> x7
-    v61  Call { target_pc=14, args=[v60] }                -> x0
+    v61  Call { target_pc=14, args=[v60], fp_return=false } -> x0
     v62  Imm(0)                                           -> x1
     v63  Extend { value=v61, kind=I16 }                   -> x0
     v64  BinopI { op=ne, lhs=v63, rhs_imm=0 }             -> x0
@@ -202,7 +202,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=28
   block 18  start_pc=0
     v66  LoadLocal { off=-8, kind=I16 }                   -> x0
     v67  BinopI { op=shl, lhs=v51, rhs_imm=15 }           -> x7
-    v68  Call { target_pc=14, args=[v67] }                -> x0
+    v68  Call { target_pc=14, args=[v67], fp_return=false } -> x0
     v69  Imm(0)                                           -> x1
     v70  Extend { value=v68, kind=I16 }                   -> x0
     v71  BinopI { op=ne, lhs=v70, rhs_imm=-32768 }        -> x0
@@ -360,7 +360,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=28
     v187 Binop { op=add, lhs=v183, rhs=v186 }             -> x0
     v188 BinopI { op=shl, lhs=v187, rhs_imm=32 }          -> x0
     v189 BinopI { op=shr, lhs=v188, rhs_imm=32 }          -> x7
-    v190 Call { target_pc=14, args=[v189] }               -> x0
+    v190 Call { target_pc=14, args=[v189], fp_return=false } -> x0
     v191 Store { addr=v175, value=v190, kind=I16 }        -> -
     v192 LocalAddr(-27)                                   -> x0
     v193 BinopI { op=add, lhs=v192, rhs_imm=6 }           -> x0

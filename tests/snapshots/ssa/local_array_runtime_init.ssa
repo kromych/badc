@@ -267,7 +267,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=5
     v8   Imm(22136)                                       -> x1
     v9   Store { addr=v7, value=v8, kind=I16 }            -> -
     v10  Imm(5)                                           -> x7
-    v11  Call { target_pc=14, args=[v10] }                -> x0
+    v11  Call { target_pc=14, args=[v10], fp_return=false } -> x0
     v12  Imm(4660000)                                     -> x1
     v13  Imm(20014547599360000)                           -> x1
     v14  Imm(4682136)                                     -> x1
@@ -280,7 +280,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=5
   block 2  start_pc=0
     v18  Imm(3)                                           -> x7
     v19  Imm(4)                                           -> x6
-    v20  Call { target_pc=15, args=[v18, v19] }           -> x0
+    v20  Call { target_pc=15, args=[v18, v19], fp_return=false } -> x0
     v21  BinopI { op=ne, lhs=v20, rhs_imm=18 }            -> x0
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 3  start_pc=0
@@ -289,7 +289,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=5
   block 4  start_pc=0
     v23  Imm(10)                                          -> x7
     v24  Imm(4)                                           -> x6
-    v25  Call { target_pc=16, args=[v23, v24] }           -> x0
+    v25  Call { target_pc=16, args=[v23, v24], fp_return=false } -> x0
     v26  BinopI { op=ne, lhs=v25, rhs_imm=20 }            -> x0
     terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
   block 5  start_pc=0
@@ -297,7 +297,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=5
     terminator Return(v27)   (exit_acc=v27)
   block 6  start_pc=0
     v28  Imm(2)                                           -> x7
-    v29  Call { target_pc=17, args=[v28] }                -> x0
+    v29  Call { target_pc=17, args=[v28], fp_return=false } -> x0
     v30  BinopI { op=ne, lhs=v29, rhs_imm=300 }           -> x0
     terminator Bz { cond=v30, target=b8, fall=b7 }   (exit_acc=v30)
   block 7  start_pc=0

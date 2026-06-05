@@ -138,11 +138,21 @@ pub(crate) enum Inst {
     Call {
         target_pc: usize,
         args: Vec<ValueId>,
+        /// True when the callee's return type is a floating-point
+        /// scalar (C99 6.2.5p10). The return value lives in the FP
+        /// return register (xmm0 / d0), so the call's result is
+        /// FP-classed and read from there.
+        fp_return: bool,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
     /// flow through the same planner.
-    CallIndirect { target: ValueId, args: Vec<ValueId> },
+    CallIndirect {
+        target: ValueId,
+        args: Vec<ValueId>,
+        /// See [`Self::Call::fp_return`].
+        fp_return: bool,
+    },
     /// External library call.
     CallExt {
         binding_idx: i64,
@@ -228,6 +238,9 @@ pub(crate) enum LoadKind {
     U16,
     /// 4-byte float widened to f64.
     F32,
+    /// 8-byte double held in an FP register; loaded with a single
+    /// FP move (no widen/narrow).
+    F64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,6 +255,9 @@ pub(crate) enum StoreKind {
     I16,
     /// 4-byte float (narrowed from f64).
     F32,
+    /// 8-byte double held in an FP register; stored with a single
+    /// FP move (no widen/narrow).
+    F64,
 }
 
 /// Integer / FP binary opcode. The planner's choice between

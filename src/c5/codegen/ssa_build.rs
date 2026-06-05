@@ -619,26 +619,53 @@ impl SsaBuilder {
     /// write through any pointer they receive (including ones
     /// derived from local addresses that escaped earlier in the
     /// caller), so every CSE entry invalidates.
-    pub(crate) fn call(&mut self, target_pc: usize, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn call(
+        &mut self,
+        target_pc: usize,
+        args: Vec<ValueId>,
+        fp_return: bool,
+    ) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::Call { target_pc, args })
+        self.push(Inst::Call {
+            target_pc,
+            args,
+            fp_return,
+        })
     }
 
     /// `Inst::Call` whose `target_pc` is 0 because the callee
     /// lives in another translation unit. Records the parser-
     /// symbol index in `extern_call_refs` so the linker can
     /// resolve to the merged ent_pc after symbol unification.
-    pub(crate) fn call_extern(&mut self, sym_idx: u32, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn call_extern(
+        &mut self,
+        sym_idx: u32,
+        args: Vec<ValueId>,
+        fp_return: bool,
+    ) -> ValueId {
         self.local_cache.clear();
-        let v = self.push(Inst::Call { target_pc: 0, args });
+        let v = self.push(Inst::Call {
+            target_pc: 0,
+            args,
+            fp_return,
+        });
         self.func.extern_call_refs.push((v, sym_idx));
         v
     }
 
     /// `Inst::CallIndirect` -- function-pointer call.
-    pub(crate) fn call_indirect(&mut self, target: ValueId, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn call_indirect(
+        &mut self,
+        target: ValueId,
+        args: Vec<ValueId>,
+        fp_return: bool,
+    ) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::CallIndirect { target, args })
+        self.push(Inst::CallIndirect {
+            target,
+            args,
+            fp_return,
+        })
     }
 
     /// `Inst::Mcpy` -- whole-struct / aggregate memory copy of
@@ -896,10 +923,10 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1]);
+        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], false);
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2]);
+        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], false);
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1137,7 +1164,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![]);
+        let _ = b.call(0, alloc::vec![], false);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

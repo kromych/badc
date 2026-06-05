@@ -137,7 +137,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
                     mark(a, &mut used);
                 }
             }
-            Inst::CallIndirect { target, args } => {
+            Inst::CallIndirect { target, args, .. } => {
                 mark(*target, &mut used);
                 for &a in args {
                     mark(a, &mut used);
@@ -261,7 +261,7 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
                 *a = map_v(*a, remap);
             }
         }
-        Inst::CallIndirect { target, args } => {
+        Inst::CallIndirect { target, args, .. } => {
             *target = map_v(*target, remap);
             for a in args.iter_mut() {
                 *a = map_v(*a, remap);
@@ -644,7 +644,9 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 .unwrap_or((0, 0));
             let inst = &caller.insts[old_pc as usize];
             let inlined = match inst {
-                Inst::Call { target_pc, args } => callees.get(target_pc).map(|c| (*c, args)),
+                Inst::Call {
+                    target_pc, args, ..
+                } => callees.get(target_pc).map(|c| (*c, args)),
                 _ => None,
             };
             // Multi-block callees: handled by `splice_multi_block`
@@ -778,7 +780,9 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
         let mut hit: Option<(usize, u32, &FunctionSsa, Vec<ValueId>)> = None;
         'find: for (b_idx, block) in caller.blocks.iter().enumerate() {
             for pc in block.inst_range.start..block.inst_range.end {
-                if let Inst::Call { target_pc, args } = &caller.insts[pc as usize]
+                if let Inst::Call {
+                    target_pc, args, ..
+                } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && c.blocks.len() > 1
                 {

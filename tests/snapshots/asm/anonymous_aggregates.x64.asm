@@ -193,7 +193,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	addq	$0x8, %rax
                	movabsq	$0x40091eb851eb851f, %rcx # imm = 0x40091EB851EB851F
-               	movq	%rcx, (%rax)
+               	movq	%rcx, %xmm14
+               	movsd	%xmm14, (%rax,%riz)
                	leaq	-0x20(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x1, %rax

@@ -126,12 +126,20 @@ fn fmt_inst(inst: &Inst) -> String {
         FpCast { kind, value } => {
             format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
         }
-        Call { target_pc, args } => format!(
-            "Call {{ target_pc={target_pc}, args=[{}] }}",
+        Call {
+            target_pc,
+            args,
+            fp_return,
+        } => format!(
+            "Call {{ target_pc={target_pc}, args=[{}], fp_return={fp_return} }}",
             fmt_value_list(args),
         ),
-        CallIndirect { target, args } => format!(
-            "CallIndirect {{ target=v{target}, args=[{}] }}",
+        CallIndirect {
+            target,
+            args,
+            fp_return,
+        } => format!(
+            "CallIndirect {{ target=v{target}, args=[{}], fp_return={fp_return} }}",
             fmt_value_list(args),
         ),
         CallExt {
@@ -219,6 +227,7 @@ fn fmt_load_kind(k: LoadKind) -> &'static str {
         LoadKind::I16 => "I16",
         LoadKind::U16 => "U16",
         LoadKind::F32 => "F32",
+        LoadKind::F64 => "F64",
     }
 }
 
@@ -229,6 +238,7 @@ fn fmt_store_kind(k: StoreKind) -> &'static str {
         StoreKind::I32 => "I32",
         StoreKind::I16 => "I16",
         StoreKind::F32 => "F32",
+        StoreKind::F64 => "F64",
     }
 }
 

@@ -10,11 +10,10 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x4059000000000000, %rax # imm = 0x4059000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -25,14 +24,13 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
-               	movq	%rcx, %xmm0
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
                	movq	%r11, %xmm15
-               	xorpd	%xmm15, %xmm0
-               	movq	%rax, %xmm14
-               	ucomisd	%xmm0, %xmm14
+               	xorpd	%xmm15, %xmm1
+               	ucomisd	%xmm1, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -43,11 +41,10 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax
-               	movq	(%rax), %rax
-               	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
-               	movq	%rax, %xmm14
-               	movq	%rcx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	movsd	(%rax,%riz), %xmm0
+               	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
+               	movq	%rax, %xmm15
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r11b
@@ -59,4 +56,5 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -100,16 +100,16 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
   block 6  start_pc=0
     v22  ImmData(104)                                     -> x0
     v23  Imm(0)                                           -> x1
-    v24  Load { addr=v22, kind=I64 }                      -> x0
-    v25  Imm(4616009474069663580)                         -> x1
+    v24  Load { addr=v22, kind=F64 }                      -> d0
+    v25  Imm(4616009474069663580)                         -> x0
     v26  Binop { op=flt, lhs=v24, rhs=v25 }               -> x1
     v27  Imm(0)                                           -> x0
     terminator Bnz { cond=v26, target=b13, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
     v28  ImmData(104)                                     -> x0
     v29  Imm(0)                                           -> x1
-    v30  Load { addr=v28, kind=I64 }                      -> x0
-    v31  Imm(4616031992067800433)                         -> x1
+    v30  Load { addr=v28, kind=F64 }                      -> d0
+    v31  Imm(4616031992067800433)                         -> x0
     v32  Binop { op=fgt, lhs=v30, rhs=v31 }               -> x1
     v33  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v32)
@@ -124,9 +124,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=1
     v37  ImmData(104)                                     -> x0
     v38  Imm(8)                                           -> x1
     v39  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x0
-    v40  Load { addr=v39, kind=I64 }                      -> x0
-    v41  Imm(4604930618986332160)                         -> x1
-    v42  Fneg(v41)                                        -> d0
+    v40  Load { addr=v39, kind=F64 }                      -> d0
+    v41  Imm(4604930618986332160)                         -> x0
+    v42  Fneg(v41)                                        -> d1
     v43  Binop { op=fne, lhs=v40, rhs=v42 }               -> x0
     terminator Bz { cond=v43, target=b12, fall=b11 }   (exit_acc=v43)
   block 11  start_pc=0

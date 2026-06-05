@@ -151,8 +151,8 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v2   Imm(4617315517961601024)                         -> x3
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=-4, kind=I64 }                   -> x0
-    v5   Call { target_pc=14, args=[v1, v2] }             -> x0
-    v6   Fneg(v2)                                         -> d0
+    v5   Call { target_pc=14, args=[v1, v2], fp_return=true } -> d0
+    v6   Fneg(v2)                                         -> d1
     v7   Binop { op=fne, lhs=v5, rhs=v6 }                 -> x0
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
@@ -163,7 +163,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v10  Imm(4617315517961601024)                         -> x3
     v11  Imm(0)                                           -> x0
     v12  LoadLocal { off=-5, kind=I64 }                   -> x0
-    v13  Call { target_pc=14, args=[v9, v10] }            -> x0
+    v13  Call { target_pc=14, args=[v9, v10], fp_return=true } -> d0
     v14  Binop { op=fne, lhs=v13, rhs=v10 }               -> x0
     terminator Bz { cond=v14, target=b4, fall=b3 }   (exit_acc=v14)
   block 3  start_pc=0
@@ -174,8 +174,8 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v17  Imm(4617315517961601024)                         -> x3
     v18  Imm(0)                                           -> x0
     v19  LoadLocal { off=-6, kind=I64 }                   -> x0
-    v20  Call { target_pc=14, args=[v16, v17] }           -> x0
-    v21  Fneg(v17)                                        -> d0
+    v20  Call { target_pc=14, args=[v16, v17], fp_return=true } -> d0
+    v21  Fneg(v17)                                        -> d1
     v22  Binop { op=fne, lhs=v20, rhs=v21 }               -> x0
     terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
   block 5  start_pc=0
@@ -186,7 +186,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v25  Imm(4617315517961601024)                         -> x3
     v26  Imm(0)                                           -> x0
     v27  LoadLocal { off=-7, kind=I64 }                   -> x0
-    v28  Call { target_pc=14, args=[v24, v25] }           -> x0
+    v28  Call { target_pc=14, args=[v24, v25], fp_return=true } -> d0
     v29  Binop { op=fne, lhs=v28, rhs=v25 }               -> x0
     terminator Bz { cond=v29, target=b8, fall=b7 }   (exit_acc=v29)
   block 7  start_pc=0
@@ -200,9 +200,9 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v35  LoadLocal { off=-8, kind=I64 }                   -> x0
     v36  Imm(0)                                           -> x0
     v37  LoadLocal { off=-9, kind=I64 }                   -> x0
-    v38  Call { target_pc=15, args=[v31, v32, v33] }      -> x0
-    v39  Fneg(v33)                                        -> d0
-    v40  Binop { op=fadd, lhs=v32, rhs=v39 }              -> d0
+    v38  Call { target_pc=15, args=[v31, v32, v33], fp_return=true } -> d0
+    v39  Fneg(v33)                                        -> d1
+    v40  Binop { op=fadd, lhs=v32, rhs=v39 }              -> d1
     v41  Binop { op=fne, lhs=v38, rhs=v40 }               -> x0
     terminator Bz { cond=v41, target=b10, fall=b9 }   (exit_acc=v41)
   block 9  start_pc=0
@@ -216,9 +216,9 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v47  LoadLocal { off=-10, kind=I64 }                  -> x0
     v48  Imm(0)                                           -> x0
     v49  LoadLocal { off=-11, kind=I64 }                  -> x0
-    v50  Call { target_pc=15, args=[v43, v44, v45] }      -> x0
-    v51  Fneg(v44)                                        -> d0
-    v52  Binop { op=fadd, lhs=v51, rhs=v45 }              -> d0
+    v50  Call { target_pc=15, args=[v43, v44, v45], fp_return=true } -> d0
+    v51  Fneg(v44)                                        -> d1
+    v52  Binop { op=fadd, lhs=v51, rhs=v45 }              -> d1
     v53  Binop { op=fne, lhs=v50, rhs=v52 }               -> x0
     terminator Bz { cond=v53, target=b12, fall=b11 }   (exit_acc=v53)
   block 11  start_pc=0
@@ -232,8 +232,8 @@ fn ent_pc=16 n_params=0 variadic=false locals=13
     v59  LoadLocal { off=-12, kind=I64 }                  -> x0
     v60  Imm(0)                                           -> x0
     v61  LoadLocal { off=-13, kind=I64 }                  -> x0
-    v62  Call { target_pc=15, args=[v55, v56, v57] }      -> x0
-    v63  Binop { op=fadd, lhs=v56, rhs=v57 }              -> d0
+    v62  Call { target_pc=15, args=[v55, v56, v57], fp_return=true } -> d0
+    v63  Binop { op=fadd, lhs=v56, rhs=v57 }              -> d1
     v64  Binop { op=fne, lhs=v62, rhs=v63 }               -> x0
     terminator Bz { cond=v64, target=b14, fall=b13 }   (exit_acc=v64)
   block 13  start_pc=0

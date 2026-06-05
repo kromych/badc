@@ -916,7 +916,7 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
                 f(a);
             }
         }
-        Inst::CallIndirect { target, args } => {
+        Inst::CallIndirect { target, args, .. } => {
             f(*target);
             for &a in args {
                 f(a);
@@ -960,28 +960,33 @@ pub(super) fn produces_value(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) | ParamRef { .. } => {
-            ResultKind::Int
-        }
+        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
+        // A parameter seeded with an FP load kind arrives in an FP
+        // argument register; classify it accordingly so the seed and
+        // its consumers share the FP register file.
+        ParamRef { kind, .. } => match kind {
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
         Phi { kind, .. } => match kind {
-            LoadKind::F32 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Load { kind, .. } | LoadLocal { kind, .. } => match kind {
-            LoadKind::F32 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
-            kind: StoreKind::F32,
+            kind: StoreKind::F32 | StoreKind::F64,
             ..
         }
         | StoreLocal {
-            kind: StoreKind::F32,
+            kind: StoreKind::F32 | StoreKind::F64,
             ..
         } => ResultKind::Fp,
         Store { .. } | StoreLocal { .. } | StoreIndexed { .. } => ResultKind::Int,
         LoadIndexed { kind, .. } => match kind {
-            LoadKind::F32 => ResultKind::Fp,
+            LoadKind::F32 | LoadKind::F64 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
@@ -995,7 +1000,18 @@ fn result_kind(inst: &Inst) -> ResultKind {
             FpCastKind::FpToInt => ResultKind::Int,
             FpCastKind::IntToFp => ResultKind::Fp,
         },
-        Call { .. } | CallIndirect { .. } | CallExt { .. } => ResultKind::Int,
+        // C99 6.2.5p10: a call returning a floating-point scalar
+        // delivers its value in the FP return register (xmm0 / d0),
+        // so the call's result is FP-classed. `fp_return` is set by
+        // the walker from the callee's return type.
+        Call { fp_return, .. } | CallIndirect { fp_return, .. } => {
+            if *fp_return {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
+        CallExt { .. } => ResultKind::Int,
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { .. } => ResultKind::Int,

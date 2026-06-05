@@ -173,29 +173,29 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	scvtf	d0, x0
-               	fmov	x16, d0
-               	stur	x16, [x29, #-0x30]
-               	ldur	x0, [x29, #-0x30]
-               	mov	x1, #0x401e000000000000 // =4620130267728707584
-               	fmov	d16, x1
-               	fneg	d0, d16
+               	sub	x17, x29, #0x30
+               	str	d0, [x17]
+               	sub	x16, x29, #0x30
+               	ldr	d0, [x16]
+               	mov	x0, #0x401e000000000000 // =4620130267728707584
                	fmov	d16, x0
-               	fcmp	d16, d0
+               	fneg	d1, d16
+               	fcmp	d0, d1
                	cset	x20, mi
                	cbnz	x20, <addr>
-               	ldur	x0, [x29, #-0x30]
-               	mov	x1, #0x401a000000000000 // =4619004367821864960
-               	fmov	d16, x1
-               	fneg	d0, d16
+               	sub	x16, x29, #0x30
+               	ldr	d0, [x16]
+               	mov	x0, #0x401a000000000000 // =4619004367821864960
                	fmov	d16, x0
-               	fcmp	d16, d0
+               	fneg	d1, d16
+               	fcmp	d0, d1
                	cset	x20, gt
                	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x182
-               	ldur	x1, [x29, #-0x30]
-               	fmov	d0, x1
+               	sub	x16, x29, #0x30
+               	ldr	d0, [x16]
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x3                // =3
@@ -279,11 +279,11 @@ Disassembly of section .text:
                	movk	x0, #0x4007, lsl #48
                	fmov	d16, x0
                	fneg	d0, d16
-               	fmov	x16, d0
-               	stur	x16, [x29, #-0x58]
-               	ldur	x0, [x29, #-0x58]
-               	fmov	d16, x0
-               	fcvtzs	x0, d16
+               	sub	x17, x29, #0x58
+               	str	d0, [x17]
+               	sub	x16, x29, #0x58
+               	ldr	d0, [x16]
+               	fcvtzs	x0, d0
                	sxtw	x1, w0
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16

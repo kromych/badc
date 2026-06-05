@@ -23,7 +23,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
-    v2   Call { target_pc=0, args=[v1] }                  -> x0
+    v2   Call { target_pc=0, args=[v1], fp_return=false } -> x0
     v3   TlsAddr(0)                                       -> x0
     v4   Load { addr=v3, kind=I32 }                       -> x1
     v5   BinopI { op=ne, lhs=v4, rhs_imm=7 }              -> x1

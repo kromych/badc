@@ -67,8 +67,8 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(88)                                      -> x0
     v2   Imm(0)                                           -> x1
-    v3   Load { addr=v1, kind=I64 }                       -> x1
-    v4   Imm(4609434218613702656)                         -> x2
+    v3   Load { addr=v1, kind=F64 }                       -> d0
+    v4   Imm(4609434218613702656)                         -> x1
     v5   Binop { op=fne, lhs=v3, rhs=v4 }                 -> x1
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
@@ -78,9 +78,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v7   ImmData(88)                                      -> x1
     v8   Imm(8)                                           -> x1
     v9   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
-    v10  Load { addr=v9, kind=I64 }                       -> x1
-    v11  Imm(4612811918334230528)                         -> x2
-    v12  Fneg(v11)                                        -> d0
+    v10  Load { addr=v9, kind=F64 }                       -> d0
+    v11  Imm(4612811918334230528)                         -> x1
+    v12  Fneg(v11)                                        -> d1
     v13  Binop { op=fne, lhs=v10, rhs=v12 }               -> x1
     terminator Bz { cond=v13, target=b4, fall=b3 }   (exit_acc=v13)
   block 3  start_pc=0
@@ -90,9 +90,9 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
     v15  ImmData(88)                                      -> x1
     v16  Imm(16)                                          -> x1
     v17  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x1
-    v18  Load { addr=v17, kind=I64 }                      -> x1
-    v19  Imm(4764320886503243776)                         -> x2
-    v20  Fneg(v19)                                        -> d0
+    v18  Load { addr=v17, kind=F64 }                      -> d0
+    v19  Imm(4764320886503243776)                         -> x1
+    v20  Fneg(v19)                                        -> d1
     v21  Binop { op=fne, lhs=v18, rhs=v20 }               -> x1
     terminator Bz { cond=v21, target=b6, fall=b5 }   (exit_acc=v21)
   block 5  start_pc=0
@@ -101,30 +101,30 @@ fn ent_pc=14 n_params=0 variadic=false locals=2
   block 6  start_pc=0
     v23  ImmData(88)                                      -> x1
     v24  Imm(0)                                           -> x1
-    v25  Load { addr=v1, kind=I64 }                       -> x1
-    v26  Imm(8)                                           -> x2
-    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
-    v28  Load { addr=v27, kind=I64 }                      -> x2
+    v25  Load { addr=v1, kind=F64 }                       -> d0
+    v26  Imm(8)                                           -> x1
+    v27  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x1
+    v28  Load { addr=v27, kind=F64 }                      -> d1
     v29  Binop { op=fadd, lhs=v25, rhs=v28 }              -> d0
     v30  Imm(16)                                          -> x1
     v31  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
-    v32  Load { addr=v31, kind=I64 }                      -> x0
+    v32  Load { addr=v31, kind=F64 }                      -> d1
     v33  Binop { op=fadd, lhs=v29, rhs=v32 }              -> d0
-    v34  StoreLocal { off=-1, value=v33, kind=I64 }       -> -
-    v35  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v36  Imm(4764320886503243776)                         -> x1
-    v37  Fneg(v36)                                        -> d0
-    v38  Imm(4602678819172646912)                         -> x1
-    v39  Binop { op=fadd, lhs=v37, rhs=v38 }              -> d0
+    v34  StoreLocal { off=-1, value=v33, kind=F64 }       -> -
+    v35  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v36  Imm(4764320886503243776)                         -> x0
+    v37  Fneg(v36)                                        -> d1
+    v38  Imm(4602678819172646912)                         -> x0
+    v39  Binop { op=fadd, lhs=v37, rhs=v38 }              -> d1
     v40  Binop { op=fgt, lhs=v35, rhs=v39 }               -> x1
     v41  Imm(0)                                           -> x0
     terminator Bnz { cond=v40, target=b11, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
-    v42  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v43  Imm(4764320886503243776)                         -> x1
-    v44  Fneg(v43)                                        -> d0
-    v45  Imm(4609434218613702656)                         -> x1
-    v46  Binop { op=fsub, lhs=v44, rhs=v45 }              -> d0
+    v42  LoadLocal { off=-1, kind=F64 }                   -> d0
+    v43  Imm(4764320886503243776)                         -> x0
+    v44  Fneg(v43)                                        -> d1
+    v45  Imm(4609434218613702656)                         -> x0
+    v46  Binop { op=fsub, lhs=v44, rhs=v45 }              -> d1
     v47  Binop { op=flt, lhs=v42, rhs=v46 }               -> x1
     v48  Imm(0)                                           -> x0
     terminator Jmp(b8)   (exit_acc=v47)

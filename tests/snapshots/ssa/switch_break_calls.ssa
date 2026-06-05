@@ -47,19 +47,19 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v7   Extend { value=v6, kind=I32 }                    -> x0
     terminator Return(v7)   (exit_acc=v7)
   block 2  start_pc=0
-    v8   Call { target_pc=0, args=[] }                    -> x3
+    v8   Call { target_pc=0, args=[], fp_return=false }   -> x3
     v9   Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v8)
   block 3  start_pc=0
-    v10  Call { target_pc=1, args=[] }                    -> x3
+    v10  Call { target_pc=1, args=[], fp_return=false }   -> x3
     v11  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v10)
   block 4  start_pc=0
-    v12  Call { target_pc=2, args=[] }                    -> x3
+    v12  Call { target_pc=2, args=[], fp_return=false }   -> x3
     v13  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v12)
   block 5  start_pc=0
-    v14  Call { target_pc=3, args=[] }                    -> x3
+    v14  Call { target_pc=3, args=[], fp_return=false }   -> x3
     v15  Imm(0)                                           -> x0
     terminator Jmp(b1)   (exit_acc=v14)
   block 6  start_pc=0
@@ -80,7 +80,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(2)                                           -> x7
-    v2   Call { target_pc=4, args=[v1] }                  -> x0
+    v2   Call { target_pc=4, args=[v1], fp_return=false } -> x0
     terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

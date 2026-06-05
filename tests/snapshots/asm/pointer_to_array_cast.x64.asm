@@ -92,8 +92,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	shlq	$0x1, %rdx
                	addq	%rdx, %rax
-               	movl	$0x3, %r11d
-               	imulq	%r11, %rcx
+               	imulq	$0x3, %rcx, %rcx
                	movslq	%ecx, %rcx
                	movswq	%cx, %rcx
                	movw	%cx, (%rax)
@@ -135,4 +134,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

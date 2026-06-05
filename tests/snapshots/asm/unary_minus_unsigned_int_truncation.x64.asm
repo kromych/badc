@@ -13,8 +13,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
                	movl	$0x1, %eax
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
@@ -24,8 +23,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	orq	%rax, %rcx
@@ -36,8 +34,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	orq	%rax, %rcx
@@ -49,8 +46,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
-               	movabsq	$-0x1, %rdx
-               	imulq	%rcx, %rdx
+               	imulq	$-0x1, %rcx, %rdx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rdx
                	orq	%rdx, %rcx
@@ -61,8 +57,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
@@ -90,8 +85,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rax
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	orq	%rcx, %rax
@@ -109,8 +103,7 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rax
-               	movabsq	$-0x1, %rcx
-               	imulq	%rax, %rcx
+               	imulq	$-0x1, %rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	andq	%r11, %rcx
                	orq	%rcx, %rax
@@ -128,5 +121,3 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -129,8 +129,7 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	shlq	$0x1, %rsi
                	addq	%rsi, %rax
-               	movl	$0x64, %r11d
-               	imulq	%r11, %rcx
+               	imulq	$0x64, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
@@ -180,8 +179,7 @@ Disassembly of section .text:
                	shlq	$0x1, %rsi
                	addq	%rsi, %rax
                	movswq	(%rax), %rax
-               	movl	$0x64, %r11d
-               	imulq	%r11, %rcx
+               	imulq	$0x64, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
@@ -228,3 +226,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

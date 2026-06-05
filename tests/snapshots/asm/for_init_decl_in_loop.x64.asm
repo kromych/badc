@@ -108,8 +108,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rcx
                	movslq	-0x10(%rbp), %rdx
-               	movl	$0x64, %r11d
-               	imulq	%r11, %rdx
+               	imulq	$0x64, %rdx, %rdx
                	movslq	%edx, %rdx
                	movslq	-0x18(%rbp), %rsi
                	addq	%rsi, %rdx
@@ -130,4 +129,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -31,8 +31,7 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	shlq	$0x1, %rsi
                	addq	%rax, %rsi
-               	movl	$0x3, %r11d
-               	imulq	%r11, %rdx
+               	imulq	$0x3, %rdx, %rdx
                	movslq	%edx, %rdx
                	movswq	%dx, %rdx
                	movw	%dx, (%rsi)
@@ -96,4 +95,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

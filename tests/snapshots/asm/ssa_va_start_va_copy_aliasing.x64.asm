@@ -94,8 +94,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rcx), %rcx
                	movq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
-               	movl	$0x3e8, %r11d           # imm = 0x3E8
-               	imulq	%r11, %rcx
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -127,8 +126,7 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
                	leaq	-0x10(%rbp), %rdx
-               	movl	$0x11, %r11d
-               	imulq	%r11, %rax
+               	imulq	$0x11, %rax, %rax
                	addq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -181,5 +179,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

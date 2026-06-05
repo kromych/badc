@@ -105,8 +105,7 @@ Disassembly of section .text:
                	movw	%ax, (%rcx)
                	leaq	-0x8(%rbp), %rax
                	movzwq	(%rax), %rax
-               	movl	$0x3e8, %r11d           # imm = 0x3E8
-               	imulq	%r11, %rax
+               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	movslq	%eax, %rax
                	leaq	-0x8(%rbp), %rcx
                	addq	$0x2, %rcx
@@ -387,4 +386,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -39,16 +39,13 @@ Disassembly of section .text:
                	movslq	(%rdx), %rdx
                	leaq	-0x8(%rbp), %rsi
                	movslq	0x10(%rbp), %rsi
-               	movl	$0x3e8, %r11d           # imm = 0x3E8
-               	imulq	%r11, %rsi
+               	imulq	$0x3e8, %rsi, %rsi      # imm = 0x3E8
                	movslq	%esi, %rsi
-               	movl	$0x64, %r11d
-               	imulq	%r11, %rax
+               	imulq	$0x64, %rax, %rax
                	movslq	%eax, %rax
                	addq	%rsi, %rax
                	movslq	%eax, %rax
-               	movl	$0xa, %r11d
-               	imulq	%r11, %rcx
+               	imulq	$0xa, %rcx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
@@ -113,3 +110,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -4530,15 +4530,19 @@ fn emit_mcpy(
         .get(src_val as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Materialise both bases. r10 / rcx are caller-saved scratch
-    // regs outside the SSA allocator pool, so they can't clobber
-    // anything live.
+    // Materialise both bases into reserved scratches. SCRATCH_R10 and
+    // SCRATCH_R13 sit outside both allocator pools, so loading a base
+    // into either cannot clobber a live SSA value. rcx must not be used
+    // here: it is in the LinuxX64 `caller_gprs` pool, so under raised
+    // register pressure the allocator parks SSA values there (e.g. a
+    // `context` pointer threaded into a later call argument), and a
+    // materialise into rcx would overwrite that value.
     let Some(dst_r) = materialize_int(code, dst_in, SCRATCH_R10, frame) else {
         bail_msg("Mcpy: dst base not int reg / spill");
         return false;
     };
     let src_scratch = if dst_r.0 == SCRATCH_R10.0 {
-        Reg::RCX
+        SCRATCH_R13
     } else {
         SCRATCH_R10
     };

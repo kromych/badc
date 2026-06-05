@@ -805,6 +805,62 @@ fn fp_load_into_spill_preserves_live_operand_under_pressure() {
 }
 
 #[test]
+fn mcpy_src_scratch_preserves_live_pointer_under_pressure() {
+    // A zero-initialised local aggregate (`swc s = {0}`) lowers to an
+    // `Inst::Mcpy` from a zero-filled `ImmData` blob. On x86_64 the Mcpy
+    // emit materialises its destination base into SCRATCH_R10 and, when
+    // the destination spilled (so its base already occupies r10), needs a
+    // second scratch for the source base. rcx is in the LinuxX64
+    // `caller_gprs` pool, so under raised register pressure the allocator
+    // parks SSA values there; here it holds the `context` pointer (the
+    // second parameter) that is live across the copy and threaded into a
+    // later call argument. Using rcx as the source scratch overwrote that
+    // pointer, so the callee saw the `ImmData` blob address instead.
+    // The source scratch must be SCRATCH_R13, outside both pools. This is
+    // the stb_image_write `stbi_write_jpg_to_func` shape: the `context`
+    // passed to `stbi__start_write_callbacks` came out as the quant-table
+    // blob address, so every JPEG byte was written to the wrong buffer.
+    let src = r#"
+        struct ctx { long *buf; int len; int cap; };
+        typedef struct { void *func; void *context; unsigned char buf[64]; int used; } swc;
+        struct ctx *g_seen;
+        void start_cb(swc *s, void *f, void *c) { s->func = f; s->context = c; }
+        int core(swc *s, int w, int h, int comp, int q) {
+            g_seen = (struct ctx *)s->context;
+            return w + h + comp + q;
+        }
+        int run(void *f, struct ctx *c, int w, int h, int comp, int q) {
+            swc s = {0};
+            start_cb(&s, f, c);
+            return core(&s, w, h, comp, q);
+        }
+        int main() {
+            struct ctx ctx;
+            ctx.buf = 0; ctx.len = 0; ctx.cap = 0;
+            g_seen = 0;
+            run((void *)0x1234, &ctx, 8, 8, 3, 90);
+            // 42 when the callee saw the real context pointer; a clobbered
+            // context yields the blob address and a mismatch.
+            return (g_seen == &ctx) ? 42 : 7;
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(2, 8, || {
+        jit_exit(src, &["mcpy-src-scratch"])
+    });
+    assert_eq!(
+        result, 42,
+        "Mcpy source scratch clobbered a live pointer the allocator parked in rcx"
+    );
+    let result_opt = crate::c5::codegen::ssa_alloc::with_pool_size_override(2, 8, || {
+        jit_exit_native_optimized(src, &["mcpy-src-scratch-opt"])
+    });
+    assert_eq!(
+        result_opt, 42,
+        "Mcpy source scratch clobbered a live pointer parked in rcx (-O)"
+    );
+}
+
+#[test]
 fn fp_load_f64_into_spill_preserves_live_operand_under_pressure() {
     // Same shape as the f32 case but with `double`, exercising the
     // F64 (no-widen) branch of the spill-staging load.

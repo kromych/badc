@@ -870,6 +870,34 @@ fn fp_inttofp_cast_into_spill_preserves_live_operand_under_pressure() {
 }
 
 #[test]
+fn float_struct_field_const_init() {
+    // C99 6.7.9: a `float`-typed struct member initialized from a
+    // floating constant stores the narrowed f32 pattern. Writing the
+    // f64 pattern's low four bytes instead yields +0.0f for any
+    // non-tiny value. Covers positional, designated, nested-struct,
+    // and array-of-struct field writes (all route through
+    // write_init_value).
+    let src = r#"
+        typedef struct { float r; float i; } cpx;
+        typedef struct { cpx a; int n; } box;
+        typedef struct { float v; } w;
+        int main() {
+            cpx p = {3.0f, 4.0f};
+            cpx d = {.r = 1.0f, .i = 2.0f};
+            box b = {{1.5f, 2.5f}, 7};
+            w a[2] = {{6.0f}, {0.5f}};
+            return (int)(p.r * 10 + p.i)        /* 34 */
+                 + (int)(d.r * 10 + d.i)        /* 12 */
+                 + (int)(b.a.r * 10 + b.a.i)    /* 17 */
+                 + b.n                          /* 7  */
+                 + (int)(a[0].v + a[1].v * 10); /* 11 */
+            /* 34 + 12 + 17 + 7 + 11 = 81 */
+        }
+    "#;
+    assert_eq!(jit_exit(src, &["fstruct-const"]), 81);
+}
+
+#[test]
 fn printf_through_libc_got() {
     // printf's libc address is dlsym'd at JIT time and patched into
     // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or

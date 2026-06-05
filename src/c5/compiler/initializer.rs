@@ -805,7 +805,7 @@ impl Compiler {
                     self.next()?;
                     let (value, reloc) = self.parse_constant_init_value()?;
                     let size = self.size_of_type(final_ty);
-                    self.write_init_value(final_offset as usize, size, value, reloc);
+                    self.write_init_value(final_offset as usize, size, value, reloc, final_ty);
                     pos = outer_idx + 1;
                     if self.lex.tk == ',' {
                         self.next()?;
@@ -866,6 +866,7 @@ impl Compiler {
                         1,
                         b as i64,
                         super::initializer::InitElemReloc::None,
+                        field.ty,
                     );
                     idx += 1;
                     if start_addr + idx >= self.data.len() {
@@ -933,7 +934,7 @@ impl Compiler {
                         )?;
                     } else {
                         let (value, reloc) = self.parse_constant_init_value()?;
-                        self.write_init_value(here, elem_size, value, reloc);
+                        self.write_init_value(here, elem_size, value, reloc, field.ty);
                     }
                     idx += 1;
                     if self.lex.tk == ',' {
@@ -956,7 +957,7 @@ impl Compiler {
                 while (idx as i64) < field.array_size && self.lex.tk != '}' {
                     let (value, reloc) = self.parse_constant_init_value()?;
                     let here = field_base + idx * elem_size;
-                    self.write_init_value(here, elem_size, value, reloc);
+                    self.write_init_value(here, elem_size, value, reloc, field.ty);
                     idx += 1;
                     if idx as i64 >= field.array_size {
                         break;
@@ -1008,7 +1009,7 @@ impl Compiler {
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let field_size = self.size_of_type(field.ty);
-                self.write_init_value(field_base, field_size, value, reloc);
+                self.write_init_value(field_base, field_size, value, reloc, field.ty);
             }
             pos = field_idx + 1;
             if self.lex.tk == ',' {
@@ -1019,18 +1020,27 @@ impl Compiler {
         Ok(())
     }
 
-    /// Write `field_size` little-endian bytes of `value` into
-    /// `self.data` at byte offset `here`, then push the
-    /// appropriate relocation if the value is a data offset
-    /// (string / `&global`) or a code PC (function pointer).
+    /// Write `field_size` little-endian bytes of an initializer
+    /// element of type `elem_ty` into `self.data` at byte offset
+    /// `here`, then push the appropriate relocation if the value is a
+    /// data offset (string / `&global`) or a code PC (function
+    /// pointer). The value is converted to its storage bit pattern
+    /// for `elem_ty` first (narrowing an f64 literal to f32 for a
+    /// `float` element per C99 6.7.9), so a `float` struct field or
+    /// designated element lands as the 4-byte f32 pattern rather than
+    /// the low half of the f64 pattern. `to_storage_bits` is the
+    /// identity for non-floating element types, so integer and
+    /// pointer fields are unchanged.
     pub(super) fn write_init_value(
         &mut self,
         here: usize,
         field_size: usize,
         value: i64,
         reloc: InitElemReloc,
+        elem_ty: i64,
     ) {
-        self.write_init_bytes(here, value, field_size);
+        let bits = self.to_storage_bits(value, reloc, elem_ty);
+        self.write_init_bytes(here, bits, field_size);
         self.push_init_reloc(here, value, reloc);
     }
 

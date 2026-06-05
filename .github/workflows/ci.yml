@@ -749,6 +749,53 @@ jobs:
         # NTSTATUS would signal a c5 Windows-codegen regression.
         run: python demos/nt_loader/smoke.py
 
+  pressure:
+    # Run the test suite and the functional demos with the register
+    # allocator's per-bank counts capped to a fixed N, to catch
+    # spill / scratch / reload bugs that only appear under pressure.
+    # The caps are read only with the codegen_test feature
+    # (BADC_MAX_GPR / BADC_MAX_FPR). Value-checking tests and the
+    # demos must produce the same result at any pressure; exact-shape
+    # tests pin their own pressure through with_pool_size_override, so
+    # the global cap does not affect them. N=1 is excluded: it leaves
+    # a single register per bank, which the lua VM call path cannot
+    # yet satisfy (tracked with a TODO in the allocator).
+    name: pressure N=${{ matrix.pressure }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+        pressure: [2, 3, 5, 7, 8, 9, 16]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BADC_MAX_GPR: ${{ matrix.pressure }}
+      BADC_MAX_FPR: ${{ matrix.pressure }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pressure-${{ matrix.os }}
+      - name: build codegen_test binary
+        run: cargo build --release --locked --features codegen_test
+      - name: cargo test under pressure
+        run: cargo test --release --locked --features codegen_test --lib
+      - name: demos under pressure
+        run: |
+          set -e
+          export BADC="$PWD/target/release/badc"
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb; do
+            echo "::group::$d (N=${{ matrix.pressure }})"
+            python "demos/$d/smoke.py"
+            echo "::endgroup::"
+          done
+
   features:
     name: feature combos
     runs-on: ubuntu-latest

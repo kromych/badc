@@ -290,6 +290,34 @@ fn recursion_factorial() {
 }
 
 #[test]
+fn indirect_call_through_fn_ptr_max_int_args() {
+    // Win64 passes the first four integer arguments in rcx, rdx, r8,
+    // r9 (x64 calling convention). An indirect call whose target
+    // pointer competes with those argument registers used to stage
+    // the target into either SCRATCH_R10 (the marshal's parallel-move
+    // scratch) or an argument-destination register, both of which the
+    // argument marshal overwrites before the `call`, sending control
+    // to a clobbered pointer (access violation). The fix stages the
+    // target into a register disjoint from every arg source, every
+    // arg destination, and r10 -- spilling to the stack when none is
+    // free. Four register arguments plus the live function pointer
+    // exercises the tight-pressure path that surfaced the bug.
+    let src = r#"
+        long add4(long a, long b, long c, long d) { return a + b + c + d; }
+        long call_it(long (*p)(long, long, long, long),
+                     long a, long b, long c, long d) {
+            return p(a, b, c, d);
+        }
+        int main() {
+            long (*p)(long, long, long, long);
+            p = add4;
+            return (int)call_it(p, 10, 11, 12, 9);
+        }
+    "#;
+    assert_exit(src, "icall4", &[], 42);
+}
+
+#[test]
 fn printf_through_iat() {
     // Exits with the number of chars printf returned (4: "42\n" on
     // Linux / macOS, but Windows printf returns the byte count too,

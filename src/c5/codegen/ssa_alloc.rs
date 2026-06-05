@@ -157,10 +157,12 @@ pub(super) struct RegBanks {
     /// call instruction must NOT be assigned here -- the
     /// allocator spills them to memory instead.
     pub caller_gprs: &'static [u8],
-    /// Callee-saved FP regs. AAPCS64 marks d8..d15 callee-saved;
-    /// SysV / Win64 mark none of xmm callee-saved, so the FP
-    /// allocator on x86_64 forces every live-across-call FP
-    /// value to memory.
+    /// Callee-saved FP regs the allocator may use. AAPCS64 marks
+    /// d8..d15 callee-saved. SysV AMD64 marks no xmm callee-saved.
+    /// Win64 marks xmm6..xmm15 non-volatile, but the x86_64
+    /// prologue/epilogue emit no FP save/restore, so this bank is
+    /// left empty there as well; both x86_64 ABIs force every
+    /// live-across-call FP value to memory.
     pub callee_fprs: &'static [u8],
     /// Caller-saved FP regs (d0..d7 on aarch64; xmm0..xmm15 on
     /// x86_64).
@@ -218,7 +220,18 @@ impl RegBanks {
                 // regs (rcx, rdx, r8, r9) plus rax, r11.
                 callee_gprs: &[3, 6, 7, 12, 14, 15],
                 caller_gprs: &[0, 1, 2, 8, 9, 11],
-                callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                // Win64 marks xmm6..xmm15 non-volatile (callee-saved),
+                // but the x86_64 prologue/epilogue and `Frame` layout
+                // reserve no space for and emit no save/restore of FP
+                // registers (`emit_prologue` only spills `gpr_used`).
+                // Assigning a live-across-call FP value to xmm6..xmm15
+                // would therefore corrupt the caller's non-volatile
+                // state on return. Keep the FP pool empty like SysV so
+                // the allocator forces every live-across-call FP value
+                // to memory and only ever uses the caller-saved
+                // (volatile) xmm0..xmm5. xmm0..xmm5 are the Win64
+                // volatile set per the x64 calling convention.
+                callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5],
             },
         }
@@ -1655,6 +1668,80 @@ mod tests {
             must_callee,
             hint,
         })
+    }
+
+    #[test]
+    fn x86_64_register_banks_expose_no_callee_saved_fp() {
+        // The x86_64 prologue/epilogue (`emit_prologue` / `emit_return`
+        // in ssa_emit_x86_64) and the `Frame` layout reserve no space
+        // for FP-register saves and emit no save/restore of any xmm.
+        // Both x86_64 ABIs must therefore expose an empty callee-saved
+        // FP bank: the allocator keeps every live-across-call FP value
+        // in memory and only ever uses the volatile xmm regs. Win64
+        // marks xmm6..xmm15 non-volatile (x64 calling convention); if
+        // they leaked into `callee_fprs` the allocator could park a
+        // value there and corrupt the caller's xmm6..xmm15 on return,
+        // since nothing saves them.
+        for target in [Target::LinuxX64, Target::WindowsX64] {
+            let banks = RegBanks::for_target(target);
+            assert!(
+                banks.callee_fprs.is_empty(),
+                "{target:?} exposes callee-saved FP regs {:?} but the x86_64 \
+                 prologue/epilogue emit no FP save/restore",
+                banks.callee_fprs
+            );
+        }
+        // The Win64 volatile xmm set is xmm0..xmm5; the caller-saved FP
+        // bank must not advertise a non-volatile register either.
+        let win = RegBanks::for_target(Target::WindowsX64);
+        assert!(
+            win.caller_fprs.iter().all(|&r| r <= 5),
+            "Win64 caller_fprs {:?} includes a non-volatile xmm (>= xmm6)",
+            win.caller_fprs
+        );
+    }
+
+    #[test]
+    fn win64_fp_value_live_across_call_does_not_use_callee_saved_xmm() {
+        // An FP local live across a call must not be parked in a Win64
+        // non-volatile xmm (xmm6..xmm15): the x86_64 prologue/epilogue
+        // emit no FP save/restore, so such a placement would corrupt
+        // the caller's register on return. Pre-fix the allocator put
+        // the sum `s` in xmm6 and read it back after the `g()` calls.
+        let src = r#"
+double g(double);
+double sink;
+double f(double a, double b, double c, double d, double e, double h) {
+    double s = a + b + c + d + e + h;
+    sink = g(a);
+    sink = g(b);
+    return s + g(c);
+}
+int main(void) { return 0; }
+"#;
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::WindowsX64)
+            .expect("produce_ssa_funcs");
+        for func in &funcs {
+            let alloc = allocate(func, Target::WindowsX64);
+            for place in &alloc.places {
+                if let Place::FpReg(r) = place {
+                    assert!(
+                        *r <= 5,
+                        "Win64 allocation parked an FP value in non-volatile xmm{r} \
+                         ({}); the prologue/epilogue do not save it",
+                        func.name
+                    );
+                }
+            }
+            assert!(
+                alloc.fp_used.is_empty(),
+                "Win64 allocation reported callee-saved FP regs {:?} in {}; \
+                 nothing in the x86_64 emit saves them",
+                alloc.fp_used,
+                func.name
+            );
+        }
     }
 
     #[test]

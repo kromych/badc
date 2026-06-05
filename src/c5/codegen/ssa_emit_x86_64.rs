@@ -1603,6 +1603,18 @@ fn emit_prologue(
     if frame.frame_bytes > 0 {
         emit_sub_rsp_imm32(code, frame.frame_bytes);
     }
+    // The x86_64 prologue/epilogue and `Frame` reserve no space for
+    // FP-register saves, so the allocator must never hand back a
+    // callee-saved (non-volatile) xmm in `fp_used`: `RegBanks` for
+    // both SysV and Win64 leave `callee_fprs` empty. A non-empty
+    // `fp_used` here would mean an unsaved non-volatile xmm and a
+    // silent caller-state corruption on return (Win64 xmm6..xmm15).
+    debug_assert!(
+        alloc.fp_used.is_empty(),
+        "ICE: x86_64 allocator assigned callee-saved FP registers ({:?}) \
+         but the prologue/epilogue emit no FP save/restore",
+        alloc.fp_used
+    );
     // Save callee-saved GPRs the allocator reported as used. We
     // keep them at the bottom of the frame at sp + saved_fpr_bytes
     // (= 0 on x86_64 since the allocator's fp pool is xmm-only).
@@ -3879,46 +3891,97 @@ fn emit_call_indirect(
         .get(target as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Collect the registers currently holding arg-source values
-    // for this call. The target-stage scratch must avoid them:
-    // the materialise below writes the call target into the
-    // scratch and the subsequent marshal_args reads each arg
-    // from its allocator placement -- staging the target into a
-    // register that also holds an arg source corrupts that arg
-    // before the marshal can copy it to its arg-reg slot.
-    let mut arg_source_regs: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(args.len());
+    // Collect every register `marshal_args` reads or writes for
+    // this call; the staged target must avoid all of them.
+    //
+    //   * Arg SOURCES: the marshal reads each argument from its
+    //     allocator placement. Staging the target over an arg
+    //     source corrupts that arg before the marshal copies it.
+    //   * Arg DESTINATIONS (`abi.int_arg_regs[0..n]`, e.g.
+    //     rcx/rdx/r8/r9 on Win64, rdi/rsi/rdx/rcx/r8/r9 on SysV):
+    //     the marshal writes each argument into its target arg
+    //     register. Staging the target into an arg-destination
+    //     register lets the marshal overwrite it before the
+    //     `call`, sending control to the first argument's value.
+    //   * SCRATCH_R10: the marshal's parallel-register-move scratch
+    //     (`schedule_int_reg_moves`) and spill/stack staging
+    //     register; it is clobbered mid-marshal.
+    let n_reg_args = args.len().min(abi.int_arg_regs.len());
+    let mut blocked: alloc::vec::Vec<Reg> =
+        alloc::vec::Vec::with_capacity(args.len() + n_reg_args + 1);
     for &a in args {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
-            arg_source_regs.push(Reg(*r));
+            blocked.push(Reg(*r));
         }
     }
+    for &r in &abi.int_arg_regs[..n_reg_args] {
+        blocked.push(Reg(r));
+    }
+    blocked.push(SCRATCH_R10);
     // Capture the target pointer into a caller-saved scratch
-    // before arg marshalling can clobber it. R11 is the default
-    // choice because no ABI assigns it to an argument slot, so
-    // it almost never appears among the arg sources. The
-    // fallback walks `CALLER_SAVED_INT_SCRATCHES` for an
-    // alternative when R11 *does* hold an arg source.
-    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &arg_source_regs).unwrap_or(Reg::R11);
-    let target_r = match materialize_int(code, target_place, target_scratch, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("CallIndirect: target not int reg / spill");
+    // before arg marshalling can clobber it. R11 is the usual
+    // pick because no ABI assigns it to an argument slot, so it is
+    // rarely blocked; the helper walks `CALLER_SAVED_INT_SCRATCHES`
+    // for an alternative otherwise. When everything is blocked the
+    // `else` branch below spills the target to the stack.
+    let target_scratch = pick_caller_saved_scratch(Reg(0xff), &blocked);
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    if let Some(target_scratch) = target_scratch {
+        // A free caller-saved register is available: stage the
+        // target there, then marshal. The marshal never writes
+        // `target_scratch` (it is neither an arg source nor r10).
+        let target_r = match materialize_int(code, target_place, target_scratch, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("CallIndirect: target not int reg / spill");
+                return false;
+            }
+        };
+        if target_r.0 != target_scratch.0 {
+            emit_mov_rr(code, target_scratch, target_r);
+        }
+        if plan.scratch_bytes > 0 {
+            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        }
+        if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
             return false;
         }
-    };
-    if target_r.0 != target_scratch.0 {
-        emit_mov_rr(code, target_scratch, target_r);
-    }
-    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
-    if plan.scratch_bytes > 0 {
-        emit_sub_rsp_imm32(code, plan.scratch_bytes);
-    }
-    if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
-        return false;
-    }
-    super::x86_64::emit_call_r(code, target_scratch);
-    if plan.scratch_bytes > 0 {
-        emit_add_rsp_imm32(code, plan.scratch_bytes);
+        super::x86_64::emit_call_r(code, target_scratch);
+        if plan.scratch_bytes > 0 {
+            emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+    } else {
+        // Every caller-saved register is an arg source (and r10 is
+        // reserved for the marshal). No register survives the
+        // marshal, so spill the target to a fresh 16-byte stack
+        // slot above the marshal's scratch window, marshal, then
+        // reload into SCRATCH_R10 for the `call`. The 16-byte slot
+        // keeps the call-site sp 16-aligned (SysV / Win64 require
+        // 16-byte alignment at `call`).
+        let target_r = match materialize_int(code, target_place, SCRATCH_R10, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("CallIndirect: target not int reg / spill");
+                return false;
+            }
+        };
+        let slot_bytes = 16u32;
+        emit_sub_rsp_imm32(code, slot_bytes);
+        emit_mov_mem_r(code, Reg::RSP, 0, target_r);
+        if plan.scratch_bytes > 0 {
+            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        }
+        if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
+            return false;
+        }
+        // The target slot sits just above the marshal's scratch
+        // window, at [rsp + scratch_bytes] after the second sub.
+        emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
+        super::x86_64::emit_call_r(code, SCRATCH_R10);
+        if plan.scratch_bytes > 0 {
+            emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        emit_add_rsp_imm32(code, slot_bytes);
     }
     // A floating-point return rides xmm0 (C99 6.2.5p10); an integer
     // / pointer return rides rax. `fp_return` selects the source for

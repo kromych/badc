@@ -195,10 +195,12 @@ fn ent_pc=27 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=F64 }                    -> d0
-    v2   LocalAddr(-1)                                    -> x0
-    v3   Store { addr=v2, value=v1, kind=F32 }            -> -
-    v4   LoadLocal { off=-1, kind=F32 }                   -> d0
-    terminator Return(v4)   (exit_acc=v4)
+    v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
+    v3   LocalAddr(-1)                                    -> x0
+    v4   Store { addr=v3, value=v2, kind=F32 }            -> -
+    v5   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v6   FpCast { kind=F32ToF64, value=v5 }               -> d0
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=28 ---
 ; name=main
 fn ent_pc=28 n_params=0 variadic=false locals=44

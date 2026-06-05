@@ -55,10 +55,16 @@ pub(super) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            let f32_mark = if func.f32_values.get(v as usize).copied().unwrap_or(false) {
+                " [f32]"
+            } else {
+                ""
+            };
             out.push_str(&format!(
-                "    v{v:<3} {:<48} -> {}\n",
+                "    v{v:<3} {:<48} -> {}{}\n",
                 fmt_inst(inst),
                 fmt_place(place),
+                f32_mark,
             ));
         }
         out.push_str(&format!(
@@ -285,6 +291,8 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
     match k {
         FpCastKind::FpToInt => "FpToInt",
         FpCastKind::IntToFp => "IntToFp",
+        FpCastKind::F32ToF64 => "F32ToF64",
+        FpCastKind::F64ToF32 => "F64ToF32",
     }
 }
 

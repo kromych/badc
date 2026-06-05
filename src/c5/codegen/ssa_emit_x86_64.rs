@@ -47,14 +47,15 @@ use super::Target;
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
-    emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr, emit_cvtsd2ss, emit_cvtsi2sd,
-    emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_imul_r_mem, emit_imul_rr, emit_lea_r_mem,
-    emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm,
-    emit_movq_xmm_r, emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm,
-    emit_movss_xmm_mem, emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8,
-    emit_mulsd, emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl,
-    emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32,
-    emit_subsd, emit_ucomisd, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_addss, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr, emit_cvtsd2ss,
+    emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss, emit_imul_r_mem,
+    emit_imul_rr, emit_lea_r_mem, emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr,
+    emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm, emit_movsd_xmm_mem,
+    emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16, emit_movsxd_r_mem,
+    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_or_r_mem, emit_or_rr,
+    emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
+    emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd,
+    emit_ucomiss, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -498,15 +499,27 @@ fn fp_spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) 
     }
 }
 
-/// Map an FP arithmetic [`BinOp`] to its SSE2 encoder. Returns
-/// `None` for any non-FP-arith op.
-fn fp_arith_enc(op: BinOp) -> Option<fn(&mut Vec<u8>, Reg, Reg)> {
-    Some(match op {
-        BinOp::Fadd => emit_addsd,
-        BinOp::Fsub => emit_subsd,
-        BinOp::Fmul => emit_mulsd,
-        BinOp::Fdiv => emit_divsd,
-        _ => return None,
+/// Map an FP arithmetic [`BinOp`] to its scalar SSE encoder. `is_f32`
+/// selects the single-precision (`addss` / ...) vs double-precision
+/// (`addsd` / ...) form per C99 6.3.1.8. Returns `None` for any
+/// non-FP-arith op.
+fn fp_arith_enc_for(op: BinOp, is_f32: bool) -> Option<fn(&mut Vec<u8>, Reg, Reg)> {
+    Some(if is_f32 {
+        match op {
+            BinOp::Fadd => emit_addss,
+            BinOp::Fsub => emit_subss,
+            BinOp::Fmul => emit_mulss,
+            BinOp::Fdiv => emit_divss,
+            _ => return None,
+        }
+    } else {
+        match op {
+            BinOp::Fadd => emit_addsd,
+            BinOp::Fsub => emit_subsd,
+            BinOp::Fmul => emit_mulsd,
+            BinOp::Fdiv => emit_divsd,
+            _ => return None,
+        }
     })
 }
 
@@ -1926,11 +1939,15 @@ fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
-        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame),
+        Inst::Load { addr, kind } => {
+            emit_load(code, dst, *addr, *kind, alloc.is_f32(v), alloc, frame)
+        }
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, v, *addr, *value, *kind, alloc, frame)
         }
-        Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame),
+        Inst::LoadLocal { off, kind } => {
+            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame)
+        }
         Inst::StoreLocal { off, value, kind } => {
             emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame)
         }
@@ -2195,7 +2212,14 @@ use super::ssa_emit_common::c5_slot_to_fp_offset;
 /// The c5 slot offset folds into the load's ModR/M disp
 /// directly, skipping the `LocalAddr` materialisation the
 /// `LocalAddr` + `Load` pair would have required.
-fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, frame: Frame) -> bool {
+fn emit_load_local(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    kind: LoadKind,
+    keep_f32: bool,
+    frame: Frame,
+) -> bool {
     let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
         Ok(v) => v,
         Err(_) => {
@@ -2211,8 +2235,13 @@ fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, fra
                 return false;
             }
         };
+        // `movss` reads the 4-byte storage into the low dword. A
+        // single-precision value (C99 6.3.1.8) stays f32; the archive-
+        // reload boundary leaves it untagged and widens via `cvtss2sd`.
         emit_movss_xmm_mem(code, dd, Reg::RBP, disp);
-        emit_cvtss2sd(code, dd, dd);
+        if !keep_f32 {
+            emit_cvtss2sd(code, dd, dd);
+        }
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return true;
     }
@@ -2507,6 +2536,7 @@ fn emit_load(
     dst: Place,
     addr: u32,
     kind: LoadKind,
+    keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
@@ -2527,9 +2557,9 @@ fn emit_load(
         }
     };
     if let LoadKind::F32 = kind {
-        // `float` lvalue: load 4 bytes into the low dword of an
-        // xmm and widen to f64. The result is an xmm; routes
-        // through the FP dst Place.
+        // `float` lvalue: `movss` reads 4 bytes into the low dword. A
+        // single-precision value (C99 6.3.1.8) stays f32; the archive-
+        // reload boundary leaves it untagged and widens via `cvtss2sd`.
         let dd = match fp_or_spill_dst(dst) {
             Some(r) => r,
             None => {
@@ -2538,7 +2568,9 @@ fn emit_load(
             }
         };
         emit_movss_xmm_mem(code, dd, base, 0);
-        emit_cvtss2sd(code, dd, dd);
+        if !keep_f32 {
+            emit_cvtss2sd(code, dd, dd);
+        }
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return true;
     }
@@ -2610,9 +2642,11 @@ fn emit_store(
         }
     };
     if let StoreKind::F32 = kind {
-        // `float` lvalue store: narrow the f64 in xmm to f32 and
-        // write the low dword. The narrowed value also feeds dst
-        // when the allocator parked the stored f64 result there.
+        // `float` lvalue store. A single-precision value (C99 6.3.1.8)
+        // is already f32 in the low dword, so write it directly via
+        // `movss`. A double value (the archive-reload boundary, or a
+        // `double` assigned to a `float` the walker didn't pre-narrow)
+        // is narrowed via `cvtsd2ss` first.
         let dn = match materialize_fp(code, value_place, SCRATCH_XMM14, frame) {
             Some(r) => r,
             None => {
@@ -2620,6 +2654,15 @@ fn emit_store(
                 return false;
             }
         };
+        if alloc.is_f32(value) {
+            emit_movss_mem_xmm(code, base, 0, dn);
+            match dst {
+                Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
+                Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
+                _ => {}
+            }
+            return true;
+        }
         // Narrow into SCRATCH_XMM15 so dn (which may be an
         // allocator-held xmm holding the wider f64 the result Place
         // expects) survives.
@@ -2731,14 +2774,16 @@ fn emit_extend(
     true
 }
 
-/// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit of an f64.
-/// Builds the `1 << 63` sign-bit mask on the fly into
-/// `SCRATCH_XMM15` (movq xmm, r10 after loading the immediate
-/// into r10) and xors in place.
+/// `Inst::Fneg(v)` -- flip the IEEE 754 sign bit. For a `double`
+/// the mask is `1 << 63`; for a single-precision value (C99 6.3.1.8)
+/// the mask is `1 << 31`, flipping the sign bit of the f32 held in
+/// the low dword. Builds the mask on the fly into `SCRATCH_XMM15`
+/// (movq xmm, r10 after loading the immediate into r10) and xors in
+/// place.
 fn emit_fneg(
     code: &mut Vec<u8>,
     dst: Place,
-    _v: super::super::ir::ValueId,
+    v: super::super::ir::ValueId,
     value: u32,
     alloc: &Allocation,
     frame: Frame,
@@ -2765,14 +2810,18 @@ fn emit_fneg(
     if dn.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, dn);
     }
-    // Build the sign-bit mask 0x8000_0000_0000_0000 in an integer
-    // scratch and transfer to SCRATCH_XMM15, then xorpd in place. r10
-    // is reserved outside both allocator banks and holds nothing live
-    // on this path (Fneg reads only its FP `value`), so the mask load
-    // clobbers no allocator value -- a caller-saved pick can come up
-    // empty under saturation.
+    // Build the sign-bit mask in an integer scratch and transfer to
+    // SCRATCH_XMM15, then xorpd in place. r10 is reserved outside both
+    // allocator banks and holds nothing live on this path (Fneg reads
+    // only its FP `value`), so the mask load clobbers no allocator
+    // value.
     let scratch_int = SCRATCH_R10;
-    emit_mov_r_imm64(code, scratch_int, i64::MIN);
+    let mask: i64 = if alloc.is_f32(v) {
+        0x8000_0000
+    } else {
+        i64::MIN
+    };
+    emit_mov_r_imm64(code, scratch_int, mask);
     emit_movq_xmm_r(code, SCRATCH_XMM15, scratch_int);
     emit_xorpd(code, dd, SCRATCH_XMM15);
     fp_spill_dst_to_slot(code, dst, dd, frame);
@@ -2832,6 +2881,48 @@ fn emit_fp_cast(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        // C99 6.3.1.5: widen single to double (`cvtss2sd`) or narrow
+        // double to single (`cvtsd2ss`). The single value lives in the
+        // low dword of the xmm; `cvtss2sd` reads it, `cvtsd2ss` writes
+        // it, so both are register-to-register with no separate move.
+        FpCastKind::F32ToF64 => {
+            let dn = match materialize_fp(code, src_place, SCRATCH_XMM14, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast F32ToF64: value not fp reg / spill / int reg");
+                    return false;
+                }
+            };
+            let dd = match fp_or_spill_dst(dst) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast F32ToF64: dst not fp reg / spill");
+                    return false;
+                }
+            };
+            emit_cvtss2sd(code, dd, dn);
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            true
+        }
+        FpCastKind::F64ToF32 => {
+            let dn = match materialize_fp(code, src_place, SCRATCH_XMM14, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast F64ToF32: value not fp reg / spill / int reg");
+                    return false;
+                }
+            };
+            let dd = match fp_or_spill_dst(dst) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast F64ToF32: dst not fp reg / spill");
+                    return false;
+                }
+            };
+            emit_cvtsd2ss(code, dd, dn);
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            true
+        }
     }
 }
 
@@ -2863,7 +2954,7 @@ fn emit_binop(
     // `FpReg` source in place without copying, so staging lhs into
     // dst would then clobber rhs. Capture rhs first, forcing a copy
     // into `SCRATCH_XMM15` when it aliases dst.
-    if let Some(arith) = fp_arith_enc(op) {
+    if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
         let dd = match fp_or_spill_dst(dst) {
             Some(r) => r,
             None => {
@@ -2920,7 +3011,13 @@ fn emit_binop(
                 return false;
             }
         };
-        emit_ucomisd(code, dn, dm);
+        // The compare width follows the operands' precision (C99
+        // 6.3.1.8): two f32 operands use `ucomiss`, else `ucomisd`.
+        if alloc.is_f32(lhs) || alloc.is_f32(rhs) {
+            emit_ucomiss(code, dn, dm);
+        } else {
+            emit_ucomisd(code, dn, dm);
+        }
         let Some(rd) = int_or_spill_dst(dst) else {
             bail_msg("Fcmp: dst not int reg / spill");
             return false;

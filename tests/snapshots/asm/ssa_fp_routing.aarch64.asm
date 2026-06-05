@@ -207,9 +207,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	ldr	d0, [x29, #0x10]
+               	fcvt	s0, d0
                	sub	x0, x29, #0x8
-               	fcvt	s17, d0
-               	str	s17, [x0]
+               	str	s0, [x0]
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvt	d0, s0

@@ -153,6 +153,7 @@ impl SsaBuilder {
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
+            f32_values: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -243,8 +244,30 @@ impl SsaBuilder {
         let id = self.func.insts.len() as ValueId;
         self.func.insts.push(inst);
         self.func.inst_src.push(self.cur_src);
+        self.func.f32_values.push(false);
         self.last_def = id;
         id
+    }
+
+    /// Mark value `v` as single-precision (`f32`). See
+    /// [`FunctionSsa::f32_values`]. The walker calls this whenever a
+    /// value's C type is `float` (C99 6.3.1.8) so the per-arch emit
+    /// keeps it in the low 32 bits of an FP register and selects the
+    /// single-precision encoder. Idempotent.
+    pub(crate) fn mark_f32(&mut self, v: ValueId) -> ValueId {
+        if let Some(slot) = self.func.f32_values.get_mut(v as usize) {
+            *slot = true;
+        }
+        v
+    }
+
+    /// True when value `v` was previously marked single-precision.
+    pub(crate) fn is_f32(&self, v: ValueId) -> bool {
+        self.func
+            .f32_values
+            .get(v as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Set the `(line, file_idx)` source position stamped on every
@@ -366,9 +389,16 @@ impl SsaBuilder {
         v
     }
 
-    /// `Inst::Load` through a precomputed address.
+    /// `Inst::Load` through a precomputed address. A `float`-typed
+    /// load (`LoadKind::F32`) yields a single-precision value (C99
+    /// 6.3.1.8); tag it f32 so the codegen keeps it in the s-view of an
+    /// FP register without a widening conversion.
     pub(crate) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
-        self.push(Inst::Load { addr, kind })
+        let v = self.push(Inst::Load { addr, kind });
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
+        v
     }
 
     /// `Inst::Store` through a precomputed address. Returns the
@@ -396,6 +426,12 @@ impl SsaBuilder {
             }
         }
         let v = self.push(Inst::LoadLocal { off, kind });
+        // A `float`-typed local load is single precision (C99 6.3.1.8);
+        // tag it f32 so the codegen keeps it in the s-view of an FP
+        // register without a widening conversion.
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
         self.local_cache.push(LocalCacheEntry {
             off,
             kind,
@@ -604,7 +640,10 @@ impl SsaBuilder {
     }
 
     /// `Inst::FpCast`. Pure value; same input + same kind ->
-    /// same output. CSE-eligible.
+    /// same output. CSE-eligible. The f32-ness of the result is set
+    /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via
+    /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
+    /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
         let key = PureKey::FpCast { kind, value };
         if let Some(cached) = self.lookup_pure(key) {
@@ -613,6 +652,27 @@ impl SsaBuilder {
         let id = self.push(Inst::FpCast { kind, value });
         self.pure_cache.insert(key, id);
         id
+    }
+
+    /// Widen a single-precision value to double (C99 6.3.1.5). If
+    /// `value` is not actually f32 (already double), returns it
+    /// unchanged. The result is double (not f32-marked).
+    pub(crate) fn fp_widen_to_f64(&mut self, value: ValueId) -> ValueId {
+        if !self.is_f32(value) {
+            return value;
+        }
+        self.fp_cast(FpCastKind::F32ToF64, value)
+    }
+
+    /// Narrow a double-precision value to single (C99 6.3.1.5). If
+    /// `value` is already f32, returns it unchanged. The result is
+    /// f32-marked.
+    pub(crate) fn fp_narrow_to_f32(&mut self, value: ValueId) -> ValueId {
+        if self.is_f32(value) {
+            return value;
+        }
+        let id = self.fp_cast(FpCastKind::F64ToF32, value);
+        self.mark_f32(id)
     }
 
     /// `Inst::Call` -- direct user-function call. Callees may

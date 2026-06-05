@@ -495,6 +495,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // FADD/FSUB/FMUL/FDIV/FCMP/FCVTZS/SCVTF; this fixture is the
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
+    ("float_single_precision.c", 0),
+    ("float_double_mix.c", 0),
     // Variadic FP packer on macOS arm64. The Apple AAPCS64
     // quirk: variadic args spill to the stack regardless of
     // type, so `printf("%f\n", 1.5)` lands the double's bit

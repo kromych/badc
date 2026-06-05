@@ -92,10 +92,10 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	xorq	%rax, %rax
-               	leaq	-0x18(%rbp), %rcx
                	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm15
-               	movss	%xmm15, (%rcx,%riz)
+               	cvtsd2ss	%xmm14, %xmm0
+               	leaq	-0x18(%rbp), %rcx
+               	movss	%xmm0, (%rcx,%riz)
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
@@ -115,13 +115,11 @@ Disassembly of section .text:
                	shlq	$0x2, %rdx
                	addq	%rdx, %rax
                	movss	(%rax,%riz), %xmm0
-               	cvtss2sd	%xmm0, %xmm0
                	leaq	<rip>, %rax
                	addq	%rcx, %rax
                	addq	%rdx, %rax
                	movss	(%rax,%riz), %xmm1
-               	cvtss2sd	%xmm1, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomiss	%xmm1, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -173,29 +171,24 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
-               	cvtss2sd	%xmm0, %xmm0
                	leaq	<rip>, %rcx
                	movslq	-0x8(%rbp), %rdx
                	shlq	$0x4, %rdx
                	addq	%rdx, %rcx
                	movss	(%rcx,%riz), %xmm1
-               	cvtss2sd	%xmm1, %xmm1
                	movq	%rcx, %rdx
                	addq	$0x4, %rdx
                	movss	(%rdx,%riz), %xmm2
-               	cvtss2sd	%xmm2, %xmm2
-               	addsd	%xmm2, %xmm1
+               	addss	%xmm2, %xmm1
                	addq	$0x8, %rcx
                	movss	(%rcx,%riz), %xmm2
-               	cvtss2sd	%xmm2, %xmm2
-               	addsd	%xmm2, %xmm1
-               	addsd	%xmm1, %xmm0
-               	cvtsd2ss	%xmm0, %xmm15
-               	movss	%xmm15, (%rax,%riz)
+               	addss	%xmm2, %xmm1
+               	addss	%xmm1, %xmm0
+               	movss	%xmm0, (%rax,%riz)
                	jmp	<addr>
                	movss	-0x18(%rbp,%riz), %xmm0
-               	cvtss2sd	%xmm0, %xmm0
                	xorq	%rax, %rax
+               	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	setne	%al

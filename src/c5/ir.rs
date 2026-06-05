@@ -311,6 +311,17 @@ pub(crate) enum FpCastKind {
     FpToInt,
     /// i64 to f64.
     IntToFp,
+    /// Widen f32 to f64 (C99 6.3.1.5). The single-precision source
+    /// value is converted to double; the result is f64. Emitted at a
+    /// `float` operand mixed with a `double` operand, an explicit
+    /// `(double)f` cast, and the variadic / default-argument
+    /// promotion of `float` to `double` (6.5.2.2p6).
+    F32ToF64,
+    /// Narrow f64 to f32 (C99 6.3.1.5). The double source value is
+    /// rounded to single precision; the result is f32. Emitted at an
+    /// explicit `(float)d` cast and an assignment / return converting
+    /// a `double` value to a `float` object.
+    F64ToF32,
 }
 
 /// A basic block's terminator. Drives the block's control-flow
@@ -440,4 +451,15 @@ pub(crate) struct FunctionSsa {
     /// referenced sym to a `SymbolKind::TlsData`'s merged TLS
     /// offset.
     pub extern_tls_refs: Vec<(u32, u32)>,
+    /// Per-Inst single-precision marker, parallel to `insts`. `true`
+    /// when the value's FP register holds an `f32` (single) pattern in
+    /// its low 32 bits rather than an `f64` (double). C99 6.3.1.8 does
+    /// not promote `float` operands to `double` for the usual
+    /// arithmetic conversions: `float op float` has type `float` and is
+    /// computed in single precision. The per-arch emit consults this
+    /// table to pick the single- vs double-precision encoder for FP
+    /// binops, `Fneg`, and FP comparisons, and to reinterpret an
+    /// f32-typed `Imm` constant through a 32-bit `fmov` / `movd`.
+    /// Empty (treated as all-false) for SSA built outside the walker.
+    pub f32_values: Vec<bool>,
 }

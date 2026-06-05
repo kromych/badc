@@ -52,12 +52,13 @@ use super::aarch64::{
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br,
     enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d,
-    enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d,
-    enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post,
-    enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm,
-    enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
-    enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
+    enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x,
+    enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldp_post,
+    enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
+    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_msub,
+    enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
+    enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
+    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -1302,11 +1303,22 @@ fn emit_inst(
             true
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame, scratch),
+        Inst::Load { addr, kind } => emit_load(
+            code,
+            dst,
+            *addr,
+            *kind,
+            alloc.is_f32(v),
+            alloc,
+            frame,
+            scratch,
+        ),
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
         }
-        Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame, scratch),
+        Inst::LoadLocal { off, kind } => {
+            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
+        }
         Inst::StoreLocal { off, value, kind } => {
             emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
         }
@@ -1390,13 +1402,16 @@ fn emit_inst(
             scratch,
             *current_alloca_top,
         ),
-        Inst::Fneg(v) => {
+        Inst::Fneg(src) => {
             let src_place = alloc
                 .places
-                .get(*v as usize)
+                .get(*src as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+            // C99 6.3.1.8: negation of a `float` is single-precision;
+            // the result's f32 marker mirrors the operand's.
+            let is_f32 = alloc.is_f32(v);
+            let dn = match materialize_fp_for(code, *src, src_place, SCRATCH_FP0, frame, alloc) {
                 Some(r) => r,
                 None => return false,
             };
@@ -1409,7 +1424,11 @@ fn emit_inst(
                 Place::Spill(_) => SCRATCH_FP1,
                 _ => return false,
             };
-            emit(code, enc_fneg_d(dd, dn));
+            if is_f32 {
+                emit(code, super::aarch64::enc_fneg_s(dd, dn));
+            } else {
+                emit(code, enc_fneg_d(dd, dn));
+            }
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit_sp_str_d_auto(code, dd, sp_off);
@@ -1461,6 +1480,46 @@ fn emit_inst(
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
                         emit_sp_str_x_auto(code, rd, sp_off);
+                    }
+                    true
+                }
+                // C99 6.3.1.5: widen single to double (`fcvt Dd, Sn`)
+                // or narrow double to single (`fcvt Sd, Dn`). The
+                // single-precision view occupies the low 32 bits of the
+                // same physical V register, so the source f32 is read as
+                // an s-reg and the f64 result written as a d-reg (and
+                // vice versa) with no separate move.
+                FpCastKind::F32ToF64 => {
+                    let dn = match materialize_fp_f32(code, src_place, SCRATCH_FP0, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    let dd = match dst {
+                        Place::FpReg(r) => r,
+                        Place::Spill(_) => SCRATCH_FP0,
+                        _ => return false,
+                    };
+                    emit(code, enc_fcvt_d_s(dd, dn));
+                    if let Place::Spill(slot) = dst {
+                        let sp_off = spill_off(frame, slot);
+                        emit_sp_str_d_auto(code, dd, sp_off);
+                    }
+                    true
+                }
+                FpCastKind::F64ToF32 => {
+                    let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    let dd = match dst {
+                        Place::FpReg(r) => r,
+                        Place::Spill(_) => SCRATCH_FP0,
+                        _ => return false,
+                    };
+                    emit(code, enc_fcvt_s_d(dd, dn));
+                    if let Place::Spill(slot) = dst {
+                        let sp_off = spill_off(frame, slot);
+                        emit_sp_str_d_auto(code, dd, sp_off);
                     }
                     true
                 }
@@ -2547,6 +2606,7 @@ fn emit_load(
     dst: Place,
     addr: u32,
     kind: LoadKind,
+    keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2560,13 +2620,15 @@ fn emit_load(
         Some(r) => r,
         None => return false,
     };
-    // F32 loads land in a d-reg (widened to f64 via fcvt). All
-    // other widths land in a GPR.
+    // F32 loads read into the s-view of a v-register. When the value is
+    // single-precision (C99 6.3.1.8), it stays f32 (no widen). The
+    // archive-reload path (lift_program) leaves the value untagged and
+    // consumes it as f64, so widen via `fcvt Dd, Sn` there.
     if let LoadKind::F32 = kind {
         let dd = match dst {
             Place::FpReg(r) => r,
-            // A spilled f64 stages through a reserved scratch d-reg
-            // outside the allocator's d0..d15 pool; d0 may hold a
+            // A spilled f32 / f64 stages through a reserved scratch
+            // d-reg outside the allocator's d0..d15 pool; d0 may hold a
             // live value the caller still needs.
             Place::Spill(_) => SCRATCH_FP0,
             _ => {
@@ -2575,7 +2637,9 @@ fn emit_load(
             }
         };
         emit(code, enc_ldr_s_imm(dd, rn, 0));
-        emit(code, enc_fcvt_d_s(dd, dd));
+        if !keep_f32 {
+            emit(code, enc_fcvt_d_s(dd, dd));
+        }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_sp_str_d_auto(code, dd, sp_off);
@@ -2631,10 +2695,13 @@ fn emit_load_local(
     dst: Place,
     off: i64,
     kind: LoadKind,
+    keep_f32: bool,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    // F32 lands in a d-reg via a 32-bit FP load + fcvt-to-f64.
+    // F32 reads into the s-view of a v-register. A single-precision
+    // value (C99 6.3.1.8) stays f32; the archive-reload path leaves it
+    // untagged and widens to f64 via `fcvt Dd, Sn`.
     if matches!(kind, LoadKind::F32) {
         let dd = match dst {
             Place::FpReg(r) => r,
@@ -2662,7 +2729,9 @@ fn emit_load_local(
         } else {
             emit(code, super::aarch64::enc_ldr_s_imm(dd, scratch.primary, 0));
         }
-        emit(code, super::aarch64::enc_fcvt_d_s(dd, dd));
+        if !keep_f32 {
+            emit(code, super::aarch64::enc_fcvt_d_s(dd, dd));
+        }
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_sp_str_d_auto(code, dd, sp_off);
@@ -3092,6 +3161,28 @@ fn emit_store(
         None => return false,
     };
     if let StoreKind::F32 = kind {
+        // C99 6.3.1.8 / 6.3.1.5: a single-precision value is already an
+        // f32 in the s-view, so store it directly (`str s`, no narrow).
+        // A double value (the archive-reload boundary, or a `double`
+        // assigned to a `float` lvalue the walker didn't pre-narrow) is
+        // narrowed via `fcvt Sd, Dn` first.
+        if alloc.is_f32(value) {
+            let sn = match materialize_fp_f32(code, value_place, SCRATCH_FP0, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_str_s_imm(sn, rn, 0));
+            // Propagate the f32 accumulator to `dst` if parked elsewhere.
+            if let Some(rd) = fp_reg(dst) {
+                if rd != sn {
+                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                }
+            } else if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_d_auto(code, sn, sp_off);
+            }
+            return true;
+        }
         // Stage the value as a d-reg holding the f64 pattern.
         // For an FpReg source the materialise already gives us
         // that; for an IntReg / Spill the source register holds
@@ -3206,12 +3297,16 @@ fn emit_binop(
     // GPR (cset). The scratch d-regs (d0 / d1) reload spilled
     // operands; the matching int scratch slots aren't disturbed
     // because no int materialisation runs in this branch.
-    if let Some(arith) = fp_arith_enc(op) {
-        let dn = match materialize_fp(code, lhs_place, SCRATCH_FP0, frame) {
+    if fp_arith_enc(op).is_some() {
+        // C99 6.3.1.8: pick the single- vs double-precision encoder by
+        // the result's width. A `float op float` result is f32 and the
+        // operands are themselves f32; a `double` result is f64.
+        let is_f32 = alloc.is_f32(v);
+        let dn = match materialize_fp_for(code, lhs, lhs_place, SCRATCH_FP0, frame, alloc) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp(code, rhs_place, SCRATCH_FP1, frame) {
+        let dm = match materialize_fp_for(code, rhs, rhs_place, SCRATCH_FP1, frame, alloc) {
             Some(r) => r,
             None => return false,
         };
@@ -3225,7 +3320,24 @@ fn emit_binop(
             Place::Spill(_) => SCRATCH_FP0,
             _ => return false,
         };
-        emit(code, arith(dd, dn, dm));
+        let word = if is_f32 {
+            match op {
+                BinOp::Fadd => super::aarch64::enc_fadd_s(dd, dn, dm),
+                BinOp::Fsub => super::aarch64::enc_fsub_s(dd, dn, dm),
+                BinOp::Fmul => super::aarch64::enc_fmul_s(dd, dn, dm),
+                BinOp::Fdiv => super::aarch64::enc_fdiv_s(dd, dn, dm),
+                _ => return false,
+            }
+        } else {
+            match op {
+                BinOp::Fadd => enc_fadd_d(dd, dn, dm),
+                BinOp::Fsub => enc_fsub_d(dd, dn, dm),
+                BinOp::Fmul => enc_fmul_d(dd, dn, dm),
+                BinOp::Fdiv => enc_fdiv_d(dd, dn, dm),
+                _ => return false,
+            }
+        };
+        emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit_sp_str_d_auto(code, dd, sp_off);
@@ -3233,11 +3345,14 @@ fn emit_binop(
         return true;
     }
     if let Some(cond) = fp_compare_cond(op) {
-        let dn = match materialize_fp(code, lhs_place, SCRATCH_FP0, frame) {
+        // The compare width follows the operands' precision: two f32
+        // operands use `fcmp Sn, Sm`, else `fcmp Dn, Dm`.
+        let is_f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
+        let dn = match materialize_fp_for(code, lhs, lhs_place, SCRATCH_FP0, frame, alloc) {
             Some(r) => r,
             None => return false,
         };
-        let dm = match materialize_fp(code, rhs_place, SCRATCH_FP1, frame) {
+        let dm = match materialize_fp_for(code, rhs, rhs_place, SCRATCH_FP1, frame, alloc) {
             Some(r) => r,
             None => return false,
         };
@@ -3246,7 +3361,11 @@ fn emit_binop(
             Place::Spill(_) => scratch.primary,
             _ => return false,
         };
-        emit(code, enc_fcmp_d(dn, dm));
+        if is_f32 {
+            emit(code, enc_fcmp_s(dn, dm));
+        } else {
+            emit(code, enc_fcmp_d(dn, dm));
+        }
         emit(code, enc_cset(rd, cond));
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
@@ -3647,6 +3766,48 @@ fn materialize_fp_shifted(
             Some(scratch_d)
         }
         Place::None => None,
+    }
+}
+
+/// Materialise a single-precision (`f32`) value's `Place` into the
+/// low 32 bits of a v-register. A `Place::FpReg` already holds the
+/// f32 in its s-view; a `Place::Spill` reloads the 64-bit slot (a
+/// single-precision write zeroes the upper half, so the low 32 bits
+/// carry the f32). A `Place::IntReg` holds an f32 constant's int-
+/// encoded bit pattern in the low 32 bits; reinterpret it through
+/// `fmov s, w` (not the 64-bit `fmov d, x`, which would read garbage
+/// upper bits and misalign the single value).
+fn materialize_fp_f32(code: &mut Vec<u8>, place: Place, scratch_d: u8, frame: Frame) -> Option<u8> {
+    match place {
+        Place::FpReg(r) => Some(r),
+        Place::Spill(slot) => {
+            let sp_off = spill_off(frame, slot);
+            emit_sp_ldr_d(code, scratch_d, sp_off, Reg(16));
+            Some(scratch_d)
+        }
+        Place::IntReg(r) => {
+            emit(code, enc_fmov_w_to_s(scratch_d, Reg(r)));
+            Some(scratch_d)
+        }
+        Place::None => None,
+    }
+}
+
+/// Materialise an FP operand, choosing the single- vs double-
+/// precision reinterpret of an int-register constant by the value's
+/// f32 marker.
+fn materialize_fp_for(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    place: Place,
+    scratch_d: u8,
+    frame: Frame,
+    alloc: &Allocation,
+) -> Option<u8> {
+    if alloc.is_f32(v) {
+        materialize_fp_f32(code, place, scratch_d, frame)
+    } else {
+        materialize_fp(code, place, scratch_d, frame)
     }
 }
 

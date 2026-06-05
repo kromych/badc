@@ -399,6 +399,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("float_pointer_basics.c", 0),
     // Full FP arithmetic + comparisons + casts.
     ("float_arithmetic.c", 0),
+    ("float_single_precision.c", 0),
+    ("float_double_mix.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy.

@@ -144,6 +144,21 @@ pub(super) struct Allocation {
     /// coalescing pre-passes (copy / phi congruence / call-arg /
     /// return) layered on in subsequent iterations.
     pub hints: Vec<Option<u8>>,
+    /// Per-value single-precision marker copied from
+    /// [`FunctionSsa::f32_values`]. `true` when the value's FP register
+    /// holds an `f32` pattern (C99 6.3.1.8). The per-arch emit consults
+    /// this to pick the single- vs double-precision FP encoder and to
+    /// reinterpret an f32-typed `Imm` through a 32-bit `fmov` / `movd`.
+    /// Empty (all-false) for SSA built outside the walker.
+    pub f32_values: Vec<bool>,
+}
+
+impl Allocation {
+    /// True when value `v` holds a single-precision `f32` pattern.
+    /// Out-of-range / unmarked values are double-precision.
+    pub(super) fn is_f32(&self, v: ValueId) -> bool {
+        self.f32_values.get(v as usize).copied().unwrap_or(false)
+    }
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -259,6 +274,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             hints,
+            f32_values: Vec::new(),
         };
     }
 
@@ -489,6 +505,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         sxtw_k,
         branch_fused,
         hints,
+        f32_values: func.f32_values.clone(),
     }
 }
 
@@ -1015,7 +1032,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt => ResultKind::Int,
-            FpCastKind::IntToFp => ResultKind::Fp,
+            FpCastKind::IntToFp | FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),
@@ -2163,6 +2180,7 @@ int main(void) { return 0; }
             is_variadic: false,
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks,
             extern_call_refs: Vec::new(),

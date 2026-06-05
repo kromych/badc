@@ -784,18 +784,20 @@ fn run_inst<H: Host>(
         Inst::Binop { op, lhs, rhs } => {
             let lv = frame.regs[*lhs as usize];
             let rv = frame.regs[*rhs as usize];
-            frame.regs[v as usize] = apply_binop(*op, lv, rv)?;
+            let res = apply_binop(*op, lv, rv)?;
+            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
             let lv = frame.regs[*lhs as usize];
-            frame.regs[v as usize] = apply_binop(*op, lv, *rhs_imm)?;
+            let res = apply_binop(*op, lv, *rhs_imm)?;
+            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
             let neg = (-f64::from_bits(raw as u64)).to_bits() as i64;
-            frame.regs[v as usize] = neg;
+            frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::Extend { value, kind } => {
@@ -813,6 +815,13 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = match kind {
                 FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
                 FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
+                // A register carrying a single-precision value already
+                // holds the f64 bit pattern of that f32 (the F32 load
+                // widens on read). Widening to double is therefore a
+                // no-op; narrowing rounds the f64 to f32 then re-stores
+                // the f32-as-f64 bit pattern (C99 6.3.1.5).
+                FpCastKind::F32ToF64 => raw,
+                FpCastKind::F64ToF32 => (f64::from_bits(raw as u64) as f32 as f64).to_bits() as i64,
             };
             return Ok(());
         }
@@ -1481,6 +1490,21 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
         StoreKind::F32 | StoreKind::F64 => value,
+    }
+}
+
+/// Round a result to single precision when `f32_flag` marks the
+/// defining value f32 (C99 6.3.1.8). The register convention keeps an
+/// f32 value as the f64 bit pattern of its single-precision value, so
+/// the round-trip through `f32` reproduces hardware single-precision
+/// arithmetic. A non-f32 (double) value passes through unchanged. The
+/// flag is `None` for SSA built outside the walker (no f32 tracking),
+/// which also passes through as double.
+fn round_if_f32(bits: i64, f32_flag: Option<&bool>) -> i64 {
+    if matches!(f32_flag, Some(true)) {
+        (f64::from_bits(bits as u64) as f32 as f64).to_bits() as i64
+    } else {
+        bits
     }
 }
 

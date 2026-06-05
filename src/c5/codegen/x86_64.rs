@@ -685,6 +685,49 @@ fn emit_sse2_sd(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// Internal: emit a `F3 0F <op> /r` SSE single-precision scalar
+/// instruction with two XMM operands, encoded as `dst <op>= src`.
+fn emit_sse_ss(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `ADDSS xmm, xmm` -- single-precision add (C99 6.3.1.8).
+pub(super) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x58, dst, src);
+}
+
+/// `SUBSS xmm, xmm` -- `dst = dst - src`.
+pub(super) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x5C, dst, src);
+}
+
+/// `MULSS xmm, xmm`.
+pub(super) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x59, dst, src);
+}
+
+/// `DIVSS xmm, xmm` -- `dst = dst / src`.
+pub(super) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x5E, dst, src);
+}
+
+/// `UCOMISS xmm, xmm` -- ordered scalar single-precision compare,
+/// sets EFLAGS. Encoding: `0F 2E /r` (no mandatory prefix).
+pub(super) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+    if lhs.high() || rhs.high() {
+        emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2E);
+    emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
+}
+
 /// `ADDSD xmm, xmm`.
 pub(super) fn emit_addsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x58, dst, src);

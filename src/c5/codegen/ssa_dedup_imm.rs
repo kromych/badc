@@ -205,6 +205,7 @@ mod tests {
             is_variadic: false,
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
             insts,
             blocks,
             extern_call_refs: Vec::new(),

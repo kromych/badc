@@ -92,10 +92,10 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	b	<addr>
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x18
                	fmov	d16, x0
-               	fcvt	s17, d16
-               	str	s17, [x1]
+               	fcvt	s0, d16
+               	sub	x1, x29, #0x18
+               	str	s0, [x1]
                	stur	w0, [x29, #-0x8]
                	b	<addr>
                	ldursw	x0, [x29, #-0x10]
@@ -116,14 +116,12 @@ Disassembly of section .text:
                	lsl	x2, x2, #2
                	add	x0, x0, x2
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	adrp	x0, <page>
                	add	x0, x0, #0x210
                	add	x0, x0, x1
                	add	x0, x0, x2
                	ldr	s1, [x0]
-               	fcvt	d1, s1
-               	fcmp	d0, d1
+               	fcmp	s0, s1
                	cset	x0, ne
                	cbz	x0, <addr>
                	b	<addr>
@@ -168,30 +166,25 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x0, x29, #0x18
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	adrp	x1, <page>
                	add	x1, x1, #0x150
                	ldursw	x2, [x29, #-0x8]
                	lsl	x2, x2, #4
                	add	x1, x1, x2
                	ldr	s1, [x1]
-               	fcvt	d1, s1
                	add	x2, x1, #0x4
                	ldr	s2, [x2]
-               	fcvt	d2, s2
-               	fadd	d1, d1, d2
+               	fadd	s1, s1, s2
                	add	x1, x1, #0x8
                	ldr	s2, [x1]
-               	fcvt	d2, s2
-               	fadd	d1, d1, d2
-               	fadd	d0, d0, d1
-               	fcvt	s17, d0
-               	str	s17, [x0]
+               	fadd	s1, s1, s2
+               	fadd	s0, s0, s1
+               	str	s0, [x0]
                	b	<addr>
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
-               	fcvt	d0, s0
                	mov	x0, #0x0                // =0
+               	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne

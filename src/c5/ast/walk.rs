@@ -1098,7 +1098,22 @@ impl<'a> Walker<'a> {
     ) -> Result<super::super::ir::ValueId, WalkError> {
         match self.ast.expr(id) {
             Expr::IntLit { val, .. } => Ok(b.imm(*val)),
-            Expr::FloatLit { bits, .. } => Ok(b.imm(*bits as i64)),
+            Expr::FloatLit { bits, ty } => {
+                // C99 6.4.4.2: an `f`-suffixed constant has type `float`
+                // and is represented in single precision. The lexer
+                // records the f64 bit pattern; narrow it to the f32 bit
+                // pattern (parked in the low 32 bits of the immediate)
+                // and tag the value f32 so the codegen reinterprets it
+                // through a 32-bit move. A `double` constant keeps its
+                // f64 bits untagged.
+                if is_float_ty(*ty) {
+                    let f32_bits = f64::from_bits(*bits) as f32;
+                    let imm = f32_bits.to_bits() as i64;
+                    let v = b.imm(imm);
+                    return Ok(b.mark_f32(v));
+                }
+                Ok(b.imm(*bits as i64))
+            }
             Expr::StrLit { data_off, .. } => Ok(b.imm_data(*data_off)),
             Expr::Ident {
                 sym,
@@ -1170,6 +1185,49 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(*op, lv, *val));
                 }
                 let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                // Floating-point binops (C99 6.3.1.8). `float op float`
+                // is single precision; any `double` operand promotes the
+                // op (and the other operand) to double. The parser
+                // already chose Fadd/.../Feq and set `ty` to the result
+                // type; the walker decides the operand / result width.
+                if matches!(
+                    *op,
+                    BinOp::Fadd
+                        | BinOp::Fsub
+                        | BinOp::Fmul
+                        | BinOp::Fdiv
+                        | BinOp::Feq
+                        | BinOp::Fne
+                        | BinOp::Flt
+                        | BinOp::Fgt
+                        | BinOp::Fle
+                        | BinOp::Fge
+                ) {
+                    // C99 6.3.1.8: the op is single precision only when
+                    // both operands are already f32; any f64 operand
+                    // promotes the op (and the f32 operand) to double.
+                    // The walker tags each `float`-typed value f32 as it
+                    // is produced, so the operands' f32 markers are the
+                    // bit-accurate signal -- the operand AST's C type can
+                    // diverge from the value's representation after an
+                    // intervening widening.
+                    let op_is_f32 = b.is_f32(lv) && b.is_f32(rv);
+                    if op_is_f32 {
+                        let res = b.binop(*op, lv, rv);
+                        // Arithmetic produces a `float`; tag it. A
+                        // comparison produces an `int` and is left
+                        // untagged.
+                        if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
+                            return Ok(b.mark_f32(res));
+                        }
+                        return Ok(res);
+                    }
+                    // Double-precision op: any f32 operand widens to
+                    // double first (6.3.1.5).
+                    lv = b.fp_widen_to_f64(lv);
+                    rv = b.fp_widen_to_f64(rv);
+                    return Ok(b.binop(*op, lv, rv));
+                }
                 // The rhs AST shape isn't an `IntLit`, but walking
                 // it may have constant-folded down to one (e.g.
                 // `K * sizeof(*arr)` with both K and the size as
@@ -1343,7 +1401,16 @@ impl<'a> Walker<'a> {
                     return Ok(value);
                 }
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
-                let value = self.walk_expr_rvalue(b, *rhs)?;
+                let mut value = self.walk_expr_rvalue(b, *rhs)?;
+                // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned to a
+                // `float` object is narrowed to single precision. The
+                // parser inserts no float<->double cast (same type
+                // class), so the walker narrows here when the stored
+                // value is still double. The assignment expression's
+                // value is the converted (f32) value.
+                if matches!(kind, StoreKind::F32) {
+                    value = b.fp_narrow_to_f32(value);
+                }
                 b.store(addr, value, kind);
                 // C99 6.5.16p3: the assignment's value is the
                 // value stored, after any conversion the rhs walker
@@ -1524,8 +1591,17 @@ impl<'a> Walker<'a> {
                                 .map(is_floating_scalar)
                                 .unwrap_or(false);
                             if arg_is_fp {
+                                // The c5 cdecl passes every FP arg as a
+                                // widened 8-byte double through an integer
+                                // register slot; the callee's entry copy
+                                // re-narrows a `float` parameter. Widen an
+                                // f32 arg to f64 first so the wire format
+                                // stays 8-byte (the call ABI itself is a
+                                // follow-on; this preserves it). C99
+                                // 6.5.2.2p6.
+                                let widened = b.fp_widen_to_f64(arg_vals[i]);
                                 let slot = b.alloc_synthetic_local();
-                                b.store_local(slot, arg_vals[i], super::super::ir::StoreKind::I64);
+                                b.store_local(slot, widened, super::super::ir::StoreKind::I64);
                                 arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
                             }
                         }
@@ -1536,10 +1612,17 @@ impl<'a> Walker<'a> {
                         // from there and FP-classes the value.
                         let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
-                        if target_pc == 0 {
-                            return Ok(b.call_extern(*sym, arg_vals, fp_return));
+                        let call = if target_pc == 0 {
+                            b.call_extern(*sym, arg_vals, fp_return)
+                        } else {
+                            b.call(target_pc as usize, arg_vals, fp_return)
+                        };
+                        // A `float`-returning callee yields a single-
+                        // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
+                        if is_float_ty(*ty) {
+                            return Ok(b.mark_f32(call));
                         }
-                        return Ok(b.call(target_pc as usize, arg_vals, fp_return));
+                        return Ok(call);
                     }
                     if *class == Token::Sys as i64 {
                         // The Ident's `val` is the binding's
@@ -1681,18 +1764,28 @@ impl<'a> Walker<'a> {
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
                 if target_is_fp && !source_is_fp {
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::IntToFp, v));
+                    // Integer -> FP. `IntToFp` produces an f64; a `float`
+                    // target then narrows to single precision (6.3.1.4).
+                    let f = b.fp_cast(super::super::ir::FpCastKind::IntToFp, v);
+                    if is_float_ty(*to_ty) {
+                        return Ok(b.fp_narrow_to_f32(f));
+                    }
+                    return Ok(f);
                 } else if !target_is_fp && source_is_fp {
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
+                    // FP -> integer. `FpToInt` truncates an f64; a `float`
+                    // source widens to f64 first so the same converter
+                    // handles both precisions (6.3.1.4).
+                    let d = b.fp_widen_to_f64(v);
+                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, d));
                 }
-                // FP-to-FP (float <-> double) is bit-pattern-
-                // compatible in the accumulator -- the c5
-                // accumulator carries f64 bits; narrowing /
-                // widening between float and double happens at
-                // the `StoreKind::F32` / `LoadKind::F32` boundary.
-                // No inline conversion required.
+                // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
+                // `(float)d` narrows. The conversion is a no-op only when
+                // the source already has the target precision.
                 if target_is_fp && source_is_fp {
-                    return Ok(v);
+                    if is_float_ty(*to_ty) {
+                        return Ok(b.fp_narrow_to_f32(v));
+                    }
+                    return Ok(b.fp_widen_to_f64(v));
                 }
                 // Integer-to-integer cast. C99 6.3.1.3:
                 //   * narrowing -> unsigned target: mask to the
@@ -1759,21 +1852,47 @@ impl<'a> Walker<'a> {
                         | BinOp::Shr
                         | BinOp::Shru
                 );
-                let new_val = if imm_safe && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
-                    b.binop_imm(*op, old, *val)
-                } else {
-                    let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
-                    // The walked rhs may have constant-folded to
-                    // an `Imm` even when the AST shape isn't an
-                    // `IntLit`; route through `binop_imm` in that
-                    // case for the same reason as the
-                    // `Expr::Binary` arm.
-                    if imm_safe && let Some(rk) = b.peek_imm(rhs_val) {
-                        b.binop_imm(*op, old, rk)
+                let new_val =
+                    if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
+                        // C99 6.5.16.2: `E1 op= E2` computes `E1 op E2` in
+                        // the operands' common type, then converts to E1's
+                        // type. `old` (the lvalue) is `float` when the store
+                        // is F32; the rhs may be `float` or `double`. Match
+                        // the `Expr::Binary` precision rules, then narrow the
+                        // result to the store width.
+                        let mut lv = old;
+                        let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                        let op_is_f32 = b.is_f32(lv) && b.is_f32(rv);
+                        if op_is_f32 {
+                            let res = b.binop(*op, lv, rv);
+                            b.mark_f32(res)
+                        } else {
+                            lv = b.fp_widen_to_f64(lv);
+                            rv = b.fp_widen_to_f64(rv);
+                            let res = b.binop(*op, lv, rv);
+                            // Narrow the double result back to the lvalue's
+                            // single precision (C99 6.3.1.5) before the store.
+                            if matches!(store_kind, StoreKind::F32) {
+                                b.fp_narrow_to_f32(res)
+                            } else {
+                                res
+                            }
+                        }
+                    } else if imm_safe && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
+                        b.binop_imm(*op, old, *val)
                     } else {
-                        b.binop(*op, old, rhs_val)
-                    }
-                };
+                        let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
+                        // The walked rhs may have constant-folded to
+                        // an `Imm` even when the AST shape isn't an
+                        // `IntLit`; route through `binop_imm` in that
+                        // case for the same reason as the
+                        // `Expr::Binary` arm.
+                        if imm_safe && let Some(rk) = b.peek_imm(rhs_val) {
+                            b.binop_imm(*op, old, rk)
+                        } else {
+                            b.binop(*op, old, rhs_val)
+                        }
+                    };
                 b.store(addr, new_val, store_kind);
                 // C99 6.5.16.2p3: the value of `E1 op= E2` is the
                 // post-update value of E1 in E1's type. For a
@@ -1940,7 +2059,14 @@ impl<'a> Walker<'a> {
             UnOp::Neg => {
                 let v = self.walk_expr_rvalue(b, child)?;
                 if is_floating_scalar(ty) {
-                    Ok(b.fneg(v))
+                    // C99 6.3.1.8 / 6.5.3.3: `-x` keeps the operand's
+                    // type. A `float` negation is single precision; tag
+                    // the result so the codegen emits `fneg s`.
+                    let neg = b.fneg(v);
+                    if is_float_ty(ty) {
+                        return Ok(b.mark_f32(neg));
+                    }
+                    Ok(neg)
                 } else {
                     let zero = b.imm(0);
                     Ok(b.binop(BinOp::Sub, zero, v))
@@ -2226,6 +2352,13 @@ fn is_pointer_ty(ty: i64) -> bool {
 fn is_floating_scalar(ty: i64) -> bool {
     let stripped = ty & !UNSIGNED_BIT;
     stripped == Ty::Float as i64 || stripped == Ty::Double as i64
+}
+
+/// True for the scalar `float` type. C99 6.3.1.8 leaves `float op
+/// float` at type `float` (single precision); the walker tags the
+/// result and feeds the single-precision codegen path.
+fn is_float_ty(ty: i64) -> bool {
+    (ty & !UNSIGNED_BIT) == Ty::Float as i64
 }
 
 /// `Token::Ty` unsigned-bit position. The compiler-side helper is

@@ -22,19 +22,23 @@
 //! readable.
 
 use super::Compiler;
-use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
+use super::types::{
+    is_float_ty, is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty,
+};
 
 impl Compiler {
     /// Apply the C99 6.5.16.1p2 assignment conversion: when the
     /// destination is a floating type and `a` holds an integer-
     /// typed value, lift through the int-to-float cast; when
     /// the destination is an integer / pointer and `a` holds a
-    /// float / double, drop through the float-to-int cast.
-    /// Same-class assignments leave the
-    /// bit pattern alone. Called from every scalar store path
-    /// so an `unsigned char` initializer of a `float` local /
-    /// global / struct field round-trips through the IEEE-754
-    /// representation rather than the raw integer bit pattern.
+    /// float / double, drop through the float-to-int cast. When both
+    /// sides are floating but at different precision (C99 6.3.1.5),
+    /// wrap in the float<->double cast so the walker narrows / widens.
+    /// Same-precision floating assignments leave the bit pattern alone.
+    /// Called from every scalar store path so an `unsigned char`
+    /// initializer of a `float` local / global / struct field
+    /// round-trips through the IEEE-754 representation rather than the
+    /// raw integer bit pattern.
     pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
         let dest_is_fp = is_floating_scalar(dest_ty);
         let src_is_fp = is_floating_scalar(self.ty);
@@ -49,6 +53,12 @@ impl Compiler {
             self.ty = dest_ty;
         } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
             self.ast_fpcast();
+            self.ast_apply_assign_conv(dest_ty);
+            self.ty = dest_ty;
+        } else if dest_is_fp && src_is_fp && is_float_ty(dest_ty) != is_float_ty(self.ty) {
+            // `double` -> `float` (narrow) or `float` -> `double`
+            // (widen). The walker's `Expr::Cast` arm emits the matching
+            // `Inst::FpCast(F64ToF32 / F32ToF64)` per C99 6.3.1.5.
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         }

@@ -77,8 +77,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0x148
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	mov	x1, #0x4000000000000000 // =4611686018427387904
+               	fcvt	d0, s0
                	fmov	d17, x1
                	fcmp	d0, d17
                	cset	x1, ne
@@ -89,10 +89,10 @@ Disassembly of section .text:
                	ret
                	add	x1, x0, #0x4
                	ldr	s0, [x1]
-               	fcvt	d0, s0
                	mov	x1, #0x4004000000000000 // =4612811918334230528
                	fmov	d16, x1
                	fneg	d1, d16
+               	fcvt	d0, s0
                	fcmp	d0, d1
                	cset	x1, ne
                	cbz	x1, <addr>
@@ -102,8 +102,8 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, #0x8
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	mov	x0, #0x4028000000000000 // =4622945017495814144
+               	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne

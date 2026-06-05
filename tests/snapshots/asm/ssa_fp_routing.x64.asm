@@ -296,9 +296,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movsd	0x10(%rbp,%riz), %xmm0
+               	cvtsd2ss	%xmm0, %xmm0
                	leaq	-0x8(%rbp), %rax
-               	cvtsd2ss	%xmm0, %xmm15
-               	movss	%xmm15, (%rax,%riz)
+               	movss	%xmm0, (%rax,%riz)
                	movss	-0x8(%rbp,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	addq	$0x10, %rsp
@@ -721,5 +721,4 @@ Disassembly of section .text:
                	addq	$0x170, %rsp            # imm = 0x170
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -112,17 +112,19 @@ Disassembly of section .text:
                	lsl	x2, x1, #2
                	add	x0, x0, x2
                	scvtf	d0, x1
+               	fcvt	s0, d0
                	mov	x1, #0x3fd0000000000000 // =4598175219545276416
+               	fcvt	d0, s0
                	fmov	d17, x1
                	fmul	d0, d0, d17
-               	fcvt	s17, d0
-               	str	s17, [x0]
+               	fcvt	s0, d0
+               	str	s0, [x0]
                	b	<addr>
                	sub	x0, x29, #0x508
                	add	x0, x0, #0x20
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
@@ -135,8 +137,8 @@ Disassembly of section .text:
                	mov	x1, #0xc00000000000     // =211106232532992
                	movk	x1, #0x4058, lsl #48
                	fmov	d16, x1
-               	fcvt	s17, d16
-               	str	s17, [x0]
+               	fcvt	s0, d16
+               	str	s0, [x0]
                	sub	x0, x29, #0x508
                	ldr	s0, [x0]
                	fcvt	d0, s0

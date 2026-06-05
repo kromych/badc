@@ -425,6 +425,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // Full FP arithmetic on Windows/AArch64 -- same NEON lowering
     // as the ELF arm64 / macOS arm64 paths.
     ("float_arithmetic.c", 0),
+    ("float_single_precision.c", 0),
+    ("float_double_mix.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy.

@@ -19,16 +19,14 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %r13
                	movq	(%r13), %rax
-               	leaq	0x10(%rax), %rax
-               	movq	%rax, (%r13)
-               	leaq	-0x10(%rax), %rax
+               	leaq	0x10(%rax), %r10
+               	movq	%r10, (%r13)
                	movslq	(%rax), %rax
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %r13
                	movq	(%r13), %rcx
-               	leaq	0x10(%rcx), %rcx
-               	movq	%rcx, (%r13)
-               	leaq	-0x10(%rcx), %rcx
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%r13)
                	movslq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
                	cmpq	$0x2a, %rax

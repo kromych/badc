@@ -101,9 +101,8 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %r13
                	movq	(%r13), %rax
-               	leaq	0x10(%rax), %rax
-               	movq	%rax, (%r13)
-               	leaq	-0x10(%rax), %rax
+               	leaq	0x10(%rax), %r10
+               	movq	%r10, (%r13)
                	movslq	(%rax), %rdx
                	leaq	<rip>, %rdi
                	movslq	-0x10(%rbp), %rsi

@@ -82,16 +82,14 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %r13
                	movq	(%r13), %rax
-               	leaq	0x10(%rax), %rax
-               	movq	%rax, (%r13)
-               	leaq	-0x10(%rax), %rax
+               	leaq	0x10(%rax), %r10
+               	movq	%r10, (%r13)
                	movq	(%rax), %rax
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %r13
                	movq	(%r13), %rcx
-               	leaq	0x10(%rcx), %rcx
-               	movq	%rcx, (%r13)
-               	leaq	-0x10(%rcx), %rcx
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%r13)
                	movq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
                	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
@@ -113,16 +111,14 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %r13
                	movq	(%r13), %rax
-               	leaq	0x10(%rax), %rax
-               	movq	%rax, (%r13)
-               	leaq	-0x10(%rax), %rax
+               	leaq	0x10(%rax), %r10
+               	movq	%r10, (%r13)
                	movq	(%rax), %rax
                	leaq	-0x10(%rbp), %rcx
                	movq	%rcx, %r13
                	movq	(%r13), %rcx
-               	leaq	0x10(%rcx), %rcx
-               	movq	%rcx, (%r13)
-               	leaq	-0x10(%rcx), %rcx
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%r13)
                	movq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
                	leaq	-0x10(%rbp), %rdx

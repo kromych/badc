@@ -83,9 +83,8 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %r13
                	movq	(%r13), %rcx
-               	leaq	0x10(%rcx), %rcx
-               	movq	%rcx, (%r13)
-               	leaq	-0x10(%rcx), %rcx
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%r13)
                	movq	(%rcx), %rcx
                	pushq	%r11
                	movq	(%rcx), %r11

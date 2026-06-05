@@ -278,6 +278,55 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     reg_bytes + overflow_bytes
 }
 
+/// Per-parameter mask: `mask[idx]` is true when the per-inst
+/// `Inst::ParamRef` for register parameter `idx` must read its value
+/// from the prologue-spilled c5 cdecl home cell rather than from the
+/// incoming host argument register.
+///
+/// The hazard: the allocator can color several `ParamRef` values into
+/// one register (sequentially-live parameters consumed by intervening
+/// stores). When the destination register an earlier-emitted
+/// `ParamRef` writes is a later parameter's incoming argument register,
+/// the write clobbers that argument value before the later `ParamRef`
+/// reads it. The home cell is immune because the prologue stored it
+/// before any body instruction ran. A parameter is flagged only when it
+/// is non-elidable (so the prologue stored its home cell) and some
+/// earlier `ParamRef`'s destination is its argument register; otherwise
+/// the argument register is still live and the cheaper register read is
+/// kept.
+fn compute_param_from_home(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> alloc::vec::Vec<bool> {
+    let (elidable, n_reg, _) = param_elidable_mask(func, alloc, abi);
+    let mut mask = alloc::vec![false; n_reg];
+    if n_reg == 0 {
+        return mask;
+    }
+    // Destination registers of the `ParamRef` values seen so far in
+    // instruction (emit) order. A later parameter whose argument
+    // register appears here was clobbered before it could be read.
+    let mut written: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    for (vid, inst) in func.insts.iter().enumerate() {
+        let Inst::ParamRef { idx, .. } = inst else {
+            continue;
+        };
+        let i = *idx as usize;
+        if i >= n_reg {
+            continue;
+        }
+        let arg_reg = abi.int_arg_regs[i];
+        if !elidable.get(i).copied().unwrap_or(false) && written.contains(&arg_reg) {
+            mask[i] = true;
+        }
+        if let Some(Place::IntReg(r)) = alloc.places.get(vid).copied() {
+            written.insert(r);
+        }
+    }
+    mask
+}
+
 fn bail_msg(reason: &str) {
     super::ssa_emit_common::bail_msg("x86_64", reason);
 }
@@ -307,6 +356,12 @@ const SCRATCH_R10: Reg = Reg(10);
 /// isn't enough.
 const SCRATCH_RCX: Reg = Reg(1);
 const SCRATCH_RDX: Reg = Reg(2);
+/// Reserved scratch outside both allocator pools (see the r13 note
+/// on `SCRATCH_R10`). Handlers that already commit `SCRATCH_R10`
+/// to one operand and need a second guaranteed-free register use
+/// this; it never aliases an allocator-chosen `rd`, a staged
+/// dividend in `SCRATCH_R10`, or any argument register.
+const SCRATCH_R13: Reg = Reg(13);
 
 /// Scratch XMM registers for FP handlers. The SSA allocator's
 /// caller_fprs pool covers `xmm0..xmm7` and callee_fprs is empty
@@ -598,7 +653,7 @@ fn emit_phi_predecessor_moves(
         // the caller-saved pool) keeps the copy from bailing in a
         // high-pressure function where every caller-saved register is
         // live across the block exit.
-        if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, Reg(13)) {
+        if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R13) {
             return false;
         }
         // FP phi edges: xmm14 / xmm15 are reserved scratch outside the
@@ -1050,6 +1105,23 @@ pub(super) fn emit_function(
     let abi = target.abi();
     let frame = Frame::for_function(func, alloc, abi);
 
+    // A per-inst `Inst::ParamRef` materialises its parameter from the
+    // incoming host argument register. The allocator can pack several
+    // sequentially-live parameters into one register, each consumed by
+    // an intervening store before the next is produced, and the
+    // destination register it picks for an earlier parameter may be a
+    // later parameter's incoming argument register. The earlier
+    // `ParamRef`'s write then overwrites that argument value before the
+    // later `ParamRef` reads it. A non-elidable register parameter is
+    // spilled by the prologue to its c5 cdecl home cell, which survives
+    // the clobber; `param_from_home[i]` marks the parameters that must
+    // read their home cell rather than the argument register. The flag
+    // is set only for the parameters actually at risk -- a non-elidable
+    // parameter whose argument register is the destination of an
+    // earlier-emitted `ParamRef` -- so the common case stays a
+    // register-to-register move.
+    let param_from_home = compute_param_from_home(func, alloc, abi);
+
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
@@ -1111,7 +1183,7 @@ pub(super) fn emit_function(
             // r10 / r13 are reserved scratch (never an argument register
             // and never in the allocator's bank), so they cannot collide
             // with any pending parameter source or destination.
-            if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, Reg(13)) {
+            if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, SCRATCH_R13) {
                 return false;
             }
             for (dst, kind) in exts {
@@ -1199,6 +1271,7 @@ pub(super) fn emit_function(
                 tls_index_fixups,
                 tls_total_size,
                 &mut current_alloca_top,
+                &param_from_home,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -1610,6 +1683,7 @@ fn emit_inst(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
     current_alloca_top: &mut u32,
+    param_from_home: &[bool],
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -1632,33 +1706,61 @@ fn emit_inst(
             true
         }
         Inst::ParamRef { idx, kind } => {
-            // Materialise the i-th host-ABI argument register into
-            // the allocator's chosen `Place`, sign-extending the
-            // low `kind` bytes per C99 6.3.1.3 so the value held
-            // in the register is canonically 64-bit-sign-extended.
-            // The prologue does not modify the arg registers (rdi
-            // rsi rdx rcx r8 r9 on System V; rcx rdx r8 r9 on
-            // Win64), so the arg value is still in its incoming
-            // register at this IR position. Narrow-load promotion
-            // downstream can then collapse `Inst::Extend` to a
-            // plain copy when the kinds match.
-            let arg_reg = match abi.int_arg_regs.get(*idx as usize) {
+            // Materialise the i-th host-ABI argument into the
+            // allocator's chosen `Place`, sign-extending the low
+            // `kind` bytes per C99 6.3.1.3 so the value held in the
+            // register is canonically 64-bit-sign-extended.
+            //
+            // The incoming argument register (rdi rsi rdx rcx r8 r9
+            // on System V; rcx rdx r8 r9 on Win64) is not always
+            // pristine at this IR position: when an earlier-emitted
+            // `ParamRef` wrote to this parameter's argument register
+            // (the allocator packed sequentially-live parameters into
+            // one register), reading it would take the earlier
+            // parameter's value. `param_from_home` marks those at-risk
+            // parameters; they are non-elidable, so the prologue
+            // spilled them to their c5 cdecl home cell at
+            // `[rbp + (idx+1)*16]`, which survives the clobber. The
+            // unmarked parameters read the argument register directly.
+            // Narrow-load promotion downstream can then collapse
+            // `Inst::Extend` to a plain copy when the kinds match.
+            let i = *idx as usize;
+            let from_home = param_from_home.get(i).copied().unwrap_or(false);
+            let home_off = c5_slot_to_fp_offset(*idx as i64 + 2) as i32;
+            let arg_reg = match abi.int_arg_regs.get(i) {
                 Some(&r) => Reg(r),
                 None => {
                     bail_msg("ParamRef: idx out of range for int_arg_regs");
                     return false;
                 }
             };
-            let sign_extend = |code: &mut Vec<u8>, rd: Reg| match kind {
-                LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, arg_reg),
-                LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, arg_reg),
-                LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, arg_reg),
-                _ => emit_mov_rr(code, rd, arg_reg),
+            let materialize = |code: &mut Vec<u8>, rd: Reg| {
+                if from_home {
+                    match kind {
+                        LoadKind::I8 => {
+                            super::x86_64::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
+                        }
+                        LoadKind::I16 => {
+                            super::x86_64::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
+                        }
+                        LoadKind::I32 => {
+                            super::x86_64::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
+                        }
+                        _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
+                    }
+                } else {
+                    match kind {
+                        LoadKind::I8 => super::x86_64::emit_movsx_r_r8(code, rd, arg_reg),
+                        LoadKind::I16 => super::x86_64::emit_movsx_r_r16(code, rd, arg_reg),
+                        LoadKind::I32 => super::x86_64::emit_movsxd_r_r(code, rd, arg_reg),
+                        _ => emit_mov_rr(code, rd, arg_reg),
+                    }
+                }
             };
             match dst {
-                Place::IntReg(r) => sign_extend(code, Reg(r)),
+                Place::IntReg(r) => materialize(code, Reg(r)),
                 Place::Spill(_) => {
-                    sign_extend(code, SCRATCH_R10);
+                    materialize(code, SCRATCH_R10);
                     spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
                 }
                 _ => {
@@ -3142,12 +3244,21 @@ fn emit_binop_divmod(
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => DivOperand::Reg(Reg(r)),
         Place::Spill(slot) => DivOperand::Mem(spill_slot_sp_offset(frame, slot) + pushed_bytes),
         Place::IntReg(r) => {
-            if rn.0 == SCRATCH_R10.0 {
-                bail_msg("Binop divmod: divisor aliases rdx:rax with scratch holding the dividend");
-                return false;
-            }
-            emit_mov_rr(code, SCRATCH_R10, Reg(r));
-            DivOperand::Reg(SCRATCH_R10)
+            // A divisor in rax / rdx must be copied out before the
+            // dividend setup overwrites those registers. The copy
+            // target must not collide with the staged dividend: a
+            // spilled lhs is materialised into rd, which for a
+            // spilled dst is SCRATCH_R10, so SCRATCH_R10 is not
+            // always free here. SCRATCH_R13 is reserved outside both
+            // allocator pools and never holds the dividend, so it is
+            // always available for the divisor copy.
+            let div_scratch = if rn.0 == SCRATCH_R10.0 {
+                SCRATCH_R13
+            } else {
+                SCRATCH_R10
+            };
+            emit_mov_rr(code, div_scratch, Reg(r));
+            DivOperand::Reg(div_scratch)
         }
         _ => {
             bail_msg("Binop divmod: rhs not int reg / spill");

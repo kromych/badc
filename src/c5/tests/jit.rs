@@ -328,6 +328,101 @@ fn division_with_spilled_dividend_under_pressure() {
 }
 
 #[test]
+fn paramref_pointer_arg_survives_shared_register_packing() {
+    // A `ParamRef` materialises its parameter from the incoming host
+    // argument register. When the allocator packs several
+    // sequentially-live parameters into one register -- each consumed
+    // by an intervening store before the next is produced -- the
+    // destination register it picks for an earlier parameter can be a
+    // later parameter's incoming argument register. The earlier
+    // `ParamRef`'s write then clobbers the later parameter's argument
+    // value before it is read; on System V the fourth integer argument
+    // is rcx, which the allocator readily reuses for earlier params.
+    // This mirrors sqlite3's codeApplyAffinity(Parse*, int base, int n,
+    // char *zAff): base and n are stored, then zAff is dereferenced,
+    // and the corrupted zAff (a small integer) faulted on deref. The
+    // first parameter is kept live so the allocator packs parameters
+    // 1, 2 and 3 into the second integer register, which on System V
+    // is rcx -- the incoming register of the fourth argument. The
+    // non-elidable parameters must be read from their prologue home
+    // cells, which survive the clobber, not from the live argument
+    // register. The -O pipeline produces the packing on its own.
+    // The trailing `while` loop over `zAff` is load-bearing: it is the
+    // register pressure that drives the allocator to pack the three
+    // stored parameters into the second integer register (rcx) instead
+    // of leaving them in distinct registers. Without it the allocator
+    // colours them apart and the entry parallel-copy batch -- which is
+    // always correct -- handles the placement, hiding the per-inst bug.
+    let src = r#"
+        static int g[8];
+        static int apply(int *keep, int base, int n, int *zAff) {
+            g[5] = keep[0];
+            g[0] = base;
+            g[1] = n;
+            if (zAff == 0) return -1;
+            g[2] = keep[1];
+            while (n > 0 && zAff[0] <= 64) { n--; base++; zAff++; }
+            return base * 100 + n + keep[2];
+        }
+        int main() {
+            int keep[3];
+            int z[4];
+            keep[0] = 11; keep[1] = 22; keep[2] = 33;
+            z[0] = 100; z[1] = 100; z[2] = 100; z[3] = 0;
+            // zAff[0]=100 > 64 so the loop never runs; the result is
+            // base*100 + n + keep[2] = 5*100 + 1 + 33 = 534. A clobbered
+            // `zAff` dereferences a small integer in the loop guard and
+            // faults or yields nonsense.
+            return apply(keep, 5, 1, z);
+        }
+    "#;
+    let result = jit_exit_native_optimized(src, &["paramref-pack"]);
+    assert_eq!(
+        result, 534,
+        "a pointer parameter was clobbered by an earlier ParamRef sharing its argument register"
+    );
+}
+
+#[test]
+fn division_with_call_result_divisor_and_spilled_dst_under_pressure() {
+    // The x86_64 divmod lowering must marshal a divisor that the
+    // allocator placed in rax or rdx out of those registers before the
+    // dividend setup overwrites them. The copy target was always
+    // SCRATCH_R10; when the destination is itself a spill, rd resolves
+    // to SCRATCH_R10 and the spilled dividend is staged there, so the
+    // divisor copy and the dividend collide and the function bailed out
+    // of the implemented subset (sqlite3_db_status64). The divisor must
+    // go to a second reserved scratch (r13) in that case.
+    //
+    // Reproducing the exact place triple (dividend Spill, divisor in the
+    // rax result register, dst Spill) needs: a non-inlinable callee so
+    // the divisor stays a live call result in rax; a loop-carried
+    // (phi'd) quotient so the allocator spills the destination; and the
+    // capped bank so the dividend spills too. 1000 / 3 six times is 1.
+    let src = r#"
+        long dv(long x) { if (x > 1000000) return x; return x + 1; }
+        long g[8];
+        int main() {
+            g[0] = 1000; g[1] = 0; g[2] = 2; g[3] = 0;
+            long acc = g[0];
+            int i;
+            for (i = 0; i < 6; i++) {
+                long t = acc + g[1];
+                acc = t / dv(g[2]);
+            }
+            return (int)(acc + g[3]); // 1000/3/3/3/3/3/3 = 1
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit_native_optimized(src, &["div-call-spill"])
+    });
+    assert_eq!(
+        result, 1,
+        "divmod lowering failed to marshal a call-result divisor away from a spilled dividend/dst"
+    );
+}
+
+#[test]
 fn multiply_by_immediate_with_spilled_result_under_pressure() {
     // `BinopI { op: Mul }` by a non-power-of-two constant. The x86_64
     // lowering must not depend on a free caller-saved scratch to

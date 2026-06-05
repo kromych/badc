@@ -1023,3 +1023,62 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
         "c4 self-host JIT (native optimizer on) exited {exit}"
     );
 }
+
+#[test]
+fn des_ct_fconf_wide_imm_scratch_native_optimized() {
+    // BearSSL's DES round function (des_ct.c `Fconf`), extracted as
+    // tests/fixtures/c/des_ct_fconf_wide_imm_scratch.c. At -O the
+    // optimizer folds each `y = const ^ (x & mask)` line into a
+    // `BinopI{Xor}` against a 32-bit constant outside i32 range; the
+    // ~30 `y` temporaries are all live at once, saturating the
+    // caller-saved registers so the wide-immediate Xor lowering finds
+    // no free scratch and previously bailed with "op outside the
+    // implemented subset" at ent_pc 113 on x86_64. The reserved r13
+    // scratch closes that hole. The fixture self-folds its result into
+    // one byte; 24 is the known answer (verified against the
+    // non-optimized lowering, which agrees).
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("fixtures");
+    path.push("c");
+    path.push("des_ct_fconf_wide_imm_scratch.c");
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let opt = jit_exit_native_optimized(&src, &["fconf-O"]);
+    assert_eq!(opt, 24, "des_ct Fconf miscompiled at -O (wide-imm scratch)");
+    let noopt = jit_exit(&src, &["fconf-noO"]);
+    assert_eq!(noopt, 24, "des_ct Fconf diverged between -O and default");
+}
+
+#[test]
+fn variable_shift_to_spill_under_pressure() {
+    // A variable-count shift whose value-to-shift and result spill, and
+    // whose destination can land in rcx (the shift-count register). The
+    // x86_64 lowering previously bailed when rd was rcx and no
+    // caller-saved scratch was free; it now stages through the reserved
+    // r13 scratch. The eight live accumulators saturate the registers
+    // so the shift's working register is contended.
+    let src = r#"
+        unsigned do_shifts(unsigned a, unsigned b, unsigned c, unsigned d,
+                           unsigned e, unsigned f, unsigned g, unsigned h) {
+            unsigned s = (b ^ 0xAC74D1D4u) & 31u;
+            unsigned x0 = (a << s) >> s;
+            unsigned x1 = c + d + e + f + g + h;
+            return x0 + (x1 & 0u);
+        }
+        int main() {
+            // (a << s) >> s with a's high bits clear is a.
+            unsigned r = do_shifts(200u, 3u, 7u, 8u, 9u, 10u, 11u, 12u);
+            return (int)(r & 0xffu); // 200
+        }
+    "#;
+    let cap = crate::c5::codegen::ssa_alloc::with_pool_size_override(3, 2, || {
+        jit_exit(src, &["shift-spill-cap"])
+    });
+    assert_eq!(
+        cap, 200,
+        "variable shift miscompiled under register-pool cap"
+    );
+    let opt = jit_exit_native_optimized(src, &["shift-spill-O"]);
+    assert_eq!(opt, 200, "variable shift miscompiled at -O");
+}

@@ -31,8 +31,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	setne	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax

@@ -14,27 +14,27 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x8(%rbp), %rax
                	leaq	0x10(%rbp), %rcx
-               	leaq	0x10(%rcx), %r11
-               	movq	%r11, (%rax)
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %r11
-               	movq	(%r11), %rax
+               	movq	%rax, %r13
+               	movq	(%r13), %rax
                	leaq	0x10(%rax), %rax
-               	movq	%rax, (%r11)
+               	movq	%rax, (%r13)
                	leaq	-0x10(%rax), %rax
                	movslq	(%rax), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, %r11
-               	movq	(%r11), %rcx
+               	movq	%rcx, %r13
+               	movq	(%r13), %rcx
                	leaq	0x10(%rcx), %rcx
-               	movq	%rcx, (%r11)
+               	movq	%rcx, (%r13)
                	leaq	-0x10(%rcx), %rcx
                	movslq	(%rcx), %rcx
                	leaq	-0x8(%rbp), %rdx
-               	movq	%rdx, %r11
-               	movq	(%r11), %rdx
+               	movq	%rdx, %r13
+               	movq	(%r13), %rdx
                	leaq	0x10(%rdx), %rdx
-               	movq	%rdx, (%r11)
+               	movq	%rdx, (%r13)
                	leaq	-0x10(%rdx), %rdx
                	movslq	(%rdx), %rdx
                	leaq	-0x8(%rbp), %rsi
@@ -109,5 +109,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

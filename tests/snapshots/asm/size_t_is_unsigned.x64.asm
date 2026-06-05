@@ -35,8 +35,8 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	movabsq	$0x1c71c71c71c71c71, %r11 # imm = 0x1C71C71C71C71C71
-               	cmpq	%r11, %rcx
+               	movabsq	$0x1c71c71c71c71c71, %r13 # imm = 0x1C71C71C71C71C71
+               	cmpq	%r13, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp

@@ -14,12 +14,12 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x8(%rbp), %rax
                	leaq	0x10(%rbp), %rcx
-               	leaq	0x10(%rcx), %r11
-               	movq	%r11, (%rax)
+               	leaq	0x10(%rcx), %r10
+               	movq	%r10, (%rax)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x8(%rbp), %rcx
-               	movq	(%rcx), %r11
-               	movq	%r11, (%rax)
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
                	jmp	<addr>
@@ -29,10 +29,10 @@ Disassembly of section .text:
                	jge	<addr>
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rdx
-               	movq	%rdx, %r11
-               	movq	(%r11), %rdx
+               	movq	%rdx, %r13
+               	movq	(%r13), %rdx
                	leaq	0x10(%rdx), %rdx
-               	movq	%rdx, (%r11)
+               	movq	%rdx, (%r13)
                	leaq	-0x10(%rdx), %rdx
                	movslq	(%rdx), %rdx
                	addq	%rdx, %rax
@@ -74,3 +74,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

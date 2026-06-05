@@ -101,8 +101,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
-               	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	cmpq	%r11, %rax
+               	movabsq	$0x123456789abcdef, %r13 # imm = 0x123456789ABCDEF
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x70, %rsp

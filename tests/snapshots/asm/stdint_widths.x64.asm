@@ -136,16 +136,16 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x1122334455667788, %rax # imm = 0x1122334455667788
-               	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
-               	cmpq	%r11, %rax
+               	movabsq	$0x1122334455667788, %r13 # imm = 0x1122334455667788
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
                	movabsq	$-0x123456789abcdf0, %rax # imm = 0xFEDCBA9876543210
-               	movabsq	$-0x123456789abcdf0, %r11 # imm = 0xFEDCBA9876543210
-               	cmpq	%r11, %rax
+               	movabsq	$-0x123456789abcdf0, %r13 # imm = 0xFEDCBA9876543210
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x16, %eax
                	addq	$0x50, %rsp

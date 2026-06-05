@@ -99,8 +99,8 @@ Disassembly of section .text:
                	addq	%rax, %rsi
                	jmp	<addr>
                	movq	0x30(%rsp), %rax
-               	movabsq	$0x30a55d88de61bb19, %r11 # imm = 0x30A55D88DE61BB19
-               	cmpq	%r11, %rax
+               	movabsq	$0x30a55d88de61bb19, %r13 # imm = 0x30A55D88DE61BB19
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -112,9 +112,9 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x440000080000c800, %r11 # imm = 0x440000080000C800
+               	movabsq	$0x440000080000c800, %r13 # imm = 0x440000080000C800
                	movq	%rbx, %rax
-               	cmpq	%r11, %rbx
+               	cmpq	%r13, %rbx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

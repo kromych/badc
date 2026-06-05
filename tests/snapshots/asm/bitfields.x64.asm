@@ -39,8 +39,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	addq	$0x4, %rax
                	movl	(%rax), %ecx
-               	movabsq	$-0x100000000, %r11     # imm = 0xFFFFFFFF00000000
-               	andq	%r11, %rcx
+               	movabsq	$-0x100000000, %r13     # imm = 0xFFFFFFFF00000000
+               	andq	%r13, %rcx
                	movl	$0x12345678, %edx       # imm = 0x12345678
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)

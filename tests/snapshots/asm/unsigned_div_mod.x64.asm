@@ -110,8 +110,8 @@ Disassembly of section .text:
                	xorq	%rdx, %rdx
                	divq	%rcx
                	popq	%rdx
-               	movabsq	$0x7fffffffffffffff, %r11 # imm = 0x7FFFFFFFFFFFFFFF
-               	cmpq	%r11, %rax
+               	movabsq	$0x7fffffffffffffff, %r13 # imm = 0x7FFFFFFFFFFFFFFF
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x60, %rsp

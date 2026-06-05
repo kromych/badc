@@ -85,9 +85,9 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	setb	%al
                	movzbq	%al, %rax
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %rax
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %rax
                	popq	%rbp
                	popq	%r11
                	addq	$0x20, %rsp
@@ -106,9 +106,9 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %rax
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %rax
                	popq	%rbp
                	popq	%r11
                	addq	$0x20, %rsp
@@ -134,8 +134,8 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm15
                	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
-               	movq	%xmm0, %r11
-               	movq	%r11, -0x28(%rbp)
+               	movq	%xmm0, %r10
+               	movq	%r10, -0x28(%rbp)
                	movq	-0x28(%rbp), %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
@@ -161,8 +161,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	cvtsi2sd	%rbx, %xmm0
-               	movq	%xmm0, %r11
-               	movq	%r11, -0x38(%rbp)
+               	movq	%xmm0, %r10
+               	movq	%r10, -0x38(%rbp)
                	movq	-0x38(%rbp), %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
@@ -179,8 +179,8 @@ Disassembly of section .text:
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
-               	movq	%xmm0, %r11
-               	movq	%r11, -0x40(%rbp)
+               	movq	%xmm0, %r10
+               	movq	%r10, -0x40(%rbp)
                	movq	-0x40(%rbp), %rdi
                	movq	%rbx, %rsi
                	callq	<addr>

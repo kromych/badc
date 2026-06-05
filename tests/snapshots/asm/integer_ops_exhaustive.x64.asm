@@ -705,8 +705,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	%eax, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -860,8 +860,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	%ebx, %eax
-               	movl	$0xff0fff00, %r11d      # imm = 0xFF0FFF00
-               	cmpq	%r11, %rax
+               	movl	$0xff0fff00, %r13d      # imm = 0xFF0FFF00
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -969,8 +969,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	%eax, %eax
-               	movl	$0x80000000, %r11d      # imm = 0x80000000
-               	cmpq	%r11, %rax
+               	movl	$0x80000000, %r13d      # imm = 0x80000000
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -995,8 +995,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	shlq	$0x3f, %rax
-               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
-               	cmpq	%r11, %rax
+               	movabsq	$-0x8000000000000000, %r13 # imm = 0x8000000000000000
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -1076,8 +1076,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	movl	-0xe0(%rbp), %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax

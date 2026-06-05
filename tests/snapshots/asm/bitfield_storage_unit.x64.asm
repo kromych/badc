@@ -66,8 +66,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	leaq	-0x18(%rbp), %rax
                	movl	(%rax), %ecx
-               	movabsq	$-0xfffffe01, %r11      # imm = 0xFFFFFFFF000001FF
-               	andq	%r11, %rcx
+               	movabsq	$-0xfffffe01, %r13      # imm = 0xFFFFFFFF000001FF
+               	andq	%r13, %rcx
                	movl	$0x2468a00, %edx        # imm = 0x2468A00
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
@@ -149,8 +149,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax
                	movl	(%rax), %ecx
-               	movabsq	$-0xfffffe01, %r11      # imm = 0xFFFFFFFF000001FF
-               	andq	%r11, %rcx
+               	movabsq	$-0xfffffe01, %r13      # imm = 0xFFFFFFFF000001FF
+               	andq	%r13, %rcx
                	movl	$0xfffffe00, %edx       # imm = 0xFFFFFE00
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
@@ -170,8 +170,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	addq	$0x4, %rax
                	movl	(%rax), %ecx
-               	movabsq	$-0xfffffe01, %r11      # imm = 0xFFFFFFFF000001FF
-               	andq	%r11, %rcx
+               	movabsq	$-0xfffffe01, %r13      # imm = 0xFFFFFFFF000001FF
+               	andq	%r13, %rcx
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax

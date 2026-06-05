@@ -85,8 +85,8 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
-               	movl	$0x90abcdef, %r11d      # imm = 0x90ABCDEF
-               	cmpq	%r11, %rax
+               	movl	$0x90abcdef, %r13d      # imm = 0x90ABCDEF
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x60, %rsp
@@ -103,8 +103,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
-               	movl	$0x90abcdef, %r11d      # imm = 0x90ABCDEF
-               	cmpq	%r11, %rax
+               	movl	$0x90abcdef, %r13d      # imm = 0x90ABCDEF
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x60, %rsp
@@ -128,8 +128,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	leaq	-0x8(%rbp), %rax
                	movl	(%rax), %eax
-               	movl	$0xcafebabe, %r11d      # imm = 0xCAFEBABE
-               	cmpq	%r11, %rax
+               	movl	$0xcafebabe, %r13d      # imm = 0xCAFEBABE
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x60, %rsp
@@ -146,8 +146,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
-               	movabsq	$0xbadf00dcafebabe, %r11 # imm = 0xBADF00DCAFEBABE
-               	cmpq	%r11, %rax
+               	movabsq	$0xbadf00dcafebabe, %r13 # imm = 0xBADF00DCAFEBABE
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x60, %rsp
@@ -408,8 +408,8 @@ Disassembly of section .text:
                	leaq	-0x58(%rbp), %rax
                	addq	$0x8, %rax
                	movq	(%rax), %rax
-               	movabsq	$0x123456789abcdef0, %r11 # imm = 0x123456789ABCDEF0
-               	cmpq	%r11, %rax
+               	movabsq	$0x123456789abcdef0, %r13 # imm = 0x123456789ABCDEF0
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x2d, %eax
                	addq	$0x60, %rsp

@@ -177,8 +177,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	0x40(%rsp), %rax
-               	movabsq	$0xe8d4a51000, %r11     # imm = 0xE8D4A51000
-               	cmpq	%r11, %rax
+               	movabsq	$0xe8d4a51000, %r13     # imm = 0xE8D4A51000
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0xd, %eax
                	movq	%rax, %rcx
@@ -191,8 +191,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	0x30(%rsp), %rax
-               	movabsq	$0x100000000, %r11      # imm = 0x100000000
-               	cmpq	%r11, %rax
+               	movabsq	$0x100000000, %r13      # imm = 0x100000000
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0xe, %eax
                	movq	%rax, %rcx

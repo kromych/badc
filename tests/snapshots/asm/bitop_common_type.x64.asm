@@ -17,8 +17,8 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	orq	%rcx, %rdx
                	addq	$0x1, %rdx
-               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f001, %r13      # imm = 0x14006F001
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
@@ -28,8 +28,8 @@ Disassembly of section .text:
                	xorq	$-0x1, %rdx
                	andq	%rax, %rdx
                	addq	$0x1, %rdx
-               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f001, %r13      # imm = 0x14006F001
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -38,8 +38,8 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	xorq	%rcx, %rdx
                	addq	$0x1, %rdx
-               	movabsq	$0x14006f001, %r11      # imm = 0x14006F001
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f001, %r13      # imm = 0x14006F001
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
@@ -49,8 +49,8 @@ Disassembly of section .text:
                	subq	$0x1, %rdx
                	orq	$0xf, %rdx
                	addq	$0x1, %rdx
-               	movabsq	$0x14006f010, %r11      # imm = 0x14006F010
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f010, %r13      # imm = 0x14006F010
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
@@ -58,8 +58,8 @@ Disassembly of section .text:
                	retq
                	movq	%rax, %rdx
                	orq	%rcx, %rdx
-               	movabsq	$0x14006f000, %r11      # imm = 0x14006F000
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f000, %r13      # imm = 0x14006F000
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
@@ -67,16 +67,16 @@ Disassembly of section .text:
                	retq
                	movq	%rax, %rdx
                	orq	%rcx, %rdx
-               	movabsq	$0x14006f000, %r11      # imm = 0x14006F000
-               	cmpq	%r11, %rdx
+               	movabsq	$0x14006f000, %r13      # imm = 0x14006F000
+               	cmpq	%r13, %rdx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	orq	%rcx, %rax
-               	movabsq	$0x100000000, %r11      # imm = 0x100000000
-               	cmpq	%r11, %rax
+               	movabsq	$0x100000000, %r13      # imm = 0x100000000
+               	cmpq	%r13, %rax
                	seta	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax

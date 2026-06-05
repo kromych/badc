@@ -107,8 +107,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	%eax, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -135,8 +135,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	%eax, %eax
-               	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
-               	cmpq	%r11, %rax
+               	movl	$0xfffffffe, %r13d      # imm = 0xFFFFFFFE
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax
@@ -163,8 +163,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	movl	%eax, %eax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	cmpq	%r11, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
                	cmpq	$0x0, %rax

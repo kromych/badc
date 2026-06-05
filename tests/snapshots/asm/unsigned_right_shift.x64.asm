@@ -88,8 +88,8 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	shrq	$0x1, %rax
-               	movabsq	$0x4000000000000000, %r11 # imm = 0x4000000000000000
-               	cmpq	%r11, %rax
+               	movabsq	$0x4000000000000000, %r13 # imm = 0x4000000000000000
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp

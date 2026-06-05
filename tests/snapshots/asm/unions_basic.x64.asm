@@ -63,9 +63,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	setb	%al
                	movzbq	%al, %rax
-               	setnp	%r11b
-               	movzbq	%r11b, %r11
-               	andq	%r11, %rax
+               	setnp	%r10b
+               	movzbq	%r10b, %r10
+               	andq	%r10, %rax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0x4, %eax

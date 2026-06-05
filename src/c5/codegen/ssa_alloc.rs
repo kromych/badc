@@ -285,7 +285,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         }
         cl
     };
-    let mut calls_after_def = compute_calls_after_def(func, &last_use, target);
+    let mut calls_after_def = compute_calls_after_def(func, &liveness, target);
     // Promote per-value `calls_after_def` to the class's combined
     // live range. Without this, a class member whose own last use
     // does not cross a call but whose class root lives past one
@@ -1518,10 +1518,12 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
     }
 }
 
-/// For each value, mark whether any call instruction sits
-/// strictly between its def PC and last-use PC. Such a value
-/// must be in a callee-saved register (or spilled), since a
-/// caller-saved reg would be clobbered by the intervening call.
+/// For each value, mark whether its live range spans a call. Such a
+/// value must be in a callee-saved register (or spilled), since a
+/// caller-saved register would be clobbered by the call. The answer
+/// comes from the CFG live range (`Liveness::values_live_across_calls`),
+/// the same view the interference graph is built from, so the two
+/// agree on which values cross a call.
 ///
 /// `Inst::TlsAddr` is treated as a call on targets whose TLS
 /// lowering issues an indirect call: Mach-O/AArch64 reads a TLV
@@ -1530,40 +1532,18 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
 /// variant-1 (TPIDR_EL0 + add) and Windows' (gs/x18 + 0x58 table
 /// walk) reach the per-thread storage without leaving the
 /// instruction stream, so they stay outside the call set.
-fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32], target: Target) -> Vec<bool> {
+fn compute_calls_after_def(
+    func: &FunctionSsa,
+    liveness: &super::ssa_liveness::Liveness,
+    target: Target,
+) -> Vec<bool> {
+    // A value crosses a call when its live range spans the call, a
+    // property of the control-flow graph rather than the linear pc
+    // order: a value live across a call only on a branch or back-edge
+    // path has that call outside its `[def, last_use]` pc interval, so
+    // a pc-interval test misses it.
     let tls_addr_is_call = matches!(target, Target::MacOSAarch64);
-    let n = func.insts.len();
-    let mut call_pcs: Vec<u32> = Vec::new();
-    for (idx, inst) in func.insts.iter().enumerate() {
-        let is_call = matches!(
-            inst,
-            Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
-        ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
-        if is_call {
-            call_pcs.push(idx as u32);
-        }
-    }
-    call_pcs.sort_unstable();
-    // Call-arg coalescing: the upper bound is `first < end`. A
-    // call at exactly `last_use` is the value's consumer; its arg
-    // marshal reads the value before the callee runs, so the
-    // value lives in a caller-saved arg-register and
-    // `populate_call_arg_hints` can hint it to the matching slot.
-    // Five emit-layer prerequisites are in tree: the ParamRef
-    // ordering guard, the x86_64 + aarch64 CallIndirect target-
-    // scratch pickers, and the scratch-aware cycle-break in both
-    // per-arch `schedule_int_reg_moves` implementations.
-    let mut out = vec![false; n];
-    for (idx, &end) in last_use.iter().enumerate() {
-        let def = idx as u32;
-        let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
-        if let Some(&first) = call_pcs.get(lo)
-            && first < end
-        {
-            out[idx] = true;
-        }
-    }
-    out
+    liveness.values_live_across_calls(func, tls_addr_is_call)
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
@@ -1925,34 +1905,94 @@ int main(void) { return 0; }
             last_use[v_imm_idx],
         );
 
-        let on_macos = compute_calls_after_def(&func, &last_use, Target::MacOSAarch64);
+        let liveness = crate::c5::codegen::ssa_liveness::Liveness::compute(&func);
+
+        let on_macos = compute_calls_after_def(&func, &liveness, Target::MacOSAarch64);
         assert!(
             on_macos[v_imm_idx],
             "TlsAddr's hidden blr should flag a value live across it on MacOSAarch64",
         );
 
-        let on_linux = compute_calls_after_def(&func, &last_use, Target::LinuxAarch64);
+        let on_linux = compute_calls_after_def(&func, &liveness, Target::LinuxAarch64);
         assert!(
             !on_linux[v_imm_idx],
             "Linux AArch64 TLS reads mrs TPIDR_EL0 -- no call, no flag",
         );
 
-        let on_win = compute_calls_after_def(&func, &last_use, Target::WindowsAarch64);
+        let on_win = compute_calls_after_def(&func, &liveness, Target::WindowsAarch64);
         assert!(
             !on_win[v_imm_idx],
             "Windows AArch64 TLS walks the TEB -- no call, no flag",
         );
 
-        let on_linux_x64 = compute_calls_after_def(&func, &last_use, Target::LinuxX64);
+        let on_linux_x64 = compute_calls_after_def(&func, &liveness, Target::LinuxX64);
         assert!(
             !on_linux_x64[v_imm_idx],
             "Linux x86_64 TLS reads fs:[0] -- no call, no flag",
         );
 
-        let on_win_x64 = compute_calls_after_def(&func, &last_use, Target::WindowsX64);
+        let on_win_x64 = compute_calls_after_def(&func, &liveness, Target::WindowsX64);
         assert!(
             !on_win_x64[v_imm_idx],
             "Windows x86_64 TLS walks the TEB -- no call, no flag",
+        );
+    }
+
+    /// A value whose definition has a higher instruction index than a
+    /// call it is live across -- the call is laid out at a lower pc in a
+    /// successor block that the value is live into. The earlier
+    /// `def < call_pc < last_use` interval could not see such a call: it
+    /// only searched for the first call pc above the definition, so a
+    /// call below the definition pc (but inside the value's CFG live
+    /// range) was missed and the value was left in a caller-saved
+    /// register the call clobbered. `compute_calls_after_def` must use
+    /// the CFG live range, where the value is live across the call
+    /// regardless of pc order. This is the block-layout shape
+    /// `luaV_execute` hits: a promoted value defined in a late-laid-out
+    /// block, live into an earlier-laid-out block that makes a call.
+    #[test]
+    fn calls_after_def_flags_value_across_call_at_lower_pc() {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+
+        let mut b = SsaBuilder::new(0, 0, false);
+        let mid = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+        // entry: jmp mid. CFG order is entry -> mid -> body -> exit.
+        b.jmp(mid);
+        // body is switched to first, so its instructions take the lower
+        // pc range: it just makes a call and falls to exit. v is live
+        // across that call (defined in mid, used in exit), but the call
+        // pc is below v's definition pc.
+        b.switch_to(body);
+        let _ = b.call(0, alloc::vec::Vec::new(), false);
+        b.jmp(exit);
+        // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
+        // above the call pc.
+        b.switch_to(mid);
+        let v = b.imm(7);
+        b.jmp(body);
+        // exit: return v -- keeps v live through body across the call.
+        b.switch_to(exit);
+        b.return_(v);
+        let func = b.finish();
+
+        let v_idx = v as usize;
+        let call_pc = func
+            .insts
+            .iter()
+            .position(|i| matches!(i, Inst::Call { .. }))
+            .expect("a call") as u32;
+        assert!(
+            (v_idx as u32) > call_pc,
+            "test shape requires v's def pc ({v_idx}) above the call pc ({call_pc})",
+        );
+
+        let liveness = crate::c5::codegen::ssa_liveness::Liveness::compute(&func);
+        let flags = compute_calls_after_def(&func, &liveness, Target::LinuxX64);
+        assert!(
+            flags[v_idx],
+            "a value live across a call laid out at a lower pc must be flagged must-be-callee",
         );
     }
 

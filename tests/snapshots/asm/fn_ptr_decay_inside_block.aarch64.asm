@@ -34,8 +34,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x20, <page>
-               	add	x20, x20, #0x238
+               	adrp	x1, <page>
+               	add	x1, x1, #0x238
                	b	<addr>
                	adrp	x20, <page>
                	add	x20, x20, #0x238
@@ -60,21 +60,21 @@ Disassembly of section .text:
                	add	x0, x22, x0
                	str	w0, [x21]
                	b	<addr>
-               	cmp	x20, #0x0
+               	cmp	x1, #0x0
                	b.eq	<addr>
                	b	<addr>
-               	mov	x20, #0x0               // =0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	sub	x21, x29, #0x8
-               	ldrsw	x22, [x21]
+               	sub	x20, x29, #0x8
+               	ldrsw	x21, [x20]
                	mov	x0, #0x3                // =3
-               	mov	x9, x20
+               	mov	x9, x1
                	str	x0, [sp, #-0x10]!
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	add	x0, x22, x0
-               	str	w0, [x21]
+               	add	x0, x21, x0
+               	str	w0, [x20]
                	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x238

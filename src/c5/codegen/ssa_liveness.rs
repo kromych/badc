@@ -284,6 +284,85 @@ impl Liveness {
         }
         Interference { adj }
     }
+
+    /// Per-value flag: true when the value's live range spans a call,
+    /// i.e. the value is live at the program point immediately after
+    /// some `Call` / `CallIndirect` / `CallExt` instruction (and, on
+    /// targets where `Inst::TlsAddr` lowers to a call, that as well).
+    /// A caller-saved register holding such a value would be clobbered
+    /// by the call, so the allocator must place it in a callee-saved
+    /// register or spill it.
+    ///
+    /// This is the same CFG-liveness view the interference graph uses
+    /// (the per-block backward sweep over the dataflow live-out),
+    /// rather than a linear `def < call_pc < last_use` pc interval.
+    /// The pc interval disagrees with the true live range whenever a
+    /// value is live across a call only on a branch or back-edge path
+    /// -- the call then falls outside `[def, last_use]` and the value
+    /// is wrongly judged not to cross it. `luaV_execute`'s dispatch
+    /// loop is exactly that shape: a value defined in the loop body and
+    /// used again after the back-edge crosses the body's calls without
+    /// the linear interval covering them.
+    pub(super) fn values_live_across_calls(
+        &self,
+        func: &FunctionSsa,
+        tls_addr_is_call: bool,
+    ) -> Vec<bool> {
+        let n = func.insts.len();
+        let mut out = vec![false; n];
+        for (b, blk) in func.blocks.iter().enumerate() {
+            let mut live: BTreeSet<ValueId> = BTreeSet::new();
+            let base = b * self.words;
+            for w in 0..self.words {
+                let mut bits = self.live_out[base + w];
+                while bits != 0 {
+                    live.insert((w as u32) * 64 + bits.trailing_zeros());
+                    bits &= bits - 1;
+                }
+            }
+            if blk.exit_acc != NO_VALUE && (blk.exit_acc as usize) < n {
+                live.insert(blk.exit_acc);
+            }
+            match &blk.terminator {
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                    if (*cond as usize) < n {
+                        live.insert(*cond);
+                    }
+                }
+                Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
+                    live.insert(*v);
+                }
+                _ => {}
+            }
+            for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
+                let inst = &func.insts[idx as usize];
+                let is_call = matches!(
+                    inst,
+                    Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
+                ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)));
+                if super::ssa_alloc::produces_value(inst) {
+                    live.remove(&idx);
+                }
+                // After removing the call's own result (its definition
+                // point), `live` holds exactly the values live at the
+                // point just after the call returns. Each such value's
+                // range spans the call.
+                if is_call {
+                    for &x in &live {
+                        out[x as usize] = true;
+                    }
+                }
+                if !matches!(inst, Inst::Phi { .. }) {
+                    super::ssa_alloc::for_each_operand(inst, |op| {
+                        if op != NO_VALUE && (op as usize) < n {
+                            live.insert(op);
+                        }
+                    });
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Interference graph over register-allocation nodes (phi-congruence

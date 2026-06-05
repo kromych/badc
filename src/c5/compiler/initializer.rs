@@ -22,8 +22,8 @@
 //!   are the per-byte LE writers that record DataReloc / CodeReloc
 //!   entries for pointer-typed elements.
 //! * [`Compiler::emit_local_array_init`] / `emit_local_init_store`
-//!   emit the bytecode that drives array / scalar local initialisers
-//!   into their stack slot at runtime.
+//!   build the AST shape that drives array / scalar local
+//!   initialisers into their stack slot at runtime.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster only made
 //! sense as a unit once `collect_struct_initializer` started
@@ -35,7 +35,6 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
@@ -55,10 +54,10 @@ pub(super) enum InitElemReloc {
     /// to convert `Some(sym)` entries against undefined
     /// externals into `DataDataAbs64` relocations.
     Data(Option<usize>),
-    /// Value is a function bytecode PC; needs a CodeReloc. The
+    /// Value is a function ent_pc; needs a CodeReloc. The
     /// payload is the function's symbol index, captured at parse
     /// time so the post-body fixup pass can look up the
-    /// resolved bytecode PC and patch both the data bytes and
+    /// resolved ent_pc and patch both the data bytes and
     /// the matching `Program::code_relocs` entry.
     Code(usize),
     /// Value is an IEEE-754 f64 bit pattern produced by a float
@@ -80,7 +79,7 @@ impl Compiler {
     ///   * `Data`        -- data-segment offset, push a DataReloc
     ///                      so the per-format writer can patch the
     ///                      slot to the runtime address.
-    ///   * `Code(sym)`   -- function bytecode PC, push a CodeReloc
+    ///   * `Code(sym)`   -- function ent_pc, push a CodeReloc
     ///                      and stash the symbol index for the
     ///                      post-body fixup pass.
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
@@ -96,7 +95,7 @@ impl Compiler {
             InitElemReloc::Code(sym_idx) => {
                 self.code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: here as u64,
-                    target_bc_pc: value as u64,
+                    target_ent_pc: value as u64,
                 });
                 self.code_reloc_sym_idx.push(sym_idx);
             }
@@ -125,13 +124,11 @@ impl Compiler {
         // Compute the canonical f64 bit pattern from the source
         // value first, then narrow to f32 for the `Ty::Float` case.
         // The 4-byte single-precision storage slot can only hold the
-        // narrowed bits -- a direct truncation of the f64 pattern
-        // (the bug this branch fixes) would zero out the entire low
-        // mantissa for any non-tiny value, e.g. `1.0` ->
-        // `0x3FF0_0000_0000_0000` -> low 4 bytes = `0x0000_0000` =
-        // `+0.0f`, which made every entry of `static float
-        // basis[12][4] = { {1, 1, 0}, ... }` in stb_perlin collapse
-        // to zero.
+        // narrowed bits. A direct truncation of the f64 pattern would
+        // zero out the entire low mantissa for any non-tiny value,
+        // e.g. `1.0` -> `0x3FF0_0000_0000_0000` -> low 4 bytes =
+        // `0x0000_0000` = `+0.0f`, collapsing every non-zero entry of
+        // a `static float arr[N] = { 1.0f, ... }` initializer.
         let f64_bits = match reloc {
             InitElemReloc::Float64Bits => value,
             InitElemReloc::None => (value as f64).to_bits() as i64,
@@ -371,6 +368,7 @@ impl Compiler {
         // constant expression -- the float case has to flip the
         // IEEE-754 sign bit rather than negate an integer value.
         if self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit() {
+            let snap = self.lex.snapshot();
             self.next()?; // consume `-`
             if self.lex.tk == Token::FloatNum {
                 let bits = (self.lex.ival as u64) ^ (1u64 << 63);
@@ -382,8 +380,16 @@ impl Compiler {
                 return Ok((bits as i64, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num {
-                let v = -self.lex.ival;
-                self.next()?;
+                // Leading `-Num` may head a binary integer chain
+                // (`-N * M`, `-N + M`, ...). Without restarting the
+                // const-expression evaluator on the whole input the
+                // trailing operator escapes into the outer
+                // brace-list parser and the brace list miscounts
+                // its entries. Rewind to the `-` and route through
+                // `parse_constant_int`, which honours the C99 6.6
+                // precedence chain.
+                self.lex.restore(snap);
+                let v = self.parse_constant_int()?;
                 return Ok((v, InitElemReloc::None));
             }
             // peek said "digit next", so the lexer must have
@@ -542,9 +548,10 @@ impl Compiler {
                 let target_idx = self.lex.curr_id_idx;
                 let class = self.symbols[target_idx].class;
                 if class == Token::Fun as i64 {
-                    let bc_pc = self.symbols[target_idx].val;
+                    self.symbols[target_idx].was_referenced = true;
+                    let ent_pc = self.symbols[target_idx].val;
                     self.next()?;
-                    return Ok((bc_pc, InitElemReloc::Code(target_idx)));
+                    return Ok((ent_pc, InitElemReloc::Code(target_idx)));
                 }
                 if class == Token::Glo as i64 {
                     let off = self.symbols[target_idx].val;
@@ -565,28 +572,30 @@ impl Compiler {
             // Forward-referenced function pointer in a static
             // initializer: dispatch tables that list functions
             // defined later in the same TU. The post-parse
-            // `apply_fn_call_fixups` pass already resolves
-            // `target_bc_pc` from each symbol's final `val`, so
-            // we bind the identifier as `Token::Fun` with val=0
-            // here and let the fixup pass patch both the data
-            // bytes and the CodeReloc entry once the body has
-            // been emitted. The forward-ref heuristic only
-            // fires when the next token is `,` / `}` -- i.e.,
-            // the identifier is the entire init slot, not the
-            // start of an expression that happens to use an
-            // undeclared name.
+            // [`Compiler::resolve_code_relocs`] pass rewrites
+            // each `code_relocs[i].target_ent_pc` from the
+            // originating symbol's now-resolved `Symbol::val`,
+            // so we bind the identifier as `Token::Fun` with
+            // val=0 here and let the resolve pass fill in the
+            // CodeReloc once the body has been emitted. The
+            // forward-ref heuristic only fires when the next
+            // token is `,` / `}` -- i.e., the identifier is the
+            // entire init slot, not the start of an expression
+            // that happens to use an undeclared name.
             if class == 0
                 && (self.lex.peek_after_whitespace(b',') || self.lex.peek_after_whitespace(b'}'))
             {
                 self.symbols[idx].class = Token::Fun as i64;
                 self.symbols[idx].type_ = Ty::Int as i64;
+                self.symbols[idx].was_referenced = true;
                 self.next()?;
                 return Ok((0, InitElemReloc::Code(idx)));
             }
             if class == Token::Fun as i64 {
-                let bc_pc = self.symbols[idx].val;
+                self.symbols[idx].was_referenced = true;
+                let ent_pc = self.symbols[idx].val;
                 self.next()?;
-                return Ok((bc_pc, InitElemReloc::Code(idx)));
+                return Ok((ent_pc, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
                 // Integer constant -- either a bare enum / macro
@@ -605,9 +614,9 @@ impl Compiler {
                 // can't be folded in at compile time, so we route the
                 // slot through a per-Sys trampoline (a tiny synthetic
                 // c5 function that re-pushes its declared args and
-                // re-dispatches via `Op::JsrExt`). The CodeReloc
+                // re-dispatches via an external call. The CodeReloc
                 // points at the trampoline's synthetic symbol; its
-                // `.val` holds the trampoline's `bc_pc` once
+                // `.val` holds the trampoline's `ent_pc` once
                 // [`Compiler::emit_sys_trampolines`] runs in the
                 // post-parse fixup pass. From the call site's view
                 // -- e.g., a vtable consumer reading
@@ -694,6 +703,54 @@ impl Compiler {
         Ok((v, InitElemReloc::None))
     }
 
+    /// Walk a C99 6.7.8p7 designator-chain tail (the part after the
+    /// first `.field` has already been consumed) and resolve it
+    /// down to a concrete `(byte_offset, type)` pair for the value
+    /// site. Accepts further `.member` steps; `[index]` sub-array
+    /// designators surface as a parse error until they are wired
+    /// up. The current type must be a value-typed struct or union
+    /// for any `.` step.
+    pub(super) fn resolve_nested_designator_chain(
+        &mut self,
+        mut cur_offset: i64,
+        mut cur_ty: i64,
+    ) -> Result<(i64, i64), C5Error> {
+        while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+            if self.lex.tk == Token::Dot {
+                if !is_struct_ty(cur_ty) || struct_ptr_depth(cur_ty) != 0 {
+                    return Err(
+                        self.compile_err("`.` designator on a non-struct / non-union field")
+                    );
+                }
+                let sid = struct_id_of(cur_ty);
+                self.next()?;
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("field name expected after `.`"));
+                }
+                let sub_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                let sub_idx = self.structs[sid]
+                    .fields
+                    .iter()
+                    .position(|f| f.name == sub_name)
+                    .ok_or_else(|| {
+                        self.compile_err(format!(
+                            "struct {} has no field {}",
+                            self.structs[sid].name, sub_name
+                        ))
+                    })?;
+                let sub = self.structs[sid].fields[sub_idx].clone();
+                cur_offset += sub.offset as i64;
+                cur_ty = sub.ty;
+            } else {
+                return Err(self.compile_err(
+                    "`[N]` sub-designator inside a struct chain is not yet supported",
+                ));
+            }
+        }
+        Ok((cur_offset, cur_ty))
+    }
+
     /// Collect a `{ ... }` struct initializer. Each entry can be
     /// designated (`.field = value`) or positional. Entries are
     /// returned in source order with their resolved field offset
@@ -718,14 +775,7 @@ impl Compiler {
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
-                    );
-                }
-                self.next()?;
-
-                self.structs[struct_id]
+                let outer_idx = self.structs[struct_id]
                     .fields
                     .iter()
                     .position(|f| f.name == field_name)
@@ -734,7 +784,39 @@ impl Compiler {
                             "struct {} has no field {}",
                             self.structs[struct_id].name, field_name
                         ))
-                    })?
+                    })?;
+                // C99 6.7.8p7: a designator list may be a chain of
+                // `.member` and `[index]` steps. `.outer.inner = v`
+                // is equivalent to `.outer = { .inner = v }`. Walk
+                // the chain to compute the cumulative byte offset
+                // and the final field's type, then store the value
+                // there directly. Falls through to the existing
+                // single-level path when no extra steps follow.
+                if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                    let outer = self.structs[struct_id].fields[outer_idx].clone();
+                    let chain_base = (var_offset as usize) + outer.offset;
+                    let (final_offset, final_ty) =
+                        self.resolve_nested_designator_chain(chain_base as i64, outer.ty)?;
+                    if self.lex.tk != Token::Assign {
+                        return Err(self.compile_err("`=` expected after nested-designator chain"));
+                    }
+                    self.next()?;
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    let size = self.size_of_type(final_ty);
+                    self.write_init_value(final_offset as usize, size, value, reloc, final_ty);
+                    pos = outer_idx + 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    continue;
+                }
+                if self.lex.tk != Token::Assign {
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
+                }
+                self.next()?;
+                outer_idx
             } else {
                 pos
             };
@@ -782,6 +864,7 @@ impl Compiler {
                         1,
                         b as i64,
                         super::initializer::InitElemReloc::None,
+                        field.ty,
                     );
                     idx += 1;
                     if start_addr + idx >= self.data.len() {
@@ -802,6 +885,33 @@ impl Compiler {
                 };
                 let mut idx: usize = 0;
                 while self.lex.tk != '}' {
+                    // C99 6.7.8p7 array designator inside an array
+                    // field's nested initializer. `[N] = value`
+                    // jumps the write cursor to N; subsequent
+                    // positional entries (or further `[K] = ...`
+                    // clauses) continue from there. Mirrors the
+                    // top-level array-init path in
+                    // `collect_array_initializer`.
+                    if self.lex.tk == Token::Brak {
+                        self.next()?;
+                        let n = self.parse_constant_int()?;
+                        if n < 0 {
+                            return Err(self.compile_err(format!(
+                                "array designator index must be non-negative (got {n})"
+                            )));
+                        }
+                        if self.lex.tk != ']' {
+                            return Err(
+                                self.compile_err("`]` expected after array designator index")
+                            );
+                        }
+                        self.next()?;
+                        if self.lex.tk != Token::Assign {
+                            return Err(self.compile_err("`=` expected after `[N]` designator"));
+                        }
+                        self.next()?;
+                        idx = n as usize;
+                    }
                     if idx as i64 >= field.array_size {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}.{}`",
@@ -822,7 +932,7 @@ impl Compiler {
                         )?;
                     } else {
                         let (value, reloc) = self.parse_constant_init_value()?;
-                        self.write_init_value(here, elem_size, value, reloc);
+                        self.write_init_value(here, elem_size, value, reloc, field.ty);
                     }
                     idx += 1;
                     if self.lex.tk == ',' {
@@ -845,7 +955,7 @@ impl Compiler {
                 while (idx as i64) < field.array_size && self.lex.tk != '}' {
                     let (value, reloc) = self.parse_constant_init_value()?;
                     let here = field_base + idx * elem_size;
-                    self.write_init_value(here, elem_size, value, reloc);
+                    self.write_init_value(here, elem_size, value, reloc, field.ty);
                     idx += 1;
                     if idx as i64 >= field.array_size {
                         break;
@@ -897,7 +1007,7 @@ impl Compiler {
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let field_size = self.size_of_type(field.ty);
-                self.write_init_value(field_base, field_size, value, reloc);
+                self.write_init_value(field_base, field_size, value, reloc, field.ty);
             }
             pos = field_idx + 1;
             if self.lex.tk == ',' {
@@ -908,18 +1018,27 @@ impl Compiler {
         Ok(())
     }
 
-    /// Write `field_size` little-endian bytes of `value` into
-    /// `self.data` at byte offset `here`, then push the
-    /// appropriate relocation if the value is a data offset
-    /// (string / `&global`) or a code PC (function pointer).
+    /// Write `field_size` little-endian bytes of an initializer
+    /// element of type `elem_ty` into `self.data` at byte offset
+    /// `here`, then push the appropriate relocation if the value is a
+    /// data offset (string / `&global`) or a code PC (function
+    /// pointer). The value is converted to its storage bit pattern
+    /// for `elem_ty` first (narrowing an f64 literal to f32 for a
+    /// `float` element per C99 6.7.9), so a `float` struct field or
+    /// designated element lands as the 4-byte f32 pattern rather than
+    /// the low half of the f64 pattern. `to_storage_bits` is the
+    /// identity for non-floating element types, so integer and
+    /// pointer fields are unchanged.
     pub(super) fn write_init_value(
         &mut self,
         here: usize,
         field_size: usize,
         value: i64,
         reloc: InitElemReloc,
+        elem_ty: i64,
     ) {
-        self.write_init_bytes(here, value, field_size);
+        let bits = self.to_storage_bits(value, reloc, elem_ty);
+        self.write_init_bytes(here, bits, field_size);
         self.push_init_reloc(here, value, reloc);
     }
 
@@ -965,10 +1084,14 @@ impl Compiler {
             return;
         }
         self.emit_lea(local_val);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.emit_data_imm(src_data_addr as i64);
-        self.emit_op(Op::Mcpy);
-        self.emit_val(total_bytes as i64);
+        self.mark_emit_other();
+        // Dual-emit: record the Mcpy source descriptor so the
+        // surrounding decl-site caller can build
+        // `Decl::Local { init: Aggregate { src_data_off,
+        // size_bytes } }`.
+        self.pending_local_aggregate_ast = Some((src_data_addr as i64, total_bytes as i64));
     }
 
     /// Emit the store sequence for a local-variable initializer:
@@ -977,7 +1100,7 @@ impl Compiler {
     /// is at the comma or semicolon following the initializer.
     pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
         self.emit_lea(local_val);
-        self.emit_op(Op::Psh);
+        self.ast_psh();
         self.expr(Token::Assign as i64)?;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
@@ -988,20 +1111,30 @@ impl Compiler {
         // store lands. Mirror logic for the reverse direction
         // (int destination, float source).
         self.convert_assign_rhs(ty);
+        // Dual-emit: capture the init expression's ExprId for
+        // `Decl::Local { init: Some(...) }`. Capture after the
+        // convert so a `Cast { child, to_ty }` wrapper from
+        // `convert_assign_rhs` (when the implicit conversion
+        // fires) flows through to the walker. The Si below
+        // already runs through `ast_apply_assign`, but the
+        // lvalue is `emit_lea`-shaped (no AST counterpart), so
+        // the assign drops. The caller pushes a `Decl::Local`
+        // wrapping `init_ast` so the walker can issue the
+        // canonical `store_local` directly.
+        self.pending_local_init_ast = self.ast_acc;
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
-            self.emit_op(Op::Mcpy);
-            self.emit_val(self.size_of_type(ty) as i64);
+            self.mark_emit_other();
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
-            self.emit_op(Op::Sc);
+            self.ast_assign();
         } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {
             // `float`-typed local: narrow the accumulator (an f64
             // bit pattern from the RHS) to single-precision and
             // store 4 bytes. The slot reserved by
             // `local_storage_slots` is still an 8-byte c5 stack
             // word, so the upper 4 bytes stay whatever they were;
-            // the matching `Op::Lf` reads only the low 4 and
+            // the matching `LoadKind::F32` reads only the low 4 and
             // widens them back to f64.
-            self.emit_op(Op::Sf);
+            self.ast_assign();
         } else {
             // Local int / long / pointer: the slot is a full c5
             // stack word (8 bytes), so a single `Si` writes the
@@ -1011,7 +1144,7 @@ impl Compiler {
             // a later 8-byte Li -- but no caller of this helper
             // re-reads via Li, so the wide store is fine and the
             // existing optimizer recognises Si patterns.
-            self.emit_op(Op::Si);
+            self.ast_assign();
         }
         Ok(())
     }
@@ -1138,10 +1271,12 @@ impl Compiler {
         if self.lex.tk == '(' {
             self.next()?;
             // C-style cast in a constant float expression:
-            // `(float)EXPR` / `(double)EXPR`. Recognised so
-            // stb sources that pin the result width explicitly
-            // still fold. Pointer / non-arithmetic types in
-            // this position would be a type error.
+            // `(float)EXPR` / `(double)EXPR`. C99 6.5.4 allows the
+            // operand of a cast in a constant expression; we
+            // recognise the form so the surrounding constant
+            // folder treats it as a pin on the result width.
+            // Pointer / non-arithmetic types in this position
+            // would be a type error.
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {

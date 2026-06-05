@@ -42,7 +42,7 @@ Already-closed gaps that the BearSSL bringup surfaced:
 * **Extern + def merge for non-array globals (C99 6.9.2).**
   An earlier `extern const T v;` allocates storage at `sym.val`;
   any in-TU code emitted before the defining `const T v = { ... };`
-  bakes that offset into its bytecode. The merge must REUSE that
+  bakes that offset into its machine code. The merge must REUSE that
   storage so the defining initializer lands at the same offset.
   Deferred-size array externs (`extern T x[];`) still allocate
   fresh because the extern path leaves them without storage.

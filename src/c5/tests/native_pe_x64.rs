@@ -290,6 +290,34 @@ fn recursion_factorial() {
 }
 
 #[test]
+fn indirect_call_through_fn_ptr_max_int_args() {
+    // Win64 passes the first four integer arguments in rcx, rdx, r8,
+    // r9 (x64 calling convention). An indirect call whose target
+    // pointer competes with those argument registers used to stage
+    // the target into either SCRATCH_R10 (the marshal's parallel-move
+    // scratch) or an argument-destination register, both of which the
+    // argument marshal overwrites before the `call`, sending control
+    // to a clobbered pointer (access violation). The fix stages the
+    // target into a register disjoint from every arg source, every
+    // arg destination, and r10 -- spilling to the stack when none is
+    // free. Four register arguments plus the live function pointer
+    // exercises the tight-pressure path that surfaced the bug.
+    let src = r#"
+        long add4(long a, long b, long c, long d) { return a + b + c + d; }
+        long call_it(long (*p)(long, long, long, long),
+                     long a, long b, long c, long d) {
+            return p(a, b, c, d);
+        }
+        int main() {
+            long (*p)(long, long, long, long);
+            p = add4;
+            return (int)call_it(p, 10, 11, 12, 9);
+        }
+    "#;
+    assert_exit(src, "icall4", &[], 42);
+}
+
+#[test]
 fn printf_through_iat() {
     // Exits with the number of chars printf returned (4: "42\n" on
     // Linux / macOS, but Windows printf returns the byte count too,
@@ -366,7 +394,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// I/O against POSIX-flavoured paths, and dlopen-against-libc-soname
 /// are intentionally skipped here -- the Windows analogues exist
 /// but the c4 fixtures expect POSIX shapes the WINE path doesn't
-/// reproduce. mprotect now works through the in-text thunk that
+/// reproduce. mprotect works through an in-text helper that
 /// translates POSIX prot bits to PAGE_* and the BOOL return to
 /// 0/-1, so `mprotect_allows_read.c` is in.
 const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
@@ -393,6 +421,21 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_pointer_typedefs.c", 0),
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
+    ("local_array_partial_init_zero.c", 0),
+    ("ssa_call_result_spill.c", 0),
+    ("struct_field_assign_from_call.c", 0),
+    ("struct_byval_param_followed_by_ptr.c", 0),
+    ("tail_call_no_address_escape.c", 0),
+    ("fib.c", 0),
+    ("queens.c", 0),
+    ("inline_keyword_uncaps.c", 0),
+    ("ssa_bail_fixup_rollback.c", 0),
+    ("ssa_fp_routing.c", 0),
+    ("ssa_callee_saved_x19.c", 0),
+    ("ssa_va_arg_loop.c", 0),
+    ("ssa_variadic_fp_arg.c", 0),
+    ("ssa_fp_compare_nan.c", 0),
+    ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
@@ -406,6 +449,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
+    ("many_args_host_stack_overflow.c", 0),
+    ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
@@ -420,6 +465,10 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
+    ("switch_nested_case_in_compound.c", 0),
+    ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("libc_basic.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),
@@ -460,7 +509,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy.
+    // Whole-struct copy via Inst::Mcpy.
     ("struct_value_copy.c", 0),
     // Struct-by-value parameter / return on Win64.
     ("struct_by_value_param.c", 0),
@@ -508,12 +557,13 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): post-call sub-word extension on
-/// the libc return register. See the matching test in
+/// Post-call sub-word extension on the libc return register.
+/// See the matching test in
 /// `super::native::atoi_negative_sign_extends`. PE/x86_64
-/// against msvcrt is the original repro -- msvcrt leaves the upper
-/// 32 bits of RAX unspecified for `int` returns, and without the
-/// post-call `movsxd` the c5 accumulator sees garbage above EAX.
+/// against msvcrt is the strictest variant: msvcrt leaves the
+/// upper 32 bits of RAX unspecified for `int` returns, so
+/// without the post-call `movsxd` the c5 accumulator sees
+/// garbage above EAX.
 #[test]
 fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {

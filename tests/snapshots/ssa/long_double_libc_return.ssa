@@ -1,0 +1,56 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=main
+fn ent_pc=0 n_params=0 variadic=false locals=5
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(8)                                       -> x7
+    v2   Imm(0)                                           -> x6
+    v3   CallExt { binding_idx=11, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v4   StoreLocal { off=-1, value=v3, kind=F64 }        -> -
+    v5   LoadLocal { off=-1, kind=F64 }                   -> d0
+    v6   Imm(5039527983027585024)                         -> x0
+    v7   Binop { op=fne, lhs=v5, rhs=v6 }                 -> x0
+    terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
+  block 1  start_pc=0
+    v8   Imm(11)                                          -> x0
+    terminator Return(v8)   (exit_acc=v8)
+  block 2  start_pc=0
+    v9   ImmData(40)                                      -> x7
+    v10  Imm(0)                                           -> x6
+    v11  CallExt { binding_idx=11, args=[v9, v10], fp_arg_mask=0x0 } -> x0
+    v12  StoreLocal { off=-2, value=v11, kind=F64 }       -> -
+    v13  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v14  Imm(4895412794951729152)                         -> x0
+    v15  Binop { op=fne, lhs=v13, rhs=v14 }               -> x0
+    terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
+  block 3  start_pc=0
+    v16  Imm(12)                                          -> x0
+    terminator Return(v16)   (exit_acc=v16)
+  block 4  start_pc=0
+    v17  Imm(4607182418800017408)                         -> x7
+    v18  Imm(53)                                          -> x6
+    v19  CallExt { binding_idx=56, args=[v17, v18], fp_arg_mask=0x1 } -> x0
+    v20  StoreLocal { off=-3, value=v19, kind=F64 }       -> -
+    v21  LoadLocal { off=-3, kind=F64 }                   -> d0
+    v22  Imm(4845873199050653696)                         -> x0
+    v23  Binop { op=fne, lhs=v21, rhs=v22 }               -> x0
+    terminator Bz { cond=v23, target=b6, fall=b5 }   (exit_acc=v23)
+  block 5  start_pc=0
+    v24  Imm(13)                                          -> x0
+    terminator Return(v24)   (exit_acc=v24)
+  block 6  start_pc=0
+    v25  Imm(0)                                           -> x0
+    terminator Return(v25)   (exit_acc=v25)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)

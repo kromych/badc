@@ -222,8 +222,7 @@ fn recursion_factorial() {
 
 #[test]
 fn exit_with_value() {
-    // exit(N) compiles to the c5 `Op::Exit` op, which our codegen
-    // routes through a libc call to _exit.
+    // exit(N) lowers to a libc `_exit` call.
     assert_eq!(
         build_and_run("int main() { exit(7); return 0; }", "exit7"),
         7
@@ -317,6 +316,10 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("mem2reg_param_promoted.c", 0),
+    ("phi_class_for_loop_sum.c", 45),
+    ("phi_class_nested_loops.c", 49),
+    ("phi_class_diamond_join.c", 30),
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),
@@ -342,6 +345,26 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("function_pointer_typedefs.c", 0),
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
+    ("double_int_initializer.c", 0),
+    ("tentative_definitions.c", 0),
+    ("hex_constant_unsigned_type.c", 0),
+    ("multi_declarator_prototypes.c", 0),
+    ("struct_tag_block_scope.c", 0),
+    ("local_array_partial_init_zero.c", 0),
+    ("ssa_call_result_spill.c", 0),
+    ("ssa_bail_fixup_rollback.c", 0),
+    ("struct_field_assign_from_call.c", 0),
+    ("struct_byval_param_followed_by_ptr.c", 0),
+    ("tail_call_no_address_escape.c", 0),
+    ("fib.c", 0),
+    ("queens.c", 0),
+    ("inline_keyword_uncaps.c", 0),
+    ("ssa_fp_routing.c", 0),
+    ("ssa_callee_saved_x19.c", 0),
+    ("ssa_va_arg_loop.c", 0),
+    ("ssa_variadic_fp_arg.c", 0),
+    ("ssa_fp_compare_nan.c", 0),
+    ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
@@ -357,7 +380,19 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
+    ("many_args_host_stack_overflow.c", 0),
+    ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
+    ("struct_deref_va_arg.c", 0),
+    ("switch_multilabel.c", 0),
+    ("switch_goto_label_into_case.c", 0),
+    ("switch_label_after_terminator.c", 0),
+    ("unsigned_div_in_assign.c", 0),
+    ("fp_param_ternary.c", 0),
+    ("paren_comma_side_effect.c", 0),
+    ("for_init_decl_in_loop.c", 0),
+    ("int_times_double_into_local.c", 0),
+    ("ptr_diff_plus_ptr.c", 0),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
@@ -372,7 +407,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
+    ("switch_nested_case_in_compound.c", 0),
+    ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("sys_addr_in_static_init.c", 42),
+    ("sys_addr_zero_arg.c", 42),
     ("libc_struct_buf_size.c", 42),
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
@@ -427,7 +467,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     // Runtime dynamic linking. Opens the global symbol table,
-    // resolves libc atoi via dlsym, calls it through Op::Jsri
+    // resolves libc atoi via dlsym, calls it through indirect call
     // (which loads args into x0..x7 in case the target is native),
     // exits with atoi("123") = 123.
     ("dlopen_atoi.c", 123),
@@ -479,7 +519,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_per_thread.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy on macOS arm64. The aarch64
+    // Whole-struct copy via Inst::Mcpy on macOS arm64. The aarch64
     // codegen unrolls the copy into ldur/stur word pairs.
     ("struct_value_copy.c", 0),
     // Struct-by-value parameter / return. Both ride the existing
@@ -496,6 +536,50 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.
     ("integer_ops_exhaustive.c", 0),
+    // C99 6.6 leading-`-Num` in a struct-array brace entry. The
+    // `parse_constant_init_value` fast-path now rewinds and uses
+    // `parse_constant_int` for the whole expression so `-N * M`
+    // / `-N + M` shapes fold in place instead of leaking the
+    // trailing operator into the brace-list parser.
+    ("init_leading_neg_arith.c", 0),
+    // C99 6.7.8p7 array designator on a struct-array element.
+    // The known-size constant-staging path now resolves
+    // `[K] = {field, ...}` to element K and resumes positional
+    // after the jump; missing indices stay zero (6.7.8p21).
+    ("struct_array_designator.c", 0),
+    // C89 6.5.2 / C99 6.7.2p2 deprecated implicit-int: a decl
+    // without a type specifier infers `int`. Honours
+    // `f(int x) { ... }` / `g = 5;` / `main() { ... }`.
+    ("implicit_int_decl.c", 0),
+    // C99 6.10.1 + 6.5.15: `#if (cond ? then : else)` ternary in
+    // a preprocessor constant expression, parenthesised + at the
+    // top level. Right-associative chains (`cond ? a : b ? c : d`)
+    // recurse through the else arm.
+    ("pp_if_ternary.c", 0),
+    // C99 6.7.8p7 array designator inside a struct's array-field
+    // nested brace list: `.row = {[0] = 10, [2] = 30}`. Also
+    // pins `__STDC_HOSTED__ == 1` per C99 6.10.8p2.
+    ("array_field_designator.c", 0),
+    // C99 6.7.5.3p7 + 6.7.5.2p1: `static` / `const` / `volatile`
+    // / `restrict` inside a parameter declarator's `[`. The
+    // keyword is a hint; badc skips it before parsing the
+    // dimension and treats the parameter as a plain pointer
+    // (matching the implicit decay rule).
+    ("param_array_qualifier.c", 0),
+    // C99 6.7.8p7 nested designator chain. `.outer.inner = v`
+    // sets a sub-field at the cumulative byte offset; the
+    // constant-staging path (file-scope / `static` locals) and
+    // the runtime path (block-scope locals with a non-constant
+    // entry) both walk the chain in one pass.
+    ("nested_designator_init.c", 0),
+    // C99 7.1.4p2: a TU may call `printf` without including
+    // `<stdio.h>`. The compiler hits the first-pass "unknown
+    // function `printf`" error, looks the name up in the
+    // build-time `BINDING_TO_HEADER` index, force-includes
+    // `<stdio.h>` and re-runs the compile in one transparent
+    // retry. Exits 0 when the auto-include path is wired up;
+    // a `BuildError` on this entry means the retry regressed.
+    ("auto_include_undeclared_libc.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return
@@ -643,14 +727,14 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): `atoi("-17")` -- the libc return-
-/// register sign-extension contract on AAPCS64 / Win64 leaves the
-/// upper bits unspecified for sub-word returns. The fix
-/// (`emit_extend_x19_for_return` / its x86_64 sibling) emits
-/// `sxtw` / `movsxd` after every libc call. Run on every native
-/// lane (Mach-O / ELF / PE) since each backend emits its own
-/// post-call extension and the bug surfaces differently per
-/// platform-libc combination.
+/// AAPCS64 / Win64: the libc return-register sign-extension
+/// contract leaves the upper bits unspecified for sub-word
+/// returns. `emit_extend_x19_for_return` / its x86_64 sibling
+/// emit `sxtw` / `movsxd` after every libc call so an
+/// `int`-returning libc fn (`atoi("-17")`) widens to i64
+/// correctly. Run on every native lane (Mach-O / ELF / PE)
+/// since each backend emits its own post-call extension and
+/// the failure manifests differently per platform-libc pair.
 #[test]
 fn atoi_negative_sign_extends() {
     let outcome = build_and_run_fixture("atoi_negative.c");
@@ -694,7 +778,7 @@ fn fixture_parity_native_optimized() {
 ///
 /// Verifies the entire shared-library pipeline -- including
 /// that the Mach-O symbol-table entry's `n_value` is the
-/// function's runtime VA, not its bytecode-PC offset.
+/// function's runtime VA, not its ent_pc identifier.
 #[test]
 fn dylib_export_dlopen_call_returns_42() {
     use crate::{NativeOptions, emit_native_with_options};

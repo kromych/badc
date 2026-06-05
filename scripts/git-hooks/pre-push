@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Pre-push gate: enforce the same fmt + clippy + no-default-features
+CI jobs locally and reject non-ASCII bytes in tracked source files.
+
+`cargo fmt --check`, `cargo clippy --release --all-targets -- -D
+warnings`, and `cargo build --no-default-features --lib` run here. A
+failure aborts the push so a rebase or fix can land first. The ASCII
+check guards against zero-width / homoglyph characters slipping into
+Rust source, headers, fixtures, or scripts. Bypass with
+`git push --no-verify` when shipping a WIP branch where the strict
+gate isn't desired.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+# File suffixes that must stay 7-bit ASCII. Snapshot binaries and
+# vendored fixtures (demos/ archives, tests/perf/build) can carry
+# arbitrary bytes; the explicit allowlist keeps the check fast and
+# false-positive-free.
+ASCII_SUFFIXES = frozenset(
+    [
+        ".rs",
+        ".toml",
+        ".py",
+        ".sh",
+        ".ps1",
+        ".c",
+        ".h",
+        ".md",
+        ".yml",
+        ".yaml",
+    ]
+)
+
+# Directory prefixes excluded from the ASCII check. Vendored sqlite /
+# lua / miniz / tweetnacl / stb sources can include UTF-8 in their
+# upstream comments; the snapshot dumps and binary objects under
+# tests/snapshots are textually-formatted but may carry encoded
+# bytes from the underlying ELF / PE.
+ASCII_SKIP_PREFIXES = (
+    "demos/sqlite3/sqlite3.",
+    "demos/sqlite3/shell.",
+    "demos/lua/",
+    "demos/miniz/",
+    "demos/tweetnacl/",
+    "demos/stb/",
+    "demos/chibicc/",
+    "demos/bzip2/",
+    "demos/bearssl/",
+    "demos/kissfft/",
+    "demos/monocypher/",
+    "demos/tinycc/",
+    "demos/sqlite-pcache-mem/",
+    "demos/nt_loader/",
+    "tests/snapshots/",
+    "tests/perf/build/",
+)
+
+
+def run(label: str, cmd: list[str], cwd: Path) -> int:
+    print(f"[pre-push] {label}", flush=True)
+    return subprocess.run(cmd, cwd=cwd).returncode
+
+
+def check_ascii(root: Path) -> int:
+    """Reject tracked files whose suffix demands ASCII but whose
+    bytes include any value above 0x7f. Prints every offending
+    path + the first non-ASCII byte's line / column for triage."""
+    print("[pre-push] ascii check on tracked source", flush=True)
+    out = subprocess.run(
+        ["git", "ls-files"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    bad: list[str] = []
+    for line in out.stdout.splitlines():
+        path = line.strip()
+        if not path:
+            continue
+        if any(path.startswith(pre) for pre in ASCII_SKIP_PREFIXES):
+            continue
+        suffix = Path(path).suffix.lower()
+        if suffix not in ASCII_SUFFIXES:
+            continue
+        full = root / path
+        try:
+            data = full.read_bytes()
+        except OSError:
+            continue
+        for i, byte in enumerate(data):
+            if byte > 0x7F:
+                lineno = data[:i].count(b"\n") + 1
+                col = i - (data.rfind(b"\n", 0, i) + 1) + 1
+                bad.append(f"{path}:{lineno}:{col}: non-ASCII byte 0x{byte:02x}")
+                break
+    if bad:
+        print("[pre-push] ascii violations:", file=sys.stderr)
+        for entry in bad:
+            print(f"  {entry}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def main() -> int:
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    root = Path(out.stdout.strip())
+    rc = check_ascii(root)
+    if rc != 0:
+        return rc
+    rc = run("cargo fmt --check", ["cargo", "fmt", "--check"], root)
+    if rc != 0:
+        return rc
+    rc = run(
+        "cargo clippy --release --all-targets -- -D warnings",
+        [
+            "cargo",
+            "clippy",
+            "--release",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        root,
+    )
+    if rc != 0:
+        return rc
+    # Matches the `feature combos` CI job's first step. The lib still
+    # has to compile with the default features dropped (`std`-gated
+    # paths excluded), which mostly catches missing `alloc::*` /
+    # `core::*` imports in code that compiles fine under default
+    # features.
+    return run(
+        "cargo build --no-default-features --lib",
+        ["cargo", "build", "--no-default-features", "--lib"],
+        root,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

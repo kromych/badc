@@ -1,0 +1,184 @@
+
+bitfield_brace_init.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	leaq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%r11
+               	movzbq	(%rcx), %r11
+               	movb	%r11b, (%rax)
+               	popq	%r11
+               	leaq	-0x8(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0xb, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x8(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x2, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x2, %rax
+               	je	<addr>
+               	movl	$0xc, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x8(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x4, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movl	$0xd, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x8(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x6, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x0, %rax
+               	je	<addr>
+               	movl	$0xe, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x10(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%r11
+               	movzbq	(%rcx), %r11
+               	movb	%r11b, (%rax)
+               	movzbq	0x1(%rcx), %r11
+               	movb	%r11b, 0x1(%rax)
+               	movzbq	0x2(%rcx), %r11
+               	movb	%r11b, 0x2(%rax)
+               	movzbq	0x3(%rcx), %r11
+               	movb	%r11b, 0x3(%rax)
+               	popq	%r11
+               	leaq	-0x10(%rbp), %rax
+               	movl	(%rax), %eax
+               	andq	$0xff, %rax
+               	cmpq	$0xab, %rax
+               	je	<addr>
+               	movl	$0x15, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x10(%rbp), %rax
+               	movl	(%rax), %eax
+               	sarq	$0x8, %rax
+               	andq	$0x1, %rax
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x16, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x10(%rbp), %rax
+               	movl	(%rax), %eax
+               	sarq	$0x9, %rax
+               	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
+               	cmpq	$0x12345, %rax          # imm = 0x12345
+               	je	<addr>
+               	movl	$0x17, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x18(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%r11
+               	movzbq	(%rcx), %r11
+               	movb	%r11b, (%rax)
+               	popq	%r11
+               	leaq	-0x18(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	andq	$0x7, %rax
+               	cmpq	$0x7, %rax
+               	je	<addr>
+               	movl	$0x1f, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x18(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x3, %rax
+               	andq	$0x7, %rax
+               	cmpq	$0x7, %rax
+               	je	<addr>
+               	movl	$0x20, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x18(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x6, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movl	$0x21, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	pushq	%r11
+               	movzbq	(%rcx), %r11
+               	movb	%r11b, (%rax)
+               	popq	%r11
+               	leaq	-0x20(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x29, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x2, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x2, %rax
+               	je	<addr>
+               	movl	$0x2a, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x4, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x0, %rax
+               	je	<addr>
+               	movl	$0x2b, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	movzbq	(%rax), %rax
+               	sarq	$0x6, %rax
+               	andq	$0x3, %rax
+               	cmpq	$0x0, %rax
+               	je	<addr>
+               	movl	$0x2c, %eax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	addq	$0x20, %rsp
+               	popq	%rbp
+               	retq

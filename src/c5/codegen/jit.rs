@@ -53,9 +53,10 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
     jit_run_with_options(program, args, NativeOptions::default())
 }
 
-/// Variant of [`jit_run`] that accepts user-controllable optimization
-/// knobs. Currently the only knob is [`NativeOptions::optimize`];
-/// future ones will land here too.
+/// Variant of [`jit_run`] that accepts user-controllable
+/// [`NativeOptions`]. The `optimize` knob is currently a no-op
+/// (see [`NativeOptions::optimize`]); the other knobs control
+/// `OutputKind`, DWARF emission, and so on.
 pub fn jit_run_with_options(
     program: &Program,
     args: &[String],
@@ -131,10 +132,127 @@ mod jit_impl {
     // dlopen-NULL error); Windows reaches for `format!` instead.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use alloc::vec::Vec;
+    use std::cell::RefCell;
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
 
+    thread_local! {
+        /// atexit handlers registered by JIT'd code during the
+        /// currently-executing `jit_run`, in registration order. C11
+        /// 7.22.4.2p1 requires LIFO drain order; the post-`main_fn`
+        /// drain walks the Vec in reverse.
+        ///
+        /// Each entry carries the raw handler pointer plus an argument
+        /// word. C89-style `atexit(handler)` stores the handler as a
+        /// `(void)` function and ignores the arg; `__cxa_atexit(handler,
+        /// arg, dso)` stores the handler as a `(void*)` function and
+        /// the arg word it was given. Both shapes are ABI-compatible
+        /// with `extern "C" fn(*mut c_void)` on every supported target:
+        /// the extra register on a no-arg handler call is harmless.
+        ///
+        /// Scoped to the executing thread so concurrent `jit_run`
+        /// invocations on the cargo test harness's parallel scheduler
+        /// do not see each other's handler PCs. `jit_run` saves any
+        /// pre-existing entries (a nested call) on entry, drains the
+        /// current call's entries after `main_fn` returns, then
+        /// restores the prior state. arg is stored as `usize` so the
+        /// `RefCell<Vec<...>>` need not enforce `Sync` on the raw
+        /// pointer; the lifetime is owned by the JIT data region the
+        /// caller passed in (typically NULL or a `&__dso_handle`).
+        static JIT_ATEXIT_CHAIN: RefCell<Vec<(extern "C" fn(*mut c_void), usize)>> =
+            const { RefCell::new(Vec::new()) };
+    }
+
+    /// Replacement for libc's `atexit` when JIT'd code resolves
+    /// the symbol through `dlsym`. C89 signature: handler takes
+    /// no args. We coerce it to the `(void*)` shape and store a
+    /// NULL arg so the drain path can run both shapes uniformly.
+    extern "C" fn jit_atexit_thunk(handler: extern "C" fn()) -> c_int {
+        let handler_with_arg: extern "C" fn(*mut c_void) =
+            unsafe { core::mem::transmute(handler as *const ()) };
+        push_atexit_entry(handler_with_arg, core::ptr::null_mut())
+    }
+
+    /// Replacement for libc's `__cxa_atexit` when JIT'd code
+    /// resolves the symbol through `dlsym`. glibc's `atexit()` is
+    /// a header-side inline that forwards to `__cxa_atexit(fn,
+    /// NULL, &__dso_handle)`, so on Linux the JIT-side `atexit`
+    /// call lands here instead of on `jit_atexit_thunk`. The
+    /// `dso_handle` arg is ignored: the JIT runtime owns the
+    /// lifetime of the handler region.
+    extern "C" fn jit_cxa_atexit_thunk(
+        handler: extern "C" fn(*mut c_void),
+        arg: *mut c_void,
+        _dso_handle: *mut c_void,
+    ) -> c_int {
+        push_atexit_entry(handler, arg)
+    }
+
+    fn push_atexit_entry(handler: extern "C" fn(*mut c_void), arg: *mut c_void) -> c_int {
+        // Stash arg as usize so the RefCell holds plain data; the
+        // pointer survives the round-trip because the JIT runtime
+        // owns the arg's lifetime (callers pass NULL or a
+        // `&__dso_handle` from the JIT data region).
+        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().push((handler, arg as usize)));
+        0
+    }
+
+    /// Return the JIT-side thunk address for any libc atexit-shape
+    /// symbol, otherwise 0. The host's libc atexit registers
+    /// handler PCs into the host's own `__cxa_finalize` list, but
+    /// those PCs sit in the JIT mmap region that `JitRegion::drop`
+    /// unmaps before the host process exits -- so handing the
+    /// host's atexit address to JIT'd code yields a dangling
+    /// pointer at process teardown. Intercepting the binding at
+    /// JIT bind_imports time means every JIT'd `atexit` /
+    /// `__cxa_atexit` call lands on our thunk instead.
+    fn atexit_thunk_addr(name: &str) -> u64 {
+        match name {
+            "atexit" => jit_atexit_thunk as *const () as usize as u64,
+            "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
+            _ => 0,
+        }
+    }
+
+    /// Drain and invoke every atexit handler registered during
+    /// the current `jit_run`. Called after JIT'd `main` returns
+    /// and before the code region is unmapped.
+    fn drain_jit_atexit_chain() {
+        let entries: Vec<(extern "C" fn(*mut c_void), usize)> =
+            JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect());
+        for (handler, arg) in entries.into_iter().rev() {
+            handler(arg as *mut c_void);
+        }
+    }
+
+    /// Save the current thread's atexit chain (any entries left over
+    /// from a nested `jit_run` invocation on the same thread) so the
+    /// outer call's drain does not consume them. Restore by passing
+    /// the returned Vec to [`restore_jit_atexit_chain`].
+    fn take_prior_jit_atexit_chain() -> Vec<(extern "C" fn(*mut c_void), usize)> {
+        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect())
+    }
+
+    fn restore_jit_atexit_chain(prior: Vec<(extern "C" fn(*mut c_void), usize)>) {
+        JIT_ATEXIT_CHAIN.with(|chain| *chain.borrow_mut() = prior);
+    }
+
     pub fn jit_run(
+        program: &Program,
+        args: &[String],
+        options: NativeOptions,
+    ) -> Result<i32, C5Error> {
+        // Reset the per-thread atexit chain so this invocation's
+        // drain only processes its own entries. Any pre-existing
+        // entries (from a nested `jit_run` further up the stack on
+        // this thread) are saved here and restored after the drain.
+        let prior_atexit = take_prior_jit_atexit_chain();
+        let result = jit_run_inner(program, args, options);
+        restore_jit_atexit_chain(prior_atexit);
+        result
+    }
+
+    fn jit_run_inner(
         program: &Program,
         args: &[String],
         options: NativeOptions,
@@ -143,8 +261,8 @@ mod jit_impl {
         let build = lower_for_jit(program, target, options)?;
 
         // Allocate a writable data region, copy `build.data` in. The
-        // page is RW (no exec permission); programs that try to
-        // execute through it would fault, which is what we want.
+        // page is RW (no exec permission); an attempt to execute
+        // through it faults with the expected SIGSEGV / EXCEPTION.
         let mut data_region = if !build.data.is_empty() {
             Some(DataRegion::new(&build.data)?)
         } else {
@@ -206,22 +324,15 @@ mod jit_impl {
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
-                let bc_pc = r.target_bc_pc as usize;
-                // Prefer the per-function arg-shuffling thunk; see
-                // pe.rs's code_reloc loop for the rationale. The JIT
-                // host is macOS arm64 / Linux today (no Win64 shadow
-                // space), so a bare body would also work, but the
-                // thunk lookup keeps the JIT in lockstep with what
-                // the per-format writers do.
+                let ent_pc = r.target_ent_pc as usize;
                 let native_off = build
-                    .func_thunk_offsets
-                    .get(&bc_pc)
+                    .pc_to_native
+                    .get(ent_pc)
                     .copied()
-                    .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                     .unwrap_or(usize::MAX);
                 if native_off == usize::MAX {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!("JIT: code reloc references missing bytecode pc {bc_pc}"),
+                        &format!("JIT: code reloc references missing ent_pc {ent_pc}"),
                     )));
                 }
                 let absolute = code_vmaddr + native_off as u64;
@@ -267,9 +378,182 @@ mod jit_impl {
         // a parent function would make). main reads argc/argv from
         // the System V argument registers and returns its exit code
         // in rax / x0.
-        let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
-            unsafe { std::mem::transmute(entry_ptr) };
-        let exit_code = main_fn(args.len() as c_int, argv_ptrs.as_ptr());
+        //
+        // Dispatch through a fresh `pthread_create` worker on POSIX
+        // hosts. The cargo test harness's parallel scheduler runs
+        // each lib test on a thread it owns; calling the JIT'd code
+        // directly on that thread exposes it to whatever signal mask,
+        // stack guard size, alternate-stack setup, and TLS the
+        // harness has installed for itself. A pthread worker has the
+        // kernel-defaulted register state, signal mask, and TLS, so
+        // the JIT'd code observes the environment a freshly-launched
+        // native binary would. Windows keeps the in-thread call: it
+        // has no concurrent native-fixture parity harness pressuring
+        // the same thread.
+        let exit_code = run_main_threaded(
+            entry_ptr,
+            args.len() as c_int,
+            argv_ptrs.as_ptr(),
+            argv_cstrings,
+        )?;
+        Ok(exit_code)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn run_main_threaded(
+        entry_ptr: *const u8,
+        argc: c_int,
+        argv: *const *const c_char,
+        _argv_owned: Vec<CString>,
+    ) -> Result<i32, C5Error> {
+        // pthread_t is an opaque pointer on Linux and macOS (8 bytes
+        // on every supported host arch).
+        type PthreadT = usize;
+        unsafe extern "C" {
+            fn pthread_create(
+                tid: *mut PthreadT,
+                attr: *const c_void,
+                start: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+                arg: *mut c_void,
+            ) -> c_int;
+            fn pthread_join(tid: PthreadT, retval: *mut *mut c_void) -> c_int;
+        }
+
+        // Payload moves to the worker by raw pointer; the worker
+        // reads it once, then ownership returns through `worker_ret`.
+        struct Payload {
+            entry_addr: usize,
+            argc: c_int,
+            argv: *const *const c_char,
+        }
+        let payload = Box::new(Payload {
+            entry_addr: entry_ptr as usize,
+            argc,
+            argv,
+        });
+
+        unsafe extern "C" fn worker(arg: *mut c_void) -> *mut c_void {
+            // SAFETY: arg is the raw pointer the spawning thread
+            // produced via `Box::into_raw`. Boxing it back hands the
+            // payload's lifetime to this thread.
+            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
+                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
+            let rc = main_fn(payload.argc, payload.argv);
+            // C11 7.22.4.2p1: atexit handlers fire in LIFO order.
+            // Drain on the worker so any TLS the handlers touched
+            // belongs to the worker, not the spawning thread.
+            drain_jit_atexit_chain();
+            Box::into_raw(Box::new(rc)) as *mut c_void
+        }
+
+        let mut tid: PthreadT = 0;
+        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let rc = unsafe { pthread_create(&mut tid, core::ptr::null(), worker, raw_payload) };
+        if rc != 0 {
+            // Reclaim the payload box; the worker never ran.
+            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: pthread_create failed (rc={rc})"),
+            )));
+        }
+        let mut ret: *mut c_void = core::ptr::null_mut();
+        let join_rc = unsafe { pthread_join(tid, &mut ret) };
+        if join_rc != 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: pthread_join failed (rc={join_rc})"),
+            )));
+        }
+        let exit_code = unsafe { *Box::from_raw(ret as *mut c_int) };
+        // _argv_owned dropped here, after the worker has joined and
+        // any reads through `argv` have completed.
+        Ok(exit_code as i32)
+    }
+
+    #[cfg(target_os = "windows")]
+    fn run_main_threaded(
+        entry_ptr: *const u8,
+        argc: c_int,
+        argv: *const *const c_char,
+        _argv_owned: Vec<CString>,
+    ) -> Result<i32, C5Error> {
+        // Windows kernel32 thread API. HANDLE is a pointer-sized
+        // opaque token; DWORD is 32-bit. The thread entry shape is
+        // `DWORD WINAPI ThreadProc(LPVOID)`. On x86_64 / aarch64
+        // Windows the WINAPI calling convention coincides with
+        // `extern "C"`.
+        type Handle = *mut c_void;
+        unsafe extern "system" {
+            fn CreateThread(
+                lp_thread_attributes: *mut c_void,
+                dw_stack_size: usize,
+                lp_start_address: unsafe extern "system" fn(*mut c_void) -> u32,
+                lp_parameter: *mut c_void,
+                dw_creation_flags: u32,
+                lp_thread_id: *mut u32,
+            ) -> Handle;
+            fn WaitForSingleObject(handle: Handle, dw_milliseconds: u32) -> u32;
+            fn GetExitCodeThread(handle: Handle, lp_exit_code: *mut u32) -> i32;
+            fn CloseHandle(handle: Handle) -> i32;
+        }
+
+        struct Payload {
+            entry_addr: usize,
+            argc: c_int,
+            argv: *const *const c_char,
+        }
+        let payload = Box::new(Payload {
+            entry_addr: entry_ptr as usize,
+            argc,
+            argv,
+        });
+
+        unsafe extern "system" fn worker(arg: *mut c_void) -> u32 {
+            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
+            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
+                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
+            let rc = main_fn(payload.argc, payload.argv);
+            drain_jit_atexit_chain();
+            // Thread exit code is a 32-bit DWORD; the caller widens
+            // back to i32 on retrieval. Negative `rc` round-trips
+            // through the two's-complement representation.
+            rc as u32
+        }
+
+        let mut thread_id: u32 = 0;
+        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let handle: Handle = unsafe {
+            CreateThread(
+                core::ptr::null_mut(),
+                0,
+                worker,
+                raw_payload,
+                0,
+                &mut thread_id,
+            )
+        };
+        if handle.is_null() {
+            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "JIT: CreateThread returned NULL",
+            )));
+        }
+        const INFINITE: u32 = 0xFFFF_FFFF;
+        let wait_rc = unsafe { WaitForSingleObject(handle, INFINITE) };
+        if wait_rc != 0 {
+            unsafe { CloseHandle(handle) };
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: WaitForSingleObject failed (rc={wait_rc:#x})"),
+            )));
+        }
+        let mut exit_code: u32 = 0;
+        let ok = unsafe { GetExitCodeThread(handle, &mut exit_code) };
+        unsafe { CloseHandle(handle) };
+        if ok == 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "JIT: GetExitCodeThread failed",
+            )));
+        }
         Ok(exit_code as i32)
     }
 
@@ -324,8 +608,8 @@ mod jit_impl {
     #[cfg(target_os = "macos")]
     const MAP_ANONYMOUS: c_int = 0x1000;
 
-    /// macOS-only `MAP_JIT`. Required for any region we want to be
-    /// both writable and executable on Apple Silicon -- without it,
+    /// macOS-only `MAP_JIT`. Required for any region that must be
+    /// both writable and executable on Apple Silicon; without it,
     /// asking for `PROT_EXEC` on a writable mapping is rejected by
     /// the kernel. The hardware-enforced W^X toggle that gates each
     /// access lives in `pthread_jit_write_protect_np`.
@@ -415,7 +699,7 @@ mod jit_impl {
 
         /// Windows allocates RW first, copies the code in, then
         /// flips to PAGE_EXECUTE_READ via `make_executable`. No
-        /// W^X-toggle dance; VirtualProtect is a one-shot.
+        /// per-access W^X toggle; VirtualProtect is a one-shot.
         #[cfg(target_os = "windows")]
         fn new(code: &[u8]) -> Result<Self, C5Error> {
             let len = round_up_to_page(code.len());
@@ -844,16 +1128,18 @@ mod jit_impl {
                 } else {
                     imp.real_symbol.as_str()
                 };
-                let cs = match CString::new(lookup_name) {
-                    Ok(cs) => cs,
-                    Err(_) => continue, // unreachable: symbol names are static ASCII
-                };
-                let mut addr: u64 = 0;
-                for h in &self.lib_handles {
-                    let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
-                    if a != 0 {
-                        addr = a;
-                        break;
+                let mut addr: u64 = atexit_thunk_addr(lookup_name);
+                if addr == 0 {
+                    let cs = match CString::new(lookup_name) {
+                        Ok(cs) => cs,
+                        Err(_) => continue, // unreachable: symbol names are static ASCII
+                    };
+                    for h in &self.lib_handles {
+                        let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
+                        if a != 0 {
+                            addr = a;
+                            break;
+                        }
                     }
                 }
                 let slot_off = i * 8;
@@ -910,12 +1196,15 @@ mod jit_impl {
                 }
             }
             for (i, imp) in imports.imports.iter().enumerate() {
-                let cs = match CString::new(imp.real_symbol.as_str()) {
-                    Ok(cs) => cs,
-                    Err(_) => continue, // unreachable: symbol names are static ASCII
-                };
-                let h = handles[imp.dylib_index];
-                let addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
+                if addr == 0 {
+                    let cs = match CString::new(imp.real_symbol.as_str()) {
+                        Ok(cs) => cs,
+                        Err(_) => continue, // unreachable: symbol names are static ASCII
+                    };
+                    let h = handles[imp.dylib_index];
+                    addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                }
                 let slot_off = i * 8;
                 unsafe {
                     let dst = self.ptr.add(slot_off) as *mut u64;
@@ -1134,10 +1423,21 @@ mod jit_impl {
         let imm21 = (page_diff >> 12) as i32;
         let in_page = (target_vmaddr & 0xFFF) as u32;
 
-        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X19, imm21);
+        // Recover the destination register encoded by the codegen at
+        // the placeholder site. adrp/add carry rd in the low 5 bits;
+        // the add additionally carries rn in bits 5..10. Both match
+        // by construction (`adrp rd; add rd, rd, #imm`).
+        let prev_adrp =
+            u32::from_le_bytes([code[off], code[off + 1], code[off + 2], code[off + 3]]);
+        let prev_add =
+            u32::from_le_bytes([code[off + 4], code[off + 5], code[off + 6], code[off + 7]]);
+        let rd = (prev_adrp & 0x1F) as u8;
+        let add_rd = (prev_add & 0x1F) as u8;
+        let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg(rd), imm21);
         let add_word = super::super::aarch64::enc_add_imm(
-            super::super::aarch64::Reg::X19,
-            super::super::aarch64::Reg::X19,
+            super::super::aarch64::Reg(add_rd),
+            super::super::aarch64::Reg(add_rn),
             in_page,
         );
         code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
@@ -1217,10 +1517,10 @@ mod jit_impl {
 
     // ----------------------------------------------------------------
     // I-cache coherence after writing JIT code. x86_64 has a coherent
-    // I-cache so the function is a no-op there; aarch64 needs an
-    // explicit clean+invalidate dance per cache-line, capped with
-    // dsb+isb to ensure the instruction stream sees the new bytes
-    // before we branch into them.
+    // I-cache so the function is a no-op there; aarch64 requires an
+    // explicit clean + invalidate per cache line, terminated by dsb +
+    // isb, so the instruction stream sees the new bytes before
+    // control branches into them.
     // ----------------------------------------------------------------
 
     #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "macos"),))]
@@ -1228,8 +1528,8 @@ mod jit_impl {
 
     /// macOS arm64: defer to Apple's published API. `sys_icache_invalidate`
     /// is in libSystem (always linked) and is the supported interface
-    /// for JITs on Apple Silicon -- it does the dc cvau / ic ivau /
-    /// dsb / isb dance with the right cache-line size for the host.
+    /// for JITs on Apple Silicon -- it issues dc cvau / ic ivau / dsb
+    /// / isb with the cache-line size reported by the running CPU.
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     fn flush_icache(ptr: *const u8, len: usize) {
         unsafe extern "C" {
@@ -1250,9 +1550,10 @@ mod jit_impl {
         }
     }
 
-    /// Linux aarch64: roll the dance by hand. ARM ARM allows D-cache
-    /// and I-cache to have different line sizes; the smallest possible
-    /// per spec is 16 bytes. Using 16 means more iterations than
+    /// Linux aarch64: issue the cache-maintenance sequence
+    /// directly. ARM ARM allows D-cache and I-cache to have
+    /// different line sizes; the smallest the architecture
+    /// permits is 16 bytes. Using 16 emits more iterations than
     /// necessary on most cores (typical line is 64) but is always
     /// correct.
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]

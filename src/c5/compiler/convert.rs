@@ -21,16 +21,16 @@
 //! `expr()`; centralising them here keeps the per-operator branches
 //! readable.
 
-use super::super::op::Op;
 use super::Compiler;
 use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
 
 impl Compiler {
     /// Apply the C99 6.5.16.1p2 assignment conversion: when the
     /// destination is a floating type and `a` holds an integer-
-    /// typed value, lift via `Op::Fcvtif`; when the destination
-    /// is an integer / pointer and `a` holds a float / double,
-    /// drop via `Op::Fcvtfi`. Same-class assignments leave the
+    /// typed value, lift through the int-to-float cast; when
+    /// the destination is an integer / pointer and `a` holds a
+    /// float / double, drop through the float-to-int cast.
+    /// Same-class assignments leave the
     /// bit pattern alone. Called from every scalar store path
     /// so an `unsigned char` initializer of a `float` local /
     /// global / struct field round-trips through the IEEE-754
@@ -39,10 +39,17 @@ impl Compiler {
         let dest_is_fp = is_floating_scalar(dest_ty);
         let src_is_fp = is_floating_scalar(self.ty);
         if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
-            self.emit_op(Op::Fcvtif);
+            self.ast_fpcast();
+            // Dual-emit: wrap the accumulator in an
+            // `Expr::Cast` so the walker emits the matching
+            // `Inst::FpCast(IntToFp)`. The walker keys on the
+            // cast's `to_ty` vs the child's source type to pick
+            // the conversion kind.
+            self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
-            self.emit_op(Op::Fcvtfi);
+            self.ast_fpcast();
+            self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         }
     }
@@ -77,18 +84,18 @@ impl Compiler {
             self.max_loc_offs = self.loc_offs;
         }
         let temp = -self.loc_offs;
-        self.emit_op(Op::StLocI);
-        self.emit_val(temp);
-        // Pop LHS off the c5 stack into accumulator: `Imm 0; Or` pops
-        // stack-top into acc by virtue of `Op::Or` ORing acc with the
-        // popped stack-top (acc was set to 0 a moment ago).
+        self.mark_emit_other();
+        // Pop LHS off the c5 stack into accumulator: `Imm 0; Or`
+        // pops stack-top into acc by virtue of `BinOp::Or` ORing
+        // acc with the popped stack-top (acc was set to 0 a
+        // moment ago).
         self.emit_imm(0);
-        self.emit_op(Op::Or);
-        self.emit_binop_with_imm(Op::And, mask);
-        self.emit_op(Op::Psh);
+        self.ast_binop(crate::c5::ir::BinOp::Or);
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
+        self.ast_psh();
         self.emit_lea(temp);
-        self.emit_op(Op::Li);
-        self.emit_binop_with_imm(Op::And, mask);
+        self.mark_emit_other();
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
     }
 
     /// After an Add / Sub / Mul, normalize the 64-bit accumulator
@@ -123,7 +130,7 @@ impl Compiler {
                 4 => 0xffff_ffff,
                 _ => return,
             };
-            self.emit_binop_with_imm(Op::And, mask);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         } else {
             // Signed: integer promotion already widens char / short
             // to int, so the only narrow signed common type that
@@ -136,8 +143,8 @@ impl Compiler {
                 4 => 32,
                 _ => return,
             };
-            self.emit_binop_with_imm(Op::Shl, shift_bits);
-            self.emit_binop_with_imm(Op::Shr, shift_bits);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift_bits);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift_bits);
         }
     }
 
@@ -145,52 +152,52 @@ impl Compiler {
     /// usual-arithmetic-conversions when the LHS / RHS have
     /// different signedness or widths.
     ///
-    /// Plain `Op::Eq` is bit-equality at 64 bits, which goes wrong
+    /// Plain `BinOp::Eq` is bit-equality at 64 bits, which goes wrong
     /// when (a) the common type is narrower than 8 bytes and
     /// (b) one operand is sign-extended into the high half while
     /// the other isn't. e.g. `(int)-1 == (uint)0xFFFFFFFF` should be
     /// true at the common `unsigned int` width, but the LHS lives
     /// in the register as 0xFFFFFFFFFFFFFFFF (sign-extended via
-    /// `Op::Lw`) and the RHS as 0x00000000FFFFFFFF (zero-extended
-    /// via `Op::Lwu`), so straight `Eq` returns false.
+    /// `LoadKind::I32`) and the RHS as 0x00000000FFFFFFFF (zero-extended
+    /// via `LoadKind::U32`), so straight `Eq` returns false.
     ///
     /// Strategy: if the common type is narrower than 8 bytes, fold
     /// the LHS-on-stack and RHS-in-acc through XOR (which pops the
     /// stack), AND with the common-width mask, then compare against
-    /// 0. Equal iff the masked-XOR is 0. The `Op::Xor` -> `Op::And`
-    /// -> `Op::Eq`/`Op::Ne` sequence is 5 ops; the wide-common
-    /// path uses 1, so the cost only lands on mixed-width sites.
+    /// 0. Equal iff the masked-XOR is 0. The
+    /// `BinOp::Xor` -> `BinOp::And` -> `BinOp::Eq`/`BinOp::Ne`
+    /// sequence is 5 ops; the wide-common path uses 1, so the
+    /// cost only lands on mixed-width sites.
     pub(super) fn emit_eq_with_common_width(&mut self, lhs_ty: i64, invert: bool) {
-        let plain_op = if invert { Op::Ne } else { Op::Eq };
+        use super::super::ir::BinOp as B;
+        let plain_op = if invert { B::Ne } else { B::Eq };
         // Pointers are 8 bytes regardless of pointee type and are
         // always compared as full-width values; the common-width
         // mask is only correct for actual integers. `p == 0`
         // would otherwise mask the pointer to 32 bits and accept
         // any pointer with low-half-zero as NULL.
         if is_pointer_ty(lhs_ty) || is_pointer_ty(self.ty) {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
-        // The XOR-mask trick only matters when one operand is
-        // signed and the other unsigned at a width narrower than
-        // 8 bytes -- that's when the sign-extension into the
+        // The XOR-mask sequence is only needed when one operand
+        // is signed and the other unsigned at a width narrower
+        // than 8 bytes -- that's when the sign-extension into the
         // 64-bit register can make `(int)-1 == (uint)0xFFFFFFFF`
-        // come out false. When both operands have the same
-        // signedness, both loads produce matching 64-bit
-        // representations and plain `Op::Eq` already does the
-        // right thing. Skipping the trick for the same-
-        // signedness case keeps the per-eq cost at 1 op for the
-        // overwhelmingly common path.
+        // come out false. Matching signedness produces matching
+        // 64-bit representations and plain `B::Eq` is correct on
+        // its own. Skipping the mask for the same-signedness case
+        // keeps the per-eq cost at 1 op.
         let lhs_unsigned = is_unsigned_ty(lhs_ty);
         let rhs_unsigned = is_unsigned_ty(self.ty);
         if lhs_unsigned == rhs_unsigned {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         let common = usual_arith_common_ty(lhs_ty, self.ty, self.target);
         let common_size = self.size_of_type(common);
         if common_size >= 8 {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
         // Narrow common type, mixed signedness: emit
@@ -203,17 +210,17 @@ impl Compiler {
             _ => -1,
         };
         if mask == -1 {
-            self.emit_op(plain_op);
+            self.ast_binop(plain_op);
             return;
         }
-        // Acc holds RHS; stack-top holds LHS. `Op::Xor` does
+        // Acc holds RHS; stack-top holds LHS. `BinOp::Xor` does
         // `acc = acc XOR top, sp += 8` -- after this, acc holds
         // `LHS XOR RHS` (XOR is commutative) and the stack is
         // restored to its pre-comparison state.
-        self.emit_op(Op::Xor);
+        self.ast_binop(crate::c5::ir::BinOp::Xor);
         // Mask the XOR to the common-type width: the comparison
         // only cares about the low N bytes.
-        self.emit_binop_with_imm(Op::And, mask);
+        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         // Compare against 0.
         self.emit_binop_with_imm(plain_op, 0);
     }

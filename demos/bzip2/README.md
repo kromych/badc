@@ -3,8 +3,7 @@
 Build the upstream [bzip2](https://sourceware.org/bzip2/)
 1.0.8 library through badc and run a buffer-to-buffer
 compress + decompress round-trip at blockSize 1 (smallest)
-and blockSize 9 (largest). Aligns with gh #11 ("add building
-some archive libraries like 7z, lzma, bzip").
+and blockSize 9 (largest).
 
 bzip2 is integer + bit-twiddle heavy: Burrows-Wheeler
 transform, move-to-front, run-length encoding, and Huffman

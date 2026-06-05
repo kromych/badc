@@ -1,0 +1,58 @@
+
+deferred_jit_thread_local.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	movq	%rdi, %rax
+               	movslq	%eax, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rax, %rdx
+               	shlq	$0x2, %rdx
+               	addq	%rcx, %rdx
+               	movl	%eax, (%rdx)
+               	shlq	$0x2, %rax
+               	addq	%rcx, %rax
+               	movslq	(%rax), %rax
+               	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	xorq	%rdi, %rdi
+               	callq	<addr>
+               	movq	%fs:0x0, %rax
+               	subq	$0x10, %rax
+               	movslq	(%rax), %rcx
+               	cmpq	$0x7, %rcx
+               	je	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movq	%fs:0x0, %rcx
+               	subq	$0x8, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$-0x3, %rcx
+               	je	<addr>
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movslq	(%rax), %rcx
+               	movq	%fs:0x0, %rdx
+               	subq	$0x8, %rdx
+               	movslq	(%rdx), %rdx
+               	addq	%rdx, %rcx
+               	movslq	%ecx, %rcx
+               	movl	%ecx, (%rax)
+               	movslq	(%rax), %rax
+               	cmpq	$0x4, %rax
+               	je	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq

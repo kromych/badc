@@ -1,0 +1,32 @@
+
+switch_default_routing.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movl	$0x63, %eax
+               	jmp	<addr>
+               	movslq	%eax, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0xa, %eax
+               	jmp	<addr>
+               	movl	$0x14, %eax
+               	jmp	<addr>
+               	movl	$0x64, %eax
+               	jmp	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	cmpq	$0x2, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	addb	%al, (%rax)

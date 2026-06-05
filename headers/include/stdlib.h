@@ -2,17 +2,14 @@
 // process control.
 //
 // `exit` on Windows binds to `msvcrt!exit`, which runs the CRT's
-// atexit chain + flushes stdout / stderr before terminating. The
-// previous binding (`kernel32!ExitProcess`) was chosen back when
-// no fixture depended on stdio flushing -- a fast, no-init exit
-// for the small fixtures that just `return 0`. sqlite's shell
-// changed that: a piped `printf "select 1;" | sqlite3 :memory:`
-// run produced empty output with `ExitProcess` because every
-// SELECT row sat in stdout's fully-buffered pipe and got
-// discarded on the unflushed exit. msvcrt's `exit` is already
-// loaded for everything else we link, so the CRT-init concern
-// from the original comment doesn't apply to programs that
-// touch stdio at all.
+// atexit chain + flushes stdout / stderr before terminating per
+// C99 7.20.4.3p2. The earlier binding (`kernel32!ExitProcess`)
+// terminates without draining buffered stdio streams, so a
+// program writing through fully-buffered stdout to a pipe loses
+// every row that sat unflushed at exit. msvcrt's `exit` is
+// already loaded for everything else we link, so the CRT-init
+// concern from the original comment doesn't apply to programs
+// that touch stdio at all.
 
 #pragma once
 
@@ -302,13 +299,14 @@ static inline void __clear_cache(void *begin, void *end) {
                           (long long)((char *)end - (char *)begin));
 }
 // msvcrt exposes the environment vector through the `_environ`
-// data symbol. The c5 dialect has no dynamic-data-import binding
-// yet, so each TU contributes a tentative definition (C99 6.9.2)
-// that the linker collapses into one zero-initialised slot.
-// Programs that need the real msvcrt environ have to populate
-// this slot themselves from `main`'s `envp` argument.
-// TODO: replace the tentative definition with a real data
-// import once the binding-pragma surface grows a data form.
-char **environ;
-char **_environ;
+// data symbol. Both `environ` and `_environ` live in
+// `lib/runtime.c` as single canonical definitions; user code
+// declares each `extern` here so every TU resolves through the
+// same slot rather than contributing a tentative def of its
+// own.
+// TODO: replace this slot with a real data import once
+// `#pragma binding`'s data form lands so msvcrt's own
+// `_environ` is bound directly.
+extern char **environ;
+extern char **_environ;
 #endif

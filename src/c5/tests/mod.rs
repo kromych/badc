@@ -2,8 +2,7 @@
 //!
 //! - [`lexer`]    -- drives `Lexer::next` directly and inspects the token stream.
 //! - [`parser`]   -- feeds malformed C to the compiler and asserts on errors.
-//! - [`codegen`]  -- compiles valid C and inspects `program.text`.
-//! - [`vm`]       -- builds `Program` literals by hand and runs them.
+//! - [`codegen`]  -- compiles valid C and inspects post-link program metadata.
 //! - [`programs`] -- end-to-end: load a `.c` fixture, compile, run, assert exit code.
 //!
 //! Tests that contain meaningful C source load it from `tests/fixtures/c/<name>.c`
@@ -16,7 +15,7 @@ use std::path::PathBuf;
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
 use super::token::{Tok, Token};
-use super::{C5Error, Compiler, Op, Program, Vm, optimize};
+use super::{C5Error, Compiler, Program, Vm};
 
 mod codegen;
 mod deferred;
@@ -31,12 +30,10 @@ mod native_elf;
 mod native_elf_x64;
 mod native_pe_arm64;
 mod native_pe_x64;
-mod optimizer;
 mod parser;
 mod pointer_tracking;
 mod programs;
 mod types;
-mod vm;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {
@@ -88,7 +85,7 @@ pub fn compile_str(src: &str) -> Program {
 
 /// Compile inline source WITHOUT the standard prelude. Used by the
 /// codegen tests that assert byte-for-byte equality on the emitted
-/// bytecode -- those tests can't tolerate the lazy-stream helper
+/// native code -- those tests can't tolerate the lazy-stream helper
 /// (or any future prelude-only function) appearing in the output.
 pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()
@@ -127,27 +124,6 @@ where
     S: Into<String>,
 {
     let program = compile_fixture(name);
-    Vm::new(program)
-        .with_pointer_tracking()
-        .with_args(args)
-        .run()
-        .unwrap()
-}
-
-/// Compile + optimize + run a fixture. Used by the optimizer e2e tests
-/// to confirm `-O` doesn't change observable behavior.
-pub fn run_optimized_fixture(name: &str) -> i64 {
-    let program = optimize(compile_fixture(name)).expect("optimizer failed");
-    Vm::new(program).with_pointer_tracking().run().unwrap()
-}
-
-/// Optimize-and-run with extra `args` for the hosted program.
-pub fn run_optimized_fixture_with_args<I, S>(name: &str, args: I) -> i64
-where
-    I: IntoIterator<Item = S>,
-    S: Into<String>,
-{
-    let program = optimize(compile_fixture(name)).expect("optimizer failed");
     Vm::new(program)
         .with_pointer_tracking()
         .with_args(args)

@@ -316,8 +316,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
-/// are arch-independent. mprotect goes through the in-text thunk
-/// the same way, so `mprotect_allows_read.c` is included.
+/// are arch-independent.
 const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("control_flow.c", 1),
@@ -342,6 +341,21 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("function_pointer_typedefs.c", 0),
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
+    ("local_array_partial_init_zero.c", 0),
+    ("ssa_call_result_spill.c", 0),
+    ("struct_field_assign_from_call.c", 0),
+    ("struct_byval_param_followed_by_ptr.c", 0),
+    ("tail_call_no_address_escape.c", 0),
+    ("fib.c", 0),
+    ("queens.c", 0),
+    ("inline_keyword_uncaps.c", 0),
+    ("ssa_bail_fixup_rollback.c", 0),
+    ("ssa_fp_routing.c", 0),
+    ("ssa_callee_saved_x19.c", 0),
+    ("ssa_va_arg_loop.c", 0),
+    ("ssa_variadic_fp_arg.c", 0),
+    ("ssa_fp_compare_nan.c", 0),
+    ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
@@ -355,6 +369,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
+    ("many_args_host_stack_overflow.c", 0),
+    ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
@@ -369,6 +385,10 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
+    ("switch_nested_case_in_compound.c", 0),
+    ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("libc_basic.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),
@@ -407,7 +427,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy.
+    // Whole-struct copy via Inst::Mcpy.
     ("struct_value_copy.c", 0),
     // Struct-by-value parameter / return on Windows/AArch64.
     ("struct_by_value_param.c", 0),
@@ -475,14 +495,12 @@ fn fixture_parity_native_optimized() {
     );
 }
 
-/// Regression marker (gh #48): `atoi("-17")` -- the libc return-
-/// register sign-extension contract on AAPCS64 / Win64 leaves the
-/// upper bits of X0 (or RAX) unspecified for sub-word returns, and
-/// c5's 64-bit accumulator needs the post-call `sxtw` / `movsxd`
-/// emitted by `emit_extend_x19_for_return` so a downstream
-/// `acc != -17` compare matches. The same fixture runs on every
-/// native lane (Mach-O, ELF, PE) -- this is the PE/AArch64
-/// instance.
+/// AAPCS64 / Win64 leave the upper bits of X0 (or RAX)
+/// unspecified for sub-word libc returns; c5's 64-bit
+/// accumulator needs the post-call `sxtw` / `movsxd` emitted by
+/// `emit_extend_x19_for_return` so a downstream `acc != -17`
+/// compare matches. The same fixture runs on every native lane
+/// (Mach-O, ELF, PE); this is the PE/AArch64 instance.
 #[test]
 fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {

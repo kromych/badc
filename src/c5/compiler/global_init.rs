@@ -100,7 +100,7 @@ impl Compiler {
         }
         // Bare function reference in a global initializer:
         // `static int (*fp)() = func;`. The value is the function's
-        // bytecode PC; a CodeReloc patches the slot to the runtime
+        // ent_pc; a CodeReloc patches the slot to the runtime
         // code address at load time. Token::Sys (a libc-bound name)
         // routes through `ensure_sys_trampoline_sym` first to get a
         // synthetic Token::Fun whose val is filled in later by
@@ -120,15 +120,48 @@ impl Compiler {
             if self.symbols[sym_idx].class == Token::Sys as i64 {
                 sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
             }
-            let bc_pc = self.symbols[sym_idx].val;
+            self.symbols[sym_idx].was_referenced = true;
+            let ent_pc = self.symbols[sym_idx].val;
             self.next()?;
-            let bytes = (bc_pc as u64).to_le_bytes();
+            let bytes = (ent_pc as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.code_relocs.push(crate::c5::program::CodeReloc {
                 data_offset: var_offset as u64,
-                target_bc_pc: bc_pc as u64,
+                target_ent_pc: ent_pc as u64,
             });
             self.code_reloc_sym_idx.push(sym_idx);
+            return Ok(());
+        }
+        // Bare global array reference in a pointer initializer:
+        // `int arr[N] = ...; int *p = arr;`. C99 6.3.2.1p3: an
+        // lvalue of array type decays to a pointer to its first
+        // element in every non-lvalue context, including a
+        // global initializer. Emit the same `DataReloc` shape as
+        // `&arr[0]` would: the slot holds the array's
+        // data-segment offset; the writer / linker patches the
+        // runtime VA at image-load time.
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
+            && self.symbols[self.lex.curr_id_idx].array_size > 0
+            && is_pointer_ty(var_ty)
+        {
+            if is_thread_local {
+                return Err(self.compile_err_at(
+                    line,
+                    "array-decay initializer for `_Thread_local` not supported",
+                ));
+            }
+            let target_idx = self.lex.curr_id_idx;
+            let target_offset = self.symbols[target_idx].val;
+            self.symbols[target_idx].was_referenced = true;
+            self.next()?;
+            let bytes = (target_offset as u64).to_le_bytes();
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: var_offset as u64,
+                target_offset: target_offset as u64,
+            });
+            self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
         }
         // String literal in a `char *p` global initializer.
@@ -368,6 +401,16 @@ impl Compiler {
         // (enum / `#define`d constants), and the offsetof shape.
         let value = self.parse_const_expr_or()?;
 
+        // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
+        // floating object is converted to the floating value; storing
+        // the integer's bit pattern would leave a denormal. Mirror the
+        // float-literal path above, which stores the f64 bit pattern.
+        let value = if var_is_float {
+            (value as f64).to_bits() as i64
+        } else {
+            value
+        };
+
         let bytes = value.to_le_bytes();
         let segment = if is_thread_local {
             &mut self.tls_data
@@ -395,10 +438,9 @@ impl Compiler {
             }
         }
 
-        // Type-check: warn (don't error) if the constant
-        // doesn't match the declared type. For now we only
-        // care about pointer-vs-int mismatches the way the
-        // assignment path does.
+        // Type-check: warn (don't error) if the constant doesn't match
+        // the declared type. Only pointer-vs-int mismatches are
+        // diagnosed here, matching the assignment path.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
         if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);

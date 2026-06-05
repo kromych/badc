@@ -250,6 +250,22 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_pointer_typedefs.c", 0),
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
+    ("local_array_partial_init_zero.c", 0),
+    ("ssa_call_result_spill.c", 0),
+    ("param_reg_swap.c", 77),
+    ("struct_field_assign_from_call.c", 0),
+    ("struct_byval_param_followed_by_ptr.c", 0),
+    ("tail_call_no_address_escape.c", 0),
+    ("fib.c", 0),
+    ("queens.c", 0),
+    ("inline_keyword_uncaps.c", 0),
+    ("ssa_bail_fixup_rollback.c", 0),
+    ("ssa_fp_routing.c", 0),
+    ("ssa_callee_saved_x19.c", 0),
+    ("ssa_va_arg_loop.c", 0),
+    ("ssa_variadic_fp_arg.c", 0),
+    ("ssa_fp_compare_nan.c", 0),
+    ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
@@ -278,7 +294,12 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
+    ("switch_nested_case_in_compound.c", 0),
+    ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("sys_addr_in_static_init.c", 42),
+    ("sys_addr_zero_arg.c", 42),
     ("libc_struct_buf_size.c", 42),
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
@@ -336,8 +357,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
-    // Whole-struct copy via Op::Mcpy. The x86_64 codegen unrolls
-    // it into mov / mov word pairs.
+    // Whole-struct copy via Inst::Mcpy. The x86_64 codegen
+    // unrolls it into mov / mov word pairs.
     ("struct_value_copy.c", 0),
     // Struct-by-value parameter / return.
     ("struct_by_value_param.c", 0),
@@ -382,11 +403,11 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): post-call sub-word extension on
-/// the libc return register. See the matching test in
-/// `super::native::atoi_negative_sign_extends`. The
-/// x86_64 ELF backend uses `movsxd` for `Sign32`; glibc happens
-/// to zero the upper bits today but the contract isn't binding.
+/// Post-call sub-word extension on the libc return register.
+/// See the matching test in `super::native::atoi_negative_sign_extends`.
+/// The x86_64 ELF backend uses `movsxd` for `Sign32`; glibc
+/// happens to zero the upper bits today but the contract isn't
+/// binding.
 #[test]
 fn atoi_negative_sign_extends() {
     let outcome = build_and_run_fixture("atoi_negative.c");

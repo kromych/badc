@@ -1,24 +1,12 @@
-// DEFERRED: libc vfprintf called with a c5 va_list.
-//
-// c5's `va_list` is a `long *` walking the c5 stack at 16 bytes
-// per slot. The platform's libc vfprintf expects a platform-ABI
-// `va_list` (a struct on aarch64 / x86_64, a register-spill
-// descriptor with multiple fields). Passing c5's va_list to
-// libc's vfprintf -- as `vfprintf(out, fmt, ap)` -- corrupts
-// the formatter: it walks the wrong memory for arguments and
-// emits garbage bytes (or crashes).
-//
-// Surfaced when sqlite3 shell.c's `cli_printf` chained through
-// `sqlite3_vfprintf -> vfprintf`. Worked around there by
-// routing through sqlite3_vmprintf (which is c5-compiled and
-// agrees with c5's va_list view). The general fix is to either
-// match c5's va_list to the platform's, or to provide
-// c5-side wrappers around every variadic libc function that
-// might be called with a forwarded va_list.
-//
-// Today this fixture exits 1: the libc vfprintf reads garbage
-// for the int and writes the wrong characters. Once the va_list
-// gap closes, it should exit 0.
+// C99 7.15.1: `vsnprintf` reads variadic arguments through a
+// `va_list`. c5's `va_list` is a `long *` walking 16-byte c5
+// stack slots; the platform's libc va_list has a different
+// shape, so passing c5's `va_list` to libc's `vsnprintf` would
+// have the formatter walk the wrong memory. <stdio.h> redirects
+// `vsnprintf` (and the rest of the `v*printf` family) to
+// `c5_vsnprintf` in <c5io.h>, which walks the c5-shaped cursor
+// directly. The fixture forwards a captured `va_list` through
+// `vsnprintf` and asserts the formatted bytes match the input.
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>

@@ -54,12 +54,12 @@ fn duplicate_global_definition() {
 
 #[test]
 fn prototype_after_definition_at_pc_zero() {
-    // gh #52: a prototype following a function definition used to
-    // clobber the symbol's val (= bytecode pc) when val happened
-    // to be 0 -- which is exactly the case for the *first*
-    // function in the source. The reset would point every later
-    // call site at the buffer's current pc, sending the call
-    // into nowhere-land. Pin the fix.
+    // A prototype following a function definition used to
+    // clobber the symbol's val (= ent_pc) when val happened
+    // to be 0 -- exactly the case for the *first* function in
+    // the source. The reset would point every later call site
+    // at the buffer's current pc, sending the call to a stale
+    // address. Pin the fix.
     let src = "int foo_fn(int x) { return x + 1; } \
                int foo_fn(int x); \
                int main() { return foo_fn(41); }";
@@ -156,6 +156,37 @@ fn undefined_variable_used_in_expression() {
 }
 
 #[test]
+fn sizeof_rejects_undeclared_identifier() {
+    // C99 6.5.3.4 admits two operand shapes: a parenthesized
+    // type-name and a unary-expression. The unary-expression path
+    // folds back to 6.5.1p2, which requires every primary
+    // identifier to be declared. Prior to the fix the bare-id
+    // shortcut in `sizeof_expr.rs` read `Symbol::type_` directly
+    // for any `Token::Id` operand, so an undeclared name silently
+    // resolved to `Symbol::default()` (type_ = `Ty::Char` = 0) and
+    // `sizeof(undeclared)` evaluated to 1 instead of erroring.
+    expect_compile_error(
+        "int main() { return sizeof(no_such_type); }",
+        "undefined variable no_such_type",
+    );
+}
+
+#[test]
+fn sizeof_in_array_dim_rejects_undeclared_identifier() {
+    // Same constraint surfacing through a constant-expression
+    // `sizeof` (C99 6.6 + 6.7.6.2): the array-dimension parser
+    // runs `parse_constant_int` -> `sizeof_operand_bytes`. An
+    // undeclared operand must fail there, not silently fold to
+    // the `Ty::Char` placeholder size and produce a positive
+    // dimension or a confusing "array dimension must be positive"
+    // downstream message.
+    expect_compile_error(
+        "int main() { char x[sizeof(no_such_type) == 1 ? 1 : -1]; return 0; }",
+        "undefined variable no_such_type",
+    );
+}
+
+#[test]
 fn break_outside_loop() {
     expect_compile_error(
         "int main() { break; return 0; }",
@@ -198,18 +229,18 @@ fn bad_lvalue_in_assignment() {
 fn thread_local_compiles_to_op_tlslea() {
     // `_Thread_local` lexes as Token::ThreadLocal, the parser
     // accepts it as a global storage-class prefix, the symbol
-    // carries the flag, and reads/writes lower to Op::TlsLea
-    // operands rather than the regular data-segment Op::Imm.
-    use super::super::op::Op;
+    // carries the flag, and reads/writes route through the TLS
+    // segment rather than the regular data segment. The
+    // contract surfaces through `Program::tls_data` (parser-side
+    // slot allocation) and through the per-target codegen
+    // accepting the lowered form below; a regression that
+    // collapses the access onto the data segment trips one of
+    // those gates.
     let src = "_Thread_local int counter;\n\
                int main() { counter = 42; return counter; }";
     let p = super::Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
-    assert!(
-        p.text.contains(&(Op::TlsLea as i64)),
-        "expected at least one Op::TlsLea in the bytecode"
-    );
     assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
     // Every supported target now lowers `_Thread_local`. Linux
     // and Windows have full code paths; macOS arm64 routes
@@ -328,9 +359,20 @@ fn pragma_export_records_function_on_program() {
         .expect("compile");
     assert_eq!(p.exports.len(), 1, "expected one export");
     assert_eq!(p.exports[0].name, "answer");
+    // The recorded PC must point at one of the finished
+    // functions' entry positions; the export-resolution path
+    // refuses any other value, so this asserts the same
+    // invariant from the caller's side.
     assert!(
-        p.exports[0].bytecode_pc < p.text.len(),
-        "exported PC must be inside the bytecode"
+        p.finished_functions
+            .iter()
+            .any(|f| f.ent_pc == p.exports[0].ent_pc),
+        "exported PC {} should match one of the finished functions' ent_pc values: {:?}",
+        p.exports[0].ent_pc,
+        p.finished_functions
+            .iter()
+            .map(|f| (&f.name, f.ent_pc))
+            .collect::<alloc::vec::Vec<_>>(),
     );
 }
 
@@ -351,10 +393,8 @@ fn pragma_export_with_unknown_name_is_refused() {
 
 #[test]
 fn pragma_export_with_global_data_is_refused() {
-    // Today `#pragma export(...)` only handles functions.
-    // Pointing it at a global variable surfaces a clear "not
-    // a function" diagnostic so a future "data export"
-    // milestone has somewhere to land.
+    // `#pragma export(...)` only handles functions. Pointing it at a
+    // global variable surfaces a clear "not a function" diagnostic.
     let src = "
         int counter;
         #pragma export(counter)
@@ -441,10 +481,10 @@ fn float_modulo_rejected() {
 
 #[test]
 fn float_increment_not_yet_implemented() {
-    // `f++` on a float would need to lower to `f = f + 1.0`, but the
-    // current `++/--` lowering hard-codes integer arithmetic via
-    // `Op::Imm 1; Op::Add` patches over the lvalue load. The float
-    // path is still ahead of us.
+    // `f++` on a float would need to lower to `f = f + 1.0`, but
+    // the current `++/--` lowering hard-codes integer arithmetic
+    // (immediate 1 plus add) over the lvalue load. The float path
+    // is still ahead of us.
     expect_compile_error(
         "int main() { float x; x = 1.0; x++; return 0; }",
         "floating-point ++/-- not yet implemented",
@@ -454,10 +494,10 @@ fn float_increment_not_yet_implemented() {
 #[test]
 fn float_int_mixed_addition_auto_promotes() {
     // Mixed int / float operands now auto-promote -- the int side
-    // is lifted to f64 (via `Op::Fcvtif` for the RHS-int case, or
-    // via the spill-recover-Fcvtif sequence using `Op::StLocI` for
-    // the LHS-int case). `(double)i + 1.0` and bare `i + 1.0` both
-    // compile and produce the same result.
+    // is lifted to f64 (via int-to-float cast for the RHS-int
+    // case, or via the spill-recover-cast sequence using a
+    // store-local for the LHS-int case). `(double)i + 1.0` and
+    // bare `i + 1.0` both compile and produce the same result.
     let src = "int main() { int i; double y; i = 3; y = i + 1.5; return (int)y; }";
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     let vm_result = crate::c5::Vm::new(prog).run().unwrap();

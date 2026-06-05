@@ -192,6 +192,9 @@ impl Compiler {
         // for the type keyword.
         let mut m = IntModifiers::default();
         while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::Inline {
+                self.pending_is_inline = true;
+            }
             if !self.try_consume_int_modifier(&mut m)? {
                 // const / volatile / restrict / _Atomic / etc. --
                 // all no-ops in c5, just consume.
@@ -216,12 +219,12 @@ impl Compiler {
             // distinction is carried out-of-band via
             // `pending_base_was_void`: the function-decl path
             // reads it after the declarator runs to mark the
-            // function symbol's `returns_void`. The earlier
-            // attempt to give `void` its own band collided with
-            // sqlite3's `void (*xFunc)(...)` dispatch tables (the
-            // band number leaked into the call-through-fn-ptr type
-            // comparison) -- keeping the encoding here untouched
-            // sidesteps that trap.
+            // function symbol's `returns_void`. A prior attempt
+            // to give `void` its own type band leaked into the
+            // call-through-fn-ptr type comparison and rejected
+            // `void (*p)(...)` dispatch tables, so the encoding
+            // here stays unchanged and `returns_void` propagates
+            // through the side channel instead.
             self.pending.base_was_void = true;
             Ty::Char as i64 | UNSIGNED_BIT
         } else if self.lex.tk == Token::Float {
@@ -243,16 +246,22 @@ impl Compiler {
             Ty::Double as i64
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
-            // to plain `int`. Consume any tag name and any optional
-            // body; return Int as the underlying type.
+            // to plain `int`. Capture any tag name and any
+            // optional body's constants for DWARF; return Int as
+            // the underlying type.
             self.next()?;
-            if self.lex.tk == Token::Id {
+            let tag_name = if self.lex.tk == Token::Id {
+                let id_idx = self.lex.curr_id_idx;
+                let name = self.symbols[id_idx].name.clone();
                 self.next()?;
-            }
+                name
+            } else {
+                alloc::string::String::new()
+            };
             if self.lex.tk == '{' {
                 // Re-parse the body via the same constants-loop the
                 // file-scope path uses.
-                self.parse_enum_body()?;
+                self.parse_enum_body(&tag_name)?;
             }
             Ty::Int as i64
         } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {

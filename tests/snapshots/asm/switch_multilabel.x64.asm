@@ -1,0 +1,114 @@
+
+switch_multilabel.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	movq	%rdi, %rax
+               	movslq	%eax, %rax
+               	jmp	<addr>
+               	xorq	%rax, %rax
+               	retq
+               	movl	$0x1, %eax
+               	retq
+               	movl	$0x2, %eax
+               	retq
+               	movl	$0x3, %eax
+               	retq
+               	xorq	%rax, %rax
+               	retq
+               	cmpq	$0x61, %rax
+               	je	<addr>
+               	cmpq	$0x62, %rax
+               	je	<addr>
+               	cmpq	$0x63, %rax
+               	je	<addr>
+               	cmpq	$0x64, %rax
+               	je	<addr>
+               	cmpq	$0x41, %rax
+               	je	<addr>
+               	cmpq	$0x42, %rax
+               	je	<addr>
+               	cmpq	$0x30, %rax
+               	je	<addr>
+               	cmpq	$0x31, %rax
+               	je	<addr>
+               	cmpq	$0x32, %rax
+               	je	<addr>
+               	cmpq	$0x33, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0x61, %edi
+               	callq	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x62, %edi
+               	callq	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x2, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x63, %edi
+               	callq	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x3, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x64, %edi
+               	callq	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x41, %edi
+               	callq	<addr>
+               	cmpq	$0x2, %rax
+               	je	<addr>
+               	movl	$0x5, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x42, %edi
+               	callq	<addr>
+               	cmpq	$0x2, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x30, %edi
+               	callq	<addr>
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movl	$0x7, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x33, %edi
+               	callq	<addr>
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	movl	$0x8, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x3f, %edi
+               	callq	<addr>
+               	cmpq	$0x0, %rax
+               	je	<addr>
+               	movl	$0x9, %eax
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	popq	%rbp
+               	retq
+               	addb	%al, 0x41(%rdx)

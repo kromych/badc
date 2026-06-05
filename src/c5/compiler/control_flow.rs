@@ -8,70 +8,32 @@
 //! switches scope their own break / continue without leaking jumps
 //! to an outer frame.
 
-use alloc::vec::Vec;
-
 use super::Compiler;
 
 impl Compiler {
     /// Open a fresh `break` + `continue` scope for a `while` /
-    /// `for` / `do-while` body. Both stacks are pushed; the caller
-    /// finishes with [`Self::patch_loop_continues`] (to land continues
-    /// at the loop's step / cond-check PC) and [`Self::patch_loop_breaks`]
-    /// (to land breaks just past the loop), in that order.
+    /// `for` / `do-while` body. The caller finishes with
+    /// [`Self::patch_loop_continues`] then [`Self::patch_loop_breaks`].
     pub(super) fn enter_loop(&mut self) {
-        self.loop_breaks.push(Vec::new());
-        self.loop_continues.push(Vec::new());
+        self.loop_break_depth += 1;
+        self.loop_continue_depth += 1;
     }
 
     /// Open a `break`-only scope for a `switch` body. C disallows
-    /// `continue` inside a switch, so only `loop_breaks` gets a
-    /// new stack frame; the caller finishes with
-    /// [`Self::patch_loop_breaks`] alone.
+    /// `continue` inside a switch, so the `continue` depth stays
+    /// put.
     pub(super) fn enter_switch(&mut self) {
-        self.loop_breaks.push(Vec::new());
+        self.loop_break_depth += 1;
     }
 
-    /// Patch every `Jmp` operand recorded by the innermost loop's
-    /// `continue` statements to land at `target_pc`, then drop the
-    /// scope. Must be called before [`Self::patch_loop_breaks`] so the
-    /// stack discipline stays balanced. A stray call with no scope
-    /// open is a parser bug; it no-ops here so any earlier
-    /// diagnostic can still surface.
-    pub(super) fn patch_loop_continues(&mut self, target_pc: usize) {
-        for pc in self.loop_continues.pop().unwrap_or_default() {
-            self.text[pc] = target_pc as i64;
-        }
+    /// Close the innermost loop's `continue` scope. Stack-balanced
+    /// against [`Self::enter_loop`].
+    pub(super) fn close_loop_continues(&mut self) {
+        self.loop_continue_depth = self.loop_continue_depth.saturating_sub(1);
     }
 
-    /// Patch every `Jmp` operand recorded by the innermost loop's
-    /// or switch's `break` statements to land at `target_pc`, then
-    /// drop the scope.
-    pub(super) fn patch_loop_breaks(&mut self, target_pc: usize) {
-        for pc in self.loop_breaks.pop().unwrap_or_default() {
-            self.text[pc] = target_pc as i64;
-        }
-    }
-
-    /// Record the operand-PC of a `Jmp` emitted for an explicit
-    /// `break` statement; the enclosing loop / switch's exit
-    /// patcher backfills the target. Caller has already verified
-    /// the loop_breaks stack is non-empty (the lex-time
-    /// `if self.loop_breaks.is_empty()` check raises a diagnostic
-    /// first), so the `if let` here is defensive: a stray call
-    /// silently drops the jmp rather than panicking.
-    pub(super) fn record_break_jmp(&mut self, jmp_operand_pc: usize) {
-        if let Some(stack) = self.loop_breaks.last_mut() {
-            stack.push(jmp_operand_pc);
-        }
-    }
-
-    /// Record the operand-PC of a `Jmp` emitted for an explicit
-    /// `continue` statement; the enclosing loop's continue
-    /// patcher backfills the target. Caller has already verified
-    /// the loop_continues stack is non-empty.
-    pub(super) fn record_continue_jmp(&mut self, jmp_operand_pc: usize) {
-        if let Some(stack) = self.loop_continues.last_mut() {
-            stack.push(jmp_operand_pc);
-        }
+    /// Close the innermost loop's or switch's `break` scope.
+    pub(super) fn close_loop_breaks(&mut self) {
+        self.loop_break_depth = self.loop_break_depth.saturating_sub(1);
     }
 }

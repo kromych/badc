@@ -9,9 +9,9 @@
 //
 // C99 7.17p2: `size_t` is the unsigned integer type of the
 // result of `sizeof`. A signed underlying type makes
-// `~(size_t)0` evaluate to -1 (instead of the max value) and
-// silently corrupts every `MAX_SIZET / N` style cap (lua's
-// `MAXASIZE`, sqlite's `SQLITE_MAX_LENGTH`, ...).
+// `~(size_t)0` evaluate to -1 instead of the max value and
+// silently corrupts the `((size_t)-1) / N`-style allocation
+// caps that user code derives from `SIZE_MAX`.
 //
 // NULL is the canonical zero pointer literal. The offsetof
 // shape `&((T*)0)->m` is recognised by the constant-expression

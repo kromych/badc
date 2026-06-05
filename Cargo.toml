@@ -31,6 +31,14 @@ std = []
 # with `default-features = false, features = ["std"]` to keep the
 # library footprint slim.
 linker = []
+# Exposes the register-allocator pressure knobs (per-bank GPR / FP
+# count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
+# `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment
+# variables). Used to force spilling at arbitrary pressure for
+# codegen validation. Off by default: a production build ignores the
+# caps entirely and the allocator always sees the full register file.
+# Pulls in `std` for the env-var knobs and the thread-local override.
+codegen_test = ["std"]
 
 [dependencies]
 # `hashbrown` is the no_std-friendly hash table the preprocessor uses
@@ -40,3 +48,22 @@ linker = []
 # purely internal keys (macro names) and avoids the small extra cost
 # of the `aHashMap` initialisation.
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+# `rustc-hash` ships the `FxHash` hasher rustc itself uses for its
+# internal id-keyed maps. We use it through `hashbrown::HashMap` (so
+# the `no_std + alloc` build path is unchanged) on the codegen hot
+# paths whose keys are small integers (bytecode PCs, function ids)
+# and whose iteration order is never relied on. Default-features off
+# matches the rest of the dep set.
+rustc-hash = { version = "2", default-features = false }
+
+[lints.rust]
+# Promote the default-warn unused lints to deny so dead state can't
+# accumulate across refactors. CI already runs `-D warnings`, but
+# pinning the floor in Cargo.toml means a local `cargo build`
+# matches CI behaviour without RUSTFLAGS plumbing.
+unused_variables = "deny"
+unused_assignments = "deny"
+unused_imports = "deny"
+unused_must_use = "deny"
+unused_mut = "deny"
+dead_code = "deny"

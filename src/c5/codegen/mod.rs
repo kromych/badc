@@ -3,25 +3,22 @@
 //! without involving the VM. The default for the badc CLI; see also
 //! [`jit::jit_run`] for the in-process variant.
 //!
-//! The story is intentionally simple: lower the existing stack-machine
-//! bytecode straight to native instructions, then wrap the bytes in
-//! whatever executable container the OS wants. Lowering is one pass
-//! per arch; an opt-in register-pool analyzer ([`regalloc`]) routes
-//! short-lived push/pop pairs through real registers when `-O` is on.
-//!
 //! ## Pipeline
 //!
-//! [`Program`] -> per-arch lowering -> raw machine code -> per-OS
-//! image writer -> bytes on disk -> (Apple Silicon only) shell to
-//! `codesign --sign -`.
+//! [`Program`] -> [`ssa_shadow::produce_ssa_funcs`] (per-function
+//! SSA + CFG, sourced from the walker / cached `user_ssa_funcs`) ->
+//! [`ssa_alloc::allocate`] (graph-coloring register allocation) ->
+//! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
+//! raw machine code -> per-OS image writer -> bytes on disk ->
+//! (Apple Silicon only) shell to `codesign --sign -`.
 //!
 //! ## What we trade away
 //!
 //! Native binaries skip the VM's safety net. There's no
 //! `--track-pointers` equivalent, no `mprotect` enforcement, no
 //! code-vs-data separation check on every load and store. The
-//! `--interp` mode runs the same bytecode under the VM if you want
-//! the watchful version.
+//! `--interp` mode runs the same program under the SSA-walking
+//! VM if you want the watchful version.
 //!
 //! ## Supported targets
 //!
@@ -34,17 +31,36 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::error::C5Error;
-use super::op::Op;
 use super::program::Program;
 
 mod aarch64;
-mod disasm;
 mod dwarf;
+mod dwarf_reloc;
 mod elf;
+#[cfg(feature = "std")]
+mod elf_reloc;
 mod jit;
 mod mach_o;
 mod pe;
-mod regalloc;
+pub(crate) mod ssa_alloc;
+pub(crate) mod ssa_build;
+mod ssa_c5_cdecl_audit;
+mod ssa_constfold_branch;
+mod ssa_dedup_imm;
+mod ssa_drop_redundant_extend;
+#[cfg(feature = "std")]
+mod ssa_dump;
+mod ssa_emit_aarch64;
+mod ssa_emit_common;
+mod ssa_emit_x86_64;
+mod ssa_inline;
+mod ssa_liveness;
+pub(crate) mod ssa_mem2reg;
+mod ssa_native;
+mod ssa_phi_class;
+mod ssa_rotate;
+pub(crate) mod ssa_shadow;
+mod ssa_split_crit_edges;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};
@@ -200,6 +216,166 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
+/// Upper bound on ent_pcs the lowering needs to look up. The
+/// per-arch `lower` sizes `pc_to_native` by this value so
+/// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
+/// the SSA emit produces lands in range.
+pub(super) fn pc_extent_for_lowering(
+    program: &Program,
+    ssa_funcs: &[crate::c5::ir::FunctionSsa],
+) -> usize {
+    let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
+    // Cross-TU function-import placeholders sit past the
+    // highest `end_pc`; the codegen's per-`Inst::Call` fixup
+    // pass uses the same dense `pc_to_native` table to
+    // recognise them as out-of-range, so the table has to
+    // cover the placeholder range too. `extern_function_imports`
+    // is empty for every build that didn't go through the
+    // relocatable -c path.
+    let from_imports = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .max()
+        .unwrap_or(0);
+    from_ssa.max(from_imports)
+}
+
+/// Where a single call argument lands on the host ABI. Produced
+/// by [`plan_call_args`], consumed by the per-arch lowering at
+/// `Inst::CallExt` and (in non-variadic shape) at `Inst::Call`
+/// / `Inst::CallIndirect`. The placement is target-agnostic; the
+/// per-arch emitter turns each variant into the right load /
+/// store instruction pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ArgPlacement {
+    /// Goes into an integer arg register. Index is into
+    /// `Abi::int_arg_regs`.
+    IntReg(u8),
+    /// Goes into a floating-point arg register. Index is the
+    /// register number (d0..d7 on aarch64, xmm0..xmm7 on
+    /// x86_64).
+    FpReg(u8),
+    /// Goes onto the host outgoing-args stack at `[sp + offset]`
+    /// (post-`shadow_space`, post-scratch-allocation). 8-byte
+    /// stride.
+    Stack(u32),
+}
+
+/// Per-call argument plan + the host outgoing-args reservation
+/// the call site has to pre-allocate before staging the args.
+#[derive(Debug, Clone)]
+pub(super) struct CallPlan {
+    /// One entry per c5-stack arg, in source order. Length
+    /// matches `arg_count`.
+    pub placements: alloc::vec::Vec<ArgPlacement>,
+    /// Total bytes the caller must subtract from SP before
+    /// writing stack args, rounded up to a 16-byte multiple to
+    /// keep SP 16-aligned at the call. Includes `shadow_space`
+    /// (Win64 reserves 32 bytes for the callee to spill its
+    /// register args; AAPCS64 / SysV reserve 0).
+    pub scratch_bytes: u32,
+}
+
+/// Decide where each of `arg_count` call arguments lands per
+/// `abi`'s ABI dialect, given the per-arg FP-ness bitmap and how
+/// many of the args are fixed (the rest are variadic). The
+/// returned [`CallPlan`] is consumed by the per-arch emitter.
+///
+/// Argument-placement rules across the four supported dialects:
+///
+/// * **Standard AAPCS64 / SysV** (Linux aarch64, Linux x86_64):
+///   ints to `int_arg_regs`, FP scalars to the FP-reg bank,
+///   overflow to the host stack. Variadic args are placed
+///   identically to fixed ones.
+/// * **macOS arm64** (`variadic_on_stack`): fixed args follow
+///   AAPCS64; variadic args spill to the host stack at 8-byte
+///   stride, no FP regs used.
+/// * **Win64 / Windows aarch64** (`variadic_int_only`): fixed
+///   args follow the standard placement; variadic args use the
+///   integer reg bank only (FP variadic args ride int regs as
+///   their raw bit pattern), then overflow to the stack.
+pub(super) fn plan_call_args(
+    arg_count: usize,
+    fixed_args: usize,
+    fp_arg_mask: u32,
+    abi: Abi,
+) -> CallPlan {
+    let mut placements = alloc::vec::Vec::with_capacity(arg_count);
+    let int_max = abi.int_arg_regs.len();
+    let mut int_idx = 0usize;
+    let mut fp_idx = 0usize;
+    let mut stack_used: u32 = 0;
+    for i in 0..arg_count {
+        let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+        let is_variadic = i >= fixed_args;
+        let force_stack = is_variadic && abi.variadic_on_stack;
+        let allow_fp_reg = !is_variadic || !abi.variadic_int_only;
+
+        let placement = if force_stack {
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
+        } else if abi.position_indexed_args {
+            // Win64: arg position i picks reg i for both int and
+            // FP. No separate counters; arg 0 burns slot 0 even
+            // if a prior FP arg already used xmm0.
+            if i < int_max {
+                if is_fp && allow_fp_reg {
+                    ArgPlacement::FpReg(i as u8)
+                } else {
+                    ArgPlacement::IntReg(abi.int_arg_regs[i])
+                }
+            } else {
+                let off = stack_used;
+                stack_used += 8;
+                ArgPlacement::Stack(off)
+            }
+        } else if is_fp && allow_fp_reg && fp_idx < 8 {
+            let r = fp_idx as u8;
+            fp_idx += 1;
+            ArgPlacement::FpReg(r)
+        } else if int_idx < int_max {
+            // Routes both real int args and variadic FP args
+            // (under `variadic_int_only`) through the integer
+            // bank. The c5 stack stores every value as its raw
+            // 8-byte bit pattern, so the int-reg transfer
+            // matches what va_arg(double) on Microsoft reads
+            // back from the saved-int area.
+            let r = abi.int_arg_regs[int_idx];
+            int_idx += 1;
+            ArgPlacement::IntReg(r)
+        } else {
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
+        };
+        placements.push(placement);
+    }
+
+    // Shadow space rides ABOVE the outgoing-args region on Win64
+    // (caller-reserved area the callee may spill register args
+    // into). Add it to the reservation so the
+    // `[sp + offset]` writes from `Stack(offset)` land past it.
+    let raw = stack_used + abi.shadow_space;
+    let scratch_bytes = (raw + 15) & !15;
+    // Per `Stack(offset)` semantics, the caller writes each arg
+    // at `[sp + shadow_space + offset]`. Rebase the offsets so
+    // the emitter can use them directly without re-adding
+    // shadow_space on each store.
+    if abi.shadow_space > 0 {
+        for p in placements.iter_mut() {
+            if let ArgPlacement::Stack(off) = p {
+                *off += abi.shadow_space;
+            }
+        }
+    }
+    CallPlan {
+        placements,
+        scratch_bytes,
+    }
+}
+
 /// Decide how to extend a libc return value into the c5
 /// accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
@@ -268,17 +444,18 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
 }
 
 /// One resolved external import: a binding the program reaches
-/// for via `Op::JsrExt`, plus everything the codegen and writer
-/// need to wire it up. Built once per compilation by
+/// for via `Inst::CallExt`, plus everything the codegen and
+/// writer need to wire it up. Built once per compilation by
 /// [`ResolvedImports::resolve`] from the `#pragma binding(...)`
 /// table the preprocessor parsed out of the included headers.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedImport {
     /// Flat index into the program's `#pragma binding(...)` table
     /// -- the value the parser stored in the symbol's `val` field
-    /// and emitted as the operand of `Op::JsrExt`. The lowering
-    /// uses [`ResolvedImports::index_of_binding`] to translate this
-    /// back into a GOT / IAT slot index when patching call sites.
+    /// and emitted as `Inst::CallExt`'s `binding_idx`. The
+    /// lowering uses [`ResolvedImports::index_of_binding`] to
+    /// translate this back into a GOT / IAT slot index when
+    /// patching call sites.
     pub binding_idx: i64,
     /// The portable c5-side name (`"printf"`). Used by the VM to
     /// dispatch to the right Rust shim, and in compile-error
@@ -334,6 +511,74 @@ pub(crate) struct ResolvedImport {
     pub param_types: Vec<i64>,
 }
 
+/// Pre-baked DWARF byte streams from the multi-TU link.
+/// `synth_build` populates this from `MergedNative`; the
+/// final-image writer drops it into the output's `.debug_*`
+/// sections instead of regenerating via `dwarf::emit`.
+/// Address slots inside still need rebasing -- the producer
+/// emitted them as placeholders paired with reloc records.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MergedDwarf {
+    pub debug_info: Vec<u8>,
+    pub debug_abbrev: Vec<u8>,
+    pub debug_line: Vec<u8>,
+    pub debug_str: Vec<u8>,
+    /// Text-targeting DWARF relocs the linker couldn't apply
+    /// without the writer's committed `.text` runtime address.
+    /// Each entry stores the placeholder offset inside its
+    /// parent merged section, the merged-text offset of the
+    /// target, and the write width (4 or 8). The writer adds
+    /// `text_vaddr` to `merged_text_offset` and writes
+    /// little-endian bytes over the placeholder.
+    pub debug_info_text_relocs: Vec<DwarfTextReloc>,
+    pub debug_line_text_relocs: Vec<DwarfTextReloc>,
+}
+
+/// One text-targeting DWARF reloc surfaced through
+/// [`MergedDwarf`]. Mirrors [`crate::c5::linker::link::DebugTextReloc`]
+/// so the writer doesn't need to reach across the linker module
+/// boundary.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DwarfTextReloc {
+    pub byte_offset: u64,
+    pub merged_text_offset: u64,
+    pub width: u8,
+}
+
+/// Write the runtime address of a text-targeting DWARF
+/// placeholder over its preserved location in a merged DWARF
+/// section. The linker leaves `r.byte_offset` cleared; the
+/// writer adds `text_vmaddr` to `r.merged_text_offset` and writes
+/// the matching `r.width` bytes (4 or 8) little-endian.
+pub(super) fn apply_merged_dwarf_text_reloc(
+    section_bytes: &mut [u8],
+    r: &DwarfTextReloc,
+    text_vmaddr: u64,
+) -> Result<(), C5Error> {
+    let off = r.byte_offset as usize;
+    let end = off.checked_add(r.width as usize).ok_or_else(|| {
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+            "DWARF text reloc offset 0x{off:x} + width {} overflows",
+            r.width,
+        )))
+    })?;
+    if end > section_bytes.len() {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "DWARF text reloc past section end (offset 0x{off:x}, width {}, section length {})",
+                r.width,
+                section_bytes.len(),
+            ),
+        )));
+    }
+    let resolved = text_vmaddr.wrapping_add(r.merged_text_offset);
+    let bytes = &resolved.to_le_bytes()[..r.width as usize];
+    section_bytes[off..end].copy_from_slice(bytes);
+    Ok(())
+}
+
 /// One resolved dylib the program needs at load time. Distinct from
 /// [`super::preprocessor::DylibSpec`] in that this only contains the
 /// dylibs whose bindings the program *uses* -- declaring `<windows.h>`
@@ -350,7 +595,7 @@ pub(crate) struct ResolvedDylib {
 }
 
 /// The full set of imports a single compilation needs, derived from
-/// the bytecode walk + the `#pragma binding` table. Each
+/// the SSA walk + the `#pragma binding` table. Each
 /// [`ResolvedImport`]'s position in `imports` is also its GOT / IAT
 /// slot index, so the lowering pass and the wire-format writer share
 /// a single enumeration without coordinating through a static table.
@@ -364,24 +609,23 @@ impl ResolvedImports {
     /// Look up the slot index for a given binding-flat index.
     /// `None` if the program doesn't reach for that binding --
     /// callers should treat that as a codegen bug (lowering
-    /// shouldn't emit a fixup for an `Op::JsrExt` operand that
-    /// isn't in the resolved set).
+    /// shouldn't emit a fixup for an `Inst::CallExt` whose
+    /// `binding_idx` isn't in the resolved set).
     pub fn index_of_binding(&self, binding_idx: i64) -> Option<usize> {
         self.imports
             .iter()
             .position(|i| i.binding_idx == binding_idx)
     }
 
-    /// Add a binding the writer needs even if the bytecode walk
-    /// didn't find a call site for it. Currently used by the ELF
+    /// Add a binding the writer needs even if the SSA walk didn't
+    /// find a call site for it. Currently used by the ELF
     /// writers' `_start` stub, which always tail-calls libc `exit`
     /// regardless of whether the user's code did.
     ///
     /// Resolves by name through `program.dylibs` the same way the
-    /// bytecode walk would, so a source that forgot `<stdlib.h>`
-    /// still gets the friendly
-    /// "no `#pragma binding(... ::exit, ...)`" diagnostic instead
-    /// of a writer-side panic.
+    /// SSA walk would, so a source that forgot `<stdlib.h>` still
+    /// gets the friendly "no `#pragma binding(... ::exit, ...)`"
+    /// diagnostic instead of a writer-side panic.
     pub fn force_include_by_name(
         &mut self,
         local_name: &str,
@@ -438,46 +682,60 @@ impl ResolvedImports {
         Ok(())
     }
 
-    /// Walk `program.text`, collect every `Op::JsrExt` binding-idx
-    /// the bytecode reaches for, look each one up in
-    /// `program.dylibs`, and return the resolved set.
+    /// Collect every libc binding the program reaches for and
+    /// look each one up in `program.dylibs`. The dylib list is
+    /// built by deduplicating against `program.dylibs` ordering,
+    /// so a program that calls `printf` (in `libc`) and
+    /// `LoadLibraryA` (in `kernel32`) gets two dylibs in that
+    /// declaration order.
     ///
-    /// The dylib list is built by deduplicating against
-    /// `program.dylibs` ordering, so a program that calls `printf`
-    /// (in `libc`) and `LoadLibraryA` (in `kernel32`) gets two
-    /// dylibs in that declaration order.
+    /// Sources: every walker AST `Expr::Call` with a `Sys` callee
+    /// plus every `Inst::CallExt` / `Terminator::TailExt`
+    /// reachable from `synthetic_ssa_funcs` and `user_ssa_funcs`.
+    /// The two SSA vectors cover both fresh compiles (AST +
+    /// synth) and archive reloads (round-tripped user SSA + synth).
     pub fn resolve(program: &Program) -> Result<Self, C5Error> {
-        // Walk bytecode, collecting used binding-flat indices in
-        // first-encounter order. The order determines GOT slot
-        // indices; within a single compilation it just needs to be
-        // deterministic.
-        //
-        // The walker has to skip every operand-bearing op's operand
-        // word so the next iteration lands on a real opcode rather
-        // than a stray operand value. The optimizer's
-        // immediate-arith ops (`AddI`, `LdLocI`, ...) carry one
-        // operand each; missing them in the skip set used to make
-        // the walk drift onto operand bytes after the first
-        // optimized site, decoding garbage and stopping early --
-        // any `Op::JsrExt` past that point would then be invisible
-        // and the codegen would fail with "no import slot for
-        // binding N".
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
-        let mut pc = 0;
-        while pc < program.text.len() {
-            let Some(op) = Op::from_i64(program.text[pc]) else {
-                // Unknown opcode -- not our problem here; the
-                // optimizer / VM will surface it.
-                break;
-            };
-            if matches!(op, Op::JsrExt | Op::TailExt) {
-                let idx = program.text[pc + 1];
-                if seen.insert(idx) {
+        for func in &program.finished_functions {
+            for expr in &func.ast.exprs {
+                let super::ast::Expr::Call { callee, .. } = expr else {
+                    continue;
+                };
+                let callee_idx = *callee as usize;
+                if callee_idx >= func.ast.exprs.len() {
+                    continue;
+                }
+                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
+                    continue;
+                };
+                if *class != super::token::Token::Sys as i64 {
+                    continue;
+                }
+                if seen.insert(*val) {
+                    used.push(*val);
+                }
+            }
+        }
+        for func in program
+            .synthetic_ssa_funcs
+            .iter()
+            .chain(program.user_ssa_funcs.iter())
+        {
+            for inst in &func.insts {
+                if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                    && seen.insert(*binding_idx)
+                {
+                    used.push(*binding_idx);
+                }
+            }
+            for blk in &func.blocks {
+                if let crate::c5::ir::Terminator::TailExt(idx) = blk.terminator
+                    && seen.insert(idx)
+                {
                     used.push(idx);
                 }
             }
-            pc += op.word_size();
         }
 
         // Resolve each used binding-idx through `program.dylibs`.
@@ -490,8 +748,8 @@ impl ResolvedImports {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                     &format!(
-                        "Op::JsrExt operand {binding_idx} is out of range for the program's \
-                     `#pragma binding(...)` table"
+                        "Inst::CallExt binding_idx {binding_idx} is out of range for the \
+                     program's `#pragma binding(...)` table"
                     ),
                 )));
             };
@@ -524,8 +782,8 @@ impl ResolvedImports {
         // forcing a framework's runtime-init code to fire (e.g.,
         // AppKit registering the NSApplication class with the
         // Objective-C runtime so `objc_getClass("NSApplication")`
-        // resolves). The bytecode walk above only collects dylibs
-        // that owned at least one `Op::JsrExt` binding; declared-
+        // resolves). The SSA walk above only collects dylibs that
+        // owned at least one `Inst::CallExt` binding; declared-
         // but-unused dylibs were silently dropped here, with the
         // visible symptom that the program's dynamic-init hook
         // never ran. Append them in source-declared order so the
@@ -579,9 +837,9 @@ pub(crate) struct Build {
     pub text: Vec<u8>,
     /// Initialised data segment: string literals + zero-initialised
     /// globals. Copied into `__DATA,__data` by the writer; offsets
-    /// into this buffer match the bytecode's view of the data segment,
-    /// so a `DataFixup { data_offset: K }` resolves to byte K of this
-    /// `Vec`.
+    /// into this buffer match the SSA emit's view of the data
+    /// segment, so a `DataFixup { data_offset: K }` resolves to
+    /// byte K of this `Vec`.
     pub data: Vec<u8>,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
@@ -600,28 +858,65 @@ pub(crate) struct Build {
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
     pub func_fixups: Vec<FuncFixup>,
-    /// Sparse map from bytecode PC (index into `Program::text`) to
-    /// the byte offset within `Build::text` where that op's emitted
-    /// instructions start. `usize::MAX` for indices that aren't a
-    /// bytecode instruction's first word (operand slots, etc.). The
+    /// Sparse map from SSA-tier PC (ent_pc / end_pc /
+    /// block_start_pc / sentinel) to the byte offset within
+    /// `Build::text` where that PC's emitted instructions start.
+    /// `usize::MAX` for indices that aren't a recognised PC. The
     /// last entry is the total code length, so `[i+1] - [i]` gives
-    /// the byte length of the op at PC `i`.
-    pub bytecode_to_native: Vec<usize>,
-    /// Map from bytecode PC of an address-taken function to the
-    /// byte offset within `Build::text` of its host-ABI -> c5-ABI
-    /// arg-shuffling thunk. `code_relocs` data slots and Op::Imm
-    /// function-pointer literals must read this preferentially
-    /// over `bytecode_to_native`: the thunk re-spills the host's
-    /// register args onto the c5 stack at `[rbp+16]`, `[rbp+32]`,
-    /// ... where the body's `Lea` ops expect them. Calling a
-    /// bare body via Jsri works on SysV / AAPCS64 by accident
-    /// (the Jsri lowering reads c5-stack args without disturbing
-    /// rsp), but Win64's 32-byte shadow-space allocation shifts
-    /// rsp before the call and the body's `[rbp+16]` lands inside
-    /// the shadow region. Empty when no function's address is
-    /// taken (or when every address-taken function takes zero
-    /// args -- those don't need a thunk).
-    pub func_thunk_offsets: alloc::collections::BTreeMap<usize, usize>,
+    /// the byte length covered between PCs `i` and `i+1`.
+    pub pc_to_native: Vec<usize>,
+    /// `ent_pc` of every function the lowering emitted, in
+    /// lowering (= emission) order. The DWARF builder iterates
+    /// this to produce one `Subprog` per function.
+    pub func_ent_pcs: Vec<usize>,
+    /// Source-level function names parallel to `func_ent_pcs`,
+    /// populated from `FunctionSsa::name` during the per-arch
+    /// emit loop. Empty entries surface for archive-reloaded
+    /// units (the name doesn't round-trip yet) and for test-only
+    /// fixtures. The symbol-table and DWARF emitters consult
+    /// this column first, then fall back to a `fn_<ent_pc>`
+    /// placeholder.
+    pub func_names: Vec<String>,
+    /// Per-arch call sites to external symbols recorded during
+    /// the SSA emit pass, before PLT trampoline application.
+    /// Final-image writers don't read this; the
+    /// `OutputKind::Relocatable` writer surfaces each entry as
+    /// an ELF `.rela.text` reloc against the import's symbol.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+    pub reloc_call_sites: Vec<RelocCallSite>,
+    /// Cross-TU user-function call sites. Each entry pairs the
+    /// byte offset of the BL / CALL placeholder with the callee's
+    /// symbol name. The codegen redirects every `Inst::Call`
+    /// whose `target_pc` matches a [`Program::extern_function_imports`]
+    /// placeholder into this list, leaves the imm26 / disp32
+    /// at zero, and skips the matching intra-unit `Fixup::Bl`
+    /// resolution. The `OutputKind::Relocatable` writer emits one
+    /// undefined-extern symbol per unique name plus one
+    /// `R_AARCH64_CALL26` / `R_X86_64_PLT32` reloc per call site
+    /// in `.rela.text`. Final-image writers leave the field
+    /// untouched because no `extern_function_imports` ever land
+    /// in a single-TU compile path.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+    pub user_extern_call_sites: Vec<UserExternCallSite>,
+    /// Cross-TU data references. Populated by the SSA emitters
+    /// for every `Inst::ImmData(0)` whose value-id appears in
+    /// `FunctionSsa::extern_imm_data_refs`. The
+    /// `OutputKind::Relocatable` writer turns each entry into
+    /// a named undefined-data symbol + a `.rela.text` pair
+    /// (`R_AARCH64_ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC` on
+    /// aarch64, `R_X86_64_PC32` on x86_64). Final-image writers
+    /// resolve them through the linker's merged symbol table.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+    pub user_extern_data_refs: Vec<UserExternDataRef>,
+    /// SSA-side `.debug_line` rows: each `(native_pc, line,
+    /// file_idx)` entry says "the instruction whose first byte
+    /// lives at `native_pc` in `Build::text` corresponds to source
+    /// line `line` of file `file_idx`". Populated by the per-arch
+    /// SSA emit each time the walker-recorded source position
+    /// changes between consecutive `Inst`s. `file_idx` is an index
+    /// into `Program::source_files`. Empty for builds whose SSA
+    /// has no source info attached.
+    pub ssa_line_rows: Vec<(usize, u32, u32)>,
     /// Per-Build resolved import set. Built by lowering once it knows
     /// which libc ops the program uses; consumed by the wire-format
     /// writer to populate the IAT / dynsym / __got tables.
@@ -637,29 +932,29 @@ pub(crate) struct Build {
     /// `Program::tls_data`. The writer routes the first
     /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
     /// and the remainder to `.tbss` (zero-fill TLS bss). The
-    /// per-target codegen lowering for `Op::TlsLea` reads
+    /// per-target codegen lowering for `Inst::TlsAddr` reads
     /// `tls_data.len()` to compute variant-2 (x86_64) negative
     /// offsets at emit time.
     pub tls_data: Vec<u8>,
     /// Number of `tls_data` bytes that are statically initialised.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
-    /// Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
-    /// on a Win64 target. The writer reserves a 4-byte
-    /// `_tls_index` slot in `.data`, builds the
+    /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
+    /// lowering site on a Win64 target. The writer reserves a
+    /// 4-byte `_tls_index` slot in `.data`, builds the
     /// `IMAGE_TLS_DIRECTORY`, and patches each fixup with the
     /// displacement to the slot. Empty for non-Win64 targets and
     /// for Win64 programs with no `_Thread_local` globals.
     pub tls_index_fixups: Vec<TlsIndexFixup>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
-    /// `Op::TlsLea` site on macOS. Each records an
+    /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the
     /// per-variable `__thread_vars` descriptor.
     pub macho_tlv_fixups: Vec<MachoTlvFixup>,
     /// macOS arm64 TLV descriptors. One entry per distinct TLS
     /// variable referenced by the program; each descriptor's
     /// `offset_in_block` is the byte offset within
-    /// `Build::tls_data` (matching what `Op::TlsLea` records).
+    /// `Build::tls_data` (matching `Inst::TlsAddr`'s operand).
     /// The writer emits a 24-byte descriptor per entry into the
     /// `__DATA,__thread_vars` section: `[ __tlv_bootstrap | 0 |
     /// offset_in_block ]`. Empty unless the target is macOS arm64
@@ -674,9 +969,9 @@ pub(crate) struct Build {
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
     /// Function-pointer initializers in the data segment. Mirror
     /// of [`Program::code_relocs`]. Each entry pairs a data-segment
-    /// slot with the bytecode PC of a function; the per-format
+    /// slot with the ent_pc of a function; the per-format
     /// writer translates the PC to the native code offset via
-    /// `bytecode_to_native` and patches the slot to the runtime
+    /// `pc_to_native` and patches the slot to the runtime
     /// code address.
     pub code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
@@ -698,7 +993,7 @@ pub(crate) struct Build {
     /// boilerplate `mov eax, 1; ret` stub. `Some(pc)` -> writer
     /// suppresses the stub and points
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
-    /// user's body via `bytecode_to_native[pc]`.
+    /// user's body via `pc_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
     /// Mirror of [`NativeOptions::debug_info`]. The per-format
     /// writers gate DWARF section emission on this -- when
@@ -707,6 +1002,18 @@ pub(crate) struct Build {
     /// so existing tests that build a `Build` by hand keep
     /// debug info enabled.
     pub debug_info: bool,
+    /// Pre-baked merged DWARF byte streams. Set by the
+    /// multi-TU link synthesizer (`synth_build.rs`) so the
+    /// final-image writer consumes the linker-merged bytes
+    /// instead of regenerating via `dwarf::emit`. `None`
+    /// (the in-memory compile path) falls back to the on-the-fly
+    /// emitter. Each tuple element is the matching standard
+    /// section payload; relocs against runtime addresses
+    /// (`DwarfReloc` entries from the producer) are still
+    /// pending and need to be applied by the writer once it
+    /// knows the final vmaddr layout.
+    #[allow(dead_code)]
+    pub merged_dwarf: Option<MergedDwarf>,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
     /// `plt_trampoline_offsets[i]` is the local code address the
@@ -716,12 +1023,27 @@ pub(crate) struct Build {
     /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
     /// instructions on aarch64 / 1 instruction on x86_64) that
     /// the per-arch lowering emits at the tail of the user code.
-    /// Every `Op::JsrExt` / `Op::TailExt` call site now branches
-    /// here via `bl` / `call rel32` instead of inlining the GOT
-    /// load -- so a debugger's `b malloc` resolves against this
-    /// in-image local symbol rather than getting lost in the
-    /// dynamic linker's macro-expansion sites.
+    /// Every `Inst::CallExt` / `Terminator::TailExt` lowering
+    /// branches here via `bl` / `call rel32` instead of inlining
+    /// the GOT load -- so a debugger's `b malloc` resolves
+    /// against this in-image local symbol rather than getting
+    /// lost in the dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<usize>,
+    /// Post-prologue native byte offset of each function, keyed by
+    /// `ent_pc`. The SSA emit records `code.len()` right after the
+    /// prologue; the DWARF CFI pass turns the value into the FDE's
+    /// `DW_CFA_advance_loc` so the post-prologue CFA / saved-reg
+    /// rule installs at the right PC. Keyed by the function's own
+    /// `ent_pc` (unique per function) rather than a derived PC slot
+    /// in `pc_to_native`, which a neighbouring function's PC can
+    /// alias when both are small.
+    pub func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
+    /// Frame slots mem2reg promoted to registers, keyed by the
+    /// function's `ent_pc`. The debug-info emitter drops the frame
+    /// location for a local on one of these slots, since the slot no
+    /// longer holds the value (a stale `DW_OP_fbreg` would make the
+    /// debugger read uninitialised frame memory).
+    pub promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -730,7 +1052,7 @@ pub(crate) struct Build {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MachoTlvDescriptor {
     /// Byte offset within `Build::tls_data` where this variable
-    /// starts. Mirrors `Op::TlsLea`'s operand.
+    /// starts. Mirrors `Inst::TlsAddr`'s operand.
     pub offset_in_block: u64,
 }
 
@@ -747,10 +1069,10 @@ pub(crate) struct GotFixup {
     pub import_index: usize,
 }
 
-/// Relocation for `Op::Imm <data_offset>`: the codegen emits an
-/// `adrp + add` placeholder pair to materialize the address into the
-/// VM accumulator, and the writer patches both halves once it knows
-/// where `__data` lands in vmaddr space.
+/// Relocation for `Inst::ImmData`: the codegen emits an
+/// `adrp + add` placeholder pair to materialize the address into
+/// the VM accumulator, and the writer patches both halves once
+/// it knows where `__data` lands in vmaddr space.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DataFixup {
     /// Byte offset within `Build::text` of the adrp instruction.
@@ -764,7 +1086,7 @@ pub(crate) struct DataFixup {
 // the per-target TLS offset (variant-1 TCB_HEAD + offset on
 // aarch64, variant-2 -(tls_size - offset) on x86_64) only depends
 // on the total TLS block size, which is known when the codegen
-// lowers `Op::TlsLea`. The codegen materialises the final
+// lowers `Inst::TlsAddr`. The codegen materialises the final
 // immediate inline; the writer just needs `Build::tls_data` /
 // `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
 //
@@ -774,8 +1096,8 @@ pub(crate) struct DataFixup {
 // access (so the same compiled image works regardless of which
 // slot the loader picked). The address of `_tls_index` isn't
 // known until the writer lays out the data segments, so each
-// `Op::TlsLea` records a [`TlsIndexFixup`] for the writer to
-// patch.
+// `Inst::TlsAddr` lowering site records a [`TlsIndexFixup`] for
+// the writer to patch.
 
 /// Relocation for a Win64 TLS access. Records a code site whose
 /// instruction needs to be patched with the displacement to the
@@ -832,16 +1154,83 @@ pub(crate) struct MachoTlvFixup {
     pub descriptor_index: usize,
 }
 
-/// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).
-/// Same `adrp + add` shape as [`DataFixup`], but the target is another
-/// position inside `Build::text` rather than `Build::data`.
+/// Relocatable-object call site: the byte offset of the BL / B
+/// (aarch64) or CALL / JMP (x86_64) placeholder that reaches an
+/// external symbol via its PLT trampoline. The final-image
+/// writer rewrites these in place after the trampoline pool is
+/// laid out; the `OutputKind::Relocatable` writer surfaces them
+/// as `R_AARCH64_CALL26` / `R_X86_64_PLT32` entries in
+/// `.rela.text` against the import's external symbol.
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+pub(crate) struct RelocCallSite {
+    /// Byte offset within `Build::text` of the call instruction.
+    /// For aarch64 BL/B the imm26 occupies the low 26 bits of
+    /// the 4-byte instruction; the ELF reloc applies at this
+    /// offset directly. For x86_64 CALL/JMP rel32 the rel32
+    /// operand starts at `instr_offset + 1`; the ELF reloc
+    /// applies there.
+    pub instr_offset: usize,
+    /// Index into `Build::imports.imports` -- which external
+    /// symbol the call reaches for.
+    pub import_index: usize,
+    /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
+    /// calls (`bl` / `call rel32`). The relocation type is the
+    /// same on each arch -- the link bit / opcode prefix lives
+    /// in the placeholder bytes the codegen already emitted.
+    #[allow(dead_code)]
+    pub is_tail: bool,
+}
+
+/// Cross-TU user-function call site. Same shape as
+/// [`RelocCallSite`] but the target is named directly --
+/// `extern_function_imports` lives on `Program`, not on `Build`,
+/// and a single `String` per call site is cheaper than threading
+/// a second `Vec<String>` plus an index. Unique names get folded
+/// into one undefined symbol each by the writer's strtab build.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+pub(crate) struct UserExternCallSite {
+    /// Byte offset within `Build::text` of the call instruction.
+    /// Same convention as [`RelocCallSite::instr_offset`].
+    pub instr_offset: usize,
+    /// Symbol name of the cross-TU callee. The writer interns
+    /// this into the strtab and emits one undefined symbol per
+    /// unique name.
+    pub symbol_name: alloc::string::String,
+    /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
+    /// calls (`bl` / `call rel32`).
+    pub is_tail: bool,
+}
+
+/// Cross-TU data reference. Same `adrp + add` (aarch64) or
+/// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
+/// target is a named symbol defined in another TU rather than
+/// a local `.data` byte offset. The writer emits one undefined
+/// `STT_OBJECT STB_GLOBAL` symbol per unique name and one reloc
+/// per ref pointing at that symbol.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+pub(crate) struct UserExternDataRef {
+    /// Byte offset within `Build::text` of the `adrp` /
+    /// `lea`-prefix instruction. The writer pairs it with the
+    /// follow-up `add` on aarch64 to emit both halves of the
+    /// page-relative load.
+    pub instr_offset: usize,
+    /// Symbol name of the cross-TU data global.
+    pub symbol_name: alloc::string::String,
+}
+
+/// Relocation for a function-pointer literal (`Inst::ImmCode`).
+/// Same `adrp + add` shape as [`DataFixup`], but the target is
+/// another position inside `Build::text` rather than `Build::data`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FuncFixup {
     /// Byte offset within `Build::text` of the adrp instruction.
     pub adrp_offset: usize,
     /// Byte offset within `Build::text` of the target function's first
     /// instruction. Resolved by the codegen during `lower()` so the
-    /// writer doesn't need a bytecode-to-native map.
+    /// writer doesn't need to consult `pc_to_native` for this entry.
     pub target_native_offset: usize,
 }
 
@@ -854,25 +1243,11 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
-    /// Run the per-function register allocator. The c5 bytecode
-    /// pushes the left operand of every binary op onto the stack;
-    /// the regalloc routes most of those pushes through registers
-    /// instead (x20..x27 + x9..x15 on aarch64; rbx/r12/r14/r15 on
-    /// x86_64) so the matching binary op / `Si` / `Sc` reads its
-    /// operand from a register. The prologue saves only the
-    /// callee-saved slots actually used, and any function whose
-    /// max depth exceeds the per-arch pool capacity falls back to
-    /// real-stack pushes verbatim.
-    ///
-    /// Off by default. `--optimize` / `-O` flips it on, alongside
-    /// the bytecode optimizer. The two passes are independent --
-    /// each is correct on the other's input -- but together they
-    /// produce the fastest emitted code.
-    ///
-    /// The two always-on peepholes -- self-mov elision (in
-    /// `emit_mov_reg` / `emit_mov_rr`) and the cmp+branch fusion
-    /// described in the per-backend module docs -- run regardless
-    /// of this flag, since neither has a tradeoff worth gating.
+    /// Run the SSA optimization passes before register allocation:
+    /// mem2reg promotion of address-free local slots, function
+    /// inlining (bounded by `inline_cap`), rotate-idiom recognition,
+    /// branch const-folding, and immediate deduplication. Off by
+    /// default; the per-arch lowering runs these passes only when set.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
@@ -884,15 +1259,25 @@ pub struct NativeOptions {
     /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
     /// + `.debug_str` + `.debug_frame`) into the output binary.
     ///
-    /// On by default, matching gcc / clang behaviour for an
-    /// implicit `-g` build. Turning it off via `--no-debug` /
-    /// `-g0` shrinks the artifact (~10-30% on a large
-    /// translation unit), trims compile time (the type-catalog
-    /// walk is non-trivial on big inputs), and -- because the
-    /// only varying input across runs that differ in source
-    /// path is the DWARF blob -- gives byte-identical
-    /// production binaries useful for golden-hash bisection.
+    /// Off by default, matching gcc / clang, which emit no debug
+    /// info without `-g`. Enabling it via `-g` / `--debug` adds
+    /// compile time (the type-catalog walk is non-trivial on big
+    /// inputs) and artifact size (~10-30% on a large translation
+    /// unit). The default keeps builds fast and binaries small;
+    /// because the DWARF blob is the only output that varies with
+    /// the source path, a no-DWARF build is also byte-identical
+    /// across runs, useful for golden-hash bisection.
     pub debug_info: bool,
+    /// Print each SSA function's IR + allocator output to stderr
+    /// before lowering. Same as `--dump-asm` for native code: a
+    /// diagnostic emitted alongside the build. Off by default.
+    pub dump_ssa: bool,
+    /// Upper bound (in SSA `Inst` count) on a leaf function body
+    /// that may be inlined at its call sites under `-O`. The
+    /// `--inline-cap=N` CLI flag drives this; 0 disables the pass.
+    /// Default 64, matching gcc / clang `-O2`'s
+    /// `--param max-inline-insns-single=N` (gcc 70, clang ~50).
+    pub inline_cap: u32,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -916,12 +1301,18 @@ pub enum OutputKind {
     /// every `#pragma export(<name>)` becomes a callable
     /// entry point.
     SharedLibrary,
+    /// Relocatable native object (`.o` on ELF / Mach-O, `.obj` on
+    /// PE). Each function emits with cross-TU references left
+    /// as relocation entries against the unit's symbol table.
+    /// Consumed by a system linker (`ld`, `lld`, `link.exe`) or by
+    /// this compiler's `link_native_objects`. Locks the target at
+    /// compile time -- a relocatable produced for one target can't
+    /// be linked into a binary for a different one.
+    Relocatable,
 }
 
 impl Default for NativeOptions {
-    /// Defaults: optimizer off, executable output, DWARF on.
-    /// Matches the implicit-`-g` behaviour of gcc / clang and
-    /// the pre-#62 codegen.
+    /// Defaults: executable output, DWARF off, optimizations off.
     fn default() -> Self {
         Self::new()
     }
@@ -933,8 +1324,23 @@ impl NativeOptions {
         Self {
             optimize: false,
             output_kind: OutputKind::Executable,
-            debug_info: true,
+            debug_info: false,
+            dump_ssa: false,
+            inline_cap: 64,
         }
+    }
+
+    /// Set [`Self::inline_cap`] and return self.
+    pub const fn with_inline_cap(mut self, cap: u32) -> Self {
+        self.inline_cap = cap;
+        self
+    }
+
+    /// Print the SSA IR + allocation for every function. Same
+    /// observability shape as `--dump-asm`.
+    pub const fn with_dump_ssa(mut self) -> Self {
+        self.dump_ssa = true;
+        self
     }
 
     /// Set [`Self::optimize`] = true and return self.
@@ -976,7 +1382,8 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 }
 
 /// Variant of [`emit_native`] that accepts user-controllable
-/// optimization knobs.
+/// [`NativeOptions`]. `options.optimize` gates the SSA optimization
+/// passes (see [`NativeOptions::optimize`]).
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,
@@ -998,10 +1405,10 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     let mut imports = ResolvedImports::resolve(program)?;
     // Linux ELF's `_start` always tail-calls libc `exit` so glibc
     // gets to flush stdio and run atexit before the kernel reaps us.
-    // The bytecode walk only finds ops the *user's* code calls --
-    // a `int main() { return 42; }` has no `Op::Exit` -- so we
-    // force-include it here. Resolves through the same
-    // `program.dylibs` lookup as user-emitted ops would, so a
+    // The SSA walk only finds bindings the user's code calls --
+    // a `int main() { return 42; }` carries no call into `exit` --
+    // so force-include it here. Resolves through the same
+    // `program.dylibs` lookup as user-emitted bindings would, so a
     // source that omits `<stdlib.h>` still gets the friendly
     // "no `#pragma binding(... ::exit, ...)`" error.
     // Linux ELF executables tail-call libc `exit` from
@@ -1101,7 +1508,48 @@ fn append_build_info(build: &mut Build) {
     build.text.push(0);
 }
 
+/// Write a native image for `target` given an already-lowered `build`
+/// and its source `program`. Internal entry point shared between
+/// [`emit_native_with_options`] (single-TU path) and the linker's
+/// MergedNative-to-Build synthesizer (multi-TU `.o` link path). The
+/// synthesizer is gated behind the `linker` + `std` features; the
+/// no-default-features build has no consumer for this entry point.
+#[cfg(all(feature = "linker", feature = "std"))]
+pub(crate) fn write_native_image(
+    program: &Program,
+    build: &Build,
+    target: Target,
+) -> Result<Vec<u8>, C5Error> {
+    write_for(program, build, target)
+}
+
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
+    #[cfg(feature = "std")]
+    if build.output_kind == OutputKind::Relocatable {
+        // ELF64 ET_REL is the badc-internal relocatable format on
+        // every target -- single writer, single reloc table. The
+        // final executable still comes out in the target's native
+        // container (Mach-O / ELF / PE) at link time.
+        let machine = match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                Machine::Aarch64
+            }
+            Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
+        };
+        return elf_reloc::write_relocatable(program, build, machine, target);
+    }
+    // The no-std build can't reach the relocatable writer; the
+    // `-c` path lives in the CLI, which itself is std-only. If
+    // a no-std caller ever surfaces `Relocatable` it would
+    // fall through to the final-image writers below; the
+    // unreachable branch keeps the match arms exhaustive
+    // without pulling `elf_reloc` into the no-std build.
+    #[cfg(not(feature = "std"))]
+    if build.output_kind == OutputKind::Relocatable {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "Relocatable output requires the `std` feature",
+        )));
+    }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
@@ -1112,28 +1560,6 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
 }
 
 /// Render a textual listing of the lowered native code for `target`,
-/// grouped by the c4 op that produced each region. Output is hex
-/// bytes per op plus header metadata (target, sizes, entry offset,
-/// fixup counts). Triggered by the CLI's `--dump-asm` flag.
-pub fn dump_native_listing(
-    program: &Program,
-    target: Target,
-) -> Result<alloc::string::String, C5Error> {
-    dump_native_listing_with_options(program, target, NativeOptions::default())
-}
-
-/// Variant of [`dump_native_listing`] that accepts optimization
-/// knobs. The returned listing reflects whatever lowering the
-/// options selected.
-pub fn dump_native_listing_with_options(
-    program: &Program,
-    target: Target,
-    options: NativeOptions,
-) -> Result<alloc::string::String, C5Error> {
-    let build = lower_for(program, target, options)?;
-    Ok(disasm::dump(program, &build, target))
-}
-
 /// Per-target ABI knobs that affect lowering, not just the final
 /// Architecture flavour the lowering pass picks. Mirrors
 /// [`Machine`] but lives next to [`Abi`] so the per-target table
@@ -1150,8 +1576,8 @@ pub(crate) enum Arch {
 /// make: which registers carry integer arguments, how much
 /// shadow space the caller reserves, whether variadic calls go
 /// through the macOS-flavoured stack-packing path, and whether
-/// the System V `xor eax, eax` (zero XMM count) pre-call dance
-/// is required.
+/// the System V `xor eax, eax` (zero XMM count) pre-call
+/// instruction is required.
 ///
 /// Each native backend reads only the fields it needs; adding a
 /// target is one new row in [`Target::abi`]. Register lists are
@@ -1164,9 +1590,7 @@ pub(crate) struct Abi {
     /// Arch the lowering should produce instructions for. The
     /// `lower_for` dispatch already keys on this, but having it
     /// inside `Abi` lets ABI-aware helpers (entry stubs, fixup
-    /// patchers) carry one struct around rather than two. Read
-    /// in step 3 of the ABI plan when the entry-stub builder
-    /// lands.
+    /// patchers) carry one struct around rather than two.
     #[allow(dead_code)]
     pub arch: Arch,
     /// Integer arg-passing registers, in declaration order. The
@@ -1191,6 +1615,22 @@ pub(crate) struct Abi {
     /// pass variadic args identically to fixed args, so this
     /// flag is unset for them.
     pub variadic_on_stack: bool,
+    /// Windows variadic ABI passes variadic args through the
+    /// integer arg registers + the host stack, never through the
+    /// FP arg registers. Microsoft's `va_arg(double)` reads the
+    /// raw 8-byte bit pattern from the integer side (`__gr_top`
+    /// on Aarch64, the saved-int area on x64), so an AAPCS64-
+    /// or SysV-style FP-reg placement causes msvcrt's printf to
+    /// see denormal garbage. Mutually exclusive with
+    /// `variadic_on_stack` (Apple's all-stack flavour).
+    pub variadic_int_only: bool,
+    /// Win64 places each arg in the register at its argument
+    /// position (arg 0 -> int_arg_regs[0] / xmm0, arg 1 ->
+    /// int_arg_regs[1] / xmm1, ...) -- the type of arg 1 doesn't
+    /// shift arg 2's register. SysV / AAPCS64 instead advance
+    /// independent int and FP counters, so an FP arg in the
+    /// middle of an int sequence doesn't burn an int reg slot.
+    pub position_indexed_args: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site; c4 has no
     /// floats so the count is always 0, which means a single
@@ -1240,6 +1680,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: true,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
             Target::LinuxAarch64 => Abi {
@@ -1247,6 +1689,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
             Target::LinuxX64 => Abi {
@@ -1254,6 +1698,8 @@ impl Target {
                 int_arg_regs: SYSV_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: true,
             },
             Target::WindowsX64 => Abi {
@@ -1261,6 +1707,8 @@ impl Target {
                 int_arg_regs: WIN64_INT_ARGS,
                 shadow_space: 32,
                 variadic_on_stack: false,
+                variadic_int_only: true,
+                position_indexed_args: true,
                 variadic_zero_xmm_count: false,
             },
             Target::WindowsAarch64 => Abi {
@@ -1268,6 +1716,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: true,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
         }

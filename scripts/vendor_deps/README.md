@@ -1,8 +1,10 @@
 # vendor-deps bundle
 
 Demos that pull a third-party library (`miniz`, `kissfft`,
-`bzip2`, `sqlite3`) fetch the upstream archive on first use.
-CI hitting the upstream hosts directly was flaky -- transient
+`bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
+`monocypher`, `bearssl`, `lua`, `scc`) fetch the upstream
+archive on first use. CI hitting the upstream hosts directly
+was flaky -- transient
 `RemoteDisconnected` failures from the GitHub release CDN and
 sourceware.org. To stop those, the upstream archives are
 mirrored once on a `kromych/badc` GitHub release and each
@@ -18,12 +20,20 @@ sha256 verified before extraction.
 `upstream-sha-short` is the first 8 hex chars of the upstream
 project's identifier for the release:
 
-| library | source                                 | sha kind |
-|---------|----------------------------------------|----------|
-| miniz   | github richgel999/miniz tag commit     | git      |
-| kissfft | github mborgerding/kissfft tag commit  | git      |
-| bzip2   | gitlab bzip2-org/bzip2 tag commit      | git      |
-| sqlite  | `SQLITE_SOURCE_ID` Fossil release hash | fossil   |
+| library    | source                                  | sha kind        |
+|------------|-----------------------------------------|-----------------|
+| miniz      | github richgel999/miniz tag commit      | git             |
+| kissfft    | github mborgerding/kissfft tag commit   | git             |
+| bzip2      | sourceware.org bzip2 release commit     | git             |
+| sqlite     | `SQLITE_SOURCE_ID` Fossil release hash  | fossil          |
+| stb        | github nothings/stb pinned commit       | git             |
+| chibicc    | github rui314/chibicc last `main` commit| git             |
+| tinycc     | github TinyCC/tinycc `mob` HEAD commit  | git             |
+| tweetnacl  | tweetnacl.cr.yp.to static `.c` page     | content-sha256  |
+| monocypher | github LoupVaillant/Monocypher tag      | tarball-sha256  |
+| bearssl    | bearssl.org release tarball             | tarball-sha256  |
+| lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
+| scc        | git.simple-cc.org/scc master HEAD       | git             |
 
 The full sha is recorded in `manifest.json` and in each
 demo's `setup.py` constants (`UPSTREAM_SHA`).

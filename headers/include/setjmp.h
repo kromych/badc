@@ -49,13 +49,12 @@ void longjmp(jmp_buf env, int val);
 typedef long long jmp_buf[32];
 
 // Plain prototypes -- bound to msvcrt's setjmp / longjmp so a
-// bare identifier (e.g. `&longjmp` passed as a function pointer
-// in tinycc's `_tcc_setjmp(s1, jb, f, longjmp)`) resolves at
-// compile time. Direct call-through of those addresses on
-// AArch64 still crashes because msvcrt's longjmp routes
-// through SEH; the supported path is the function-like macros
-// below, which inline the CRT-free intrinsic at each call
-// site.
+// bare identifier (`&longjmp` passed as a function pointer)
+// resolves at compile time. Direct call-through of those
+// addresses on AArch64 still crashes because msvcrt's longjmp
+// routes through SEH; the supported path is the function-like
+// macros below, which inline the CRT-free intrinsic at each
+// call site.
 #pragma binding(msvcrt::setjmp, "_setjmp")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int setjmp(long long *env);

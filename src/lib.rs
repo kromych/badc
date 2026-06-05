@@ -9,9 +9,9 @@
 //! [`emit_native`] / [`emit_native_with_options`] lower it to bytes
 //! you can write to disk; [`jit_run`] / [`jit_run_with_options`]
 //! load and execute it in-process; [`Vm::new(program).run`]
-//! interprets the bytecode under a watchful pointer-tracking
-//! runtime. [`optimize`] sits between compile and any of those
-//! when you want it.
+//! interprets the pre-lifted SSA functions under a
+//! pointer-tracking runtime. [`optimize`] sits between compile
+//! and any of those when you want it.
 //!
 //! Started as a Rust port of c4; over time the dialect grew structs,
 //! a real preprocessor with `#include` / `#define` / `#pragma binding`,
@@ -55,25 +55,23 @@ extern crate alloc;
 /// Wrapped between two literal `**` markers so the prose can
 /// pop out of binary noise even with a noisy `strings` output.
 pub const BUILD_INFO: &str = concat!(
-    "**PRODUCED BY BADC v",
+    "BADC\n\tv",
     env!("CARGO_PKG_VERSION"),
-    ", commit ",
+    "\n\tcommit ",
     env!("BADC_GIT_COMMIT"),
-    ", branch ",
+    "\n\tbranch ",
     env!("BADC_GIT_BRANCH"),
-    ", remote ",
-    env!("BADC_GIT_REMOTE"),
-    "**",
+    "\n\tremote ",
+    env!("BADC_GIT_REMOTE")
 );
 
 pub mod c5;
 
 #[allow(unused_imports)]
 pub use c5::{
-    C5Error, CompileOptions, Compiler, Host, NativeOptions, Op, Overwrite, PredefinedKind,
-    PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, dump_native_listing,
-    dump_native_listing_with_options, embedded_headers, emit_native, emit_native_with_options,
-    jit_run, jit_run_with_options, optimize, predefined_symbols,
+    C5Error, CompileOptions, Compiler, Host, NativeOptions, OutputKind, Overwrite, PredefinedKind,
+    PredefinedSymbol, Program, Target, Trace, VariableInfo, Vm, embedded_headers, emit_native,
+    emit_native_with_options, jit_run, jit_run_with_options, predefined_symbols,
 };
 
 #[cfg(feature = "std")]
@@ -81,7 +79,14 @@ pub use c5::StdHost;
 
 #[cfg(feature = "linker")]
 pub use c5::{
-    ArchiveMember, Binding, DylibSpec, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Linkage,
-    Reloc, RelocKind, Subsystem, SymbolKind, link_units, read_archive, read_object, write_archive,
-    write_object,
+    ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_runtime, read_archive,
+    write_archive,
+};
+
+#[cfg(all(feature = "linker", feature = "std"))]
+pub use c5::{
+    MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
+    NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
+    is_elf_object, link_native_objects, parse_native_elf, write_executable_elf64,
+    write_native_image_from_merged,
 };

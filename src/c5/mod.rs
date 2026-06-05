@@ -1,15 +1,18 @@
+mod ast;
 mod codegen;
 mod compiler;
 mod error;
 mod headers;
 mod host;
+mod ir;
 mod lexer;
 #[cfg(feature = "linker")]
 mod linker;
 mod op;
-mod optimize;
 mod preprocessor;
 mod program;
+#[cfg(feature = "linker")]
+mod runtime;
 mod symbol;
 mod token;
 mod vm;
@@ -24,16 +27,14 @@ mod tests;
 #[allow(unused_imports)]
 pub use {
     codegen::{
-        NativeOptions, Target, dump_native_listing, dump_native_listing_with_options, emit_native,
-        emit_native_with_options, jit_run, jit_run_with_options,
+        NativeOptions, OutputKind, Target, emit_native, emit_native_with_options, jit_run,
+        jit_run_with_options,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     error::C5Error,
     headers::embedded_headers,
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
-    op::Op,
-    optimize::optimize,
     program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };
@@ -43,12 +44,19 @@ pub use host::StdHost;
 
 #[cfg(feature = "linker")]
 #[allow(unused_imports)]
+pub use linker::{ArchiveMember, read_archive, write_archive};
+#[cfg(all(feature = "linker", feature = "std"))]
+#[allow(unused_imports)]
 pub use linker::{
-    ArchiveMember, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind,
-    link_units, read_archive, read_object, write_archive, write_object,
+    MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
+    NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,
+    is_elf_object, link_native_objects, parse_native_elf, write_executable_elf64,
+    write_native_image_from_merged,
 };
 #[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
+#[cfg(feature = "linker")]
+pub use runtime::embedded_runtime;
 #[cfg(feature = "linker")]
 pub use symbol::Linkage;
 

@@ -1,20 +1,21 @@
-//! Forward-call backpatching and synthetic libc-trampoline emission.
+//! Code-reloc backpatching and synthetic libc-trampoline emission.
 //!
 //! Two passes that close out compilation:
 //!
-//!   * [`Compiler::apply_fn_call_fixups`] walks the linear table of
-//!     `(operand_pc, sym_idx)` pairs recorded by every `Jsr` /
-//!     bare-function-reference site and rewrites the operand to
-//!     the callee's now-resolved bytecode PC. The same pass also
-//!     drives `code_relocs` (static-initializer function-pointer
-//!     slots) using the parallel `code_reloc_sym_idx` shadow.
+//!   * [`Compiler::resolve_code_relocs`] rewrites every recorded
+//!     static-initializer function-pointer slot
+//!     (`code_relocs[i].target_ent_pc`) to the originating
+//!     symbol's post-body `Symbol::val` using the parallel
+//!     `code_reloc_sym_idx` shadow. The native writers walk
+//!     `Program::code_relocs` to lay down the per-target dynamic
+//!     relocation for each slot.
 //!
 //!   * [`Compiler::ensure_sys_trampoline_sym`] +
 //!     [`Compiler::emit_sys_trampolines`] handle the
 //!     "address of a libc function" idiom: there's no compile-time
 //!     libc address to fold in, so c5 synthesizes a tiny function
 //!     whose body re-pushes its declared params and re-dispatches
-//!     through `Op::JsrExt`. The synthetic symbol is allocated
+//!     through an external call. The synthetic symbol is allocated
 //!     lazily on first reference; the bodies are emitted in one
 //!     batch after every real function has landed so they never
 //!     split a caller mid-emission.
@@ -24,50 +25,21 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::lexer;
-use super::super::op::Op;
 use super::super::token::Token;
-use super::CODE_BASE;
 use super::Compiler;
 
 impl Compiler {
-    /// Rewrite every recorded forward-call placeholder so each
-    /// `Jsr` / fn-pointer-literal operand points at its callee's
-    /// final bytecode PC. The c5 model lets a function be *called*
-    /// before its body is parsed: the call-site emit only knows the
-    /// callee's `Symbol` index, not its `val` (which is the
-    /// bytecode PC the body will eventually land at). We stash the
-    /// `(operand_pc, sym_idx)` pair in `fn_call_fixups` at the
-    /// call-site emit; this pass walks the list and updates each
-    /// operand once every body has been emitted. The bias on
-    /// bare-function-reference emits (`CODE_BASE + val`) is
-    /// detected by reading the op preceding the operand: `Op::Imm`
-    /// means a value-context reference (fp = name) so the operand
-    /// carries the `CODE_BASE` bias; otherwise the op is `Op::Jsr`
-    /// and the operand is a raw bytecode PC.
-    pub(super) fn apply_fn_call_fixups(&mut self) -> Result<(), C5Error> {
-        for &(operand_pc, sym_idx) in &self.fn_call_fixups {
-            let target = self.symbols[sym_idx].val;
-            let op = self.text[operand_pc - 1];
-            if op == Op::Imm as i64 {
-                self.text[operand_pc] = CODE_BASE as i64 + target;
-            } else {
-                self.text[operand_pc] = target;
-            }
-        }
-        // Static-initializer function-pointer entries (vtables /
-        // function-pointer struct fields, e.g. dispatch tables of
-        // libc callbacks). Each `CodeReloc` was recorded at parse
-        // time with the
-        // symbol's prototype-time `val` (often 0); the parallel
-        // `code_reloc_sym_idx` tracks the originating symbol so
-        // we can read its post-body `val` here. We rewrite both
-        // the `target_bc_pc` and the matching little-endian
-        // bytes in `data` -- both are sourced from the same
-        // value at write time, so both must agree post-fixup.
+    /// Rewrite every `code_relocs[i].target_ent_pc` to the
+    /// originating symbol's post-body `val`. Walker-tier
+    /// `Inst::Call` / `Inst::ImmCode` references read the live
+    /// `Symbol::val` directly through `live_fun_val` and need no
+    /// post-parse fixup; only the data-segment function-pointer
+    /// initializers reach this pass.
+    pub(super) fn resolve_code_relocs(&mut self) -> Result<(), C5Error> {
         // The two arrays must be the same length (one symbol idx
         // per code reloc); a length mismatch is a bug in a
-        // CodeReloc-emitting site that forgot to record its
-        // sym idx.
+        // CodeReloc-emitting site that forgot to record its sym
+        // idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -83,13 +55,13 @@ impl Compiler {
             .iter_mut()
             .zip(self.code_reloc_sym_idx.iter())
         {
-            let new_target = self.symbols[sym_idx].val as u64;
-            reloc.target_bc_pc = new_target;
-            // Don't rewrite the data bytes -- the VM and per-target
-            // writers walk `code_relocs` and lay down their own
-            // bias (`CODE_BASE + target_bc_pc` for the VM; native
-            // VA for ELF / Mach-O / PE). They read `target_bc_pc`,
-            // not the placeholder bytes.
+            // The placeholder bytes in `self.data` stay
+            // unmodified: the VM and per-target writers walk
+            // `code_relocs` and lay down their own bias
+            // (`CODE_BASE + target_ent_pc` for the VM; native VA
+            // for ELF / Mach-O / PE). They read
+            // `target_ent_pc`, not the data bytes.
+            reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
         Ok(())
     }
@@ -137,10 +109,10 @@ impl Compiler {
     }
 
     /// Emit the body of every requested Sys trampoline. Called
-    /// after every real function body has been parsed -- so the
-    /// emitted bytecode lands at the tail of `text` and never
-    /// splits a caller mid-emission. Each trampoline is the
-    /// shortest possible "re-push args, JsrExt, return" sequence:
+    /// after every real function body has been parsed so the
+    /// synthesised SSA lands after the user code without
+    /// splitting a caller mid-build. Each trampoline is the
+    /// shortest possible "re-push args, CallExt, return" sequence:
     ///
     /// ```text
     /// Ent 0
@@ -163,18 +135,81 @@ impl Compiler {
     /// because the cast at the use site lines up with the fixed
     /// prefix the trampoline does forward.
     pub(super) fn emit_sys_trampolines(&mut self) {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::ir::{LoadKind, NO_VALUE};
+
         let entries: Vec<(usize, usize)> = self
             .sys_trampoline_sym
             .iter()
             .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
             .collect();
         for (sys_idx, tr_idx) in entries {
-            let bc_pc = self.text.len();
-            self.symbols[tr_idx].val = bc_pc as i64;
+            let ent_pc = self.next_ent_pc;
+            self.symbols[tr_idx].val = ent_pc as i64;
+            // C99 6.9 has no notion of synthetic helpers, but
+            // a trampoline body is emitted into this TU's text,
+            // so its symbol is `defined here` for the linker
+            // concat: the rebase loop in `linker::link` shifts
+            // every `Token::Fun` sym with `defined_here = true`
+            // by `text_base[i]` so post-link callers find the
+            // body at the post-link ent_pc.
+            self.symbols[tr_idx].defined_here = true;
 
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;
             let binding_idx = self.symbols[sys_idx].val;
+            // Forwarded arg count. Variadic prefix forwards one
+            // extra so dispatch tables (open / fcntl / ioctl)
+            // line up.
+            let nargs_ssa = if fixed_nargs == 0 && !is_variadic {
+                0
+            } else if is_variadic {
+                fixed_nargs + 1
+            } else {
+                fixed_nargs
+            };
+            // The synthesised trampoline's own signature is a
+            // fixed-arg host-ABI function: callers reach it via
+            // function pointer through `(sys_ptr)open`, which the
+            // SysV / AAPCS / win64 ABIs deliver in the integer
+            // arg registers regardless of whether the underlying
+            // libc callee is variadic. The `is_variadic` flag on
+            // the SSA function controls the prologue's arg-pickup
+            // shape (c5 stack slots vs host ABI registers) -- the
+            // trampoline always wants host ABI. The callee's
+            // variadicness is encoded on the binding and
+            // re-derived by `Inst::CallExt` lowering, so flipping
+            // the trampoline's flag to `false` leaves the libc-
+            // side `al = xmm_count` setup intact.
+            let mut sb = SsaBuilder::new(ent_pc, nargs_ssa, false);
+            sb.set_locals(0);
+            // Synthetic trampoline body forwarding to the libc
+            // binding `self.symbols[sys_idx].name`; tag the
+            // FunctionSsa with a deterministic name so the symbol
+            // table and DWARF subprogram DIEs identify it.
+            sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
+            let _alloca = sb.alloca_init(0);
+            // Zero-arg and arg-forwarding shapes both flow through
+            // the standard `call_ext + return` pair so the codegen
+            // emits a matching prologue / epilogue. A bare
+            // `Terminator::TailExt` would skip the epilogue --
+            // libc's `ret` then pops the trampoline's saved rbp as
+            // its return address and the next instruction lands in
+            // stack memory.
+            let arg_vals: alloc::vec::Vec<_> = (0..nargs_ssa)
+                .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
+                .collect();
+            let r = sb.call_ext(binding_idx, arg_vals, 0);
+            sb.return_(r);
+            let mut func = sb.finish();
+            // SsaBuilder doesn't know the ent_pc until the
+            // PC reservation below runs. Patch `end_pc` after
+            // the reservation so the DWARF emitter's per-
+            // function range covers the trampoline body.
+            func.end_pc = ent_pc; // patched after the reservation
+            let _ = NO_VALUE; // keep import non-warning
+            self.synthetic_ssa_funcs.push(func);
+            let synth_idx = self.synthetic_ssa_funcs.len() - 1;
 
             // Two trampoline shapes coexist:
             //
@@ -189,18 +224,23 @@ impl Compiler {
             // * Bindings with *no* declared params (just
             //   `int Name();`) -- e.g. kernel32 entries that
             //   real-world dispatch tables cast back to the
-            //   right arity at the call site -- get the
-            //   single-op `Op::TailExt` body. The trampoline is
-            //   `jmp [rip+iat]` and the caller's `Op::Jsri`
-            //   lowering owns the host-ABI arg setup, return-
-            //   register copy, and stack adjustment. Sub-word
-            //   extension is left to the caller (the call site
-            //   casts the result to the right type explicitly),
-            //   which matches what real-world dispatch-table
-            //   consumers already do.
+            //   right arity at the call site -- get a tail-call
+            //   body. The trampoline is `jmp [rip+iat]` and the
+            //   caller's indirect-call lowering owns the host-ABI
+            //   arg setup, return-register copy, and stack
+            //   adjustment. Sub-word extension is left to the
+            //   caller (the call site casts the result to the
+            //   right type explicitly), which matches what
+            //   real-world dispatch-table consumers already do.
             if fixed_nargs == 0 && !is_variadic {
-                self.emit_op(Op::TailExt);
-                self.emit_val(binding_idx);
+                // The SSA-tier trampoline body is fully built by
+                // SsaBuilder above; bump the parser PC counter by
+                // one so the synthesised function's `end_pc`
+                // stays strictly greater than its `ent_pc`, which
+                // is what the linker and DWARF range builder
+                // require.
+                self.next_ent_pc += 1;
+                self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
                 continue;
             }
 
@@ -224,26 +264,17 @@ impl Compiler {
                 fixed_nargs
             };
 
-            self.emit_op(Op::Ent);
-            self.emit_val(0);
-            // c5 uses cdecl push order: the first declared arg
-            // ends up on top of the stack (lowest address) so
-            // JsrExt can load arg-K from `sp + K*16`. We re-emit
-            // the pushes right-to-left -- last declared arg
-            // first -- so the trampoline's own JsrExt sees the
-            // same shape its caller passed in.
-            for i in (0..nargs).rev() {
-                self.emit_lea((i + 2) as i64);
-                self.emit_op(Op::Li);
-                self.emit_op(Op::Psh);
-            }
-            self.emit_op(Op::JsrExt);
-            self.emit_val(binding_idx);
-            if nargs > 0 {
-                self.emit_op(Op::Adj);
-                self.emit_val(nargs as i64);
-            }
-            self.emit_op(Op::Lev);
+            // SSA body fully built by SsaBuilder above. Reserve a
+            // single PC unit so the trampoline's `end_pc` is
+            // strictly greater than `ent_pc`, satisfying the
+            // linker / DWARF range invariant. The cdecl
+            // right-to-left arg push, JsrExt + binding, Adj
+            // cleanup and Lev epilogue used to be tape ops here;
+            // the matching SSA insts live on
+            // `synthetic_ssa_funcs[synth_idx]` and drive the codegen.
+            let _ = (nargs, binding_idx);
+            self.next_ent_pc += 1;
+            self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
         }
     }
 }

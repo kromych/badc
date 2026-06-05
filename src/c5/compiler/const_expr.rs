@@ -1,7 +1,7 @@
 //! Constant-expression evaluator.
 //!
 //! Used during declarator parsing where the value has to be known
-//! before any bytecode emission: array dimensions (`int xs[N]`),
+//! before any IR-building emit: array dimensions (`int xs[N]`),
 //! bitfield widths (`int x: N`), `enum E { K = N }` initialisers,
 //! `_Static_assert` operands, and the rvalues of static / global
 //! integer initializers. Supports the C99 constant-expression
@@ -85,7 +85,7 @@ impl ConstVal {
 impl Compiler {
     /// Parse a constant integer expression at parse time. Used
     /// during declarator parsing where the value has to be known
-    /// before any bytecode emission (array dimensions, bitfield
+    /// before any IR-building emit (array dimensions, bitfield
     /// widths, enum initialisers). Accepts integer literals plus
     /// floating literals as primary terms; full arithmetic over
     /// either type flows through and a floating result is

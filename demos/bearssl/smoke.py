@@ -34,6 +34,18 @@ import sys
 import tempfile
 from pathlib import Path
 
+
+class _KeepDir:
+    def __init__(self, path: str) -> None:
+        Path(path).mkdir(parents=True, exist_ok=True)
+        self._path = path
+
+    def __enter__(self) -> str:
+        return self._path
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
 BEAR_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BEAR_DIR.parent.parent
 
@@ -196,7 +208,13 @@ def main() -> int:
         print("smoke FAIL: no .c sources under demos/bearssl/src", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="bearssl-smoke-") as work_str:
+    keep = os.environ.get("BADC_SMOKE_KEEP_WORK")
+    cm = (
+        tempfile.TemporaryDirectory(prefix="bearssl-smoke-")
+        if not keep
+        else _KeepDir(keep)
+    )
+    with cm as work_str:
         work = Path(work_str)
 
         tu_noopt = work / f"bearssl_smoke.tu{EXE_SUFFIX}"

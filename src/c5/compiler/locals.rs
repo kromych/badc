@@ -29,10 +29,9 @@
 use alloc::format;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
-use super::super::token::{Token, Ty};
+use super::super::token::Token;
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -129,10 +128,58 @@ impl Compiler {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_static_local(loc_idx, ty, array_size)?;
+                self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].was_referenced = false;
+                self.symbols[loc_idx].decl_line = self.lex.line;
+                let decl_file = self.intern_source_file() as u32;
+                self.symbols[loc_idx].decl_file = decl_file;
+                self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                self.pending_local_init_ast = None;
+                self.pending_local_aggregate_ast = None;
+                self.pending_local_runtime_elements.clear();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
+                // Dual-emit: push `Decl::Local { sym, slot_off,
+                // init }`. The init flavour comes from whichever
+                // cross-helper carry the inner allocator filled:
+                // * scalar carry  -> `LocalInit::Scalar(ExprId)`
+                // * aggregate     -> `LocalInit::Aggregate`     (Mcpy)
+                // * runtime elems -> `LocalInit::Runtime`       (per-element stores,
+                //                                                 plus the optional
+                //                                                 Mcpy-zero prelude
+                //                                                 from `aggregate`)
+                // Static locals (promoted to Glo class) skip --
+                // their storage is laid out in .data at TU-load
+                // time, not in the function's frame.
+                if self.symbols[loc_idx].class == Token::Loc as i64 {
+                    let slot_off = self.symbols[loc_idx].val;
+                    let scalar = self.pending_local_init_ast.take();
+                    let aggregate = self.pending_local_aggregate_ast.take();
+                    let runtime_elements =
+                        core::mem::take(&mut self.pending_local_runtime_elements);
+                    let init = if let Some(e) = scalar {
+                        super::super::ast::LocalInit::Scalar(e)
+                    } else if !runtime_elements.is_empty() {
+                        super::super::ast::LocalInit::Runtime {
+                            zero_init: aggregate,
+                            elements: runtime_elements,
+                        }
+                    } else if let Some((src, size)) = aggregate {
+                        super::super::ast::LocalInit::Aggregate {
+                            src_data_off: src,
+                            size_bytes: size,
+                        }
+                    } else {
+                        super::super::ast::LocalInit::None
+                    };
+                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
+                } else {
+                    self.pending_local_init_ast = None;
+                    self.pending_local_aggregate_ast = None;
+                    self.pending_local_runtime_elements.clear();
+                }
             }
             // Unconditional write: a stale fn-ptr lineage from a
             // prior binding of this name must not leak into a
@@ -289,6 +336,16 @@ impl Compiler {
         ty: i64,
         declared_array_size: i64,
     ) -> Result<(), C5Error> {
+        // C99 6.7.9: an initializer at the declaration site counts
+        // as a store from the perspective of the dead-store
+        // analysis. Mark before parsing the initializer so
+        // every shape below (scalar, array, struct, deferred-
+        // size) routes through the same flag without per-branch
+        // bookkeeping.
+        if self.lex.tk == Token::Assign {
+            self.symbols[loc_idx].was_written = true;
+            self.record_local_store(loc_idx, self.lex.line);
+        }
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign {
                 return Err(self.compile_err(format!(
@@ -302,10 +359,11 @@ impl Compiler {
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
             if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
-                // Local deferred-size struct array. Same scan-then-
-                // pre-allocate dance as the file-scope path so an
-                // element's string-literal field doesn't shift the
-                // next element off its expected offset.
+                // Local deferred-size struct array. Same
+                // scan-then-pre-allocate sequence as the
+                // file-scope path so an element's string-literal
+                // field doesn't shift the next element off its
+                // expected offset.
                 let elem_size = self.size_of_type(ty);
                 let count = self.lex.count_top_level_groups_in_array() as i64;
                 let staged_off = self.data.len();
@@ -500,7 +558,20 @@ impl Compiler {
                 // the per-element runtime store path. Pure-constant
                 // initializers keep the Mcpy-from-data fast path
                 // and the staged on-disk image stays compact.
+                let elem_size = self.size_of_type(ty);
+                let full_bytes = elem_size * declared_array_size as usize;
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
+                    // C99 6.7.9p21: trailing positions in a
+                    // partially-initialized array receive
+                    // static-storage zero-init. Seed the slot
+                    // with a Mcpy from a staged zero block
+                    // before the per-element runtime stores
+                    // overlay the explicit prefix.
+                    let zero_off = self.data.len();
+                    for _ in 0..full_bytes {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(local_val, zero_off, full_bytes);
                     self.emit_local_array_init_runtime(
                         local_val,
                         ty,
@@ -520,7 +591,20 @@ impl Compiler {
                         var_name, init_count, max
                     )));
                 }
-                let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
+                let (start_addr, packed_bytes) = self.pack_initializer_into_data(ty, &elements);
+                // C99 6.7.9p21: when the brace list specifies
+                // fewer elements than the declared dimension, the
+                // remaining positions receive static-storage
+                // zero-init. Pad the staged block with zeros so
+                // the single Mcpy covers the entire array.
+                let total_bytes = if packed_bytes < full_bytes {
+                    for _ in 0..(full_bytes - packed_bytes) {
+                        self.data.push(0);
+                    }
+                    full_bytes
+                } else {
+                    packed_bytes
+                };
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
             } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.
@@ -664,12 +748,6 @@ impl Compiler {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         let elem_size = self.size_of_type(ty) as i64;
-        let store_op = match elem_size {
-            1 => Op::Sc,
-            2 => Op::Sh,
-            4 => Op::Sw,
-            _ => Op::Si,
-        };
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
             if i >= max {
@@ -684,34 +762,38 @@ impl Compiler {
                 // Inline Psh + Imm + Add (the private
                 // emit_binop_with_imm helper) -- bumps the base
                 // address loaded by Lea by `i * elem_size` bytes.
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(i * elem_size);
-                self.emit_op(Op::Add);
+                self.ast_binop(crate::c5::ir::BinOp::Add);
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             // Parse the element expression at assignment
             // precedence; the comma between elements is the
             // delimiter, not a comma-expression operator.
             self.expr(Token::Assign as i64)?;
+            // Capture the element's AST node for the matching
+            // `LocalInit::Runtime { elements: ... }` entry so the
+            // walker can emit one `store_local(offset, value)`
+            // per element.
+            let elem_ast = self.ast_acc;
             // Float / double init into a non-float slot would
             // need a conversion op here; today c5's only narrow
             // FP storage is in struct fields (handled elsewhere),
             // so the integer-store ops match the local slot
             // width for every type we hit.
-            let unsigned = (ty & UNSIGNED_BIT) != 0;
-            let _ = unsigned; // bit kept for future narrowing-store dispatch
-            // Float / double element: the Si store widens to the
-            // full 8-byte slot and the FP bits survive intact
-            // because c5 holds doubles in 64-bit accumulator
-            // registers. A float (4-byte) element would still
-            // need an explicit cvt to single-precision; today no
-            // smoke target hits that shape.
-            let is_fp = (ty & !UNSIGNED_BIT) == Ty::Float as i64
-                || (ty & !UNSIGNED_BIT) == Ty::Double as i64;
-            if is_fp {
-                self.emit_op(Op::Si);
-            } else {
-                self.emit_op(store_op);
+            // The AST shape is the same regardless of element
+            // width or FP-vs-int -- `ast_assign` builds `Expr::Assign`
+            // on top of the lvalue + rvalue the parser already
+            // staged on the vstack. Walker downstream picks the
+            // matching store width from `field.ty`.
+            self.ast_assign();
+            if let Some(value) = elem_ast {
+                self.pending_local_runtime_elements
+                    .push(super::super::ast::RuntimeInitElement {
+                        offset: i * elem_size,
+                        value,
+                        ty,
+                    });
             }
             i += 1;
             if self.lex.tk == ',' {
@@ -767,13 +849,7 @@ impl Compiler {
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
-                    );
-                }
-                self.next()?;
-                self.structs[sid]
+                let outer_idx = self.structs[sid]
                     .fields
                     .iter()
                     .position(|f| f.name == field_name)
@@ -782,7 +858,53 @@ impl Compiler {
                             "struct {} has no field {}",
                             self.structs[sid].name, field_name
                         ))
-                    })?
+                    })?;
+                // C99 6.7.8p7 nested designator chain. See the
+                // matching branch in `collect_struct_initializer`
+                // for the constant-staging variant. Computes the
+                // cumulative offset / final type, then emits one
+                // store at `&local + extra_offset + final_offset`.
+                if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                    let outer = self.structs[sid].fields[outer_idx].clone();
+                    let chain_base = extra_offset + outer.offset as i64;
+                    let (final_offset, final_ty) =
+                        self.resolve_nested_designator_chain(chain_base, outer.ty)?;
+                    if self.lex.tk != Token::Assign {
+                        return Err(self.compile_err("`=` expected after nested-designator chain"));
+                    }
+                    self.next()?;
+                    self.emit_lea(local_val);
+                    if final_offset > 0 {
+                        self.ast_psh();
+                        self.emit_imm(final_offset);
+                        self.ast_binop(crate::c5::ir::BinOp::Add);
+                    }
+                    self.ast_psh();
+                    self.expr(Token::Assign as i64)?;
+                    let field_ast = self.ast_acc;
+                    self.ast_assign();
+                    if let Some(value) = field_ast {
+                        self.pending_local_runtime_elements.push(
+                            super::super::ast::RuntimeInitElement {
+                                offset: final_offset,
+                                value,
+                                ty: final_ty,
+                            },
+                        );
+                    }
+                    pos = outer_idx + 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    continue;
+                }
+                if self.lex.tk != Token::Assign {
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
+                }
+                self.next()?;
+                outer_idx
             } else {
                 pos
             };
@@ -815,20 +937,22 @@ impl Compiler {
             self.emit_lea(local_val);
             let total_offset = extra_offset + field.offset as i64;
             if total_offset > 0 {
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(total_offset);
-                self.emit_op(Op::Add);
+                self.ast_binop(crate::c5::ir::BinOp::Add);
             }
-            self.emit_op(Op::Psh);
+            self.ast_psh();
             self.expr(Token::Assign as i64)?;
-            let elem_size = self.size_of_type(field.ty);
-            let store_op = match elem_size {
-                1 => Op::Sc,
-                2 => Op::Sh,
-                4 => Op::Sw,
-                _ => Op::Si,
-            };
-            self.emit_op(store_op);
+            let field_ast = self.ast_acc;
+            self.ast_assign();
+            if let Some(value) = field_ast {
+                self.pending_local_runtime_elements
+                    .push(super::super::ast::RuntimeInitElement {
+                        offset: total_offset,
+                        value,
+                        ty: field.ty,
+                    });
+            }
             pos = field_idx + 1;
             if self.lex.tk == ',' {
                 self.next()?;

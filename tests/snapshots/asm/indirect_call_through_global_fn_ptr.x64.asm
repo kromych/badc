@@ -1,0 +1,50 @@
+
+indirect_call_through_global_fn_ptr.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	movq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%edx, %rdx
+               	addq	%rdx, %rcx
+               	movslq	%ecx, %rcx
+               	movl	%ecx, (%rax)
+               	xorq	%rax, %rax
+               	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
+               	movq	%rbx, (%rsp)
+               	leaq	<rip>, %rax
+               	movl	$0x7, %ecx
+               	movl	%ecx, (%rax)
+               	leaq	<rip>, %rcx
+               	movl	$0x23, %edx
+               	movl	%edx, (%rcx)
+               	leaq	<rip>, %rbx
+               	movslq	(%rax), %rsi
+               	movslq	(%rcx), %rdx
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rax
+               	movq	%rax, %r11
+               	movq	%rbx, %rdi
+               	callq	*%r11
+               	movslq	(%rbx), %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x10, %rsp
+               	popq	%rbp
+               	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	popq	%rbp
+               	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

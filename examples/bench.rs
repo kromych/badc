@@ -1,7 +1,7 @@
 //! Tiny bench harness for badc's execution pipelines. Runs a few
-//! workloads through the VM, the optimized VM, and the in-process
-//! JIT, and reports wall-clock timings so successive commits have a
-//! number to point at.
+//! workloads through the VM and the in-process JIT, and reports
+//! wall-clock timings so successive commits have a number to
+//! point at.
 //!
 //! Run from the repo root:
 //!
@@ -21,7 +21,7 @@
 
 use std::time::{Duration, Instant};
 
-use badc::{Compiler, NativeOptions, Program, Vm, jit_run_with_options, optimize};
+use badc::{Compiler, Program, Vm, jit_run};
 
 /// One pipeline = one column in the output table.
 struct Pipeline {
@@ -40,19 +40,9 @@ const PIPELINES: &[Pipeline] = &[
         run: run_vm,
     },
     Pipeline {
-        label: "vm-O",
-        needs_jit: false,
-        run: run_vm,
-    },
-    Pipeline {
         label: "jit",
         needs_jit: true,
         run: run_jit,
-    },
-    Pipeline {
-        label: "jit-O",
-        needs_jit: true,
-        run: run_jit_optimized,
     },
 ];
 
@@ -65,17 +55,10 @@ fn run_vm(program: &Program, args: &[String]) -> i32 {
         .expect("vm run") as i32
 }
 
-/// JIT run with default options (no register allocator). The
-/// always-on peepholes in the lowering -- self-mov elision and
-/// cmp+branch fusion -- still fire here.
+/// JIT run. The always-on peepholes in the lowering -- self-mov
+/// elision and cmp+branch fusion -- still fire here.
 fn run_jit(program: &Program, args: &[String]) -> i32 {
-    jit_run_with_options(program, args, NativeOptions::default()).expect("jit run")
-}
-
-/// JIT run with the register allocator turned on, mirroring what
-/// `--optimize` / `-O` does from the CLI.
-fn run_jit_optimized(program: &Program, args: &[String]) -> i32 {
-    jit_run_with_options(program, args, NativeOptions::new().with_optimize()).expect("jit run")
+    jit_run(program, args).expect("jit run")
 }
 
 /// Inline workloads. Each is a (name, source, argv, expected exit)
@@ -224,20 +207,14 @@ const WORKLOADS: &[Workload] = &[
 ];
 
 fn measure(pipeline: &Pipeline, program: &Program, args: &[String], iter: usize) -> Vec<Duration> {
-    // VM and VM-O pre-prepare so the timed region is execution
-    // only. JIT pipelines call jit_run inside the timed region,
-    // which includes lowering + mmap + dlsym -- realistic per-run
-    // overhead. For long-running workloads (>1ms) this asymmetry
-    // is well under the run-to-run noise, but it's worth flagging
-    // when comparing across pipelines.
+    // VM pre-prepares so the timed region is execution only. JIT
+    // calls jit_run inside the timed region, which includes
+    // lowering + mmap + dlsym -- realistic per-run overhead. For
+    // long-running workloads (>1ms) this asymmetry is well under
+    // the run-to-run noise, but it's worth flagging when
+    // comparing across pipelines.
     let argv: Vec<String> = args.to_vec();
-    let prepared: Program = match pipeline.label {
-        // Pipelines whose label implies the bytecode optimizer ran first.
-        // For JIT, "jit-O" also flips on the native optimizer via
-        // [`run_jit_optimized`] -- single-flag model.
-        "vm-O" | "jit-O" => optimize(program.clone()).expect("optimize"),
-        _ => program.clone(),
-    };
+    let prepared: Program = program.clone();
     let mut samples = Vec::with_capacity(iter);
     for _ in 0..iter {
         let t = Instant::now();

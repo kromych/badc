@@ -1,0 +1,172 @@
+
+function_pointer_typedefs.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	movq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	retq
+               	movq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
+               	subq	%rcx, %rax
+               	movslq	%eax, %rax
+               	retq
+               	movq	%rdi, %rax
+               	movq	%rsi, %rcx
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
+               	cmpq	%rcx, %rax
+               	jge	<addr>
+               	movabsq	$-0x1, %rax
+               	retq
+               	cmpq	%rcx, %rax
+               	jle	<addr>
+               	movl	$0x1, %eax
+               	retq
+               	xorq	%rax, %rax
+               	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movq	%rdi, %rax
+               	movq	%rsi, %rdi
+               	movq	%rdx, %rsi
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	movq	%rax, %r11
+               	callq	*%r11
+               	popq	%rbp
+               	retq
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x60, %rsp
+               	movq	%rbx, (%rsp)
+               	leaq	-<rip>, %rbx       # <addr>
+               	movl	$0x3, %edi
+               	movl	$0x5, %esi
+               	movq	%rbx, %r11
+               	callq	*%r11
+               	cmpq	$-0x1, %rax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x7, %edi
+               	movl	$0x2, %esi
+               	movq	%rbx, %r11
+               	callq	*%r11
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	movl	$0x2, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	movl	$0x4, %edi
+               	movq	%rbx, %r11
+               	movq	%rdi, %rsi
+               	callq	*%r11
+               	cmpq	$0x0, %rax
+               	je	<addr>
+               	movl	$0x3, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	leaq	-<rip>, %rcx      # <addr>
+               	movq	%rcx, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	addq	$0x8, %rax
+               	leaq	-<rip>, %rcx      # <addr>
+               	movq	%rcx, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	addq	$0x10, %rax
+               	movq	%rbx, (%rax)
+               	leaq	-0x20(%rbp), %rax
+               	movq	(%rax), %rax
+               	movl	$0x2, %edi
+               	movl	$0x3, %esi
+               	movq	%rax, %r11
+               	callq	*%r11
+               	cmpq	$0x5, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	addq	$0x8, %rax
+               	movq	(%rax), %rax
+               	movl	$0xa, %edi
+               	movl	$0x4, %esi
+               	movq	%rax, %r11
+               	callq	*%r11
+               	cmpq	$0x6, %rax
+               	je	<addr>
+               	movl	$0x5, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x20(%rbp), %rax
+               	addq	$0x10, %rax
+               	movq	(%rax), %rax
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movq	%rax, %r11
+               	callq	*%r11
+               	cmpq	$-0x1, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-<rip>, %rdi      # <addr>
+               	movl	$0x8, %esi
+               	movl	$0x9, %edx
+               	callq	<addr>
+               	cmpq	$0x11, %rax
+               	je	<addr>
+               	movl	$0x7, %eax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	movq	%rax, %rcx
+               	movq	(%rsp), %rbx
+               	movq	%rcx, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	addb	%al, 0x41(%rdx)

@@ -13,21 +13,29 @@
 //! moves together. The constants loop reuses
 //! `parse_constant_int` for explicit values like `B = 1 << 8`.
 
+use alloc::string::{String, ToString};
+
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::Compiler;
+use super::{Compiler, EnumDef};
 
 impl Compiler {
     pub(super) fn parse_enum_decl(&mut self) -> Result<(), C5Error> {
         self.next()?;
-        // Optional tag name. c5 enums collapse to int regardless,
-        // so the tag is consumed without registration today (it's
-        // remembered implicitly through the matched constants).
-        if self.lex.tk == Token::Id {
+        // Optional tag name. Capture it so a matched body can
+        // register an `EnumDef` for DWARF emission. Anonymous
+        // enums (no tag) skip the registration -- their constants
+        // are still int-typed `Token::Num` symbols.
+        let tag_name = if self.lex.tk == Token::Id {
+            let id_idx = self.lex.curr_id_idx;
+            let name = self.symbols[id_idx].name.clone();
             self.next()?;
-        }
+            name
+        } else {
+            String::new()
+        };
         if self.lex.tk == '{' {
-            self.parse_enum_body()?;
+            self.parse_enum_body(&tag_name)?;
         }
         Ok(())
     }
@@ -38,14 +46,16 @@ impl Compiler {
     /// `Token::Num`-class symbol with `val` set to its enumerated
     /// value, so subsequent uses (including in array dimensions
     /// via `parse_constant_int`) resolve correctly.
-    pub(super) fn parse_enum_body(&mut self) -> Result<(), C5Error> {
+    pub(super) fn parse_enum_body(&mut self, tag_name: &str) -> Result<(), C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
+        let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("bad enum identifier"));
             }
             let idx = self.lex.curr_id_idx;
+            let name = self.symbols[idx].name.clone();
             self.next()?;
             if self.lex.tk == Token::Assign {
                 self.next()?;
@@ -59,12 +69,19 @@ impl Compiler {
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].type_ = Ty::Int as i64;
             self.symbols[idx].val = i;
+            captured.push((name, i));
             i += 1;
             if self.lex.tk == ',' {
                 self.next()?;
             }
         }
         self.next()?; // consume `}`
+        if !tag_name.is_empty() && !captured.is_empty() {
+            self.enums.push(EnumDef {
+                name: tag_name.to_string(),
+                constants: captured,
+            });
+        }
         Ok(())
     }
 }

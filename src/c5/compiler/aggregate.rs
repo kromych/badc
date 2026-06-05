@@ -48,9 +48,10 @@ impl Compiler {
     ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
         // self-referential pointer fields can find this aggregate
-        // mid-definition. If the tag already exists with a populated
-        // body, this is a duplicate definition and we error.
-        let struct_id = match self.find_struct_id(name) {
+        // mid-definition. C99 6.2.1: only a tag in the SAME scope
+        // makes this a redefinition; a tag of the same name in an
+        // outer scope is shadowed by a fresh declaration here.
+        let struct_id = match self.find_struct_id_in_current_scope(name) {
             Some(id) if self.structs[id].fields.is_empty() => {
                 self.structs[id].is_union = is_union;
                 id
@@ -70,7 +71,11 @@ impl Compiler {
                     fields: Vec::new(),
                     is_union,
                 });
-                self.structs.len() - 1
+                let id = self.structs.len() - 1;
+                if let Some(scope) = self.tag_scopes.last_mut() {
+                    scope.push((name.to_string(), id));
+                }
+                id
             }
         };
 
@@ -188,9 +193,8 @@ impl Compiler {
                 // would have to add a `*` for a real use, and
                 // a hypothetical bare field would just allocate
                 // 1 byte like the prior behavior did. Promoting
-                // this to an error needs a separate
-                // declarator-aware check; the bytecode
-                // generation works either way.
+                // this to an error needs a separate declarator-
+                // aware check; codegen handles either shape.
                 Ty::Char as i64 | UNSIGNED_BIT
             } else if self.lex.tk == Token::Float {
                 self.next()?;
@@ -246,17 +250,20 @@ impl Compiler {
             } else if self.lex.tk == Token::Enum {
                 // C99 6.7.2.2: an `enum X` field collapses to plain
                 // `int` in c5's type system the same way every other
-                // enum reference does. Consume any tag name and the
-                // optional body; the field width / alignment is the
-                // 4-byte `int` fallback. Mirrors the
-                // `parse_decl_base_type` enum branch so the same
-                // shape works at file scope and inside a struct.
+                // enum reference does. Capture the tag and the
+                // optional body's constants for DWARF; the field
+                // width / alignment is the 4-byte `int` fallback.
                 self.next()?;
-                if self.lex.tk == Token::Id {
+                let tag_name = if self.lex.tk == Token::Id {
+                    let id_idx = self.lex.curr_id_idx;
+                    let name = self.symbols[id_idx].name.clone();
                     self.next()?;
-                }
+                    name
+                } else {
+                    alloc::string::String::new()
+                };
                 if self.lex.tk == '{' {
-                    self.parse_enum_body()?;
+                    self.parse_enum_body(&tag_name)?;
                 }
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {

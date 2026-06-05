@@ -82,6 +82,7 @@ impl Compiler {
                 elem_size
             }
         } else if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
@@ -92,7 +93,13 @@ impl Compiler {
             // total rather than the decayed pointer. Scalars fall
             // through to `size_of_type(var_ty)`. Postfix shapes
             // (`name->field`, `name.field`, `name[i]`) fail the
-            // peek and route through the expression path.
+            // peek and route through the expression path. C99
+            // 6.5.1p2: an identifier used as a primary expression
+            // must be declared; gating on `class != 0` keeps the
+            // fast path for declared symbols and routes an
+            // undeclared name to the general-expression branch,
+            // whose existing primary-Id arm surfaces the
+            // "undefined variable" diagnostic.
             let idx = self.lex.curr_id_idx;
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
@@ -104,8 +111,8 @@ impl Compiler {
             }
         } else {
             // General expression: run the regular parser to learn
-            // the type, then discard the emitted bytecode (the
-            // operand is unevaluated per C99 6.5.3.4). The
+            // the type, then discard everything the parse pushed
+            // (the operand is unevaluated per C99 6.5.3.4). The
             // `last_array_decay_*` side-channel surfaces shape
             // info the array-decay paths set so a decayed array
             // recovers its real size instead of the pointer's 8.
@@ -113,17 +120,14 @@ impl Compiler {
             // Anything the parser appended to `self` that points
             // into `text` by PC has to be rewound in lockstep --
             // otherwise the stale entry references a dead PC and
-            // later passes (the call-fixup walker, the source-
-            // attribution table, etc.) corrupt unrelated code
-            // when they fire. The canonical example is
-            // `(void)sizeof(some_func(args))` -- without rewinding
-            // `fn_call_fixups`, `apply_fn_call_fixups` writes the
-            // call's target into whatever bytecode word later
-            // landed at the recorded operand PC, drifting the
-            // op/operand alignment for the rest of the function.
-            let saved_text_len = self.text.len();
-            let saved_data_imm_positions = self.data_imm_positions.len();
-            let saved_fn_call_fixups = self.fn_call_fixups.len();
+            // later passes corrupt unrelated code when they fire.
+            // `source_functions` is parallel to `text` and feeds
+            // DWARF subprogram DIEs; `code_reloc_sym_idx` is the
+            // parser-symbol shadow that
+            // [`Compiler::resolve_code_relocs`] zips against
+            // `code_relocs` post-parse, so dropping the trailing
+            // entry keeps the two arrays the same length.
+            let saved_text_len = self.next_ent_pc;
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             // If sizeof consumed a leading `(` but the inner
             // content is not a type-name, the paren belongs to a
@@ -145,19 +149,11 @@ impl Compiler {
             let array_count = self.pending.last_array_decay_size;
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
-            // Drop the operand's emitted code. Keep the parallel
-            // debug tables (source_lines / source_functions /
-            // source_file_indices) in lockstep with `text` -- if
-            // any grows past `text`, every subsequent `emit_op`
-            // attributes its bytecode PC to the wrong source row,
-            // and DWARF subprogram DIEs land on the previous
-            // function's name.
-            self.text.truncate(saved_text_len);
-            self.source_lines.truncate(saved_text_len);
-            self.source_functions.truncate(saved_text_len);
-            self.source_file_indices.truncate(saved_text_len);
-            self.data_imm_positions.truncate(saved_data_imm_positions);
-            self.fn_call_fixups.truncate(saved_fn_call_fixups);
+            // Drop any PC reservation the operand's parse
+            // recorded; sizeof emits nothing live so the saved
+            // counter must be restored verbatim.
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;

@@ -45,6 +45,130 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+/// C99 6.2.4 + 6.2.2: block-scope locals, function parameters,
+/// and `static` file-scope functions that are never referenced
+/// are dead. The compiler emits a `<file>:<line>: warning:
+/// unused ...` line for each, in the same shape as the
+/// type-mismatch warnings above. Names whose first character is
+/// `_` are suppressed by convention.
+#[test]
+fn warn_unused_variable_parameter_function() {
+    let p = compile_fixture("warn_unused_symbols.c");
+    let names_warned: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter_map(|w| {
+            let backtick = w.find('`')?;
+            let end = w[backtick + 1..].find('`')?;
+            Some(&w[backtick + 1..backtick + 1 + end])
+        })
+        .collect();
+    let expect = [
+        "dead_static",
+        "unused_arg",
+        "unused_local",
+        "main_unused",
+        "main_unused_init",
+        "inner_unused",
+        "dead_assigned",
+        "touched_then_overwritten",
+    ];
+    for name in expect {
+        assert!(
+            names_warned.contains(&name),
+            "expected warning for `{name}`, got: {:?}",
+            p.warnings
+        );
+    }
+    let suppress = [
+        "live_static",
+        "x",
+        "used_local",
+        "_silenced_local",
+        "_silenced",
+        "used",
+        "main",
+        "inner_used",
+    ];
+    for name in suppress {
+        assert!(
+            !names_warned.contains(&name),
+            "did not expect warning for `{name}`, got: {:?}",
+            p.warnings
+        );
+    }
+    let set_but_unused: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("set but never used"))
+        .collect();
+    assert!(
+        set_but_unused.iter().any(|w| w.contains("`dead_assigned`")),
+        "expected `set but never used` for dead_assigned, got: {:?}",
+        p.warnings
+    );
+    assert!(
+        set_but_unused
+            .iter()
+            .any(|w| w.contains("`touched_then_overwritten`")),
+        "expected `set but never used` for touched_then_overwritten, got: {:?}",
+        p.warnings
+    );
+}
+
+/// Per-store dead-store analysis: when `-Wdead-store` is on, each
+/// store whose value never reaches a read fires a `dead store:
+/// value assigned to X is never read` diagnostic at the store's
+/// source line. Off by default; the per-symbol `set but never
+/// used` warning still fires unconditionally.
+#[test]
+fn warn_dead_store_per_store_when_enabled() {
+    use crate::CompileOptions;
+    use crate::Compiler;
+    use crate::Target;
+    let src = super::with_prelude(&super::load_fixture("warn_dead_store.c"));
+    let opts = CompileOptions::default().with_warn_dead_store(true);
+    let p = Compiler::with_options(src, Target::host(), opts)
+        .compile()
+        .unwrap();
+    let dead: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("dead store:"))
+        .collect();
+    // `int a = 1; a = 2; return 1;` -> both stores dead.
+    let a_warns: alloc::vec::Vec<&&String> = dead.iter().filter(|w| w.contains("`a`")).collect();
+    assert_eq!(
+        a_warns.len(),
+        2,
+        "expected two dead-store warnings on `a` (initializer + a = 2;), got: {:?}",
+        dead
+    );
+    // No false positives: branch-straddling, self-referencing
+    // RHS, and address-escape cases must not fire.
+    for w in &dead {
+        assert!(
+            !w.contains("`b`") && !w.contains("`c`") && !w.contains("`d`"),
+            "unexpected dead-store warning: {w}"
+        );
+    }
+}
+
+#[test]
+fn warn_dead_store_off_by_default() {
+    let p = compile_fixture("warn_dead_store.c");
+    let dead: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("dead store:"))
+        .collect();
+    assert!(
+        dead.is_empty(),
+        "dead-store warnings should not fire without -Wdead-store: {:?}",
+        dead
+    );
+}
+
 /// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef
 /// must error at the declaration site, not silently default
 /// to `int *`.

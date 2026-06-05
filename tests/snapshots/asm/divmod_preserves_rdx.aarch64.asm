@@ -1,0 +1,123 @@
+
+divmod_preserves_rdx.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xf0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
+               	str	x20, [sp]
+               	str	x21, [sp, #0x8]
+               	str	x19, [sp, #0x10]
+               	mov	x20, x0
+               	sxtw	x20, w20
+               	adrp	x21, <page>
+               	add	x21, x21, #0x100
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	cbz	x0, <addr>
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x18
+               	mov	x1, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, #0x118
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	add	x0, x0, #0x8
+               	adrp	x2, <page>
+               	add	x2, x2, #0x11e
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	add	x0, x0, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, #0x125
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	lsl	x2, x20, #3
+               	add	x0, x0, x2
+               	ldr	x0, [x0]
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	lsl	x1, x20, #3
+               	add	x1, x21, x1
+               	ldr	x0, [x0]
+               	str	x0, [x1]
+               	b	<addr>
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x80
+               	str	x20, [sp]
+               	str	x19, [sp, #0x10]
+               	mov	x0, #0x64               // =100
+               	mov	x1, #0x32               // =50
+               	mov	x2, #0x19               // =25
+               	mov	x3, #0xc                // =12
+               	mov	x4, #0x8                // =8
+               	sdiv	x5, x0, x4
+               	sdiv	x6, x1, x4
+               	sdiv	x7, x2, x4
+               	sdiv	x4, x3, x4
+               	sxtw	x5, w5
+               	sxtw	x6, w6
+               	add	x5, x5, x6
+               	sxtw	x5, w5
+               	sxtw	x6, w7
+               	add	x5, x5, x6
+               	sxtw	x5, w5
+               	sxtw	x4, w4
+               	add	x4, x5, x4
+               	sxtw	x4, w4
+               	add	x0, x4, x0
+               	sxtw	x0, w0
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x0, x2
+               	sxtw	x0, w0
+               	add	x0, x0, x3
+               	sxtw	x20, w0
+               	adrp	x0, <page>
+               	add	x0, x0, #0x150
+               	sxtw	x1, w20
+               	bl	<addr>
+               	sxtw	x0, w0
+               	sxtw	x0, w20
+               	cmp	x0, #0xd1
+               	b.ne	<addr>
+               	mov	x1, #0x0                // =0
+               	b	<addr>
+               	mov	x1, #0x1                // =1
+               	b	<addr>
+               	mov	x0, x1
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x80
+               	ldp	x29, x30, [sp], #0x10
+               	ret

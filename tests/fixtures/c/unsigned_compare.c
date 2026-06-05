@@ -1,8 +1,8 @@
-// Unsigned integer comparisons must use unsigned semantics, not
-// signed. Surfaced by sqlite3's `Pgno` (typedef u32) compared
-// against `SQLITE_MAX_PAGE_COUNT = 0xfffffffe`: if the comparison
-// went signed, `1 > 0xfffffffe` read as `1 > -2` and turned every
-// page-1 fetch into SQLITE_FULL.
+// C99 6.5.8: unsigned integer comparisons use unsigned
+// semantics. A `u32` value compared against a hex constant
+// near the high end of the range (e.g. `0xfffffffe`) must walk
+// the unsigned ordering: under signed semantics, `1 > 0xfffffffe`
+// would read as `1 > -2` and flip the predicate.
 //
 // Covers the three integer widths the dialect supports:
 //   * `unsigned int`    -- via direct decl and via typedef

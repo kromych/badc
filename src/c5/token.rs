@@ -187,13 +187,12 @@ pub(crate) enum Token {
     /// load of the pointer slot.
     Dot,
     /// `_Thread_local` storage-class specifier (C11). Marks the
-    /// following global as having per-thread storage. Recognised
-    /// at the parser surface; the codegen still emits a clean
-    /// "not yet implemented" error -- ELF .tdata/.tbss + PE TLS
-    /// directory + Mach-O __thread_* sections are a future
-    /// milestone (the codegen lowering needs `mrs x0, tpidr_el0`
-    /// on aarch64 and `mov rax, %fs:0` on x86_64 plus the
-    /// per-target dyld initializer).
+    /// following global as having per-thread storage. Lowering
+    /// uses `mrs x0, tpidr_el0` on aarch64 and `mov rax, %fs:0`
+    /// on x86_64 to recover the thread-local block base; the
+    /// post-link target writers (ELF .tdata/.tbss, PE TLS
+    /// directory, Mach-O __thread_*) place the symbol within
+    /// the runtime block.
     ThreadLocal,
     /// `extern` keyword. Accepted as a no-op storage-class
     /// prefix in declarations (global, function, parameter,
@@ -240,9 +239,10 @@ pub(crate) enum Token {
     /// `short` modifier -- a real 2-byte width specifier. Drives
     /// `parse_decl_base_type` to pick `Ty::Short` rather than
     /// `Ty::Int`, so `short` declarations get a 2-byte slot,
-    /// `Op::Lh` / `Op::Sh` for memory access, and proper sign /
-    /// zero extension on load. `unsigned short` ORs in
-    /// `UNSIGNED_BIT` and switches the load to `Op::Lhu`.
+    /// `LoadKind::I16` / `StoreKind::I16` for memory access, and
+    /// proper sign / zero extension on load. `unsigned short`
+    /// ORs in `UNSIGNED_BIT` and switches the load to
+    /// `LoadKind::U16`.
     Short,
     /// `signed` modifier -- separated from the rest of [`IntMod`]
     /// because c5 needs to know specifically when `signed` was
@@ -260,7 +260,7 @@ pub(crate) enum Token {
     /// unsigned int u32;` all flow through `parse_decl_base_type`
     /// where the `saw_unsigned` flag ORs `UNSIGNED_BIT` into the
     /// chosen base type. Comparisons later check the bit and
-    /// pick `Op::Ult/Ugt/Ule/Uge` over their signed twins.
+    /// pick `BinOp::Ult/Ugt/Ule/Uge` over their signed twins.
     /// Without it, an unsigned 32-bit value compared against a
     /// high-bit-set constant like `0xFFFFFFFE` reads as signed
     /// `-2` and the comparison's sign goes the wrong way.
@@ -272,12 +272,17 @@ pub(crate) enum Token {
     /// twice in a row; both spellings yield `Ty::Long` so 64-bit-
     /// storage code stays portable across C platforms.
     Long,
-    /// Function specifier (`inline`, `register`, `auto`).
-    /// Consumed as a no-op anywhere a storage class may
-    /// appear. `auto` is the C default, `register` is a
-    /// historical hint, `inline` is something a real
-    /// optimizer would honour -- c5 ignores all three.
+    /// Function specifier (`register`, `auto`, `_Noreturn`,
+    /// `noreturn`). Consumed as a no-op anywhere a storage class
+    /// may appear. `auto` is the C default, `register` is a
+    /// historical hint, `_Noreturn` is a hint to optimisers about
+    /// non-returning calls.
     FuncSpec,
+    /// `inline` / `__inline` / `__inline__` (C99 6.7.4). Tracked
+    /// distinctly from the no-op specifiers so the parser can
+    /// flag the function symbol for the SSA inliner, which
+    /// bypasses the body-size cap for inline-marked callees.
+    Inline,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is
@@ -320,10 +325,11 @@ pub(crate) enum Token {
     /// carried out-of-band by
     /// [`super::compiler::Compiler::pending_base_was_void`] and
     /// [`super::symbol::Symbol::returns_void`]. The earlier
-    /// attempt to add a `Ty::Void` band collided with
-    /// function-pointer encoding in sqlite3 dispatch tables
-    /// (`void (*xFunc)(...)`); keeping the encoding untouched and
-    /// carrying void-ness on the side avoids that trap.
+    /// attempt to add a `Ty::Void` band collided with the
+    /// function-pointer slot encoding C99 6.7.6.3 requires for
+    /// `void (*)(...)` members of dispatch-table structs;
+    /// keeping the encoding untouched and carrying void-ness on
+    /// the side avoids that collision.
     Void,
 }
 

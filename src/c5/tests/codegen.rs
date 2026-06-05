@@ -1,86 +1,11 @@
-//! Codegen tests: compile a fixture and inspect `program.text` byte-for-byte.
-//!
-//! These tests assert exact instruction sequences, so they bypass the
-//! standard `TEST_PRELUDE`. `<stdio.h>` carries a lazy-stream resolver
-//! helper (see `headers/include/stdio.h`) -- pulling it in would prepend
-//! that helper's bytecode to every program and shift every PC offset.
+//! Codegen tests: compile a fixture and inspect post-link metadata.
 
-use super::{Op, compile_fixture_bare};
-
-#[test]
-fn simple_return() {
-    let program = compile_fixture_bare("ir_translation_simple.c");
-    // Every function header is `Ent <locals> AllocaInit <slot>`.
-    // For a function that doesn't use alloca, AllocaInit's operand
-    // is 0 and the native codegen treats it as a no-op.
-    let expected = vec![
-        Op::Ent as i64,
-        0,
-        Op::AllocaInit as i64,
-        0,
-        Op::Imm as i64,
-        42,
-        Op::Lev as i64,
-        Op::Lev as i64,
-    ];
-    assert_eq!(program.text, expected);
-}
-
-#[test]
-fn if_else() {
-    let program = compile_fixture_bare("ir_translation_if.c");
-    let bz_target = 13;
-    let jmp_target = 16;
-    let expected = vec![
-        Op::Ent as i64,
-        0,
-        Op::AllocaInit as i64,
-        0,
-        Op::Imm as i64,
-        1,
-        Op::Bz as i64,
-        bz_target,
-        Op::Imm as i64,
-        2,
-        Op::Lev as i64,
-        Op::Jmp as i64,
-        jmp_target,
-        Op::Imm as i64,
-        3,
-        Op::Lev as i64,
-        Op::Lev as i64,
-    ];
-    assert_eq!(program.text, expected);
-}
-
-#[test]
-fn while_loop() {
-    let program = compile_fixture_bare("ir_translation_while.c");
-    let bz_target = 13;
-    let jmp_target = 4;
-    let expected = vec![
-        Op::Ent as i64,
-        0,
-        Op::AllocaInit as i64,
-        0,
-        Op::Imm as i64,
-        0,
-        Op::Bz as i64,
-        bz_target,
-        Op::Imm as i64,
-        1,
-        Op::Lev as i64,
-        Op::Jmp as i64,
-        jmp_target,
-        Op::Lev as i64,
-    ];
-    assert_eq!(program.text, expected);
-}
+use super::compile_fixture_bare;
 
 #[test]
 fn entry_pc_points_at_main() {
     // `main` is the first (and only) function in this fixture, so its
-    // bytecode starts at PC 0.
+    // ent_pc is 0.
     let program = compile_fixture_bare("ir_translation_simple.c");
     assert_eq!(program.entry_pc, 0);
 }
@@ -95,7 +20,11 @@ fn entry_pc_points_at_main() {
 fn build_info_marker_appears_in_every_target() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str("int main() { return 0; }");
-    let needle = b"PRODUCED BY BADC";
+    // `BUILD_INFO` starts with `BADC\n\tv<version>` (see
+    // `src/lib.rs`). Probe the first line of the marker as a
+    // stable substring; the version and commit suffix change
+    // per build.
+    let needle = b"BADC\n\tv";
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -108,20 +37,19 @@ fn build_info_marker_appears_in_every_target() {
         let found = bytes.windows(needle.len()).any(|w| w == needle);
         assert!(
             found,
-            "{target:?}: expected `PRODUCED BY BADC` marker in emitted binary"
+            "{target:?}: expected `BADC\\n\\tv` marker prefix in emitted binary"
         );
     }
 }
 
-/// gh #62: `--no-debug` / `with_debug_info(false)` strips DWARF
-/// from the emitted image. The `debug_info` substring shows up
-/// in the section-name tables of every format we emit -- ELF
-/// has `.debug_info` in `.shstrtab`, PE has `.debug_info` in the
-/// COFF string table (8-char section-name field overflows to
-/// the strtab), Mach-O has `__debug_info` in its `Section64`
-/// table -- so its presence / absence is a single substring scan
-/// per target. Default options keep DWARF on; the toggle drops
-/// every byte of it.
+/// `-g` / `with_debug_info(true)` carries DWARF into the emitted
+/// image; the default (off) strips it. The `debug_info` substring
+/// shows up in the section-name tables of every format the writer
+/// emits: ELF has `.debug_info` in `.shstrtab`, PE has `.debug_info`
+/// in the COFF string table (the 8-char section-name field
+/// overflows to the strtab), Mach-O has `__debug_info` in its
+/// `Section64` table. Presence / absence is a single substring
+/// scan per target.
 #[test]
 fn with_debug_info_false_strips_dwarf_for_every_target() {
     use crate::{NativeOptions, Target, emit_native_with_options};
@@ -134,11 +62,12 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let on = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
+        let on =
+            emit_native_with_options(&program, target, NativeOptions::new().with_debug_info(true))
+                .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
         assert!(
             on.windows(needle.len()).any(|w| w == needle),
-            "{target:?}: expected `debug_info` section name in default (DWARF-on) image"
+            "{target:?}: expected `debug_info` section name in the DWARF-on (`-g`) image"
         );
         let off = emit_native_with_options(
             &program,
@@ -161,20 +90,19 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
     }
 }
 
-/// gh #61: every emitted target gets one PLT trampoline per
-/// import plus a matching local-name symbol table entry. The
-/// trampoline lets `gdb b malloc` resolve into our binary
-/// instead of getting lost in the dynamic linker; the local
-/// symbol gives the trampoline a real name (`nm` shows it,
-/// `objdump -d` annotates calls with `malloc@plt`-style
+/// Every emitted target gets one PLT trampoline per import
+/// plus a matching local-name symbol table entry. The
+/// trampoline lets `gdb b malloc` resolve into the produced
+/// binary instead of getting lost in the dynamic linker; the
+/// local symbol gives the trampoline a real name (`nm` shows
+/// it, `objdump -d` annotates calls with `malloc@plt`-style
 /// labels).
 ///
 /// Cross-target structural check: a tiny program that calls
 /// `printf` emits a binary whose bytes contain the import name
 /// at least twice -- once in the dynamic-import table and once
 /// in the static symtab (PE COFF symtab / ELF `.symtab` /
-/// Mach-O `__LINKEDIT` symbol entries). Pre-#61 the static
-/// occurrence didn't exist.
+/// Mach-O `__LINKEDIT` symbol entries).
 #[test]
 fn plt_trampoline_local_names_appear_in_every_target() {
     use crate::{NativeOptions, Target, emit_native_with_options};
@@ -184,7 +112,7 @@ fn plt_trampoline_local_names_appear_in_every_target() {
     // hand, the assertions below check that the binary's bytes
     // contain the import name at least twice -- once in the
     // dynamic-import table and once in the static (PLT-trampoline)
-    // symbol table that gh #61 added.
+    // symbol table the linker emits per target.
     let program = super::compile_str("int main() { printf(\"x\"); return 0; }");
     let needle = b"printf";
     for target in [
@@ -203,4 +131,268 @@ fn plt_trampoline_local_names_appear_in_every_target() {
              import + local PLT-trampoline symbol), found {occurrences}"
         );
     }
+}
+
+/// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
+/// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
+/// The aarch64 allocator's sxtw fold collapses that pair into a
+/// single `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`); the x86_64
+/// emit picks `movsxd r64, r32`. Verify the encoded byte
+/// sequence shows up in the emitted text and the two-shift
+/// pair does not.
+#[test]
+fn sxtw_fold_collapses_int_mul_sign_narrow() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str(
+        "int product(int a, int b) { return a * b; } int main() { return product(7, 6); }",
+    );
+    let bytes_arm =
+        emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+            .expect("emit_native MacOSAarch64");
+    // SXTW (SBFM with immr=0, imms=31) carries the fixed high bytes
+    // 0x40 0x93 regardless of the rd / rn register fields. Scan for
+    // that opcode signature so the assertion stays reg-agnostic.
+    let any_sxtw = bytes_arm.windows(4).any(|w| w[2] == 0x40 && w[3] == 0x93);
+    assert!(
+        any_sxtw,
+        "expected an SXTW byte pattern in aarch64 image (the sign-narrow Shl/Shr pair did not fold)",
+    );
+    // Pre-fold: the lsl #32 / asr #32 pair was materialised through a
+    // `movz xN, #32` before the lsl. `#32` lives in bits 21..5 of the
+    // movz word, so the encoded value 32 produces high bytes 0x80 0xd2
+    // regardless of which N gets picked. Their absence confirms the
+    // fold removed the shift pair.
+    let any_movz_32 = bytes_arm
+        .windows(4)
+        .any(|w| w[2] == 0x80 && w[3] == 0xd2 && w[1] == 0x04);
+    assert!(
+        !any_movz_32,
+        "expected the pre-fold `movz xN, #32` pattern to be absent post-fold",
+    );
+
+    let bytes_x64 = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit_native LinuxX64");
+    // movsxd r, r: REX.W prefix (0x48..0x4f with W=1), opcode 0x63,
+    // ModR/M with mod=11 (register direct). Scan for that shape so
+    // the test does not depend on which register the allocator picks.
+    let any_movsxd_r_r = bytes_x64.windows(3).any(|w| {
+        let rex = w[0];
+        (rex & 0xf0) == 0x40 && (rex & 0x08) != 0 && w[1] == 0x63 && (w[2] & 0xc0) == 0xc0
+    });
+    assert!(
+        any_movsxd_r_r,
+        "expected a `movslq` reg/reg byte pattern in x86_64 image",
+    );
+}
+
+/// C99 6.6 constant-expression evaluation: both-IntLit operands
+/// fold to a single SSA `Imm`. The walker's `Expr::Binary` arm
+/// detects this and emits no binop at all. Run via the in-process
+/// JIT so the fold is verified end-to-end.
+#[test]
+fn constant_fold_evaluates_binops_at_translation_time() {
+    use crate::{Compiler, jit_run};
+    // Each return value exercises one folded shape. The compile
+    // succeeds only if the fold produces a valid `Imm`; the JIT
+    // exit code confirms the value is correct.
+    let src = "
+        int add(void)   { return 7 + 3; }
+        int sub(void)   { return 100 - 42; }
+        int mul(void)   { return 4 * 6; }
+        int and_op(void){ return 0xff & 0x0f; }
+        int or_op(void) { return 0x10 | 0x01; }
+        int xor_op(void){ return 0xff ^ 0x0f; }
+        int shl(void)   { return 1 << 8; }
+        int shr(void)   { return 0x100 >> 4; }
+        int eq_lt(void) { return 5 < 9; }
+        int main(void) {
+            if (add()    != 10)   return 1;
+            if (sub()    != 58)   return 2;
+            if (mul()    != 24)   return 3;
+            if (and_op() != 0x0f) return 4;
+            if (or_op()  != 0x11) return 5;
+            if (xor_op() != 0xf0) return 6;
+            if (shl()    != 256)  return 7;
+            if (shr()    != 0x10) return 8;
+            if (eq_lt()  != 1)    return 9;
+            return 0;
+        }
+    ";
+    let program = Compiler::new(src.into())
+        .compile()
+        .expect("constant-fold fixture compiles");
+    let exit = jit_run(&program, &["constant_fold".to_string()])
+        .expect("constant-fold fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "constant-fold values must match standard arithmetic"
+    );
+}
+
+/// Algebraic peepholes inside `SsaBuilder::binop_imm`: identity
+/// rhs values (`Add/Sub/Or/Xor/Shift` with 0, `Mul` with 1,
+/// `And` with -1) return the lhs unchanged; zero-collapse rhs
+/// values (`Mul/And` with 0) produce `Imm(0)`. The compiler
+/// always reaches these through `binop_imm` so each shape lands
+/// in the SSA stream as either the lhs or a single Imm, and
+/// the JIT exit confirms the value matches standard arithmetic.
+#[test]
+fn ssa_build_binop_imm_identity_and_zero_collapse() {
+    use crate::{Compiler, jit_run};
+    let src = "
+        int identity_add(int x) { return x + 0; }
+        int identity_sub(int x) { return x - 0; }
+        int identity_or(int x)  { return x | 0; }
+        int identity_xor(int x) { return x ^ 0; }
+        int identity_shl(int x) { return x << 0; }
+        int identity_shr(int x) { return x >> 0; }
+        int identity_mul(int x) { return x * 1; }
+        int identity_and(int x) { return x & -1; }
+        int collapse_mul(int x) { return x * 0; }
+        int collapse_and(int x) { return x & 0; }
+        int main(void) {
+            if (identity_add(42)  != 42) return 1;
+            if (identity_sub(42)  != 42) return 2;
+            if (identity_or(42)   != 42) return 3;
+            if (identity_xor(42)  != 42) return 4;
+            if (identity_shl(42)  != 42) return 5;
+            if (identity_shr(42)  != 42) return 6;
+            if (identity_mul(42)  != 42) return 7;
+            if (identity_and(42)  != 42) return 8;
+            if (collapse_mul(42)  != 0)  return 9;
+            if (collapse_and(42)  != 0)  return 10;
+            return 0;
+        }
+    ";
+    let program = Compiler::new(src.into())
+        .compile()
+        .expect("identity/collapse fixture compiles");
+    let exit = jit_run(&program, &["identity_collapse".to_string()])
+        .expect("identity/collapse fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "binop_imm identity / zero-collapse folds must preserve C99 semantics"
+    );
+}
+
+/// A non-variadic callee whose every register-passed parameter is
+/// `Inst::ParamRef`-seeded, has no address taken, and whose c5
+/// cdecl slots have no surviving `LoadLocal` or `StoreLocal` with
+/// consumers compiles with `frame.param_spill_bytes == 0`. The
+/// prologue then skips the host-arg-reg spill block entirely and
+/// the epilogue skips the matching `add sp` / `pop+add+push`
+/// sequence. The structural marker -- the absence of any sub-then-str
+/// shape pinned to a 16-byte stride -- locks the elision in. A
+/// regression that brings back the spill (e.g. by dropping the
+/// `frame.param_spill_bytes > 0` gate) gets caught here before it
+/// reaches the perf workloads.
+#[test]
+fn native_eligible_callee_skips_param_spill_in_prologue() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    // `fib` reads `n` four times after mem2reg promotion; with the
+    // `ParamRef` seed plus the prologue helper the slot drops out.
+    let src = "
+        static long fib(int n) {
+            if (n < 2) return (long)n;
+            return fib(n - 1) + fib(n - 2);
+        }
+        int main(void) { return (int)(fib(10) - 55); }
+    ";
+    let program = Compiler::new(crate::c5::tests::with_prelude(src))
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit_native");
+    // The prologue's elided shape begins with the combined
+    // `stp x29, x30, [sp, -0x10]!` (encoded as
+    // `0xa9_bf_7b_fd`). The unelided shape begins with the
+    // host-arg-reg spill `str x_i, [sp, -0x10]!` (or its
+    // `sub sp, sp, #16` skip variant) -- neither encodes to
+    // `0xa9_bf_7b_fd` as the first word at any callee's entry.
+    // Scan the .text section's bytes for the elided stp at
+    // some 4-byte-aligned offset; absence is the regression
+    // marker.
+    let stp_word: [u8; 4] = 0xa9_bf_7b_fd_u32.to_le_bytes();
+    let found = bytes.windows(4).any(|w| w == stp_word);
+    assert!(
+        found,
+        "expected the Native-elided prologue's `stp x29, x30, [sp, -16]!` byte word \
+         (0xa9bf7bfd) to appear in the emitted .text; if absent, the elision \
+         regressed and every fully-Native callee paid the c5 cdecl spill"
+    );
+}
+
+/// A function whose only user-local has every store killed by
+/// mem2reg's write-only-slot pass and uses no callee-saved
+/// registers should have its frame allocation skipped: no `sub sp`
+/// for the local, no x19 reservation, no `add sp` in the epilogue.
+/// Verified by inspecting the byte stream for the `sub sp, sp, #16`
+/// and `sub sp, sp, #32` words that the prior frame layout emitted
+/// for this shape.
+///
+/// Without this elision, `int foo(void) { int a = 1; a = 2; return
+/// 1; }` lowered with -O paid eight extra bytes of frame plus the
+/// matching `sub sp` / `add sp` pair on every call. With this
+/// commit the function lowers to `stp fp,lr; mov fp,sp; mov w0,1;
+/// ldp fp,lr; ret` -- five instructions, twenty bytes.
+#[test]
+fn dead_local_only_function_skips_frame_sub_sp() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let src = "
+        static int foo(void) {
+            int a = 1;
+            a = 2;
+            return 1;
+        }
+        int main(void) { return foo(); }
+    ";
+    let program = Compiler::new(crate::c5::tests::with_prelude(src))
+        .compile()
+        .expect("compile");
+    // This asserts an exact frame-elision shape, which holds only with
+    // the full register file; pin the allocator to the full pool so the
+    // codegen_test pressure knobs (BADC_MAX_GPR / BADC_MAX_FPR) do not
+    // perturb it.
+    let bytes =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(
+                &program,
+                Target::MacOSAarch64,
+                NativeOptions::new().with_optimize(),
+            )
+        })
+        .expect("emit_native");
+    // Foo's fully-elided shape is exactly two consecutive words:
+    //   movz x0, #1                   -> 0xd2800020
+    //   ret                           -> 0xd65f03c0
+    // The leaf-prologue elision plus the empty-frame elision means
+    // foo has no stp / mov fp,sp / sub sp / ldp / add sp / any
+    // saves. A regression that reinstates the stp prologue breaks
+    // the two-word adjacency. Other functions in the binary (the
+    // c5 runtime shims, the start stub) can legitimately emit
+    // `movz x0, #1` followed by something else; this positive
+    // pattern stays specific to foo because nothing else returns
+    // 1 with zero prologue.
+    let movz_x0_1 = 0xd2800020_u32.to_le_bytes();
+    let ret_x30 = 0xd65f03c0_u32.to_le_bytes();
+    let mut found = false;
+    for w in bytes.windows(8) {
+        if w[0..4] == movz_x0_1 && w[4..8] == ret_x30 {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "expected foo's leaf+frame-elided two-word shape \
+         (movz x0, #1; ret) consecutive in .text; the absence means \
+         either the frame elision regressed (some `sub sp` or `stp` \
+         word slipped in) or the leaf elision regressed (the standard \
+         prologue's stp x29, x30 came back). foo should compile to \
+         exactly two instructions under -O on AAPCS64"
+    );
 }

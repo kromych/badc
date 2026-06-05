@@ -141,16 +141,16 @@
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
 // POSIX `environ` is exposed by glibc as a data symbol pointing
-// at the per-process environment vector. The c5 dialect has no
-// dynamic-data-import binding yet, so each TU contributes a
-// tentative definition (C99 6.9.2) that the linker collapses
-// into a single zero-initialised slot. Programs that need the
-// real glibc environ value -- e.g., to pass it through to a
-// child process -- have to populate this slot themselves from
-// the `envp` argument of `main`.
-// TODO: replace the tentative definition with a real data
-// import once the binding-pragma surface grows a data form.
-char **environ;
+// at the per-process environment vector. The single definition
+// lives in `lib/runtime.c` and ships with every native ELF
+// image; here we declare the extern so user code can read or
+// write it. Programs that need the real glibc environ value
+// -- e.g., to pass it through to a child process -- populate
+// it themselves from the `envp` argument of `main`.
+// TODO: replace this slot with a real data import once
+// `#pragma binding`'s data form lands so glibc's own `environ`
+// is bound directly.
+extern char **environ;
 #endif
 
 #ifdef _WIN32
@@ -241,12 +241,12 @@ int confstr(int name, char *buf, int len);
 #define RUSAGE_CHILDREN -1
 #define RUSAGE_THREAD    1
 
-/* `struct timeval` is also defined in <time.h>; the two definitions
-** must stay in sync. The `struct rusage` shape below references it
-** by tag name so getrusage()'s `ru_utime` / `ru_stime` match the
-** `timeDiff(struct timeval *, struct timeval *)` callers in
-** sqlite3 shell.c. (Earlier this header carried a private
-** `struct __c5_timeval` alias that broke the type-check.) */
+/* `struct timeval` is also defined in <time.h>; the two
+** definitions must stay in sync. The `struct rusage` shape
+** below references it by tag name so getrusage()'s `ru_utime`
+** / `ru_stime` typecheck as `struct timeval *` callers expect.
+** Earlier this header carried a private `struct __c5_timeval`
+** alias that broke that type-check. */
 struct rusage {
     struct timeval ru_utime;
     struct timeval ru_stime;

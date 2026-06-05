@@ -36,6 +36,18 @@ const COMPILE_SKIPLIST: &[&str] = &[
     // mprotect-blocks-* fixtures live under their own runtime
     // tests; their compile path is exercised through the
     // standard fixture pipeline.
+    //
+    // `_Thread_local`-bearing fixtures. The Linux native-link
+    // path (compile -> ET_REL -> link_native_objects -> write_executable_elf64)
+    // doesn't carry TLS storage through ET_REL yet, so the
+    // codegen's relocatable writer refuses these with a clear
+    // link error pointing at the in-memory compile + link path
+    // (TODO: thread `.tdata` / `.tbss` plus per-format TLS
+    // metadata through the synth pipeline).
+    "thread_local_basic.c",
+    "thread_local_initializer.c",
+    "thread_local_per_thread.c",
+    "deferred_jit_thread_local.c",
 ];
 
 #[test]

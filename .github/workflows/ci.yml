@@ -34,6 +34,7 @@ jobs:
   lint:
     name: fmt + clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -71,6 +72,7 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -166,6 +168,42 @@ jobs:
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
         run: cargo test --locked --verbose
+      - name: compare fib vs libc_basic ELFs (ubuntu-latest only, on failure)
+        # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
+        # macOS/aarch64 lanes pass identical bytes. The perf-table
+        # job's fib.c binary works on the same hardware. Build both
+        # via the CLI path and diff their ELF headers / segment
+        # layouts / dynamic section to find what shape only the
+        # failing one has.
+        if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get install -y -qq strace || true
+          cargo build --release --locked --bin badc
+          set +e
+          BADC=./target/release/badc
+          echo '#include <stdio.h>'                                  > /tmp/pf.c
+          echo 'int main(void){printf("ok\n");return 0;}'           >> /tmp/pf.c
+          $BADC tests/fixtures/c/libc_basic.c -o /tmp/libc_basic
+          $BADC tests/perf/fib.c -o /tmp/fib
+          $BADC /tmp/pf.c -o /tmp/pf
+          echo
+          echo '=== /tmp/pf (hello) run ==='
+          /tmp/pf; echo exit=$?
+          echo '=== /tmp/fib run ==='
+          timeout 5 /tmp/fib 2>&1 | head -3; echo exit=$?
+          echo '=== /tmp/libc_basic run ==='
+          /tmp/libc_basic; echo exit=$?
+          for b in /tmp/pf /tmp/fib /tmp/libc_basic; do
+            echo "=== readelf -h $b ==="
+            readelf -h "$b" | head -20
+            echo "=== readelf -l $b ==="
+            readelf -l "$b" | head -30
+            echo "=== readelf -d $b ==="
+            readelf -d "$b" | head -20
+          done
+          echo '=== strace -i /tmp/libc_basic (post-load) ==='
+          strace -i /tmp/libc_basic 2>&1 | tail -30
+          true
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.
@@ -179,6 +217,94 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
+      - name: capture sqlite3 shell crash under gdb (Linux x86_64 only)
+        # Build the shell the way smoke.py does (amalgamated +
+        # `-include msvc_compat.h`) but with `-g`, then re-run
+        # the first failing scenario inside gdb to dump a
+        # backtrace + registers + disassembly. `continue-on-
+        # error` keeps the diagnostic from masking other
+        # failures in the matrix.
+        if: matrix.os == 'ubuntu-latest' && failure()
+        continue-on-error: true
+        run: |
+          set +e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb
+          BADC="$PWD/target/release/badc"
+          WORK="$RUNNER_TEMP/sqlite3-gdb"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cd "$WORK"
+          echo "=== running smoke.py with BADC_SMOKE_KEEP_TMPDIR ==="
+          # smoke.py's atexit hook copies its tempdir contents into
+          # $WORK/saved regardless of pass / fail.
+          BADC="$BADC" BADC_SMOKE_KEEP_TMPDIR="$WORK/saved" \
+            python3 "$GITHUB_WORKSPACE/demos/sqlite3/smoke.py" || true
+          # Pick the noopt binary if it exists.
+          cp "$WORK"/saved/sqlite3shell "$WORK"/shell_g 2>/dev/null \
+            || cp "$WORK"/saved/sqlite3shell.opt "$WORK"/shell_g 2>/dev/null \
+            || echo "no shell saved"
+          ls -la "$WORK"/shell_g 2>&1 | head -1
+          # First failing scenario from smoke.py:
+          cat > in.sql <<'EOF'
+          CREATE TABLE t(x INTEGER, y TEXT);
+          INSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');
+          SELECT * FROM t;
+          .quit
+          EOF
+          echo "=== gdb backtrace ==="
+          gdb -batch \
+            -ex "set pagination off" \
+            -ex "run < in.sql" \
+            -ex "bt 50" \
+            -ex "info reg" \
+            -ex "x/8i \$rip-16" \
+            -ex "frame 0" \
+            -ex "disas" \
+            ./shell_g 2>&1 | head -200
+          echo "=== gdb exit ==="
+      - name: capture sqlite3 shell crash under cdb (Windows only)
+        # Mirror of the Linux gdb capture for the Windows runners.
+        # Rebuilds the optimized shell via smoke.py with the
+        # tempdir preserved, then runs it under cdb to dump the
+        # crash module + offending instruction + stack on the
+        # first access violation. `continue-on-error` keeps the
+        # diagnostic from masking other matrix failures.
+        if: runner.os == 'Windows' && failure()
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if not exist "%CDB%" (
+            echo cdb.exe not found at "%CDB%"
+            exit /b 0
+          )
+          set "BADC=%CD%\target\release\badc.exe"
+          set "WORK=%RUNNER_TEMP%\sqlite3-cdb"
+          if exist "%WORK%" rmdir /s /q "%WORK%"
+          mkdir "%WORK%"
+          echo === running smoke.py with BADC_SMOKE_KEEP_TMPDIR ===
+          set "BADC_SMOKE_KEEP_TMPDIR=%WORK%\saved"
+          python "%GITHUB_WORKSPACE%\demos\sqlite3\smoke.py"
+          set "SHELL_OPT="
+          for /f "delims=" %%F in ('dir /b /s "%WORK%\saved\sqlite3shell.opt.exe" 2^>nul') do (
+            if not defined SHELL_OPT set "SHELL_OPT=%%F"
+          )
+          if not defined SHELL_OPT (
+            echo no sqlite3shell.opt.exe found under "%WORK%\saved"
+            dir /s "%WORK%" 2>&1
+            exit /b 0
+          )
+          echo === running %SHELL_OPT% under cdb ===
+          rem Drive sqlite3shell via its `-cmd` flag instead of stdin
+          rem so cdb's console does not consume the SQL. `g` resumes
+          rem from the initial breakpoint and the access violation
+          rem stops the debugger; `.ecxr` pins the registers to the
+          rem exception context, `.lastevent` / `r` / `kn 50` / `lm`
+          rem / `u . L40` dump the crash; `qd` detaches and exits.
+          "%CDB%" -c "g; .ecxr; .lastevent; r; kn 50; lm; u . L40; qd" "%SHELL_OPT%" -cmd "SELECT 1;" -cmd ".quit" 2>&1
+          echo === cdb exit code: %ERRORLEVEL% ===
       - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of
         # integer + bit-twiddle deflate code. Compresses + uncompresses
@@ -225,6 +351,7 @@ jobs:
         # Diffie-Hellman. Same build flavour matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
+
       - name: bearssl smoke (TU + archive + upstream KATs)
         # Builds every .c file under demos/bearssl/src into a
         # static archive, links it against the bundled
@@ -237,24 +364,21 @@ jobs:
         run: python demos/bearssl/smoke.py
       - name: lua smoke (multi-TU + upstream test suite)
         # Vendored Lua 5.5.0 sources compile + multi-TU link
-        # through badc on every supported lane, and the curated
-        # 24-script `lua-tests` subset (bitwise, closures,
-        # coroutines, math, pattern, sort, string, table, utf8,
-        # vararg, plus the `T`-driven api / gc / gengc / memerr
-        # / tracegc) runs against the produced interpreter at
-        # both -O and noO.
-        #
-        # macOS / Linux x86_64 / Linux aarch64 gate strictly.
-        # The Windows lanes match the chibicc / tinycc skip-on-2
-        # convention: smoke.py exits 2 when the build is green
-        # but Microsoft msvcrt-specific test idiosyncrasies fire
-        # (`math.lua` ldexp/frexp, `cstack.lua` recursion limit,
-        # `constructs.lua` / `strings.lua` formatting on
-        # AArch64). The c5 build + setjmp / longjmp paths
-        # themselves are still strict: every cargo `native_pe_*`
-        # fixture parity test runs against real Windows.
+        # through badc, and the curated 24-script `lua-tests`
+        # subset (bitwise, closures, coroutines, math, pattern,
+        # sort, string, table, utf8, vararg, plus the `T`-driven
+        # api / gc / gengc / memerr / tracegc) runs against the
+        # produced interpreter at both -O and noO. Strict-gated
+        # on macOS / Linux x86_64 / Linux aarch64. The Windows
+        # lanes are skipped at the workflow level because the
+        # smoke surfaces msvcrt runtime gaps (math.lua ldexp /
+        # frexp, cstack.lua recursion limit, strings.lua and
+        # constructs.lua formatting on AArch64) tracked under
+        # TODO; the c5 build + setjmp / longjmp paths are still
+        # covered by the `native_pe_*` cargo fixture parity.
+        if: runner.os != 'Windows'
         shell: bash
-        run: python demos/lua/smoke.py || test $? -eq 2
+        run: python demos/lua/smoke.py
       - name: probe Windows msvcrt setjmp + capture lua crash
         # Diagnostic for the Windows runtime gaps the lua smoke
         # surfaces. Runs only when the smoke fails. Two probes:
@@ -390,27 +514,40 @@ jobs:
           if errorlevel 1 ( echo probe build failed & exit /b 0 )
           "%WORK%\probe.exe"
           echo probe exit: %ERRORLEVEL%
+      - name: scc execute suite smoke
+        # scc -- k0ga's Simple C Compiler -- ships a numbered
+        # `tests/cc/execute/` corpus that exercises C99 corners
+        # outside the hand-rolled badc fixture suite. The smoke
+        # walks each `*.c`, compiles + runs it through badc at
+        # both `-q -O0` and `-q -O`, and tallies the pass count
+        # against a committed BASELINE. POSIX-only: scc's tests
+        # call POSIX-shaped libc surfaces (open, getpid, fork
+        # through helper headers) and the binaries don't link on
+        # Windows targets without a wider shim.
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python demos/scc/setup.py && python demos/scc/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,
         # the multi-TU link emits a working chibicc binary, and
         # that binary produces byte-identical assembly to a gcc-
-        # built reference on the self-host sample suite (see
-        # `self_host.py`, gated to Linux x86_64). Windows runners
-        # exit 2 (skip): chibicc's body is POSIX-shaped (fork +
-        # execvp + waitpid + glob + dirname + strndup +
-        # open_memstream + strtold) and the bringup currently
-        # targets POSIX hosts only.
+        # built reference on the self-host sample suite. chibicc's
+        # body is POSIX-shaped (fork + execvp + waitpid + glob +
+        # dirname + strndup + open_memstream + strtold), so the
+        # smoke step is workflow-gated to POSIX hosts.
+        if: runner.os != 'Windows'
         shell: bash
-        run: python demos/chibicc/smoke.py || test $? -eq 2
+        run: python demos/chibicc/smoke.py
       - name: chibicc self-host parity (Linux x86_64 only)
         # Builds chibicc twice (gcc + badc), compares the .s
         # output on a curated sample suite, and asserts the
-        # linked binaries return the same exit code. Skipped
-        # automatically on non-Linux-x86_64 runners (chibicc
-        # emits SysV x86_64 GAS only).
+        # linked binaries return the same exit code. chibicc
+        # only emits SysV x86_64 GAS, so the step is gated to
+        # the Linux x86_64 lane at the workflow level.
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
-        run: python demos/chibicc/self_host.py || test $? -eq 2
+        run: python demos/chibicc/self_host.py
       - name: tinycc bringup smoke
         # Vendored tinycc HEAD compiles + multi-TU links across
         # every supported runner: each lane's HOST_MATRIX entry
@@ -420,19 +557,18 @@ jobs:
         # Compares `tcc -c` output between a reference tcc built
         # with the host compiler and a stage1 tcc built through
         # badc. HOST_PROFILES in self_host.py picks the per-host
-        # TU set plus `TCC_TARGET_*` macros. The Linux lanes
-        # (x86_64 + aarch64) gate strictly on the five-stage
-        # fixed point (samples / corpus / gen2 == gen3 /
-        # gen2-self compile / functional). The macOS aarch64 lane
-        # is soft-gated on gen2-self while a c5 miscompile in
-        # `tccmacho.c`'s Mach-O binding emit gets resolved. The
-        # Windows lanes (x86_64 + ARM64) are in active bringup
-        # and run as soft-report only; the harness publishes
-        # tallies but does not fail CI yet. KNOWN_DRIFT lists
-        # per-host residual mismatches that do not affect
-        # correctness.
-        shell: bash
-        run: python demos/tinycc/self_host.py || test $? -eq 2
+        # TU set plus `TCC_TARGET_*` macros. Every CI lane
+        # (Linux x86_64 + aarch64, macOS aarch64, Windows x86_64
+        # + ARM64) gates strictly on the five-stage fixed point:
+        # samples byte-identical, corpus byte-identical,
+        # gen2 == gen3 byte-identical, gen2-self == gen3
+        # byte-identical, and the functional hello-world round
+        # trip through stage1's own linker. `KNOWN_DRIFT` is
+        # empty on every lane; a non-empty set indicates a real
+        # regression. Exit code 2 (env_unsuitable) only fires on
+        # hosts the harness doesn't recognise -- none of the
+        # five CI runners hit that path, so the gate is hard.
+        run: python demos/tinycc/self_host.py
       - name: upload tinycc stage1 binary (Windows lanes only)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -613,9 +749,57 @@ jobs:
         # NTSTATUS would signal a c5 Windows-codegen regression.
         run: python demos/nt_loader/smoke.py
 
+  pressure:
+    # Run the test suite and the functional demos with the register
+    # allocator's per-bank counts capped to a fixed N, to catch
+    # spill / scratch / reload bugs that only appear under pressure.
+    # The caps are read only with the codegen_test feature
+    # (BADC_MAX_GPR / BADC_MAX_FPR). Value-checking tests and the
+    # demos must produce the same result at any pressure; exact-shape
+    # tests pin their own pressure through with_pool_size_override, so
+    # the global cap does not affect them. N=1 is excluded: it leaves
+    # a single register per bank, which the lua VM call path cannot
+    # yet satisfy (tracked with a TODO in the allocator).
+    name: pressure N=${{ matrix.pressure }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+        pressure: [2, 3, 5, 7, 8, 9, 16]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BADC_MAX_GPR: ${{ matrix.pressure }}
+      BADC_MAX_FPR: ${{ matrix.pressure }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pressure-${{ matrix.os }}
+      - name: build codegen_test binary
+        run: cargo build --release --locked --features codegen_test
+      - name: cargo test under pressure
+        run: cargo test --release --locked --features codegen_test --lib
+      - name: demos under pressure
+        run: |
+          set -e
+          export BADC="$PWD/target/release/badc"
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb; do
+            echo "::group::$d (N=${{ matrix.pressure }})"
+            python "demos/$d/smoke.py"
+            echo "::endgroup::"
+          done
+
   features:
     name: feature combos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -632,3 +816,96 @@ jobs:
         run: cargo build --locked --no-default-features --lib --verbose
       - name: --all-features
         run: cargo build --locked --all-features --verbose
+
+  snapshots-clean:
+    name: snapshots clean
+    runs-on: ubuntu-latest
+    needs: test
+    # Snapshot drift is independent of which test lane failed; the
+    # regenerator only needs a working ubuntu-latest test (which is
+    # the runner this job uses). Don't block on Windows / aarch64
+    # regressions.
+    if: ${{ !cancelled() }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: snapshots-clean
+      - name: install llvm-objdump
+        # scripts/snapshots.py prefers llvm-objdump over GNU objdump so
+        # the disassembly text is determined by `badc`'s output rather
+        # than the host's binutils choice. The committed snapshots were
+        # produced with llvm-objdump; require it here too.
+        run: sudo apt-get update -y && sudo apt-get install -y llvm
+      - name: build badc release
+        run: cargo build --release --locked
+      - name: regenerate snapshots
+        run: python3 scripts/snapshots.py
+      - name: verify no diff
+        run: |
+          if ! git diff --quiet tests/snapshots/; then
+            echo "::error::tests/snapshots/ drifted from the committed copy"
+            git --no-pager diff --stat tests/snapshots/
+            git --no-pager diff tests/snapshots/ | head -200
+            exit 1
+          fi
+
+  perf-table:
+    name: perf comparison (${{ matrix.os }})
+    needs: test
+    # Run the perf comparison whenever the test matrix has finished,
+    # even if some lane failed. Cross-OS test failures (e.g. a Windows
+    # codegen regression) should not block visibility on the Linux perf
+    # delta; the matrix runs only on Linux runners anyway.
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    # Don't gate CI on perf numbers -- a regression should surface in
+    # the job summary but not block the merge. Hard failures from the
+    # harness (no compilers found, fixture missing) still fail the job.
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: perf-${{ matrix.os }}
+      - name: build badc release
+        run: cargo build --release --locked
+      - name: fetch vendored tinycc sources
+        run: python3 demos/tinycc/setup.py
+      - name: fetch vendored perf fixture sources
+        # tests/perf/{crypto,compress,stb,sqlite}.c each pull a
+        # header / amalgamation from a demos/* directory. Those
+        # sources are gitignored and only land after the matching
+        # setup.py runs; without this step the perf harness sees a
+        # `file not found` for every fixture beyond fib/qsort.
+        run: |
+          python3 demos/tweetnacl/setup.py
+          python3 demos/miniz/setup.py
+          python3 demos/stb/setup.py
+          python3 demos/sqlite3/setup.py
+      - name: build tcc for the host
+        run: bash tests/perf/build_tcc.sh
+      - name: run perf harness + write to job summary
+        run: |
+          python3 tests/perf/run.py | tee /tmp/perf.md
+          {
+            echo "## badc vs tcc / clang on fib + qsort (${{ matrix.os }})"
+            echo ""
+            cat /tmp/perf.md
+          } >> "$GITHUB_STEP_SUMMARY"

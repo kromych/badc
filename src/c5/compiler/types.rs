@@ -32,7 +32,7 @@
 //! plenty of room for deeply-nested pointer levels without colliding
 //! with the next struct id.
 
-use super::super::op::Op;
+use super::super::ir::LoadKind;
 use super::super::token::{Tok, Token, Ty};
 
 /// Base of the struct-tag namespace. Every primitive (including
@@ -40,7 +40,7 @@ use super::super::token::{Tok, Token, Ty};
 pub(crate) const STRUCT_BASE: i64 = 1000;
 /// Per-struct stride. Struct id `N` occupies `[STRUCT_BASE +
 /// N*STRIDE, STRUCT_BASE + (N+1)*STRIDE)`.
-pub(super) const STRUCT_STRIDE: i64 = 1000;
+pub(crate) const STRUCT_STRIDE: i64 = 1000;
 
 /// Width of each non-struct band (float, double, long). 50 pointer
 /// levels per band given the +2-per-`*` step.
@@ -301,8 +301,8 @@ fn signed_holds_unsigned(signed_rank: u8, unsigned_rank: u8, target: super::supe
 
 /// C99 6.3.1.8 usual arithmetic conversions: pick the common type
 /// for a binary integer operation. Used by relational compares to
-/// decide between the signed (`Op::Lt/Gt/Le/Ge`) and unsigned
-/// (`Op::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
+/// decide between the signed (`BinOp::Lt/Gt/Le/Ge`) and unsigned
+/// (`BinOp::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
 /// result type so subsequent shifts / compares route correctly.
 ///
 /// Algorithm:
@@ -458,7 +458,7 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
         // Bare `float*` -- pointee is a 4-byte single-precision
         // float; `(float *)p + 1` strides four bytes, and the
-        // single-precision narrow-load `Op::Lf` reads the same
+        // single-precision narrow-load `LoadKind::F32` reads the same
         // 4 bytes.
         4
     } else {
@@ -501,6 +501,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Long
         || tk == Token::Short
         || tk == Token::FuncSpec
+        || tk == Token::Inline
 }
 
 /// True for any token that may start a c5 declaration -- a base-type
@@ -524,21 +525,21 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
 
 /// Pick the right load op for the given `ty`, factoring in the
 /// target's data model (LP64 vs LLP64 picks for `long`).
-///   * `Ty::Char` (scalar)   -> `Op::Lc` / `Op::Lcs` (1-byte)
-///   * `Ty::Short` (scalar)  -> `Op::Lh` / `Op::Lhu` (2-byte)
-///   * `Ty::Int` (scalar)    -> `Op::Lw`  / `Op::Lwu` (4-byte)
+///   * `Ty::Char` (scalar)   -> `LoadKind::U8` / `LoadKind::I8` (1-byte)
+///   * `Ty::Short` (scalar)  -> `LoadKind::I16` / `LoadKind::U16` (2-byte)
+///   * `Ty::Int` (scalar)    -> `LoadKind::I32`  / `LoadKind::U32` (4-byte)
 ///   * `Ty::Long` (scalar)   -> 4-byte on Windows / 8-byte on Unix
-///   * `Ty::LongLong` (scalar) -> always 8-byte (`Op::Li`)
-///   * everything else       -> `Op::Li`
+///   * `Ty::LongLong` (scalar) -> always 8-byte (`LoadKind::I64`)
+///   * everything else       -> `LoadKind::I64`
 ///
-/// Pointers (any base type) go through `Op::Li` because every
+/// Pointers (any base type) go through `LoadKind::I64` because every
 /// pointer is 8 bytes regardless of its pointee width or target.
 ///
 /// The signed / unsigned split for `char` / `short` / `int`
 /// picks between the sign- and zero-extending load ops; the
-/// matching store widths (`Op::Sc` / `Op::Sh` / `Op::Sw` /
-/// `Op::Si`) don't care about signedness.
-pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
+/// matching store widths (1 / 2 / 4 / 8 bytes) don't care
+/// about signedness.
+pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
     let unsigned = is_unsigned_ty(ty);
     let stripped = strip_unsigned(ty);
     if is_pointer_ty(ty) {
@@ -546,100 +547,37 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
         // width). The Long-vs-LongLong distinction here would
         // wrongly route `long *` through Lw on Windows; the
         // Float-vs-Double distinction would wrongly route
-        // `float *` through Op::Lf.
-        return Op::Li;
+        // `float *` through LoadKind::F32.
+        return LoadKind::I64;
     }
     if stripped == Ty::Char as i64 {
-        if unsigned { Op::Lc } else { Op::Lcs }
+        if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
-        if unsigned { Op::Lhu } else { Op::Lh }
+        if unsigned {
+            LoadKind::U16
+        } else {
+            LoadKind::I16
+        }
     } else if stripped == Ty::Int as i64 {
-        if unsigned { Op::Lwu } else { Op::Lw }
+        if unsigned {
+            LoadKind::U32
+        } else {
+            LoadKind::I32
+        }
     } else if stripped == Ty::Float as i64 {
         // 4-byte single-precision load that widens to f64 in the
-        // accumulator. `double` falls through to `Op::Li` since
+        // accumulator. `double` falls through to `LoadKind::I64` since
         // c5's f64 arithmetic ops carry the bit pattern verbatim
         // and the 8-byte slot needs no narrowing.
-        Op::Lf
+        LoadKind::F32
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
-        if unsigned { Op::Lwu } else { Op::Lw }
+        if unsigned {
+            LoadKind::U32
+        } else {
+            LoadKind::I32
+        }
     } else {
-        Op::Li
-    }
-}
-
-/// Mirror of [`load_op_for`] for stores.
-pub(super) fn store_op_for(ty: i64, target: super::super::Target) -> Op {
-    let stripped = strip_unsigned(ty);
-    if is_pointer_ty(ty) {
-        return Op::Si;
-    }
-    if stripped == Ty::Char as i64 {
-        Op::Sc
-    } else if stripped == Ty::Short as i64 {
-        Op::Sh
-    } else if stripped == Ty::Int as i64 {
-        Op::Sw
-    } else if stripped == Ty::Float as i64 {
-        // 4-byte single-precision store that narrows the
-        // accumulator's f64 bits via round-to-nearest-ties-to-even.
-        // `double` falls through to `Op::Si` since the 8-byte slot
-        // holds the bit pattern verbatim.
-        Op::Sf
-    } else if stripped == Ty::Long as i64 && target.is_windows() {
-        // LLP64: `long` stores as 4 bytes, same as int.
-        Op::Sw
-    } else {
-        Op::Si
-    }
-}
-
-/// True if `op_val` (the trailing word in `self.text`) is a scalar
-/// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Lwu` /
-/// `Op::Li`. The parser uses this in every "rewrite the trailing
-/// load into a Psh so the address survives" path: assignments,
-/// compound assignments, pre/post-inc/dec, address-of, etc. The
-/// helper centralises the predicate so adding a new scalar load op
-/// is a one-line change here rather than an audit of every lvalue
-/// rewrite site.
-pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
-    op_val == Op::Lc as i64
-        || op_val == Op::Lcs as i64
-        || op_val == Op::Lh as i64
-        || op_val == Op::Lhu as i64
-        || op_val == Op::Lw as i64
-        || op_val == Op::Lwu as i64
-        || op_val == Op::Li as i64
-        // Single-precision narrow load behaves like the other
-        // scalar-load ops at every lvalue / address-of / inc-dec
-        // / compound-assign rewrite site: the parser drops the
-        // trailing load to recover the address, then re-emits
-        // the matching load (`reemit_scalar_load`) after the
-        // address-side rewrites are in place.
-        || op_val == Op::Lf as i64
-}
-
-/// Re-emit the same scalar load op that produced `op_val`. Caller
-/// has just rewritten the trailing slot to `Op::Psh` and now needs
-/// to load the same width again so the address-then-value pattern
-/// the increment / compound-assignment lowering expects falls out.
-pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
-    if op_val == Op::Lc as i64 {
-        Op::Lc
-    } else if op_val == Op::Lcs as i64 {
-        Op::Lcs
-    } else if op_val == Op::Lh as i64 {
-        Op::Lh
-    } else if op_val == Op::Lhu as i64 {
-        Op::Lhu
-    } else if op_val == Op::Lw as i64 {
-        Op::Lw
-    } else if op_val == Op::Lwu as i64 {
-        Op::Lwu
-    } else if op_val == Op::Lf as i64 {
-        Op::Lf
-    } else {
-        Op::Li
+        LoadKind::I64
     }
 }

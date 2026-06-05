@@ -1,38 +1,23 @@
-// DEFERRED: address-of-libc-function in a static initializer is
-// lowered as `Imm 0` with a runtime-patch warning.
+// C99 6.7.8: an aggregate initializer may name addresses of
+// objects with static storage duration, including libc
+// functions. Pre-fix, c5 lowered an `&libc_fn` slot to `Imm 0`
+// with a runtime-patch warning; any reader of the slot before
+// a runtime overwrite would null-deref.
 //
-// sqlite3's per-platform VFS dispatch tables build a struct of
-// function pointers at file scope -- entries like `.xClose =
-// close, .xRead = read` reference libc symbols whose runtime
-// addresses aren't known at compile time. Today the compiler
-// lowers each slot to zero and emits a warning ("the runtime
-// must overwrite the slot before first use"); sqlite3's
-// `UnixOSData` initializer fills the table at init time, so
-// the trick works there. Anywhere else that reaches one of
-// these slots before the runtime patch fires would null-deref.
-//
-// The right fix is GOT-trampoline / IAT-slot resolution: emit
-// a code-relocation entry per libc symbol so the loader / our
-// emitter writes the resolved address into the slot at load
-// time. Each per-target writer (Mach-O `__got`, ELF `.got` /
-// `.got.plt`, PE import directory) already has the slot
-// machinery for *function calls*; the static-init path bypasses
-// it.
-//
-// Today this fixture exits 1: the table reads back as zeros
-// because the compiler couldn't resolve the addresses. Once a
-// trampoline pipeline lands, the addresses get patched in and
-// the fixture exits 0.
+// The fix is a per-symbol trampoline: a synthesized c5 function
+// that re-pushes its declared args and re-dispatches via
+// JsrExt; the writer patches the slot to the trampoline's
+// address at load time. Each per-target writer (Mach-O `__got`,
+// ELF `.got` / `.got.plt`, PE import directory) already has
+// the slot machinery for function calls; this fixture pins the
+// static-init path against regression.
 #include <stdio.h>
 #include <unistd.h>
 
-// Same shape as sqlite3's UnixOSData VFS dispatch table:
-// a struct of function pointers populated at file scope with
+// A struct of function pointers populated at file scope with
 // libc symbols. The dialect handles this path with a warning
-// + zero-fill (vs the bare scalar form, which is a hard
-// compile error). The slot reads back as zero today; the fix
-// is a GOT/IAT trampoline that resolves the address at load
-// time.
+// when the address can't be resolved at compile time; the
+// trampoline pipeline resolves it at load time.
 struct VfsOps {
     int (*close_fn)(int);
     long (*read_fn)(int, char *, long);

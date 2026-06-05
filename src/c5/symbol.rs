@@ -119,14 +119,14 @@ pub(crate) struct Symbol {
     /// was bare `void`. The type encoding (`type_`) still records
     /// `Ty::Char | UNSIGNED_BIT` -- a side-channel rather than
     /// a separate `Ty::Void` band, because a real band collides
-    /// with the function-pointer call-table encoding sqlite3
-    /// uses (`void (*xFunc)(...)`). Consumed by:
-    ///   * the function-body emit path: prepends `Op::Imm 0`
-    ///     before the trailing synthetic `Op::Lev` so a caller
-    ///     that misclassifies the prototype reads `0` rather
-    ///     than stale accumulator state (C99 6.8.6.4p3).
+    /// with the function-pointer encoding C99 6.7.6.3 uses for
+    /// `void (*)(...)` slots inside dispatch tables. Consumed by:
+    ///   * the function-body emit path: prepends a zero
+    ///     immediate before the trailing synthetic return so a
+    ///     caller that misclassifies the prototype reads `0`
+    ///     rather than stale accumulator state (C99 6.8.6.4p3).
     ///   * the `return` statement: bare `return;` in a void
-    ///     function emits the same `Imm 0` prefix; a `return
+    ///     function emits the same zero prefix; a `return
     ///     <expr>;` is rejected as a constraint violation
     ///     (C99 6.8.6.4p1).
     pub returns_void: bool,
@@ -166,6 +166,77 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
+
+    /// True once the parser has emitted any reference to this
+    /// symbol after its declaration -- a read, a write, an
+    /// address-of, or a decay. Set by the expression parser's
+    /// identifier resolution path; consulted at block / function
+    /// exit to emit a C99-style "unused variable" diagnostic for
+    /// block-scope locals and parameters that were never
+    /// mentioned in the body.
+    pub was_referenced: bool,
+
+    /// True once a scalar load (`LoadKind::I64` / `LoadKind::U8` / ...) of
+    /// this symbol's value survives in the parser's recent-emit
+    /// ring -- i.e., the runtime would actually read the stored
+    /// value. Distinct from `was_referenced`: the identifier-
+    /// rvalue path tentatively sets `was_read` when it tags the
+    /// load, and the assignment / address-of helpers retract the
+    /// bit if they remove the load before the parse closes.
+    /// Consulted alongside `was_written` to emit the "value
+    /// assigned but never used" diagnostic for dead stores.
+    pub was_read: bool,
+
+    /// True once a scalar store of this symbol's lvalue surface
+    /// has been emitted, or a declaration
+    /// initializer wrote the storage. Set by the assignment /
+    /// compound-assignment / increment paths in the expression
+    /// parser and by `allocate_local_with_init` for declarations
+    /// with `= ...`. Consulted alongside `was_read` to emit the
+    /// dead-store diagnostic.
+    pub was_written: bool,
+
+    /// True once the symbol's address has been taken (`&local`
+    /// or array decay). The address might escape to an unknown
+    /// callee that reads or writes the storage, so the
+    /// unused-symbol diagnostics suppress themselves
+    /// conservatively when this flag is set.
+    pub address_escaped: bool,
+
+    /// Source lines of stores to this symbol that have not yet
+    /// been followed by a read. Pushed by the assignment paths
+    /// in the expression parser and by
+    /// `allocate_local_with_init` for declarations with `= ...`.
+    /// Cleared when an identifier-rvalue load of the symbol
+    /// tags the trailing scalar load. Branches and function calls
+    /// also clear the list (conservatively; the analysis is
+    /// intra-segment to avoid flow-sensitivity false positives).
+    /// Drained at function exit to emit the dead-store
+    /// diagnostic for any line still present.
+    pub pending_stores: Vec<usize>,
+
+    /// Source line where this declaration was parsed. Captured at
+    /// declaration time so unused-variable diagnostics can point
+    /// at the declaration rather than the surrounding block's
+    /// closing brace.
+    pub decl_line: usize,
+
+    /// `Compiler::source_files` index of the file the declaration
+    /// was parsed from. Captured at declaration time alongside
+    /// `decl_line`. Surfaces as `DW_AT_decl_file` in the DWARF
+    /// variable / formal_parameter DIE after mapping to the
+    /// DWARF file_names index. Zero means the primary source.
+    pub decl_file: u32,
+
+    /// True if the declaration was parsed while the lexer was
+    /// reading the primary source (matched against
+    /// `Compiler::source_label`); false when the declaration came
+    /// from a header pulled in by `#include`. Used to suppress
+    /// unused-symbol diagnostics on header-internal static
+    /// helpers -- those are only dead with respect to the current
+    /// translation unit, and the header is the wrong place to
+    /// flag them.
+    pub decl_in_main_source: bool,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

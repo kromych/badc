@@ -1,9 +1,8 @@
-use std::io::{IsTerminal, Read, Write};
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
 use badc::{
-    Compiler, NativeOptions, PredefinedKind, Target, Vm, dump_native_listing_with_options,
-    emit_native_with_options, jit_run_with_options, optimize, predefined_symbols,
+    Compiler, NativeOptions, PredefinedKind, Target, Vm, jit_run_with_options, predefined_symbols,
 };
 
 const USAGE: &str = "\
@@ -18,12 +17,11 @@ binary directly; two or more inputs (or any `-l` / `-L` / `-c`
 flag) run through the cross-TU linker.
 
 Output mode -- pick at most one (defaults to a native binary):
-  --interp                 Run under the bytecode VM.
+  --interp                 Run under the SSA interpreter.
   --jit                    Lower in-process and call main() directly.
   --shared                 Produce a shared library (.dylib / .so /
                            .dll) exporting every #pragma export(name)
                            function.
-  --dump-asm               Print the lowered native listing and exit.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --dump-headers           Print every bundled header to stdout and
@@ -37,19 +35,23 @@ Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
                            linking. Output is `-o`'s path when a
                            single source is named, otherwise
-                           `<stem>.o` next to each input. The `.o`
-                           is target-independent; `--target=` is
-                           decided at link time.
+                           `<stem>.o` next to each input. The
+                           output is a standard ELF64 ET_REL
+                           object (machine code + symbol table +
+                           relocs) linkable by `ld` / `lld`.
+                           Target pins at compile time.
   -L <dir>                 Archive search path for `-l<name>`.
                            Repeatable; probed in declared order.
   -l <name>                Pull `lib<name>.a` in as a static
                            library. Members are pulled in on demand.
 
 Compile knobs:
-  -O, --optimize           Enable the bytecode optimizer + native
-                           regalloc.
-  --no-debug, -g0          Skip DWARF emission. Shrinks
-                           the output by ~10-30%.
+  -O, --optimize           Run the SSA optimization passes (mem2reg,
+                           inlining, rotate and branch const-fold,
+                           immediate dedup). Off by default.
+  -g, --debug              Emit DWARF debug info. Off by default;
+                           adds ~10-30% to the output size.
+  -g0, --no-debug          Skip DWARF emission (the default).
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
@@ -89,7 +91,7 @@ VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
-Mutually exclusive: --interp / --jit / --shared / --dump-asm /
+Mutually exclusive: --interp / --jit / --shared /
 --list-symbols / --dump-headers all pick the output mode; only one
 applies. --track-pointers and --trace require --interp. -o has no
 effect under --interp / --list-symbols / --dump-headers.";
@@ -110,12 +112,11 @@ enum Mode {
     /// disk. Same writer pipeline as `NativeExecutable` plus
     /// `OutputKind::SharedLibrary`.
     SharedLibrary,
-    /// `--interp` -- run under the bytecode VM.
+    /// `--interp` -- run under the SSA interpreter (`vm::ssa`),
+    /// walking `FunctionSsa` directly via `produce_ssa_funcs`.
     Interp,
     /// `--jit` -- lower in-process and call main directly.
     Jit,
-    /// `--dump-asm` -- print the native listing and exit.
-    DumpAsm,
     /// `--list-symbols` -- print the pre-defined symbol table
     /// and exit. Takes no source file.
     ListSymbols,
@@ -132,6 +133,13 @@ enum Mode {
     /// linking; the archive is meant to be passed back as
     /// input to a future link.
     BuildArchive,
+    /// `--dump-native-link` -- parse a list of native ELF
+    /// `.o` files (produced by `-c`), merge them via
+    /// `link_native_objects`, and print a summary of the
+    /// resulting `MergedNative`: per-section sizes, defined
+    /// symbols, and pending import resolutions. No output
+    /// file; diagnostic only.
+    DumpNativeLink,
 }
 
 impl Mode {
@@ -141,11 +149,11 @@ impl Mode {
             Mode::SharedLibrary => "--shared",
             Mode::Interp => "--interp",
             Mode::Jit => "--jit",
-            Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
             Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
+            Mode::DumpNativeLink => "--dump-native-link",
         }
     }
 }
@@ -160,7 +168,9 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
-    let mut emit_debug_info = true;
+    let mut dump_ssa = false;
+    let mut inline_cap: u32 = 64;
+    let mut emit_debug_info = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -174,6 +184,11 @@ fn main() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // `-Wdead-store` opts into the per-store dead-store
+    // diagnostic. Off by default; the per-symbol
+    // `unused variable` / `set but never used` warnings still
+    // fire regardless.
+    let mut warn_dead_store = false;
     // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
     // per-source `info: compiling <path>` progress line in
     // multi-TU mode and the `info: wrote file <path>` lines that
@@ -216,13 +231,55 @@ fn main() {
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
+            "--dump-ssa" => dump_ssa = true,
+            s if s.starts_with("--inline-cap=") => {
+                let body = &s["--inline-cap=".len()..];
+                match body.parse::<u32>() {
+                    Ok(n) => inline_cap = n,
+                    Err(_) => {
+                        eprint_diagnostic(
+                            "badc: error: --inline-cap=N requires a non-negative integer",
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+            // Register-allocator pressure caps, gated behind the
+            // `codegen_test` feature. Each truncates one allocator
+            // bank to N entries so the allocator spills as if the
+            // target had fewer registers. The value is published
+            // through the same `BADC_MAX_GPR` / `BADC_MAX_FPR`
+            // environment variables the allocator reads. Setting an
+            // environment variable is sound here: it runs during
+            // argument parsing before any worker thread starts.
+            #[cfg(feature = "codegen_test")]
+            s if s.starts_with("--max-gpr=") || s.starts_with("--max-fpr=") => {
+                let (flag, var) = if s.starts_with("--max-gpr=") {
+                    ("--max-gpr=", "BADC_MAX_GPR")
+                } else {
+                    ("--max-fpr=", "BADC_MAX_FPR")
+                };
+                let body = &s[flag.len()..];
+                match body.parse::<usize>() {
+                    Ok(n) if n >= 1 => unsafe { std::env::set_var(var, n.to_string()) },
+                    _ => {
+                        eprint_diagnostic(format!("badc: error: {flag}N requires an integer >= 1"));
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
-            "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
             "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
+            "--dump-native-link" => claim(&mut mode, Mode::DumpNativeLink),
             "-h" | "--help" => {
                 println!("{USAGE}");
+                return;
+            }
+            "-v" | "--version" => {
+                println!("{}", badc::BUILD_INFO);
                 return;
             }
             "-o" => match iter.next() {
@@ -289,6 +346,11 @@ fn main() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // gcc-shape `-Wdead-store` -- enable the per-store
+            // dead-store diagnostic. `-Wno-dead-store` is the
+            // opt-out spelling.
+            "-Wdead-store" => warn_dead_store = true,
+            "-Wno-dead-store" => warn_dead_store = false,
             // Quiet mode -- silence informational output (per-source
             // progress, `info: wrote file <path>` lines). Errors
             // and warnings remain on stderr unchanged.
@@ -362,7 +424,7 @@ fn main() {
     if output_path.is_some()
         && matches!(
             mode,
-            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit
+            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit | Mode::DumpNativeLink
         )
     {
         eprintln!(
@@ -383,6 +445,11 @@ fn main() {
         return;
     }
 
+    if mode == Mode::DumpNativeLink {
+        dump_native_link(&args[1..]);
+        return;
+    }
+
     // Classify every positional input by extension:
     //   * `.c`      -- a C source file to compile.
     //   * `.o`      -- a c5 object file, mmap'd straight in.
@@ -398,12 +465,10 @@ fn main() {
     let mut sources: Vec<String> = Vec::new();
     let mut objects: Vec<String> = Vec::new();
     let mut archives: Vec<String> = Vec::new();
-    let mut stdin_was_input = false;
     let mut prog_args_start: usize = args.len();
     for (i, a) in args.iter().enumerate().skip(1) {
         if a == "-" {
             sources.push(a.clone());
-            stdin_was_input = true;
             continue;
         }
         let ext = std::path::Path::new(a)
@@ -450,62 +515,151 @@ fn main() {
     }
 
     // Fall back to stdin when no positional source was given
-    // and stdin isn't a terminal -- the legacy
-    // `cat foo.c | badc` pipeline.
+    // and stdin isn't a terminal -- the `cat foo.c | badc`
+    // pipeline.
     if sources.is_empty()
         && objects.is_empty()
         && archives.is_empty()
         && !std::io::stdin().is_terminal()
     {
         sources.push("-".to_string());
-        stdin_was_input = true;
     }
     if sources.is_empty() && objects.is_empty() {
-        eprintln!("{USAGE}");
+        eprint_diagnostic("badc: error: no files");
         std::process::exit(1);
     }
 
+    // Stdin is consumed exactly once. The `--dump-pp`, JIT / interp,
+    // and native-link paths can each call `read_stdin_source()`;
+    // cache the bytes in an Option so a second call sees the same
+    // source instead of reading an empty stream off the drained pipe.
+    let stdin_cache: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let read_stdin_source = || -> String {
+        if let Some(s) = stdin_cache.borrow().as_ref() {
+            return s.clone();
+        }
         let mut s = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut s) {
             eprint_diagnostic(format!("badc: error: error reading stdin: {e}"));
             std::process::exit(1);
         }
+        *stdin_cache.borrow_mut() = Some(s.clone());
         s
     };
 
-    // Compile sources to LinkUnits.
-    let mut units: Vec<badc::LinkUnit> = Vec::with_capacity(sources.len() + objects.len());
-    let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
-    let mut accumulated_warnings: Vec<String> = Vec::new();
-    let mut accumulated_include_trace: Vec<String> = Vec::new();
-    let multi_tu = sources.len() > 1;
-    for src_path in &sources {
-        let (label, contents) = if src_path == "-" {
-            ("-".to_string(), read_stdin_source())
+    // `--jit` / `--interp` run one translation unit in-process. There
+    // is no link step: the first `.c` is the unit and must define
+    // `main` and resolve every symbol it references on its own. Any
+    // further command-line inputs are the hosted program's argv, not
+    // additional units -- so `badc --jit c4.c hello.c` runs c4 with
+    // argv `["c4.c", "hello.c"]`, the self-hosting form c4 expects.
+    // Object / archive inputs cannot be linked here and are rejected.
+    // The unit compiles straight to a `Program`, with no DWARF, which
+    // neither the JIT loader nor the SSA interpreter consumes.
+    if mode == Mode::Jit || mode == Mode::Interp {
+        if !objects.is_empty() || !archives.is_empty() {
+            eprint_diagnostic(format!(
+                "badc: error: {} runs a single `.c` source and does not link \
+                 object / archive inputs",
+                mode.flag_name()
+            ));
+            std::process::exit(1);
+        }
+        let src_path = sources[0].clone();
+        let contents = if src_path == "-" {
+            read_stdin_source()
         } else {
-            let mut file = match std::fs::File::open(src_path) {
-                Ok(f) => f,
+            match std::fs::read_to_string(&src_path) {
+                Ok(s) => s,
                 Err(e) => {
-                    eprint_diagnostic(format!("badc: error: cannot open `{src_path}`: {e}"));
+                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
                     std::process::exit(1);
                 }
-            };
-            let mut s = String::new();
-            if let Err(e) = Read::read_to_string(&mut file, &mut s) {
-                eprint_diagnostic(format!("badc: error: error reading `{src_path}`: {e}"));
+            }
+        };
+        let copts = badc::CompileOptions::default()
+            .with_defines(defines.clone())
+            .with_undefines(undefines.clone())
+            .with_include_paths(include_paths.clone())
+            .with_force_includes(force_includes.clone())
+            .with_source_label(src_path.clone())
+            .with_show_includes(show_includes)
+            .with_warn_dead_store(warn_dead_store);
+        let mut compiler = Compiler::with_options(contents, target, copts);
+        if show_includes {
+            for line in compiler.take_include_trace() {
+                eprintln!("{line}");
+            }
+        }
+        let program = match compiler.compile() {
+            Ok(p) => p,
+            Err(e) => {
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
-            (src_path.clone(), s)
         };
-        // Multi-TU progress: one line per source on stderr so a long
-        // batch makes its current position visible. Single-source
-        // compiles stay silent so `badc file.c` does not gain extra
-        // chatter.
-        if multi_tu && mode != Mode::DumpPp && !quiet {
-            eprint_diagnostic(format!("info: compiling {label}"));
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        for w in &program.warnings {
+            eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
         }
-        if mode == Mode::DumpPp {
+        // argv[0] is the unit path; argv[1..] are every following
+        // input (extra `.c` paths the hosted program opens itself)
+        // plus any trailing non-input tokens.
+        let mut c_args: Vec<String> = sources.clone();
+        if prog_args_start < args.len() {
+            c_args.extend(args[prog_args_start..].iter().cloned());
+        }
+        if mode == Mode::Jit {
+            // The JIT lowers for the host; --target plays no part.
+            let mut jit_opts = NativeOptions::new().with_inline_cap(inline_cap);
+            if optimize_flag {
+                jit_opts = jit_opts.with_optimize();
+            }
+            match jit_run_with_options(&program, &c_args, jit_opts) {
+                Ok(code) => std::process::exit(code),
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        let mut vm = Vm::new(program).with_args(c_args);
+        if track_pointers {
+            vm = vm.with_pointer_tracking();
+        }
+        if trace {
+            vm = vm.with_trace();
+        }
+        match vm.run() {
+            Ok(res) => {
+                println!("exit({res})");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprint_diagnostic(e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // `--dump-pp` / `-E` preprocesses each source to stdout and
+    // exits: no link, no codegen, no output file. A multi-source
+    // dump prefixes each unit with a `--- <label> ---` marker on
+    // stderr so the preprocessed bytes on stdout stay parseable.
+    if mode == Mode::DumpPp {
+        let multi_tu = sources.len() > 1;
+        for src_path in &sources {
+            let (label, contents) = if src_path == "-" {
+                ("-".to_string(), read_stdin_source())
+            } else {
+                match std::fs::read_to_string(src_path) {
+                    Ok(s) => (src_path.clone(), s),
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                        std::process::exit(1);
+                    }
+                }
+            };
             let opts = badc::CompileOptions::default()
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
@@ -514,9 +668,6 @@ fn main() {
                 .with_source_label(label.clone());
             match Compiler::preprocess(contents, target, opts) {
                 Ok(s) => {
-                    // File separator on stderr so a multi-source
-                    // dump remains parseable while the actual
-                    // preprocessed bytes stay clean on stdout.
                     if multi_tu {
                         eprintln!("--- {label} ---");
                     }
@@ -527,71 +678,295 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-            continue;
         }
-        let mut compiler = Compiler::with_options(
-            contents,
-            target,
-            badc::CompileOptions::default()
+        return;
+    }
+
+    // The native-link path produces every executable and shared
+    // library on every target: ELF for Linux, the MergedNative-to-
+    // Build synthesizer for Mach-O / PE.
+    //   .c sources -> Compiler::compile() -> ET_REL bytes
+    //                                     -> parse_native_elf
+    //   .o inputs  -> parse_native_elf
+    //   .a inputs  -> read_archive -> per-member parse_native_elf
+    // All collected NativeObjects feed link_native_objects, the
+    // per-arch PLT pass, and write_native_image_from_merged. The
+    // image carries DWARF (subprogram + variable + type DIEs ride
+    // the merged per-`.o` `.debug_info`; `.debug_frame` regenerates),
+    // variadic libc imports, `#pragma` exports, and `_Thread_local`
+    // storage in each format's native shape: ELF PT_TLS, the PE TLS
+    // directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O
+    // auto-codesigning lives in `post_write_native`. Only `--jit` /
+    // `--interp` (handled above) and `-c` / `--ar` (below) stay out
+    // of this path.
+    if (mode == Mode::NativeExecutable || mode == Mode::SharedLibrary) && !compile_only {
+        use badc::{Compiler, OutputKind};
+        let mut native_objs: Vec<badc::NativeObject> =
+            Vec::with_capacity(sources.len() + objects.len() + archives.len());
+
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
+        if optimize_flag {
+            reloc_opts = reloc_opts.with_optimize();
+        }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
+        reloc_opts.output_kind = OutputKind::Relocatable;
+        // Per-source progress and diagnostics match the JIT / interp
+        // paths: a multi-source build prints `info: compiling <path>`
+        // per unit, the resolved `#include` trace under `-H`, and the
+        // compiler's warnings (parser type-mismatch, AST validator,
+        // dead-store) to stderr.
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = sources.len() > 1;
+        // `.c` -> in-memory native ELF64 ET_REL: the source compiles
+        // straight to ET_REL bytes that `parse_native_elf` reads back,
+        // so no intermediate `.o` is written to disk.
+        let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>, Option<badc::Subsystem>) {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
+            let src_bytes = if src_path == "-" {
+                read_stdin_source()
+            } else {
+                match std::fs::read_to_string(src_path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                        std::process::exit(1);
+                    }
+                }
+            };
+            let copts = badc::CompileOptions::default()
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
-                .with_source_label(label.clone())
-                .with_show_includes(show_includes),
-        );
-        if show_includes {
-            accumulated_include_trace.extend(compiler.take_include_trace());
+                .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
+                .with_no_entry_point(true);
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
+            let entry = program.entry_name.clone();
+            let subsystem = program.subsystem;
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => (b, entry, subsystem),
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
+        // In-memory variant for the embedded runtime sources
+        // below: same compile + emit chain, no filesystem read.
+        let compile_in_memory = |label: &str, src: String| -> Vec<u8> {
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(label.to_string())
+                .with_no_entry_point(true);
+            let program = match Compiler::with_options(src, target, copts).compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
+        // `#pragma entrypoint(<name>)` overrides the default
+        // `main`. The pragma is per-TU; the first TU that
+        // surfaces a non-default entry wins. C99 leaves the
+        // hosted-environment entry-point name to implementations
+        // (5.1.2.2.1), so the standard doesn't pick between
+        // multi-TU pragmas.
+        let mut entry_override: Option<String> = None;
+        // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
+        // Like the entry pragma it is per-TU; the first TU that names
+        // one wins. Captured here from the compiled `Program` because
+        // the ET_REL round-trip the native path takes does not carry
+        // it (the source-level pragma rides the in-memory `Program`,
+        // not a section), then threaded to the PE writer.
+        let mut subsystem_override: Option<badc::Subsystem> = None;
+        for src_path in &sources {
+            let (bytes, entry, subsystem) = compile_one(src_path);
+            if entry_override.is_none() {
+                entry_override = entry;
+            }
+            if subsystem_override.is_none() {
+                subsystem_override = subsystem;
+            }
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {src_path}: {e}"));
+                    std::process::exit(1);
+                }
+            }
         }
-        let mut unit = match compiler.compile_to_link_unit() {
-            Ok(u) => u,
+        // Embedded runtime sources. Compiled in-memory and
+        // appended to `native_objs` so every executable picks
+        // them up; the writer's start stub uses any helper
+        // they define (e.g. `__c5_exit`) when available.
+        for (name, body) in badc::embedded_runtime() {
+            let bytes = compile_in_memory(name, body.to_string());
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: <runtime/{name}>: {e}"));
+                    std::process::exit(1);
+                }
+            }
+        }
+        for obj_path in &objects {
+            let bytes = match std::fs::read(obj_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            if !badc::is_elf_object(&bytes) {
+                eprint_diagnostic(format!(
+                    "badc: error: `{obj_path}` is not a native ELF object; \
+                     only the ELF format is supported"
+                ));
+                std::process::exit(1);
+            }
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {obj_path}: {e}"));
+                    std::process::exit(1);
+                }
+            }
+        }
+        for a_path in &archives {
+            let bytes = match std::fs::read(a_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{a_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let members = match badc::read_archive(&bytes) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: {a_path}: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            for m in members {
+                if !badc::is_elf_object(&m.bytes) {
+                    eprint_diagnostic(format!(
+                        "badc: error: archive `{a_path}` member `{}` is not a native ELF object",
+                        m.name
+                    ));
+                    std::process::exit(1);
+                }
+                match badc::parse_native_elf(&m.bytes) {
+                    Ok(o) => native_objs.push(o),
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        if native_objs.is_empty() {
+            eprint_diagnostic("badc: error: no inputs");
+            std::process::exit(1);
+        }
+        // Every supported target lays out `_Thread_local` storage
+        // through the native path: ELF PT_TLS, the PE TLS directory +
+        // `_tls_index` note, and the Mach-O TLV descriptors + fixups
+        // note.
+        let mut merged = match badc::link_native_objects(&native_objs) {
+            Ok(m) => m,
             Err(e) => {
-                eprint_diagnostic(e);
+                eprint_diagnostic(format!("badc: {e}"));
                 std::process::exit(1);
             }
         };
-        unit.source_path = label.clone();
-        accumulated_warnings.extend(unit.warnings.iter().cloned());
-        unit_source_paths.push(label);
-        units.push(unit);
-    }
-
-    // --dump-pp is a per-source dump; nothing downstream of the
-    // per-source loop applies (no link, no codegen, no output
-    // file). Return now so the rest of the driver doesn't trip on
-    // the empty unit list.
-    if mode == Mode::DumpPp {
+        let plt = match merged.machine {
+            badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
+            badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
+        };
+        let plt = match plt {
+            Ok(p) => p,
+            Err(e) => {
+                eprint_diagnostic(format!("badc: {e}"));
+                std::process::exit(1);
+            }
+        };
+        let entry_name = entry_override.as_deref().unwrap_or("main");
+        let native_output_kind = if mode == Mode::SharedLibrary {
+            OutputKind::SharedLibrary
+        } else {
+            OutputKind::Executable
+        };
+        let write_result = badc::write_native_image_from_merged(
+            &merged,
+            &plt,
+            entry_name,
+            subsystem_override,
+            native_output_kind,
+            target,
+        );
+        let bytes = match write_result {
+            Ok(b) => b,
+            Err(e) => {
+                eprint_diagnostic(format!("badc: {e}"));
+                std::process::exit(1);
+            }
+        };
+        let default_path;
+        let out: &std::path::Path = match output_path.as_deref() {
+            Some(o) => o,
+            None => {
+                default_path = default_output_path(
+                    sources.first().map(|s| s.as_str()).unwrap_or("a"),
+                    target,
+                    mode,
+                );
+                &default_path
+            }
+        };
+        write_output(out, &bytes, quiet);
+        set_executable(out);
+        post_write_native(out, target);
         return;
     }
 
-    // Load each `.o` input through mmap-shaped read.
-    for obj_path in &objects {
-        let bytes = match std::fs::read(obj_path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
-                std::process::exit(1);
-            }
-        };
-        match badc::read_object(&bytes) {
-            Ok(u) => units.push(u),
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: failed to parse `{obj_path}`: {e}"));
-                std::process::exit(1);
-            }
-        }
-    }
-
-    if show_includes {
-        for line in &accumulated_include_trace {
-            eprintln!("{line}");
-        }
-    }
-
-    // `-c` / `--compile-only`: write each compiled source's
-    // LinkUnit to disk as a `.o` and exit. Archives / `-l`
-    // inputs aren't meaningful here -- the caller is asking
-    // for the per-source object emit, not a link.
+    // `-c` / `--compile-only`: compile each `.c` source to a native
+    // ELF64 ET_REL object on disk and exit. Archive / `-l` inputs
+    // aren't meaningful here -- the caller is asking for the per-
+    // source object emit, not a link.
     if compile_only {
         if !archives.is_empty() || !lib_names.is_empty() {
             eprintln!(
@@ -600,14 +975,70 @@ fn main() {
             );
             std::process::exit(1);
         }
-        if units.is_empty() {
+        if sources.is_empty() {
             eprint_diagnostic("badc: error: -c requires at least one source input");
             std::process::exit(1);
         }
-        // Source-derived units come first in `units`; objects
-        // would only appear if the user mixed them in, which is
-        // already an error path above.
         let source_count = sources.len();
+        // Relocatable `-c` builds do not require `main`; the linker
+        // picks the entry once it merges every TU.
+        use badc::{Compiler, OutputKind};
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
+        if optimize_flag {
+            reloc_opts = reloc_opts.with_optimize();
+        }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
+        reloc_opts.output_kind = OutputKind::Relocatable;
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = source_count > 1;
+        let compile_one = |src_path: &str| -> Vec<u8> {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
+            let src_bytes = match std::fs::read_to_string(src_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
+                .with_no_entry_point(true);
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
         if let Some(out) = output_path.as_deref() {
             if source_count != 1 {
                 eprintln!(
@@ -617,25 +1048,26 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            let bytes = badc::write_object(&units[0]);
+            let bytes = compile_one(&sources[0]);
             write_output(out, &bytes, quiet);
         } else {
-            for (i, unit) in units.iter().take(source_count).enumerate() {
-                let src = &unit_source_paths[i];
-                let p = std::path::Path::new(src);
+            for src_path in sources.iter().take(source_count) {
+                let p = std::path::Path::new(src_path);
                 let out = p.with_extension("o");
-                let bytes = badc::write_object(unit);
+                let bytes = compile_one(src_path);
                 write_output(&out, &bytes, quiet);
             }
         }
         return;
     }
 
-    // `--ar` mode: bundle every input unit (compiled `.c`
-    // plus any `.o`) into a single archive named by `-o`.
-    // Each member is the unit's `.o` bytes; the SysV symbol
-    // index lists every externally-linkable defined name so
-    // pull-in works without re-parsing each member.
+    // `--ar` mode: bundle each `.c` input (compiled to native
+    // ELF64 ET_REL) plus any passed-in `.o` into a single
+    // SysV `ar` archive named by `-o`. Member bytes are the
+    // exact same blob `-c` would have written to disk; the
+    // SysV symbol index lists every `STB_GLOBAL`-defined name
+    // so the linker's archive pull-in can resolve undefined
+    // references without re-parsing each member.
     if mode == Mode::BuildArchive {
         if !archives.is_empty() || !lib_names.is_empty() {
             eprintln!(
@@ -648,207 +1080,122 @@ fn main() {
             eprint_diagnostic("badc: error: --ar requires -o <archive>.a");
             std::process::exit(1);
         };
-        if units.is_empty() {
+        let total_inputs = sources.len() + objects.len();
+        if total_inputs == 0 {
             eprint_diagnostic("badc: error: --ar requires at least one input");
             std::process::exit(1);
         }
-        let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(units.len());
-        let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(units.len());
-        // Member name comes from the source / object path's
-        // file stem with a `.o` suffix -- mirrors how a regular
-        // `-c` invocation would name the per-source output.
-        let source_count = sources.len();
-        for (i, unit) in units.iter().enumerate() {
-            let base = if i < source_count {
-                std::path::Path::new(&unit_source_paths[i])
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| format!("tu{i}"))
-            } else {
-                std::path::Path::new(&objects[i - source_count])
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| format!("tu{i}"))
+        use badc::{Compiler, OutputKind};
+        let mut reloc_opts = badc::NativeOptions::new()
+            .with_debug_info(emit_debug_info)
+            .with_inline_cap(inline_cap);
+        if optimize_flag {
+            reloc_opts = reloc_opts.with_optimize();
+        }
+        if dump_ssa {
+            reloc_opts = reloc_opts.with_dump_ssa();
+        }
+        reloc_opts.output_kind = OutputKind::Relocatable;
+        let stderr_is_tty = std::io::stderr().is_terminal();
+        let multi_tu = sources.len() > 1;
+        let compile_one = |src_path: &str| -> Vec<u8> {
+            if multi_tu && !quiet {
+                eprint_diagnostic(format!("info: compiling {src_path}"));
+            }
+            let src_bytes = match std::fs::read_to_string(src_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                    std::process::exit(1);
+                }
             };
-            let bytes = badc::write_object(unit);
-            let defined: Vec<String> = unit
-                .symbols
-                .iter()
-                .filter(|s| {
-                    !matches!(s.kind, badc::SymbolKind::Undefined)
-                        && !matches!(s.linkage, badc::Linkage::Internal | badc::Linkage::None)
-                })
-                .map(|s| s.name.clone())
-                .collect();
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src_path.to_string())
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store)
+                .with_no_entry_point(true);
+            let mut compiler = Compiler::with_options(src_bytes, target, copts);
+            if show_includes {
+                for line in compiler.take_include_trace() {
+                    eprintln!("{line}");
+                }
+            }
+            let program = match compiler.compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
+        let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
+        let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(total_inputs);
+        // Member name comes from the input path's file stem
+        // with a `.o` suffix -- mirrors how a regular `-c`
+        // invocation would name the per-source output.
+        for (i, src_path) in sources.iter().enumerate() {
+            let base = std::path::Path::new(src_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("tu{i}"));
+            let bytes = compile_one(src_path);
+            let defined = native_defined_globals(&bytes, src_path);
+            sym_index.push((members.len(), defined));
             members.push(badc::ArchiveMember {
                 name: format!("{base}.o"),
                 bytes,
             });
-            sym_index.push((i, defined));
+        }
+        for (i, obj_path) in objects.iter().enumerate() {
+            let base = std::path::Path::new(obj_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("obj{i}"));
+            let bytes = match std::fs::read(obj_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            if !badc::is_elf_object(&bytes) {
+                eprint_diagnostic(format!(
+                    "badc: error: `{obj_path}` is not a native ELF object; \
+                     only the ELF format is supported"
+                ));
+                std::process::exit(1);
+            }
+            let defined = native_defined_globals(&bytes, obj_path);
+            sym_index.push((members.len(), defined));
+            members.push(badc::ArchiveMember {
+                name: format!("{base}.o"),
+                bytes,
+            });
         }
         let blob = badc::write_archive(&members, &sym_index);
         write_output(&out_path, &blob, quiet);
         return;
     }
 
-    // Parse positional + resolved archives. The order matches
-    // command-line order so a later `-l` overrides an earlier
-    // one's symbol resolution (gcc / ld convention).
-    let mut link_archives: Vec<badc::LinkArchive> = Vec::with_capacity(archives.len());
-    for a in &archives {
-        let bytes = match std::fs::read(a) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{a}`: {e}"));
-                std::process::exit(1);
-            }
-        };
-        match badc::LinkArchive::parse(a.clone(), &bytes) {
-            Ok(la) => link_archives.push(la),
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: failed to parse `{a}`: {e}"));
-                std::process::exit(1);
-            }
-        }
-    }
-
-    // Drive the link step. `program` ends up the same shape
-    // a single-TU `Compiler::compile()` would have produced.
-    let path = unit_source_paths
-        .first()
-        .cloned()
-        .unwrap_or_else(|| objects.first().cloned().unwrap_or_else(|| "-".to_string()));
-    let mut program = match badc::link_units(units, &link_archives, badc::LinkOptions::default()) {
-        Ok(p) => p,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    program.warnings.extend(accumulated_warnings);
-    let _ = stdin_was_input;
-    if program.source_path.is_empty() {
-        program.source_path = path.clone();
-    }
-
-    let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
-        match optimize(program) {
-            Ok(p) => p,
-            Err(e) => {
-                eprint_diagnostic(e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        program
-    };
-
-    // Type-mismatch / arity / signature-redecl warnings (if any) --
-    // print once, before the program runs. They never fail the
-    // compile, but they go to stderr so a `2>/dev/null` user can
-    // suppress. Each warning arrives in gcc / clang shape
-    // (`<file>:<line>: warning: <message>`); when stderr is a TTY
-    // we color the severity word so they pop out of build logs.
-    let stderr_is_tty = std::io::stderr().is_terminal();
-    for w in &program.warnings {
-        eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
-    }
-
-    // `--optimize` / `-O` enables both the bytecode optimizer (above)
-    // and the native peephole + register allocator. The two halves are
-    // independent -- the native pass is correct on either pre- or
-    // post-bytecode-optimizer input -- but turning them on together
-    // produces the fastest emitted code.
-    let mut native_opts = if optimize_flag {
-        NativeOptions::new().with_optimize()
-    } else {
-        NativeOptions::new()
-    };
-    native_opts = native_opts.with_debug_info(emit_debug_info);
-    if mode == Mode::SharedLibrary {
-        native_opts = native_opts.with_shared_library();
-    }
-
-    match mode {
-        Mode::DumpAsm => match dump_native_listing_with_options(&program, target, native_opts) {
-            Ok(s) => print!("{s}"),
-            Err(e) => {
-                eprint_diagnostic(e);
-                std::process::exit(1);
-            }
-        },
-        Mode::Jit => {
-            // The JIT loader picks the host arch on its own; --target is
-            // ignored (the JIT can't cross-compile, and the lowering it
-            // does is determined by the host).
-            // argv[0] = first source path so the hosted program sees a
-            // sensible name; argv[1..] = whatever followed the inputs
-            // on the command line.
-            let mut c_args: Vec<String> = Vec::new();
-            c_args.push(path.clone());
-            if prog_args_start < args.len() {
-                c_args.extend(args[prog_args_start..].iter().cloned());
-            }
-            match jit_run_with_options(&program, &c_args, native_opts) {
-                Ok(code) => std::process::exit(code),
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Mode::Interp => {
-            // Pass everything from argv[1] onward to the C program -- argv[0]
-            // of the hosted program is the source file name, argv[1..] are
-            // its own args.
-            let mut c_args: Vec<String> = Vec::new();
-            c_args.push(path.clone());
-            if prog_args_start < args.len() {
-                c_args.extend(args[prog_args_start..].iter().cloned());
-            }
-            let mut vm = Vm::new(program).with_args(c_args);
-            if track_pointers {
-                vm = vm.with_pointer_tracking();
-            }
-            if trace {
-                vm = vm.with_trace();
-            }
-            match vm.run() {
-                Ok(res) => println!("exit({})", res),
-                Err(e) => {
-                    eprint_diagnostic(e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Mode::NativeExecutable | Mode::SharedLibrary => {
-            // Default: lower to a native binary, write it, mark
-            // it executable, and (on macOS hosts emitting Mach-O)
-            // ad-hoc codesign so dyld accepts it.
-            //
-            // gh #28 piped-output: if the user passed `-o -` or
-            // didn't specify -o and stdout is a pipe (= we're in
-            // the middle of a shell pipeline like
-            // `... | badc | run-on-target`), write the bytes
-            // straight to stdout instead of disk. The
-            // mark-executable + codesign + per-target nag messages
-            // are skipped -- the caller knows what they're doing.
-            let pipe_to_stdout = match output_path.as_deref() {
-                Some(p) => p == std::path::Path::new("-"),
-                None => !std::io::stdout().is_terminal(),
-            };
-            if pipe_to_stdout {
-                emit_native_binary_to_stdout(&program, target, native_opts);
-            } else {
-                let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
-                emit_native_binary(&program, &out, target, native_opts, mode, quiet);
-            }
-        }
-        Mode::ListSymbols => unreachable!("handled above"),
-        Mode::DumpHeaders => unreachable!("handled above"),
-        Mode::DumpPp => unreachable!("handled above"),
-        Mode::BuildArchive => unreachable!("handled above"),
-    }
+    // Every CLI mode is dispatched and returns above: --jit / --interp,
+    // --list-symbols / --dump-headers / --dump-native-link, --dump-pp,
+    // the native-link path (executable / shared library), `-c`, and
+    // `--ar`. Reaching here means a mode was added without a handler.
+    unreachable!("every CLI mode is handled and returns above");
 }
 
 /// Print `msg` to stderr through `colorize_diagnostic`, deciding
@@ -856,6 +1203,35 @@ fn main() {
 /// warning the CLI emits -- it's a no-op for messages that don't
 /// look like a diagnostic, so plain "badc: file not found" lines
 /// pass through unchanged.
+/// Enumerate the `STB_GLOBAL`-defined symbol names from a
+/// native ELF64 ET_REL blob. Used to populate the SysV `ar`
+/// symbol index when `--ar` bundles native objects: any name
+/// listed here resolves -- via the archive's `/` member -- to
+/// the containing member's file offset, which is how the
+/// linker's archive pull-in decides which members to load.
+fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
+    let obj = match badc::parse_native_elf(bytes) {
+        Ok(o) => o,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: {path}: {e}"));
+            std::process::exit(1);
+        }
+    };
+    obj.symbols
+        .into_iter()
+        .filter(|s| {
+            // STB_GLOBAL = 1; only section-resident defs are
+            // visible at archive-pull-in time.
+            s.binding == 1
+                && !matches!(
+                    s.section,
+                    badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                )
+        })
+        .map(|s| s.name)
+        .collect()
+}
+
 fn eprint_diagnostic(msg: impl core::fmt::Display) {
     let stderr_is_tty = std::io::stderr().is_terminal();
     let s = msg.to_string();
@@ -945,28 +1321,6 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// out to `codesign --sign -` so the loader will accept it. ELF
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
-/// Lower the program to a native binary and write it to stdout
-/// rather than a file on disk. Used by gh #28's pipe-mode (the
-/// caller redirected stdout, or asked for `-o -`). No
-/// mark-executable / codesign / per-target reminder -- the
-/// downstream of the pipe gets to handle those.
-fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options: NativeOptions) {
-    let bytes = match emit_native_with_options(program, target, options) {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    if let Err(e) = std::io::stdout().write_all(&bytes) {
-        eprint_diagnostic(format!(
-            "badc: error: failed to write binary to stdout: {e}"
-        ));
-        std::process::exit(1);
-    }
-    let _ = std::io::stdout().flush();
-}
-
 /// Write `bytes` to `out`, exit on failure, log
 /// `info: wrote file <path>` on success unless `quiet` is set.
 /// Used by every output path -- object emit, archive emit, JIT
@@ -986,38 +1340,26 @@ fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
     }
 }
 
-fn emit_native_binary(
-    program: &badc::Program,
-    out: &std::path::Path,
-    target: Target,
-    options: NativeOptions,
-    mode: Mode,
-    quiet: bool,
-) {
-    let bytes = match emit_native_with_options(program, target, options) {
-        Ok(b) => b,
-        Err(e) => {
-            eprint_diagnostic(e);
-            std::process::exit(1);
-        }
-    };
-    write_output(out, &bytes, quiet);
-    if mode == Mode::NativeExecutable {
-        set_executable(out);
-    }
+/// Post-write hooks for the native image: codesign Mach-O on macOS
+/// hosts so dyld accepts the binary, and surface a per-target
+/// reminder when the produced image's target doesn't match the
+/// running host.
+fn post_write_native(out: &std::path::Path, target: Target) {
     match target {
         Target::MacOSAarch64 => {
             #[cfg(target_os = "macos")]
             codesign(out);
             #[cfg(not(target_os = "macos"))]
-            eprintln!(
-                "badc: produced a Mach-O on a non-macOS host; copy to macOS \
-                 and `codesign --sign - <path>` before running."
-            );
+            {
+                let _ = out;
+                eprintln!(
+                    "badc: produced a Mach-O on a non-macOS host; copy to macOS \
+                     and `codesign --sign - <path>` before running."
+                );
+            }
         }
         Target::LinuxAarch64 => {
-            // ELF binaries don't need signing. If the host isn't
-            // Linux/aarch64, the user has to ship the result there.
+            let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
             eprintln!(
                 "badc: produced a Linux/aarch64 ELF on a different host; \
@@ -1025,6 +1367,7 @@ fn emit_native_binary(
             );
         }
         Target::LinuxX64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
             eprintln!(
                 "badc: produced a Linux/x86_64 ELF on a different host; \
@@ -1032,6 +1375,7 @@ fn emit_native_binary(
             );
         }
         Target::WindowsX64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
             eprintln!(
                 "badc: produced a Windows/x86_64 PE on a non-Windows host; \
@@ -1039,6 +1383,7 @@ fn emit_native_binary(
             );
         }
         Target::WindowsAarch64 => {
+            let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
             eprintln!(
                 "badc: produced a Windows/AArch64 PE on a different host; \
@@ -1095,6 +1440,103 @@ fn codesign(path: &std::path::Path) {
 /// the `--help` blurb -- the conventional shape is to redirect
 /// into `./include` and let `-I.` plus future filesystem search
 /// override the embedded copy).
+/// `--dump-native-link`: parse a list of native ELF `.o` files
+/// produced by `-c`, merge them via
+/// `link_native_objects`, and print a summary. Useful for
+/// validating the relocatable .o pipeline end-to-end before the
+/// ET_EXEC writer for `MergedNative` lands. Args are taken
+/// verbatim from the command line minus the leading executable
+/// name; non-flag positional args are treated as `.o` paths.
+fn dump_native_link(rest: &[String]) {
+    let paths: Vec<&str> = rest
+        .iter()
+        .filter(|a| !a.starts_with("--") && *a != "--dump-native-link")
+        .map(|s| s.as_str())
+        .collect();
+    if paths.is_empty() {
+        eprintln!("badc: --dump-native-link requires one or more `.o` paths");
+        std::process::exit(1);
+    }
+    let mut objs: Vec<badc::NativeObject> = Vec::with_capacity(paths.len());
+    for p in &paths {
+        let bytes = match std::fs::read(p) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("badc: --dump-native-link: cannot read `{p}`: {e}");
+                std::process::exit(1);
+            }
+        };
+        if !badc::is_elf_object(&bytes) {
+            eprintln!("badc: --dump-native-link: `{p}` is not an ELF object");
+            std::process::exit(1);
+        }
+        match badc::parse_native_elf(&bytes) {
+            Ok(o) => objs.push(o),
+            Err(e) => {
+                eprintln!("badc: --dump-native-link: {p}: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let mut merged = match badc::link_native_objects(&objs) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("badc: --dump-native-link: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("MergedNative:");
+    println!("  machine     = {:?}", merged.machine);
+    println!("  .text size  = {}", merged.text.len());
+    println!("  .data size  = {}", merged.data.len());
+    println!("  .bss size   = {}", merged.bss_size);
+    println!("  defined     = {}", merged.defined.len());
+    for (name, sym) in &merged.defined {
+        println!(
+            "    {name} @ {:?} +{:#x} size={:#x}",
+            sym.section, sym.value, sym.size
+        );
+    }
+    println!("  imports     = {}", merged.imports.len());
+    for (i, name) in merged.imports.iter().enumerate() {
+        println!("    [{i}] {name}");
+    }
+    println!("  pending     = {} reloc(s)", merged.pending_imports.len());
+    for r in &merged.pending_imports {
+        let name = if r.import_index == usize::MAX {
+            "<data-ref>"
+        } else {
+            merged.imports[r.import_index].as_str()
+        };
+        println!(
+            "    text[{:#x}] -> {name} (rtype={:#x}, addend={})",
+            r.text_offset, r.rtype, r.addend
+        );
+    }
+    // Per-arch PLT lowering pass. The trampoline shape differs
+    // between targets (six-byte JMP rip-rel on x86_64, twelve-
+    // byte adrp+ldr+br on aarch64), but the link-side
+    // contract is identical: append one trampoline per unique
+    // import, patch each call-site to reach it.
+    let plt_result = match merged.machine {
+        badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
+        badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
+    };
+    match plt_result {
+        Ok(tramps) => {
+            println!("  PLT tramps  = {} entry(ies)", tramps.len());
+            for t in &tramps {
+                let name = &merged.imports[t.import_index];
+                println!("    text[{:#x}] -> {name}", t.text_offset);
+            }
+            println!("  post-PLT .text size = {}", merged.text.len());
+        }
+        Err(e) => {
+            eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
+        }
+    }
+}
+
 fn dump_bundled_headers() {
     for (name, body) in badc::embedded_headers() {
         println!("// ===== {name} =====");

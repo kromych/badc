@@ -1,377 +1,455 @@
-//! Cross-translation-unit linker tests.
+//! Native-path linker tests.
 //!
-//! Each test compiles two or more inline sources to
-//! [`crate::c5::LinkUnit`]s, runs them through
-//! [`crate::c5::link_units`], and asserts on the resulting
-//! [`crate::c5::Program`] -- usually by running it under the VM.
+//! Each test compiles one or more inline sources to ELF64 ET_REL
+//! through `emit_native_with_options`, recovers them with
+//! `parse_native_elf`, and merges them with `link_native_objects`,
+//! asserting on the resulting `MergedNative` (dead-code elimination,
+//! `_Thread_local` layout, `#pragma export` / dylib routing) or on
+//! the final image written by `write_native_image_from_merged`.
 
 use super::TEST_PRELUDE;
-use crate::c5::{Compiler, LinkArchive, LinkOptions, LinkUnit, Vm, link_units};
-
-fn compile_unit(src: &str) -> LinkUnit {
-    Compiler::new(format!("{TEST_PRELUDE}{src}"))
-        .compile_to_link_unit()
-        .unwrap()
-}
-
-fn compile_unit_bare(src: &str) -> LinkUnit {
-    Compiler::new(src.to_string())
-        .compile_to_link_unit()
-        .unwrap()
-}
-
-fn link_and_run(units: Vec<LinkUnit>) -> i64 {
-    let program = link_units(units, &[], LinkOptions::default()).expect("link_units failed");
-    Vm::new(program).run().expect("VM run failed")
-}
+use crate::c5::Compiler;
 
 #[test]
-fn extern_function_call_across_two_units() {
-    // TU A defines `add`; TU B has `extern int add(int, int);`
-    // and calls it from `main`.
-    let a = compile_unit("int add(int a, int b) { return a + b; }");
-    let b = compile_unit(
-        "
-        extern int add(int a, int b);
-        int main() { return add(40, 2); }
-        ",
-    );
-    assert_eq!(link_and_run(alloc::vec![b, a]), 42);
-}
-
-#[test]
-fn extern_global_read_and_write_across_units() {
-    // TU A defines `counter`; TU B has `extern int counter;`
-    // and reads / writes it through `main`.
-    let a = compile_unit("int counter = 5;");
-    let b = compile_unit(
-        "
-        extern int counter;
-        int main() { counter = counter + 7; return counter; }
-        ",
-    );
-    assert_eq!(link_and_run(alloc::vec![b, a]), 12);
-}
-
-#[test]
-fn static_function_is_not_exported_cross_tu() {
-    // TU A has a `static` helper -- internal linkage.
-    // TU B has its own `helper` with the same name -- legal
-    // because static keeps the name file-scoped.
-    let a = compile_unit(
-        "
-        static int helper(int n) { return n + 100; }
-        int call_a() { return helper(1); }
-        ",
-    );
-    let b = compile_unit(
-        "
-        static int helper(int n) { return n + 200; }
-        int call_b() { return helper(2); }
-        extern int call_a();
-        int main() { return call_a() + call_b(); }
-        ",
-    );
-    // call_a uses A's static helper: 1 + 100 = 101.
-    // call_b uses B's static helper: 2 + 200 = 202.
-    // Sum = 303.
-    assert_eq!(link_and_run(alloc::vec![b, a]), 303);
-}
-
-#[test]
-fn unresolved_external_function_errors_cleanly() {
-    // TU references `foo` but no unit defines it.
-    let only = compile_unit_bare(
-        "
-        extern int foo(int);
-        int main() { return foo(7); }
-        ",
-    );
-    let result = link_units(alloc::vec![only], &[], LinkOptions::default());
-    let err = result.expect_err("link should fail with undefined reference");
-    let msg = format!("{}", err);
-    assert!(
-        msg.contains("undefined reference") && msg.contains("foo"),
-        "unexpected error message: {msg}"
-    );
-    // The message MUST NOT carry the `internal compiler error:`
-    // marker -- undefined externs are a user-level link error,
-    // not a c5 bug. Regression for the polish item that split
-    // `link_err` away from `err()` in the linker.
-    assert!(
-        !msg.contains("internal compiler error"),
-        "undefined-reference diagnostic must not be tagged as ICE: {msg}"
-    );
-}
-
-#[test]
-fn duplicate_function_definition_across_units_is_rejected() {
-    // Two TUs that each define `foo` should hard-fail at link
-    // time. Pre-fix, the second definition silently shadowed the
-    // first and the produced binary used whichever copy the
-    // linker iterated to last.
-    let a = compile_unit("int foo(void) { return 1; }");
-    let b = compile_unit(
-        "
-        int foo(void) { return 2; }
-        int main() { return foo(); }
-        ",
-    );
-    let result = link_units(alloc::vec![a, b], &[], LinkOptions::default());
-    let err = result.expect_err("link should fail with duplicate definition");
-    let msg = format!("{}", err);
-    assert!(
-        msg.contains("multiple definition") && msg.contains("foo"),
-        "unexpected error message: {msg}"
-    );
-    assert!(
-        !msg.contains("internal compiler error"),
-        "duplicate-definition diagnostic must not be tagged as ICE: {msg}"
-    );
-}
-
-#[test]
-fn object_round_trip_through_elf_wrapper() {
-    use crate::c5::{read_object, write_object};
-    let a = compile_unit("int sum(int a, int b) { return a + b; }");
-    let bytes = write_object(&a);
-    assert!(
-        bytes.len() > 64,
-        "object bytes should at least contain an ELF header"
-    );
-    let parsed = read_object(&bytes).expect("read_object");
-    // Same bytecode + data lengths -- the writer/reader pair
-    // is round-trip stable on the core payload.
-    assert_eq!(parsed.text, a.text, "text round-trip");
-    assert_eq!(parsed.data, a.data, "data round-trip");
-    assert_eq!(parsed.dylibs.len(), a.dylibs.len(), "dylib count");
-    assert_eq!(parsed.structs.len(), a.structs.len(), "struct count");
-    // Symbols round-trip (modulo their relative order, since
-    // we re-sort by linkage during write).
-    assert_eq!(parsed.symbols.len(), a.symbols.len());
-}
-
-#[test]
-fn link_uses_object_via_round_trip() {
-    use crate::c5::{read_object, write_object};
-    // Same end-to-end as `extern_function_call_across_two_units`
-    // but with TU A pushed through the ELF wrapper -- the link
-    // step sees A as if it came off disk.
-    let a = compile_unit("int add(int a, int b) { return a + b; }");
-    let bytes = write_object(&a);
-    let a_parsed = read_object(&bytes).expect("read_object");
-    let b = compile_unit(
-        "
-        extern int add(int a, int b);
-        int main() { return add(13, 29); }
-        ",
-    );
-    assert_eq!(link_and_run(alloc::vec![b, a_parsed]), 42);
-}
-
-#[test]
-fn archive_pull_in_only_includes_needed_members() {
-    use crate::c5::{ArchiveMember, write_archive, write_object};
-    // Two archive members. Only `used.o` defines a symbol
-    // anyone references; `unused.o` should not be pulled in.
-    let used_unit = compile_unit("int provided() { return 17; }");
-    let unused_unit = compile_unit("int never_called() { return 99; }");
-    let used_bytes = write_object(&used_unit);
-    let unused_bytes = write_object(&unused_unit);
-    let archive = write_archive(
-        &[
-            ArchiveMember {
-                name: "used.o".into(),
-                bytes: used_bytes,
-            },
-            ArchiveMember {
-                name: "unused.o".into(),
-                bytes: unused_bytes,
-            },
-        ],
-        &[
-            (0, alloc::vec!["provided".to_string()]),
-            (1, alloc::vec!["never_called".to_string()]),
-        ],
-    );
-
-    let lib = LinkArchive::parse("libdemo.a".into(), &archive).expect("parse archive");
-    let main_unit = compile_unit(
-        "
-        extern int provided();
-        int main() { return provided(); }
-        ",
-    );
-    let program = link_units(
-        alloc::vec![main_unit],
-        core::slice::from_ref(&lib),
-        LinkOptions::default(),
+fn transitively_dead_static_chain_is_dropped_from_object() {
+    // A static helper `a` that calls another static `b`. Nothing
+    // in the TU references `a`, so `a`, `b`, and everything else
+    // reachable only from `a` should drop. The parser's lexical
+    // `was_referenced` flag would keep `b` alive (its callee
+    // reference is set when `a`'s body is parsed); the codegen's
+    // transitive reachability pass over `Inst::Call` /
+    // `Inst::ImmCode` recovers the dead status.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "\
+         static int dead_leaf(int x) { return x + 1; }\n\
+         static int dead_caller(int x) { return dead_leaf(x) * 2; }\n\
+         int main(void) { return 0; }\n"
+            .to_string(),
     )
-    .expect("link");
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has_leaf = bytes.windows(9).any(|w| w == b"dead_leaf");
+    let has_caller = bytes.windows(11).any(|w| w == b"dead_caller");
+    assert!(!has_leaf, "transitively-dead leaf must drop");
+    assert!(!has_caller, "lexically-dead caller must drop");
+}
+
+#[test]
+fn address_taken_static_survives_dce() {
+    // A static function whose address is stored in a global
+    // function-pointer table must survive DCE: the table entry
+    // becomes a `program.code_relocs` root. Mirrors the vtable
+    // pattern (`static const VTable v = { .fp = doubled };`).
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(
+        "\
+         static int doubled(int n) { return n + n; }\n\
+         typedef int (*fp_t)(int);\n\
+         const fp_t vtable[] = { doubled };\n\
+         int main(void) { return vtable[0](21); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    let has_doubled = bytes.windows(7).any(|w| w == b"doubled");
+    assert!(
+        has_doubled,
+        "address-taken static must survive DCE via code_relocs root"
+    );
+}
+
+#[test]
+fn unreferenced_static_function_is_dropped_from_object() {
+    // C99 6.2.2p3: a file-scope `static` function has internal
+    // linkage and is reachable only from the current TU. The
+    // parser already emits a `warn_unused_static_functions`
+    // diagnostic when no in-TU call site references it; the
+    // codegen also drops the body so the resulting object
+    // doesn't carry dead code. Verifies the
+    // `function_is_unreachable_static` gate in `walk_program`.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         static int unused_helper(int x) {{ return x * 2; }}\n\
+         static int used_helper(int x) {{ return x + 1; }}\n\
+         int main(void) {{ return used_helper(41); }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+    // Walk for the function names by byte-substring lookup; the
+    // strtab carries them as NUL-terminated entries among the
+    // section header / symbol-table bytes.
+    let has_used = bytes.windows(11).any(|w| w == b"used_helper");
+    let has_unused = bytes.windows(13).any(|w| w == b"unused_helper");
+    assert!(
+        has_used,
+        "reachable static helper must survive into the object"
+    );
+    assert!(
+        !has_unused,
+        "unreachable static helper must not appear in the object"
+    );
+}
+
+#[test]
+fn thread_local_storage_round_trips_through_et_rel() {
+    // `_Thread_local` storage now rides the native ET_REL object:
+    // elf_reloc emits `.tdata` (initialised slice) + `.tbss`
+    // (zero-fill remainder), and `parse_native_elf` concatenates
+    // them back into `tls_data` / `tls_bss_size`. Verifies the
+    // bytes survive the write -> parse round-trip; the link-time
+    // PT_TLS layout is guarded separately until it lands.
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         _Thread_local int counter = 7;\n\
+         int main(void) {{ counter += 1; return counter; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    assert!(
+        !program.tls_data.is_empty(),
+        "source declares `_Thread_local`, so tls_data must be non-empty"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    assert!(
+        bytes.windows(6).any(|w| w == b".tdata"),
+        "ET_REL must carry a `.tdata` section header name"
+    );
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let total = obj.tls_data.len() + obj.tls_bss_size;
     assert_eq!(
-        Vm::new(program).run().unwrap(),
-        17,
-        "archive should provide the symbol"
+        total,
+        program.tls_data.len(),
+        "round-tripped TLS size (tdata + tbss) must match the source's tls_data",
+    );
+    // `counter = 7` is a 4-byte initialised int; its little-endian
+    // image leads the `.tdata` bytes.
+    assert!(
+        obj.tls_data.starts_with(&7i32.to_le_bytes()),
+        "initialised TLS byte image must round-trip; got {:?}",
+        obj.tls_data,
     );
 }
 
 #[test]
-fn extern_global_int_pointer_initializer_resolves_across_units() {
-    // Cross-TU `int *p = &x;` initializer: TU A defines `x`,
-    // TU B declares `extern int x;` plus a static initializer
-    // for a pointer pointing at it.
-    let a = compile_unit("int x = 99;");
-    let b = compile_unit(
+fn thread_local_storage_links_into_pt_tls_executable() {
+    // A single `_Thread_local`-bearing object links through the
+    // native path into an executable with a PT_TLS segment. The
+    // local-exec tpoff baked into `.text` stays valid because the
+    // merged TLS block keeps the source's size: `link_native_objects`
+    // carries the single unit's `tls_data` / `tls_init_size` forward
+    // and `write_native_image_from_merged` lays out PT_TLS from them.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         _Thread_local int counter = 7;\n\
+         int main(void) {{ counter += 1; return counter; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_init_size, program.tls_init_size,
+        "merged tls_init_size must match the source's"
+    );
+    assert_eq!(
+        merged.tls_data.len(),
+        program.tls_data.len(),
+        "merged tls_data length must match the source's total TLS size"
+    );
+    assert!(
+        merged.tls_data.starts_with(&7i32.to_le_bytes()),
+        "initialised TLS image must survive the merge"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+    )
+    .expect("write executable");
+    // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
+    // e_phnum @ 0x38 (u16). Scan the program header table for a
+    // PT_TLS (p_type == 7) whose p_filesz covers the 4-byte int.
+    let phoff = u64::from_le_bytes(exe[0x20..0x28].try_into().unwrap()) as usize;
+    let phentsize = u16::from_le_bytes(exe[0x36..0x38].try_into().unwrap()) as usize;
+    let phnum = u16::from_le_bytes(exe[0x38..0x3a].try_into().unwrap()) as usize;
+    const PT_TLS: u32 = 7;
+    let pt_tls = (0..phnum).find_map(|i| {
+        let base = phoff + i * phentsize;
+        let p_type = u32::from_le_bytes(exe[base..base + 4].try_into().unwrap());
+        if p_type == PT_TLS {
+            // p_filesz @ +0x20, p_memsz @ +0x28 within the phdr.
+            let p_filesz = u64::from_le_bytes(exe[base + 0x20..base + 0x28].try_into().unwrap());
+            let p_memsz = u64::from_le_bytes(exe[base + 0x28..base + 0x30].try_into().unwrap());
+            Some((p_filesz, p_memsz))
+        } else {
+            None
+        }
+    });
+    let (p_filesz, p_memsz) = pt_tls.expect("executable must carry a PT_TLS segment");
+    assert_eq!(
+        p_filesz, program.tls_init_size as u64,
+        "PT_TLS p_filesz must equal the initialised TLS image size"
+    );
+    assert_eq!(
+        p_memsz,
+        program.tls_data.len() as u64,
+        "PT_TLS p_memsz must cover the full per-thread TLS block"
+    );
+}
+
+#[test]
+fn macho_tlv_descriptors_round_trip_through_et_rel() {
+    // A macOS `_Thread_local` access lowers to a TLV-descriptor call
+    // whose descriptor offset + adrp fixup ride the ET_REL
+    // `.note.badc` NT_BADC_MACHO_TLV_DESC / NT_BADC_MACHO_TLV_FIXUP
+    // records. parse_native_elf recovers them and link_native_objects
+    // rebases the fixups into the merged `.text`, so the Mach-O writer
+    // materialises the `__thread_vars` descriptors.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             _Thread_local int counter = 7;\n\
+             int main(void) {{ counter += 1; return counter; }}\n"
+        ),
+        Target::MacOSAarch64,
+        crate::c5::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.macho_tlv_descriptors.is_empty(),
+        "the macOS `_Thread_local` variable must surface a TLV descriptor via the note"
+    );
+    assert!(
+        !obj.macho_tlv_fixups.is_empty(),
+        "the macOS `_Thread_local` access must surface a TLV fixup via the note"
+    );
+    let nd = obj.macho_tlv_descriptors.len();
+    let nf = obj.macho_tlv_fixups.len();
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(merged.macho_tlv_descriptors.len(), nd);
+    assert_eq!(merged.macho_tlv_fixups.len(), nf);
+}
+
+#[test]
+fn win64_tls_index_fixups_round_trip_through_et_rel() {
+    // A Windows `_Thread_local` access lowers to a `_tls_index` TEB
+    // lookup whose fixup site rides the ET_REL `.note.badc`
+    // NT_BADC_TLS_INDEX record. parse_native_elf recovers the byte
+    // offsets and link_native_objects rebases them into the merged
+    // `.text`, so the PE writer can patch each site.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             _Thread_local int counter = 7;\n\
+             int main(void) {{ counter += 1; return counter; }}\n"
+        ),
+        Target::WindowsAarch64,
+        crate::c5::CompileOptions::default(),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsAarch64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        !obj.tls_index_fixups.is_empty(),
+        "the Windows `_Thread_local` access must surface a tls_index fixup via the note"
+    );
+    let n = obj.tls_index_fixups.len();
+    let merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.tls_index_fixups.len(),
+        n,
+        "the linker must carry every tls_index fixup into the merged image"
+    );
+}
+
+#[test]
+fn pragma_export_round_trips_into_shared_library() {
+    // `#pragma export(<name>)` rides the ET_REL `.note.badc`
+    // NT_BADC_EXPORTS record: `parse_native_elf` recovers the name,
+    // `link_native_objects` unions it, and the shared-library writer
+    // promotes only the exported name. A symbol not named by the
+    // pragma stays private.
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         #pragma export(exported_fn)\n\
+         int exported_fn(int x) {{ return x + 1; }}\n\
+         int internal_fn(int x) {{ return x + 2; }}\n\
+         int main(void) {{ return exported_fn(1) + internal_fn(1); }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    assert!(
+        program.exports.iter().any(|e| e.name == "exported_fn"),
+        "compiler must record the `#pragma export` name"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.exports.contains(&"exported_fn".to_string()),
+        "export name must round-trip through the `.note.badc` record"
+    );
+    assert!(
+        !obj.exports.contains(&"internal_fn".to_string()),
+        "a symbol not named by `#pragma export` must not appear in the note"
+    );
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    assert_eq!(
+        merged.exports,
+        alloc::vec!["exported_fn".to_string()],
+        "linker unions only the exported names"
+    );
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let so = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+    )
+    .expect("write shared library");
+    // e_type @ 0x10: ET_DYN (3) for a shared object.
+    assert_eq!(
+        u16::from_le_bytes(so[0x10..0x12].try_into().unwrap()),
+        3,
+        "shared library must be ET_DYN"
+    );
+}
+
+#[test]
+fn cross_tu_call_into_secondary_dylib_keeps_routing() {
+    // Cross-TU import routing through the native merge. The parser
+    // records each `#pragma binding` import against its `#pragma
+    // dylib`; `parse_native_elf` recovers the per-object (import ->
+    // dylib) map and the merge in `link.rs` remaps it into the
+    // deduped dylib order. Unit A binds a symbol in a second dylib
+    // (libutil); unit B references only the shared first dylib
+    // (libc). The merge must keep A's libutil import routed to
+    // libutil even though B contributes no libutil entry.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let compile_rel = |src: &str| {
+        let program = Compiler::with_options(
+            src.to_string(),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+
+    let unit_a = compile_rel(
         "
-        extern int x;
-        int *p = &x;
-        int main() { return *p; }
+        #pragma dylib(libc, \"libc.so.6\")
+        #pragma binding(libc::printf, \"printf\")
+        #pragma dylib(libutil, \"libutil.so.1\")
+        #pragma binding(libutil::do_work, \"do_work\")
+        int printf(const char *, ...);
+        int do_work(void);
+        int lib_call(void) { printf(\"x\"); return do_work(); }
         ",
     );
-    assert_eq!(link_and_run(alloc::vec![b, a]), 99);
-}
+    let unit_b = compile_rel(
+        "
+        #pragma dylib(libc, \"libc.so.6\")
+        #pragma binding(libc::printf, \"printf\")
+        #pragma binding(libc::fputs, \"fputs\")
+        int printf(const char *, ...);
+        int fputs(const char *, void *);
+        extern int lib_call(void);
+        int main(void) { fputs(\"y\", 0); printf(\"z\"); return lib_call(); }
+        ",
+    );
 
-#[test]
-fn cross_tu_call_through_secondary_dylib() {
-    // Regression marker for the binding flat-index shift the
-    // two-pass merge in `link.rs::merge` exists to prevent.
-    //
-    // The parser encodes each `Op::JsrExt` operand as
-    // `sum(prior dylibs' sizes) + within-dylib position`. With
-    // two units that share the first dylib (libc) and one of
-    // them also references a binding past that prefix (sitting
-    // in a separate dylib), a single-pass merge would append
-    // unit 2's libc bindings AFTER computing unit 1's remap --
-    // silently shifting where the secondary dylib starts and
-    // leaving unit 1's `JsrExt <secondary>` resolving to a
-    // random libc import. The resulting binary SIGSEGV'd on
-    // Linux ELF / Windows PE and got "lucky" on macOS Mach-O
-    // (the wrong-index lookup happened to land on a benign
-    // libc import for the specific demo shapes).
-    //
-    // Build two units with custom dylib tables that mimic the
-    // header surface (libc has multiple bindings; libutil has
-    // a single binding that unit 1 calls). Run the link and
-    // assert the merged Program's `Op::JsrExt` operand still
-    // names the libutil binding after merging.
-    use crate::c5::op::Op;
-    use crate::c5::{Binding, DylibSpec, LinkSymbol, Linkage, SymbolKind};
+    // Unit B first: a single-pass merge that appended B's libc
+    // bindings before resolving A's routing would shift libutil.
+    let merged = link_native_objects(&[unit_b, unit_a]).expect("link");
 
-    let mk_binding = |local: &str, real: &str| Binding {
-        is_variadic: false,
-        fixed_args: 0,
-        return_type_tag: 0,
-        returns_long_double: false,
-        param_types: Vec::new(),
-        local_name: local.to_string(),
-        real_symbol: real.to_string(),
-    };
-
-    // Unit 1: declares libc {printf, malloc} + libutil {do_work},
-    // body of `lib_call` is `Op::JsrExt 2; Op::Lev`, which under
-    // the parser's flat-index scheme names libutil's `do_work`
-    // (sum(libc.bindings)=2, plus position 0 within libutil).
-    let lib_text = alloc::vec![
-        Op::Ent as i64,
-        0,
-        Op::JsrExt as i64,
-        2, // libutil::do_work in unit 1's view
-        Op::Lev as i64,
-    ];
-    let mut lib_unit = LinkUnit {
-        text: lib_text.clone(),
-        dylibs: alloc::vec![
-            DylibSpec {
-                name: "libc".to_string(),
-                path: "libc.so.6".to_string(),
-                bindings: alloc::vec![
-                    mk_binding("printf", "printf"),
-                    mk_binding("malloc", "malloc"),
-                ],
-            },
-            DylibSpec {
-                name: "libutil".to_string(),
-                path: "libutil.so.1".to_string(),
-                bindings: alloc::vec![mk_binding("do_work", "do_work")],
-            },
-        ],
-        symbols: alloc::vec![LinkSymbol {
-            name: "lib_call".to_string(),
-            linkage: Linkage::External,
-            kind: SymbolKind::Function,
-            value: 0,
-            size: 0,
-            type_tag: 0,
-        }],
-        ..Default::default()
-    };
-    lib_unit.source_lines = alloc::vec![0; lib_text.len()];
-    lib_unit.source_functions = alloc::vec![String::new(); lib_text.len()];
-    lib_unit.source_file_indices = alloc::vec![0; lib_text.len()];
-    let _ = lib_text;
-
-    // Unit 2: only references libc (two new bindings). If the
-    // merge appends these to the merged libc *before* unit 1's
-    // operand resolution, the flat index 2 now lands inside
-    // libc -- not libutil.
-    let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
-    let mut other_unit = LinkUnit {
-        text: unit2_text.clone(),
-        dylibs: alloc::vec![DylibSpec {
-            name: "libc".to_string(),
-            path: "libc.so.6".to_string(),
-            bindings: alloc::vec![mk_binding("printf", "printf"), mk_binding("fputs", "fputs"),],
-        }],
-        symbols: alloc::vec![LinkSymbol {
-            name: "main".to_string(),
-            linkage: Linkage::External,
-            kind: SymbolKind::Function,
-            value: 0,
-            size: 0,
-            type_tag: 0,
-        }],
-        ..Default::default()
-    };
-    other_unit.source_lines = alloc::vec![0; unit2_text.len()];
-    other_unit.source_functions = alloc::vec![String::new(); unit2_text.len()];
-    other_unit.source_file_indices = alloc::vec![0; unit2_text.len()];
-
-    let program = link_units(
-        alloc::vec![other_unit, lib_unit],
-        &[],
-        LinkOptions::default(),
-    )
-    .expect("link_units failed");
-
-    // Find lib_call's JsrExt and confirm its operand resolves
-    // to the libutil::do_work binding in the merged dylib
-    // table -- not whatever libc binding the buggy merge would
-    // have shifted it to.
-    let mut found = false;
-    let mut pc = 0usize;
-    while pc + 1 < program.text.len() {
-        if program.text[pc] == Op::JsrExt as i64 {
-            let flat = program.text[pc + 1] as usize;
-            // Walk merged dylibs in declared order to resolve.
-            let mut cursor = flat;
-            let mut resolved: Option<&str> = None;
-            for d in program.dylibs.iter() {
-                if cursor < d.bindings.len() {
-                    resolved = Some(&d.bindings[cursor].real_symbol);
-                    break;
-                }
-                cursor -= d.bindings.len();
-            }
-            assert_eq!(
-                resolved,
-                Some("do_work"),
-                "merged JsrExt operand {flat} resolved to {resolved:?}, not do_work; \
-                 the binding flat-index shift hazard is back"
-            );
-            found = true;
-            break;
-        }
-        pc += 1;
-    }
-    assert!(found, "expected to find a JsrExt in the merged text");
+    let libutil_idx = merged
+        .dylibs
+        .iter()
+        .position(|d| d.as_str() == "libutil.so.1")
+        .expect("merged dylibs should include libutil.so.1") as u32;
+    let libc_idx = merged
+        .dylibs
+        .iter()
+        .position(|d| d.as_str() == "libc.so.6")
+        .expect("merged dylibs should include libc.so.6") as u32;
+    assert_eq!(
+        merged.import_dylib_map.get("do_work"),
+        Some(&libutil_idx),
+        "secondary-dylib import `do_work` must stay routed to libutil after the merge"
+    );
+    assert_eq!(
+        merged.import_dylib_map.get("printf"),
+        Some(&libc_idx),
+        "shared-dylib import `printf` must route to libc"
+    );
 }

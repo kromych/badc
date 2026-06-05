@@ -17,8 +17,8 @@
 //!   catalog with proper pointer-chain and struct DIEs.
 //! * `.debug_line` -- a line-number program mapping every emitted
 //!   native byte range to the C source line that produced it.
-//!   Read from `program.source_lines`, which the optimizer
-//!   preserves through PC remapping.
+//!   Read from `build.ssa_line_rows`, populated by the per-arch
+//!   SSA emit as it lays out each `Inst`.
 //!
 //! Format choice: DWARF version 4, 32-bit DWARF (4-byte length
 //! prefixes), little-endian, 8-byte addresses. DWARF 4 because
@@ -38,9 +38,6 @@
 //! per-attribute encodings) keep their hand-rolled byte writes;
 //! the schema treatment is reserved for the spec's fixed-layout
 //! tables.
-//!
-//! Phase 2: `.debug_frame` / `__eh_frame` for unwinding.
-//! Phase 3: wire DWARF into the PE writer.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -48,7 +45,6 @@ use alloc::vec::Vec;
 
 use super::{Build, Target};
 use crate::c5::compiler::{StructDef, types};
-use crate::c5::op::Op;
 use crate::c5::program::Program;
 use crate::c5::token::Ty;
 
@@ -63,7 +59,7 @@ const DW_TAG_SUBPROGRAM: u8 = 0x2e;
 const DW_TAG_BASE_TYPE: u8 = 0x24;
 const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
-const DW_TAG_VARIABLE: u32 = 0x34;
+const DW_TAG_VARIABLE: u8 = 0x34;
 const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
 const DW_TAG_UNION_TYPE: u8 = 0x17;
 const DW_TAG_MEMBER: u8 = 0x0d;
@@ -72,6 +68,10 @@ const DW_TAG_MEMBER: u8 = 0x0d;
 /// `is_variadic` flag is set so gdb / lldb render the signature
 /// with an ellipsis (`printf (fmt, ...)`).
 const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
+const DW_TAG_ARRAY_TYPE: u8 = 0x01;
+const DW_TAG_SUBRANGE_TYPE: u8 = 0x21;
+const DW_TAG_ENUMERATION_TYPE: u8 = 0x04;
+const DW_TAG_ENUMERATOR: u8 = 0x28;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -100,6 +100,13 @@ const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
 /// at emit time).
 const DW_AT_BIT_OFFSET: u32 = 0x0c;
 const DW_AT_BIT_SIZE: u32 = 0x0d;
+const DW_AT_DECL_LINE: u32 = 0x3b;
+const DW_AT_DECL_FILE: u32 = 0x3a;
+const DW_AT_PROTOTYPED: u32 = 0x27;
+const DW_AT_UPPER_BOUND: u32 = 0x2f;
+const DW_AT_CALLING_CONVENTION: u32 = 0x36;
+const DW_CC_NORMAL: u8 = 0x01;
+const DW_AT_CONST_VALUE: u32 = 0x1c;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -114,10 +121,13 @@ const DW_FORM_DATA1: u32 = 0x0b;
 const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
+const DW_FORM_STRING: u32 = 0x08;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
 const DW_FORM_EXPRLOC: u32 = 0x18;
+const DW_FORM_UDATA: u32 = 0x0f;
+const DW_FORM_SDATA: u32 = 0x0d;
 
 // `DW_OP_*` opcodes used in location / frame-base expressions.
 const DW_OP_FBREG: u8 = 0x91;
@@ -143,6 +153,7 @@ const DW_LNS_COPY: u8 = 0x01;
 const DW_LNS_ADVANCE_PC: u8 = 0x02;
 const DW_LNS_ADVANCE_LINE: u8 = 0x03;
 const DW_LNS_SET_FILE: u8 = 0x04;
+const DW_LNS_SET_PROLOGUE_END: u8 = 0x0a;
 
 // Extended-opcode prefix is `0x00`; the byte after the length
 // names the extended op.
@@ -337,7 +348,8 @@ pub(crate) fn emit(
         source_path
     });
 
-    // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
+    // Walk the SSA function list, collect one `Subprog` per
+    // function.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
     // Emit one `PltSub` per import. Lets gdb / lldb resolve a
@@ -396,6 +408,7 @@ pub(crate) fn emit(
         &plt_subs,
         target,
         &program.structs,
+        &program.enums,
     );
     let debug_frame = build_debug_frame(
         target,
@@ -471,6 +484,21 @@ struct SubprogVar {
     type_tag: i64,
     /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
     fp_byte_offset: i64,
+    /// True when mem2reg promoted this slot to a register; the frame
+    /// slot no longer holds the value, so the DIE gets an empty
+    /// location rather than a stale `DW_OP_fbreg`.
+    promoted: bool,
+    /// Source line of the declaration; surfaces as
+    /// `DW_AT_decl_line` on the DIE. Zero when unknown.
+    decl_line: u32,
+    /// Element count for true local arrays. Drives DW_TAG_array_type
+    /// emission. Zero for scalars and for parameters (the latter
+    /// decay to pointers per C99 6.7.5.3p7).
+    array_size: u32,
+    /// c5 source_files index of the declaration's file. The emit
+    /// pass maps this to a DWARF file_names index for the DIE's
+    /// DW_AT_decl_file.
+    decl_file: u32,
 }
 
 /// Native bytes from a function's `low_pc` to the first byte of
@@ -484,11 +512,11 @@ struct SubprogVar {
 /// anyway.
 fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     let body_start = build
-        .bytecode_to_native
-        .get(ent_pc + Op::Ent.word_size())
+        .func_prologue_native
+        .get(&ent_pc)
         .copied()
         .unwrap_or(low_pc);
-    if body_start == usize::MAX || body_start <= low_pc {
+    if body_start <= low_pc {
         0
     } else {
         (body_start - low_pc) as u32
@@ -592,25 +620,25 @@ fn collect_subprograms(
 ) -> Vec<Subprog> {
     let mut out: Vec<Subprog> = Vec::new();
 
-    // Walk every Ent in bc-pc order. The native start is
-    // `bytecode_to_native[bc_pc]`; the native end is the start of
-    // the *next* Ent (or the total code length for the last
-    // function). A function's name lives at
-    // `program.source_functions[bc_pc]` -- empty when the
-    // optimizer dropped the map (pre-#39) or for functions
-    // emitted before any user code (e.g. trampolines).
-    let mut ent_pcs: Vec<usize> = Vec::new();
-    let mut bc_pc = 0usize;
-    while bc_pc < program.text.len() {
-        let raw = program.text[bc_pc];
-        let Some(op) = Op::from_i64(raw) else {
-            break;
-        };
-        if matches!(op, Op::Ent) {
-            ent_pcs.push(bc_pc);
-        }
-        bc_pc += op.word_size();
-    }
+    // Iterate the per-function ent_pcs the lowering recorded
+    // in emission order. Native start is
+    // `pc_to_native[ent_pc]`; native end is the start of the
+    // next function's emission (or `total_native` for the last).
+    // A function's source name comes from `build.func_names`
+    // (populated by the per-arch emit from `FunctionSsa::name`),
+    // with `Program::source_functions[ent_pc]` as a fallback for
+    // archive-reloaded units. The per-arch emit pushes
+    // `(ent_pc, name)` pairs in lockstep, so an `ent_pc -> name`
+    // map covers the sort-by-native-offset reorder below.
+    let func_name_by_pc: BTreeMap<usize, alloc::string::String> = build
+        .func_ent_pcs
+        .iter()
+        .copied()
+        .zip(build.func_names.iter().cloned())
+        .filter(|(_, n)| !n.is_empty())
+        .collect();
+    let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
+    ent_pcs.sort_unstable_by_key(|&pc| build.pc_to_native.get(pc).copied().unwrap_or(usize::MAX));
     // Sentinel for end-of-last-function range. The PLT trampoline
     // pool is appended to `build.text` after the last user
     // function; addresses inside the pool must NOT fall inside any
@@ -621,23 +649,21 @@ fn collect_subprograms(
     let total_native = end_of_user_text(build);
 
     // c5's source-function tracking sometimes attributes
-    // `Op::Ent`s to the wrong containing C function -- in a
-    // large translation unit dozens of Ents may carry the same
-    // source-name even though their actual code belongs to
+    // function entries to the wrong containing C function -- in
+    // a large translation unit dozens of entries may carry the
+    // same source-name even though their actual code belongs to
     // unrelated functions. Without disambiguation,
     // lldb's `b name` returns N matches and the user can't tell
     // which is the real one. Suffix duplicates with `.<N>` so
     // the legitimate first-occurrence keeps the bare name and
     // `b name` resolves to one location. The upstream c5
     // tracking is a separate fix (the suffixed names still
-    // point at real bytecode, so backtraces inside the
+    // point at real code, so backtraces inside the
     // mis-attributed regions are no worse than they were).
     let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
-        let raw_name = program
-            .source_functions
-            .get(ent_pc)
-            .filter(|s| !s.is_empty())
+        let raw_name = func_name_by_pc
+            .get(&ent_pc)
             .cloned()
             .unwrap_or_else(|| format!("fn_bc_{ent_pc}"));
         let count = name_seen.entry(raw_name.clone()).or_insert(0);
@@ -650,7 +676,7 @@ fn collect_subprograms(
         let name_off = strs.intern(&name);
 
         let lo = build
-            .bytecode_to_native
+            .pc_to_native
             .get(ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
@@ -659,7 +685,7 @@ fn collect_subprograms(
         }
         let hi = if let Some(&next_ent) = ent_pcs.get(i + 1) {
             build
-                .bytecode_to_native
+                .pc_to_native
                 .get(next_ent)
                 .copied()
                 .unwrap_or(total_native)
@@ -672,7 +698,7 @@ fn collect_subprograms(
 
         // Pull this subprogram's locals + parameters from
         // `program.variables`. Captured by the c5 frontend at
-        // function-body close, indexed by the Ent's bytecode pc
+        // function-body close, indexed by the Ent's ent_pc
         // so a simple equality check groups them.
         let function_bc_pc = ent_pc as u64;
         let variables = program
@@ -694,6 +720,13 @@ fn collect_subprograms(
                 } else {
                     v.fp_slot * 8
                 },
+                promoted: build
+                    .promoted_local_slots
+                    .get(&ent_pc)
+                    .is_some_and(|slots| slots.contains(&v.fp_slot)),
+                decl_line: v.decl_line,
+                array_size: v.array_size,
+                decl_file: v.decl_file,
             })
             .collect();
 
@@ -1137,201 +1170,270 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
 
 // ---- .debug_abbrev ----
 
+// Abbreviation codes. `build_debug_abbrev` declares each entry under
+// its code; `build_debug_info` and `emit_type_die` reference the same
+// codes when starting a DIE. Naming them keeps the two sides legible
+// and matches the ET_REL emitter (`dwarf_reloc`).
+const ABBREV_COMPILE_UNIT: u64 = 1;
+const ABBREV_SUBPROGRAM: u64 = 2;
+const ABBREV_BASE_TYPE: u64 = 3;
+const ABBREV_VARIABLE: u64 = 4;
+const ABBREV_FORMAL_PARAMETER: u64 = 5;
+const ABBREV_POINTER_TYPE: u64 = 6;
+const ABBREV_STRUCTURE_TYPE: u64 = 7;
+const ABBREV_UNION_TYPE: u64 = 8;
+const ABBREV_MEMBER: u64 = 9;
+const ABBREV_BITFIELD_MEMBER: u64 = 10;
+const ABBREV_PLT_SUBPROGRAM: u64 = 11;
+const ABBREV_PLT_FORMAL_PARAMETER: u64 = 12;
+const ABBREV_UNSPECIFIED_PARAMETERS: u64 = 13;
+const ABBREV_PLT_FORMAL_PARAMETER_LOC: u64 = 14;
+const ABBREV_ARRAY_TYPE: u64 = 15;
+const ABBREV_SUBRANGE_TYPE: u64 = 16;
+const ABBREV_ENUMERATION_TYPE: u64 = 17;
+const ABBREV_ENUMERATOR: u64 = 18;
+
+/// One `.debug_abbrev` declaration: the abbreviation code, its DWARF
+/// tag, whether the DIE has children, and the ordered (attribute,
+/// form) pairs. `build_debug_abbrev` emits the table from this list
+/// and `build_debug_info` writes each DIE's attribute values in the
+/// same order under the same code, so the abbrev and the values
+/// cannot drift.
+struct AbbrevDecl {
+    code: u64,
+    tag: u8,
+    has_children: bool,
+    attrs: &'static [(u32, u32)],
+}
+
+const ABBREV_DECLS: &[AbbrevDecl] = &[
+    // compile_unit with subprogram children.
+    AbbrevDecl {
+        code: ABBREV_COMPILE_UNIT,
+        tag: DW_TAG_COMPILE_UNIT,
+        has_children: true,
+        attrs: &[
+            (DW_AT_PRODUCER, DW_FORM_STRP),
+            (DW_AT_LANGUAGE, DW_FORM_DATA1),
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_COMP_DIR, DW_FORM_STRP),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET),
+        ],
+    },
+    // subprogram with variable / parameter children. DW_AT_frame_base
+    // resolves DW_OP_fbreg references against c5's frame pointer.
+    // DW_AT_prototyped is always set: c5 rejects K&R declarators per
+    // C99 6.7.6.3p14. DW_AT_calling_convention pins DW_CC_normal.
+    AbbrevDecl {
+        code: ABBREV_SUBPROGRAM,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_PROTOTYPED, DW_FORM_FLAG_PRESENT),
+            (DW_AT_CALLING_CONVENTION, DW_FORM_DATA1),
+            (DW_AT_FRAME_BASE, DW_FORM_EXPRLOC),
+        ],
+    },
+    // base_type -- one per distinct c5 scalar tag, plus the void*
+    // placeholder pointer / struct variables fall back to.
+    AbbrevDecl {
+        code: ABBREV_BASE_TYPE,
+        tag: DW_TAG_BASE_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
+            (DW_AT_ENCODING, DW_FORM_DATA1),
+        ],
+    },
+    // variable (local). DW_AT_location is DW_OP_fbreg <sleb128>,
+    // resolved via the subprogram's DW_AT_frame_base.
+    AbbrevDecl {
+        code: ABBREV_VARIABLE,
+        tag: DW_TAG_VARIABLE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    // formal_parameter -- the variable shape under a parameter tag.
+    AbbrevDecl {
+        code: ABBREV_FORMAL_PARAMETER,
+        tag: DW_TAG_FORMAL_PARAMETER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+            (DW_AT_DECL_FILE, DW_FORM_UDATA),
+            (DW_AT_DECL_LINE, DW_FORM_UDATA),
+        ],
+    },
+    // pointer_type -- 8-byte pointer; DW_AT_type refs the pointee
+    // (the next pointer DIE in a chain, or a base / struct DIE).
+    AbbrevDecl {
+        code: ABBREV_POINTER_TYPE,
+        tag: DW_TAG_POINTER_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // structure_type -- DW_AT_byte_size is DATA4 since aggregates
+    // routinely exceed 256 bytes; children are DW_TAG_member DIEs.
+    AbbrevDecl {
+        code: ABBREV_STRUCTURE_TYPE,
+        tag: DW_TAG_STRUCTURE_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_DATA4)],
+    },
+    // union_type -- structure_type's shape; members overlap at 0.
+    AbbrevDecl {
+        code: ABBREV_UNION_TYPE,
+        tag: DW_TAG_UNION_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_BYTE_SIZE, DW_FORM_DATA4)],
+    },
+    // member -- a regular (non-bitfield) field. DW_AT_data_member_-
+    // location is the byte offset from the aggregate start.
+    AbbrevDecl {
+        code: ABBREV_MEMBER,
+        tag: DW_TAG_MEMBER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
+        ],
+    },
+    // bitfield member -- DWARF 3-style byte_size + bit_offset +
+    // bit_size on top of the regular member triple; lldb / gdb both
+    // accept this shape on DWARF 4 input.
+    AbbrevDecl {
+        code: ABBREV_BITFIELD_MEMBER,
+        tag: DW_TAG_MEMBER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4),
+            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
+            (DW_AT_BIT_OFFSET, DW_FORM_DATA1),
+            (DW_AT_BIT_SIZE, DW_FORM_DATA1),
+        ],
+    },
+    // PLT-trampoline subprogram -- abbrev 2's shape plus DW_AT_type
+    // for the return, without DW_AT_frame_base (no c5 frame); allows
+    // formal_parameter / unspecified_parameters children.
+    AbbrevDecl {
+        code: ABBREV_PLT_SUBPROGRAM,
+        tag: DW_TAG_SUBPROGRAM,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_LOW_PC, DW_FORM_ADDR),
+            (DW_AT_HIGH_PC, DW_FORM_DATA8),
+            (DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT),
+            (DW_AT_TYPE, DW_FORM_REF4),
+        ],
+    },
+    // PLT formal_parameter that spilled past the ABI register window:
+    // synthetic name + type, no location.
+    AbbrevDecl {
+        code: ABBREV_PLT_FORMAL_PARAMETER,
+        tag: DW_TAG_FORMAL_PARAMETER,
+        has_children: false,
+        attrs: &[(DW_AT_NAME, DW_FORM_STRP), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // unspecified_parameters -- the `...` of a variadic prototype.
+    // The tag alone signals the ellipsis.
+    AbbrevDecl {
+        code: ABBREV_UNSPECIFIED_PARAMETERS,
+        tag: DW_TAG_UNSPECIFIED_PARAMETERS,
+        has_children: false,
+        attrs: &[],
+    },
+    // PLT formal_parameter with a known register location: abbrev 12
+    // plus DW_AT_location so gdb's `bt` reads the value from the
+    // ABI-pinned register. Only the first N register-resident args.
+    AbbrevDecl {
+        code: ABBREV_PLT_FORMAL_PARAMETER_LOC,
+        tag: DW_TAG_FORMAL_PARAMETER,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_TYPE, DW_FORM_REF4),
+            (DW_AT_LOCATION, DW_FORM_EXPRLOC),
+        ],
+    },
+    // array_type -- a true local array; DW_AT_type refs the element
+    // type and a DW_TAG_subrange_type child carries the bound.
+    // Parameters decay to pointers per C99 6.7.5.3p7.
+    AbbrevDecl {
+        code: ABBREV_ARRAY_TYPE,
+        tag: DW_TAG_ARRAY_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    // subrange_type -- DW_AT_upper_bound = element_count - 1 per
+    // DWARF 4 5.13.
+    AbbrevDecl {
+        code: ABBREV_SUBRANGE_TYPE,
+        tag: DW_TAG_SUBRANGE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_UPPER_BOUND, DW_FORM_UDATA)],
+    },
+    // enumeration_type -- tagged C99 6.7.2.2 enums; the enum is `int`
+    // in c5 so DW_AT_byte_size is 4. DW_FORM_string keeps the name
+    // inline rather than threading the sealed string table.
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: true,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_BYTE_SIZE, DW_FORM_DATA1),
+        ],
+    },
+    // enumerator -- one (name, value) pair. DW_AT_const_value is
+    // signed since C99 enum constants can be negative.
+    AbbrevDecl {
+        code: ABBREV_ENUMERATOR,
+        tag: DW_TAG_ENUMERATOR,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRING),
+            (DW_AT_CONST_VALUE, DW_FORM_SDATA),
+        ],
+    },
+];
+
 fn build_debug_abbrev() -> Vec<u8> {
     let mut buf = Vec::with_capacity(64);
-
-    // Abbrev 1: DW_TAG_compile_unit, has children.
-    write_uleb128(&mut buf, 1);
-    write_uleb128(&mut buf, DW_TAG_COMPILE_UNIT as u64);
-    buf.push(DW_CHILDREN_YES);
-    write_attr(&mut buf, DW_AT_PRODUCER, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_LANGUAGE, DW_FORM_DATA1);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_COMP_DIR, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
-    write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    write_attr(&mut buf, DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 2: DW_TAG_subprogram, has children (formal_param,
-    // variable). `DW_AT_frame_base` carries the location
-    // expression that resolves `DW_OP_fbreg` references against
-    // c5's frame pointer ($x29).
-    write_uleb128(&mut buf, 2);
-    write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
-    buf.push(DW_CHILDREN_YES);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
-    // High PC as DATA8 means "size in bytes from low_pc". Cheaper
-    // than DW_FORM_addr and matches gcc / clang's DWARF 4 output.
-    write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
-    write_attr(&mut buf, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 3: DW_TAG_base_type. Shared by every scalar base type
-    // DIE (one per distinct c5 tag) plus the placeholder void* DIE
-    // that pointer / struct variables fall back to in phase 1A.
-    write_uleb128(&mut buf, 3);
-    write_uleb128(&mut buf, DW_TAG_BASE_TYPE as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    write_attr(&mut buf, DW_AT_ENCODING, DW_FORM_DATA1);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 4: DW_TAG_variable (local). DW_AT_location is a
-    // DWARF expression -- for c5 locals it's
-    // `DW_OP_fbreg <sleb128 byte-offset>`, with the frame base
-    // resolved via the subprogram's DW_AT_frame_base.
-    write_uleb128(&mut buf, 4);
-    write_uleb128(&mut buf, DW_TAG_VARIABLE as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 5: DW_TAG_formal_parameter. Same shape as the local
-    // variable abbrev; the tag itself is what tells lldb / gdb to
-    // render the entry as a parameter rather than a local.
-    write_uleb128(&mut buf, 5);
-    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 6: DW_TAG_pointer_type. Used by every entry of a
-    // pointer-chain DIE (`int *`, `int **`, `unsigned long *`,
-    // `struct Foo *`, ...). DW_AT_byte_size is constant 8 across
-    // our supported targets; DW_AT_TYPE is a CU-relative ref4 to
-    // the pointee (the depth-1 pointer DIE for chains, or the
-    // base / struct DIE for the depth-1 entry).
-    write_uleb128(&mut buf, 6);
-    write_uleb128(&mut buf, DW_TAG_POINTER_TYPE as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 7: DW_TAG_structure_type. Has children (one
-    // DW_TAG_member per c5 `StructField`). DW_AT_byte_size is
-    // DATA4 since real-world aggregates exceed 256 bytes
-    // routinely (multi-KB struct sizes are not unusual).
-    write_uleb128(&mut buf, 7);
-    write_uleb128(&mut buf, DW_TAG_STRUCTURE_TYPE as u64);
-    buf.push(DW_CHILDREN_YES);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 8: DW_TAG_union_type. Same shape as the structure
-    // abbrev; the tag is what tells lldb / gdb to render `s.x`
-    // and `s.y` as overlapping rather than sequential.
-    write_uleb128(&mut buf, 8);
-    write_uleb128(&mut buf, DW_TAG_UNION_TYPE as u64);
-    buf.push(DW_CHILDREN_YES);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 9: DW_TAG_member -- a regular (non-bitfield) struct
-    // / union field. DW_AT_data_member_location is the byte offset
-    // of the field from the start of its containing aggregate.
-    write_uleb128(&mut buf, 9);
-    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 10: DW_TAG_member with bitfield extras
-    // (DWARF 3-style: byte_size + bit_offset + bit_size on top of
-    // the regular member triple). lldb / gdb both still handle
-    // this shape on DWARF 4 input; switching to DWARF 5's
-    // `DW_AT_data_bit_offset` is a follow-up if a consumer ever
-    // breaks.
-    write_uleb128(&mut buf, 10);
-    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
-    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
-    write_attr(&mut buf, DW_AT_BIT_OFFSET, DW_FORM_DATA1);
-    write_attr(&mut buf, DW_AT_BIT_SIZE, DW_FORM_DATA1);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 11: DW_TAG_subprogram for PLT trampolines
-    // Same shape as abbrev 2 but adds DW_AT_type for the return,
-    // drops DW_AT_frame_base (the trampoline never builds a c5
-    // frame), and is allowed children for the
-    // formal_parameter / unspecified_parameters DIEs the emitter
-    // appends.
-    write_uleb128(&mut buf, 11);
-    write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
-    buf.push(DW_CHILDREN_YES);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
-    write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
-    write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 12: DW_TAG_formal_parameter for PLT trampolines
-    // whose arg spilled past the ABI's register window. Carries
-    // a synthetic `arg<N>` name (the c5 binding doesn't track
-    // parameter names, but gdb's `info args` and `bt` skip
-    // name-less entries entirely) plus the type, no location.
-    write_uleb128(&mut buf, 12);
-    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 13: DW_TAG_unspecified_parameters -- the `...` of a
-    // variadic prototype. No attributes; the tag itself signals
-    // the ellipsis to gdb / lldb.
-    write_uleb128(&mut buf, 13);
-    write_uleb128(&mut buf, DW_TAG_UNSPECIFIED_PARAMETERS as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // Abbrev 14: DW_TAG_formal_parameter for PLT params with a
-    // known register location. Mirrors abbrev 12 but adds
-    // DW_AT_location so gdb's `bt` can read the value
-    // out of the AAPCS64 / SysV register the calling convention
-    // pinned the arg to. Only the first N fixed args (one per
-    // ABI int_arg_reg slot) get this abbrev; later ones spill to
-    // stack at locations we can't reconstruct from outside libc,
-    // so they fall back to abbrev 12.
-    write_uleb128(&mut buf, 14);
-    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
-    buf.push(DW_CHILDREN_NO);
-    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
-    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
-    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
-    write_uleb128(&mut buf, 0);
-    write_uleb128(&mut buf, 0);
-
-    // End of abbreviation table.
+    for d in ABBREV_DECLS {
+        write_uleb128(&mut buf, d.code);
+        write_uleb128(&mut buf, d.tag as u64);
+        buf.push(if d.has_children {
+            DW_CHILDREN_YES
+        } else {
+            DW_CHILDREN_NO
+        });
+        for (attr, form) in d.attrs {
+            write_attr(&mut buf, *attr, *form);
+        }
+        // End of this declaration's attribute list.
+        write_uleb128(&mut buf, 0);
+        write_uleb128(&mut buf, 0);
+    }
+    // End of the abbreviation table.
     write_uleb128(&mut buf, 0);
     buf
 }
@@ -1366,6 +1468,28 @@ fn write_attr(buf: &mut Vec<u8>, attr: u32, form: u32) {
     write_uleb128(buf, form as u64);
 }
 
+/// Bytes a DW_TAG_array_type DIE plus its DW_TAG_subrange_type
+/// child consume. abbrev_array(1) + DW_AT_type ref4(4)
+/// + abbrev_subrange(1) + DW_AT_upper_bound uleb128(N)
+/// + children_terminator(1). Used by the layout pass so struct
+/// member DW_AT_type can forward-ref into the array DIE block.
+fn array_die_size(count: u32) -> u32 {
+    let upper = count.saturating_sub(1) as u64;
+    let upper_bytes = uleb128_byte_len(upper);
+    1 + 4 + 1 + upper_bytes + 1
+}
+
+fn uleb128_byte_len(mut v: u64) -> u32 {
+    let mut n = 0;
+    loop {
+        n += 1;
+        v >>= 7;
+        if v == 0 {
+            return n;
+        }
+    }
+}
+
 // ---- .debug_info ----
 
 #[allow(clippy::too_many_arguments)]
@@ -1381,6 +1505,7 @@ fn build_debug_info(
     plt_subs: &[PltSub],
     target: Target,
     structs: &[StructDef],
+    enums: &[super::super::compiler::EnumDef],
 ) -> Vec<u8> {
     // Build the body first so we know its size before prepending
     // the unit header. CU-relative `DW_FORM_ref4` offsets are
@@ -1388,7 +1513,7 @@ fn build_debug_info(
     let mut body: Vec<u8> = Vec::with_capacity(64 + subs.len() * 48);
 
     // CU DIE: abbrev 1.
-    write_uleb128(&mut body, 1);
+    write_uleb128(&mut body, ABBREV_COMPILE_UNIT);
     body.extend_from_slice(&producer_off.to_le_bytes());
     body.push(DW_LANG_C99);
     body.extend_from_slice(&cu_name_off.to_le_bytes());
@@ -1397,18 +1522,70 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
+    // Collect every (element_type, count) pair the unit's arrays
+    // need a DIE for. Sources: non-parameter variables with
+    // `array_size > 0` (C99 6.7.5.3p7 decays parameter arrays to
+    // pointers) and struct fields with `array_size > 0`. Element
+    // must be scalar / pointer-to-scalar -- aggregate elements
+    // would need an aggregate DIE that doesn't exist yet at the
+    // array DIE's reserved position.
+    let mut array_pairs: BTreeSet<(CatalogEntry, u32)> = BTreeSet::new();
+    for s in subs {
+        for v in &s.variables {
+            if v.array_size == 0 || v.is_parameter {
+                continue;
+            }
+            let entry = classify(v.type_tag, target);
+            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                array_pairs.insert((entry, v.array_size));
+            }
+        }
+    }
+    // Restrict the struct walk to aggregates the catalog actually
+    // emits a DIE for. The TypeCatalog only pulls in structs that
+    // are transitively reachable from variables / PLT signatures;
+    // collecting array pairs from unreferenced structs would name
+    // element-type DIEs the layout pass never reserved space for.
+    let referenced_struct_ids: BTreeSet<u32> = catalog
+        .entries
+        .iter()
+        .filter_map(|e| match e {
+            CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    for id in &referenced_struct_ids {
+        let Some(s) = structs.get(*id as usize) else {
+            continue;
+        };
+        for f in &s.fields {
+            if f.array_size <= 0 || f.bit_width > 0 {
+                continue;
+            }
+            let entry = classify(f.ty, target);
+            if matches!(entry, CatalogEntry::Base(_) | CatalogEntry::Pointer { .. }) {
+                array_pairs.insert((entry, f.array_size as u32));
+            }
+        }
+    }
+
     // Layout pass: precompute the CU-relative offset every
-    // catalog entry will land at, *before* writing any of them.
-    // Member type-refs in struct DIEs reach forward to other
-    // structs (linked-list nodes, mutually-recursive
-    // aggregates), so write-time positions aren't enough.
+    // catalog entry and every array DIE will land at, before
+    // writing any of them. Struct fields with array_size > 0
+    // reach forward via DW_FORM_ref4 to array DIEs that come
+    // after the catalog, so write-time positions aren't enough.
     // `die_size` is deterministic, so the pass is exact.
     let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
+    let mut array_offsets: BTreeMap<(CatalogEntry, u32), u32> = BTreeMap::new();
     {
         let mut cursor = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
         for entry in &catalog.entries {
             entry_offsets.insert(*entry, cursor);
             cursor += entry.die_size(structs);
+        }
+        for &(entry, count) in &array_pairs {
+            array_offsets.insert((entry, count), cursor);
+            cursor += array_die_size(count);
         }
     }
 
@@ -1423,21 +1600,73 @@ fn build_debug_info(
             pre_pos, entry_offsets[entry],
             "die_size disagreed with the emitter for {entry:?}",
         );
-        emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
+        emit_type_die(
+            entry,
+            &mut body,
+            catalog,
+            structs,
+            &entry_offsets,
+            &array_offsets,
+            target,
+        );
+    }
+
+    // Array DIEs at their precomputed offsets. BTreeMap iteration
+    // is ordered by key, matching the layout pass.
+    for (&(entry, count), &arr_off) in &array_offsets {
+        debug_assert_eq!(
+            arr_off,
+            (body.len() as u32) + DebugInfoUnitHeader::SIZE,
+            "array layout disagreed with the emitter for ({entry:?}, {count})",
+        );
+        let elem_off = entry_offsets[&entry];
+        write_uleb128(&mut body, ABBREV_ARRAY_TYPE);
+        body.extend_from_slice(&elem_off.to_le_bytes());
+        // Subrange child: upper_bound = count - 1.
+        write_uleb128(&mut body, ABBREV_SUBRANGE_TYPE);
+        write_uleb128(&mut body, (count as u64).saturating_sub(1));
+        // Children-list terminator for the array_type DIE.
+        body.push(0);
+    }
+
+    // DW_TAG_enumeration_type DIEs for every tagged enum the
+    // parser captured. Standalone -- no variable references them
+    // because c5 collapses enums to `int`. Strings ride inline
+    // via DW_FORM_string so the emitter doesn't have to extend
+    // the sealed catalog string table at this point.
+    for ed in enums {
+        if ed.name.is_empty() || ed.constants.is_empty() {
+            continue;
+        }
+        write_uleb128(&mut body, ABBREV_ENUMERATION_TYPE);
+        body.extend_from_slice(ed.name.as_bytes());
+        body.push(0);
+        body.push(4);
+        for (cname, cval) in &ed.constants {
+            write_uleb128(&mut body, ABBREV_ENUMERATOR);
+            body.extend_from_slice(cname.as_bytes());
+            body.push(0);
+            write_sleb128(&mut body, *cval);
+        }
+        body.push(0);
     }
 
     // Subprogram children, each with its own variable /
     // formal_parameter children.
     for s in subs {
-        write_uleb128(&mut body, 2);
+        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
         body.extend_from_slice(&s.name_off.to_le_bytes());
         body.extend_from_slice(&s.low_pc.to_le_bytes());
         body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
         // DW_AT_external is DW_FORM_flag_present -- no bytes.
+        // DW_AT_prototyped is DW_FORM_flag_present -- no bytes.
+        // DW_AT_calling_convention: DW_CC_normal pins user-defined
+        // functions to the host C ABI (SysV / Win64 / AAPCS64).
+        body.push(DW_CC_NORMAL);
         // DW_AT_frame_base (DW_FORM_exprloc): "frame base is
         // x29 + 0", encoded as `DW_OP_breg29 0`. Two bytes:
         // opcode + sleb128(0).
-        write_uleb128(&mut body, 2);
+        write_uleb128(&mut body, ABBREV_SUBPROGRAM);
         body.push(DW_OP_BREG29);
         body.push(0);
 
@@ -1448,7 +1677,11 @@ fn build_debug_info(
         let mut sorted: Vec<&SubprogVar> = s.variables.iter().collect();
         sorted.sort_by_key(|v| (!v.is_parameter, v.fp_byte_offset));
         for v in sorted {
-            let abbrev = if v.is_parameter { 5 } else { 4 };
+            let abbrev = if v.is_parameter {
+                ABBREV_FORMAL_PARAMETER
+            } else {
+                ABBREV_VARIABLE
+            };
             write_uleb128(&mut body, abbrev);
             body.extend_from_slice(&v.name_off.to_le_bytes());
             // Resolve this variable's c5 type tag through the
@@ -1458,16 +1691,42 @@ fn build_debug_info(
             // every captured variable, so a lookup miss is
             // impossible.
             let entry = classify(v.type_tag, target);
-            let type_off = *entry_offsets
+            let elem_off = *entry_offsets
                 .get(&entry)
                 .expect("catalog includes every entry produced by classify()");
+            // True local arrays reference the array_type DIE if one
+            // was reserved for this (element, count) pair above;
+            // every other variable references the element / scalar
+            // / pointer DIE directly.
+            let type_off = if v.array_size > 0 && !v.is_parameter {
+                array_offsets
+                    .get(&(entry, v.array_size))
+                    .copied()
+                    .unwrap_or(elem_off)
+            } else {
+                elem_off
+            };
             body.extend_from_slice(&type_off.to_le_bytes());
             // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
-            let mut loc: Vec<u8> = Vec::with_capacity(8);
-            loc.push(DW_OP_FBREG);
-            write_sleb128(&mut loc, v.fp_byte_offset);
-            write_uleb128(&mut body, loc.len() as u64);
-            body.extend_from_slice(&loc);
+            // A slot mem2reg promoted to a register no longer holds
+            // the value; emit an empty location so the debugger reports
+            // it optimized out rather than reading stale frame memory.
+            if v.promoted {
+                write_uleb128(&mut body, 0);
+            } else {
+                let mut loc: Vec<u8> = Vec::with_capacity(8);
+                loc.push(DW_OP_FBREG);
+                write_sleb128(&mut loc, v.fp_byte_offset);
+                write_uleb128(&mut body, loc.len() as u64);
+                body.extend_from_slice(&loc);
+            }
+            // DW_AT_decl_file (ULEB128) -- c5's `source_files` is
+            // 0-indexed with the primary TU at 0; the DWARF
+            // file_names table is 1-indexed with the primary file
+            // at slot 1, so emit `decl_file + 1`.
+            write_uleb128(&mut body, v.decl_file as u64 + 1);
+            // DW_AT_decl_line (ULEB128).
+            write_uleb128(&mut body, v.decl_line as u64);
         }
         // Children-list terminator for this subprogram.
         body.push(0);
@@ -1494,7 +1753,7 @@ fn build_debug_info(
     };
     for plt in plt_subs {
         // Abbrev 11: name, low_pc, high_pc, external, type.
-        write_uleb128(&mut body, 11);
+        write_uleb128(&mut body, ABBREV_PLT_SUBPROGRAM);
         body.extend_from_slice(&plt.name_off.to_le_bytes());
         body.extend_from_slice(&plt.low_pc.to_le_bytes());
         body.extend_from_slice(&(plt.high_pc - plt.low_pc).to_le_bytes());
@@ -1527,7 +1786,7 @@ fn build_debug_info(
             let name_off = plt.param_name_offs[slot];
             match dwarf_arg_reg(target, slot) {
                 Some(reg) => {
-                    write_uleb128(&mut body, 14);
+                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER_LOC);
                     body.extend_from_slice(&name_off.to_le_bytes());
                     body.extend_from_slice(&type_off.to_le_bytes());
                     // DW_OP_reg<N> is one byte for N <= 31; every
@@ -1537,7 +1796,7 @@ fn build_debug_info(
                     body.push(DW_OP_REG_BASE + reg);
                 }
                 None => {
-                    write_uleb128(&mut body, 12);
+                    write_uleb128(&mut body, ABBREV_PLT_FORMAL_PARAMETER);
                     body.extend_from_slice(&name_off.to_le_bytes());
                     body.extend_from_slice(&type_off.to_le_bytes());
                 }
@@ -1547,7 +1806,7 @@ fn build_debug_info(
         // surface as `printf(char *, ...)` rather than just
         // `printf(char *)`.
         if plt.is_variadic {
-            write_uleb128(&mut body, 13);
+            write_uleb128(&mut body, ABBREV_UNSPECIFIED_PARAMETERS);
         }
         // Children-list terminator for this PLT subprogram.
         body.push(0);
@@ -1577,12 +1836,14 @@ fn build_debug_info(
 /// match `entry.die_size(structs)` exactly -- the layout pass
 /// relied on it -- which is why the abbrev / form widths here
 /// mirror the abbrev table verbatim.
+#[allow(clippy::too_many_arguments)]
 fn emit_type_die(
     entry: &CatalogEntry,
     body: &mut Vec<u8>,
     catalog: &TypeCatalog,
     structs: &[StructDef],
     entry_offsets: &BTreeMap<CatalogEntry, u32>,
+    array_offsets: &BTreeMap<(CatalogEntry, u32), u32>,
     target: Target,
 ) {
     match entry {
@@ -1592,7 +1853,7 @@ fn emit_type_die(
                 .get(key)
                 .copied()
                 .expect("collect() interned every base in base_names");
-            write_uleb128(body, 3);
+            write_uleb128(body, ABBREV_BASE_TYPE);
             body.extend_from_slice(&name_off.to_le_bytes());
             body.push(key.byte_size);
             body.push(key.encoding);
@@ -1609,7 +1870,7 @@ fn emit_type_die(
             let pointee_off = *entry_offsets
                 .get(&pointee)
                 .expect("chain insertion guarantees the pointee was placed");
-            write_uleb128(body, 6);
+            write_uleb128(body, ABBREV_POINTER_TYPE);
             body.push(8);
             body.extend_from_slice(&pointee_off.to_le_bytes());
         }
@@ -1625,7 +1886,7 @@ fn emit_type_die(
             let pointee_off = *entry_offsets
                 .get(&pointee)
                 .expect("chain insertion guarantees the pointee was placed");
-            write_uleb128(body, 6);
+            write_uleb128(body, ABBREV_POINTER_TYPE);
             body.push(8);
             body.extend_from_slice(&pointee_off.to_le_bytes());
         }
@@ -1633,7 +1894,11 @@ fn emit_type_die(
             let s = structs
                 .get(*id as usize)
                 .expect("Struct entries only land in the catalog when the id is in-range");
-            let abbrev = if s.is_union { 8 } else { 7 };
+            let abbrev = if s.is_union {
+                ABBREV_UNION_TYPE
+            } else {
+                ABBREV_STRUCTURE_TYPE
+            };
             let name_off = catalog
                 .struct_names
                 .get(id)
@@ -1660,13 +1925,25 @@ fn emit_type_die(
                 // because c5 baked the array stride into the
                 // member offsets at parse time.
                 let member_entry = classify(f.ty, target);
-                let member_type_off = *entry_offsets
+                let elem_off = *entry_offsets
                     .get(&member_entry)
                     .expect("collect() walked every struct field's type into the catalog");
+                // True field array: ref the array_type DIE if one
+                // was reserved for this (element, count) pair.
+                // Bitfields keep the element ref because they
+                // aren't arrays in any case.
+                let member_type_off = if f.array_size > 0 && f.bit_width == 0 {
+                    array_offsets
+                        .get(&(member_entry, f.array_size as u32))
+                        .copied()
+                        .unwrap_or(elem_off)
+                } else {
+                    elem_off
+                };
 
                 if f.bit_width == 0 {
                     // Regular member: abbrev 9.
-                    write_uleb128(body, 9);
+                    write_uleb128(body, ABBREV_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
@@ -1677,7 +1954,7 @@ fn emit_type_die(
                     // MSB-relative `DW_AT_bit_offset` on
                     // little-endian targets:
                     //   dwarf_bit_offset = 64 - lsb_offset - width
-                    write_uleb128(body, 10);
+                    write_uleb128(body, ABBREV_BITFIELD_MEMBER);
                     body.extend_from_slice(&member_name_off.to_le_bytes());
                     body.extend_from_slice(&member_type_off.to_le_bytes());
                     body.extend_from_slice(&(f.offset as u32).to_le_bytes());
@@ -1697,7 +1974,7 @@ fn emit_type_die(
             // `void *` in user-facing rendering -- once unknown
             // tags are extinct this entry can be removed
             // entirely.
-            write_uleb128(body, 3);
+            write_uleb128(body, ABBREV_BASE_TYPE);
             body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
             body.push(8);
             body.push(DW_ATE_ADDRESS);
@@ -2173,10 +2450,10 @@ fn build_debug_line(
     (out, 0)
 }
 
-/// Walk the bytecode, emit one row per (live) op whose source line
-/// is known. The DWARF state machine starts at `(address=0,
-/// line=1, file=1, is_stmt=true)`; we open with a
-/// `DW_LNE_set_address` to anchor at `code_vmaddr` and end with a
+/// Walk the SSA-tier line table, emit one row per (live) PC whose
+/// source line is known. The DWARF state machine starts at
+/// `(address=0, line=1, file=1, is_stmt=true)`; the emit opens with
+/// a `DW_LNE_set_address` to anchor at `code_vmaddr` and ends with
 /// `DW_LNE_end_sequence` row past the last byte.
 fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_vmaddr: u64) {
     // Anchor address at the start of code.
@@ -2209,52 +2486,128 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     let mut state_line: i64 = 1;
     let mut state_file: u64 = 1;
 
-    let mut bc_pc = 0usize;
-    while bc_pc < program.text.len() {
-        let raw = program.text[bc_pc];
-        let Some(op) = Op::from_i64(raw) else {
-            break;
-        };
-        let native = build
-            .bytecode_to_native
-            .get(bc_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native == usize::MAX {
-            bc_pc += op.word_size();
-            continue;
+    // Each function's native start PC. The SSA emit's
+    // `record_inst_src` only records a row when an instruction
+    // carries a non-zero `inst_src`, so the prologue (which the
+    // walker doesn't stamp) emits no row -- the first row in a
+    // function lands at the first body instruction, not the
+    // function entry. lldb / gdb need a row at the entry PC to
+    // attribute a function-name breakpoint to source; without
+    // it, a breakpoint at low_pc has no covering line entry and
+    // no source is shown. Seed an extra row at each function's
+    // entry PC, reusing the line and file from the body's first
+    // recorded row.
+    let mut func_starts: Vec<usize> = build
+        .func_ent_pcs
+        .iter()
+        .filter_map(|&pc| build.pc_to_native.get(pc).copied())
+        .filter(|&n| n != usize::MAX)
+        .collect();
+    func_starts.sort_unstable();
+    func_starts.dedup();
+    let mut func_start_iter = func_starts.iter().copied().peekable();
+
+    // Track whether the most recent state (addr, line, file)
+    // has already been emitted as a row. After
+    // `DW_LNE_set_address`, the state machine sits at
+    // (code_vmaddr, line=1, file=1, ...) but no row exists yet;
+    // a `DW_LNS_COPY` is what materialises the row.
+    let mut row_emitted_at_state: bool = false;
+
+    let emit_row = |buf: &mut Vec<u8>,
+                    state_addr: &mut u64,
+                    state_line: &mut i64,
+                    state_file: &mut u64,
+                    row_emitted: &mut bool,
+                    target_addr: u64,
+                    line: i64,
+                    file: u64,
+                    mark_prologue_end: bool| {
+        if target_addr > *state_addr {
+            advance_pc(buf, target_addr - *state_addr);
+            *state_addr = target_addr;
+            *row_emitted = false;
         }
-        let line = program.source_lines.get(bc_pc).copied().unwrap_or(0) as i64;
-        if line == 0 {
-            bc_pc += op.word_size();
-            continue;
-        }
-        // Resolve the lexer's per-PC file index through the
-        // remap above. Programs that compiled before the
-        // file-table plumbing landed (or that never crossed an
-        // `#include` / `#line`) leave `source_file_indices`
-        // empty, in which case every PC stays on file 1.
-        let lex_idx = program.source_file_indices.get(bc_pc).copied().unwrap_or(0) as usize;
-        let file = dwarf_file_for_lex_idx.get(lex_idx).copied().unwrap_or(1);
-        let target_addr = code_vmaddr + native as u64;
-        if target_addr > state_addr {
-            advance_pc(buf, target_addr - state_addr);
-            state_addr = target_addr;
-        }
-        if file != state_file {
+        if file != *state_file {
             buf.push(DW_LNS_SET_FILE);
             write_uleb128(buf, file);
-            state_file = file;
+            *state_file = file;
+            *row_emitted = false;
         }
-        if line != state_line {
-            advance_line(buf, line - state_line);
-            state_line = line;
+        if line != *state_line {
+            advance_line(buf, line - *state_line);
+            *state_line = line;
+            *row_emitted = false;
         }
-        // DW_LNS_copy emits the row. (We can't use special opcodes
-        // here because the address+line deltas aren't bounded by
-        // line_base / line_range in general.)
-        buf.push(DW_LNS_COPY);
-        bc_pc += op.word_size();
+        if !*row_emitted {
+            if mark_prologue_end {
+                buf.push(DW_LNS_SET_PROLOGUE_END);
+            }
+            buf.push(DW_LNS_COPY);
+            *row_emitted = true;
+        }
+    };
+
+    // One row per source-position change the SSA emit recorded
+    // against the emitted native byte offset. Provides per-
+    // statement granularity inside each function. Native code
+    // emission flows through the SSA pipeline exclusively, so
+    // every program with executable bytes populates
+    // `ssa_line_rows`; an empty vector means no code was emitted
+    // and the closing `DW_LNE_end_sequence` below caps a zero-
+    // length sequence.
+    // True once a function-entry synthetic row has fired but the
+    // matching post-prologue source row hasn't landed yet. The next
+    // emit_row that materialises a COPY stamps DW_LNS_set_prologue_end
+    // first so debuggers land "break main" past the prologue per
+    // DWARF 4 section 6.2.5.3.
+    let mut prologue_end_pending = false;
+
+    for &(native, line, file_idx) in &build.ssa_line_rows {
+        if line == 0 {
+            continue;
+        }
+        let file = dwarf_file_for_lex_idx
+            .get(file_idx as usize)
+            .copied()
+            .unwrap_or(1);
+        let target_addr = code_vmaddr + native as u64;
+        // Drain every function start at-or-before this row.
+        // The drained start gets a synthetic row whose (line,
+        // file) match this row's, so the function-entry PC
+        // through the body's first statement reports the same
+        // source position.
+        while let Some(&fn_start) = func_start_iter.peek() {
+            let entry_addr = code_vmaddr + fn_start as u64;
+            if entry_addr > target_addr {
+                break;
+            }
+            emit_row(
+                buf,
+                &mut state_addr,
+                &mut state_line,
+                &mut state_file,
+                &mut row_emitted_at_state,
+                entry_addr,
+                line as i64,
+                file,
+                false,
+            );
+            func_start_iter.next();
+            prologue_end_pending = true;
+        }
+        emit_row(
+            buf,
+            &mut state_addr,
+            &mut state_line,
+            &mut state_file,
+            &mut row_emitted_at_state,
+            target_addr,
+            line as i64,
+            file,
+            prologue_end_pending,
+        );
+        prologue_end_pending = false;
     }
 
     // Close the sequence with end_sequence at one past the last
@@ -2297,7 +2650,7 @@ fn advance_line(buf: &mut Vec<u8>, delta: i64) {
 
 struct StrTable {
     bytes: Vec<u8>,
-    // Phase 1 didn't dedupe string contents; the table is small
+    // The table does not dedupe string contents; it is small
     // (one entry per user function plus the CU name and producer)
     // and the writer reads it sequentially. The base-type names
     // come from a small `&'static str` set, so dedup
@@ -2359,6 +2712,30 @@ fn write_sleb128(buf: &mut Vec<u8>, mut value: i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Byte-stability lock for the amalg `.debug_abbrev` table.
+    /// `build_debug_info` references each abbreviation by code and
+    /// supplies its attribute values in the order declared here, so
+    /// an accidental edit to a code, tag, or attribute silently
+    /// desyncs the two emitters. Any intentional change must update
+    /// this golden after re-checking the info emitter.
+    #[test]
+    fn build_debug_abbrev_is_byte_stable() {
+        let hex: alloc::string::String = build_debug_abbrev()
+            .iter()
+            .map(|b| alloc::format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            hex,
+            "011101250e130b030e1b0e1101120710170000022e01030e110112073f192719360b\
+             40180000032400030e0b0b3e0b0000043400030e491302183a0f3b0f000005050003\
+             0e491302183a0f3b0f0000060f000b0b49130000071301030e0b06000008170103\
+             0e0b060000090d00030e4913380600000a0d00030e491338060b0b0c0b0d0b00000b\
+             2e01030e110112073f19491300000c0500030e491300000d180000000e0500030e49\
+             13021800000f0101491300001021002f0f000011040103080b0b000012280003081c\
+             0d000000"
+        );
+    }
 
     #[test]
     fn uleb128_round_trips_small_and_large() {
@@ -2481,7 +2858,7 @@ mod tests {
     #[test]
     fn classify_struct_value_routes_to_struct_entry() {
         // Plain struct id 0 (no pointer level) lands on the
-        // dedicated `Struct` variant; phase 1C emits a real
+        // dedicated `Struct` variant, which emits a real
         // DW_TAG_structure_type.
         let struct_ty = types::STRUCT_BASE;
         assert_eq!(
@@ -2730,5 +3107,58 @@ mod tests {
                 return (value, i);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod info_golden {
+    use super::*;
+
+    /// Byte-stability lock for the amalg `.debug_info` CU. Drives
+    /// build_debug_info with a single leaf subprogram and pins the
+    /// emitted bytes: the DIE-leading abbreviation codes and the
+    /// per-attribute value order are hand-matched to the abbrev
+    /// table, so this catches an info-side change that drifts from
+    /// build_debug_abbrev. Any intentional change updates this golden
+    /// after re-checking both emitters.
+    #[test]
+    fn build_debug_info_leaf_subprogram_is_byte_stable() {
+        let mut strs = StrTable::new();
+        let producer_off = strs.intern("badc test");
+        let comp_dir_off = strs.intern("");
+        let cu_name_off = strs.intern("t.c");
+        let name_off = strs.intern("main");
+        let subs = alloc::vec![Subprog {
+            name_off,
+            low_pc: 0x1000,
+            high_pc: 0x1010,
+            prologue_size: 4,
+            variables: alloc::vec![],
+        }];
+        let plt_subs: alloc::vec::Vec<PltSub> = alloc::vec![];
+        let structs: alloc::vec::Vec<StructDef> = alloc::vec![];
+        let enums: alloc::vec::Vec<crate::c5::compiler::EnumDef> = alloc::vec![];
+        let catalog = TypeCatalog::collect(&subs, &plt_subs, &mut strs, Target::LinuxX64, &structs);
+        let info = build_debug_info(
+            cu_name_off,
+            comp_dir_off,
+            producer_off,
+            0,
+            0x1000,
+            0x10,
+            &catalog,
+            &subs,
+            &plt_subs,
+            Target::LinuxX64,
+            &structs,
+            &enums,
+        );
+        let hex: alloc::string::String = info.iter().map(|b| alloc::format!("{b:02x}")).collect();
+        assert_eq!(
+            hex,
+            "440000000400000000000801010000000c0c0000000b0000000010000000000000\
+             10000000000000000000000002100000000010000000000000100000000000000001\
+             028d000000"
+        );
     }
 }

@@ -34,14 +34,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
+use super::super::ir::LoadKind;
 use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
-    is_struct_ty, is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
-    usual_arith_common_ty,
+    is_struct_ty, is_unsigned_ty, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -78,15 +77,22 @@ impl Cmp {
         }
     }
 
-    /// Return the (signed, unsigned, FP, name) tuple of bytecode
-    /// ops + diagnostic spelling for this comparison. Same shape
-    /// the per-arm code emitted before the collapse.
-    fn ops(self) -> (Op, Op, Op, &'static str) {
+    /// Return the (signed, unsigned, FP, name) tuple of `BinOp`
+    /// tags + diagnostic spelling for this comparison.
+    fn ops(
+        self,
+    ) -> (
+        super::super::ir::BinOp,
+        super::super::ir::BinOp,
+        super::super::ir::BinOp,
+        &'static str,
+    ) {
+        use super::super::ir::BinOp as B;
         match self {
-            Cmp::Lt => (Op::Lt, Op::Ult, Op::Flt, "<"),
-            Cmp::Gt => (Op::Gt, Op::Ugt, Op::Fgt, ">"),
-            Cmp::Le => (Op::Le, Op::Ule, Op::Fle, "<="),
-            Cmp::Ge => (Op::Ge, Op::Uge, Op::Fge, ">="),
+            Cmp::Lt => (B::Lt, B::Ult, B::Flt, "<"),
+            Cmp::Gt => (B::Gt, B::Ugt, B::Fgt, ">"),
+            Cmp::Le => (B::Le, B::Ule, B::Fle, "<="),
+            Cmp::Ge => (B::Ge, B::Uge, B::Fge, ">="),
         }
     }
 }
@@ -104,9 +110,16 @@ impl Compiler {
     /// the magnitude bump further as needed.
     fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
         let suffix_long = self.lex.int_suffix_long;
-        let is_unsigned = self.lex.int_suffix_unsigned;
-        let int_size = self.size_of_type(Ty::Int as i64);
-        let long_size = self.size_of_type(Ty::Long as i64);
+        let mut is_unsigned = self.lex.int_suffix_unsigned;
+        // C99 6.4.4.1: a hexadecimal, octal, or binary constant may take
+        // an unsigned type at a rank when no signed type at that rank
+        // fits; a decimal constant with no `u` suffix never does.
+        let allow_unsigned_fallback = !self.lex.int_is_decimal;
+        let sizes = [
+            self.size_of_type(Ty::Int as i64),
+            self.size_of_type(Ty::Long as i64),
+            self.size_of_type(Ty::LongLong as i64),
+        ];
         let mag = (ival as i128).unsigned_abs();
         let fits = |size_bytes: usize, signed: bool| -> bool {
             let bits = (size_bytes as u32) * 8;
@@ -124,12 +137,25 @@ impl Compiler {
                 mag <= ((1u128 << bits) - 1u128)
             }
         };
-        let mut rank: u8 = suffix_long;
-        if rank < 1 && (!fits(int_size, !is_unsigned)) {
-            rank = 1;
-        }
-        if rank < 2 && (!fits(long_size, !is_unsigned)) {
-            rank = 2;
+        // Walk the rank list (int, long, long long) starting at the
+        // floor the `l`/`ll` suffix names. At each rank try the signed
+        // type, then the unsigned type when a `u` suffix or the
+        // non-decimal base allows it, before widening.
+        let mut rank: usize = (suffix_long as usize).min(2);
+        loop {
+            let size = sizes[rank];
+            if !is_unsigned && fits(size, true) {
+                break;
+            }
+            if (is_unsigned || allow_unsigned_fallback) && fits(size, false) {
+                is_unsigned = true;
+                break;
+            }
+            if rank >= 2 {
+                is_unsigned = is_unsigned || allow_unsigned_fallback;
+                break;
+            }
+            rank += 1;
         }
         let mut ty = match rank {
             2 => Ty::LongLong as i64,
@@ -148,20 +174,23 @@ impl Compiler {
         if self.lex.tk == 0 {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
-            self.emit_imm(self.lex.ival);
-            self.ty = self.literal_auto_promoted_type(self.lex.ival);
+            let val = self.lex.ival;
+            self.emit_imm(val);
+            self.ty = self.literal_auto_promoted_type(val);
+            self.ast_emit_int_lit(val, self.ty);
             self.next()?;
         } else if self.lex.tk == Token::FloatNum {
-            // The lexer parsed `1.5` etc. into f64 and stored
-            // `f64::to_bits()` cast to i64 in `ival`. The byte
-            // pattern flows through Op::Imm unmodified -- a future
-            // float codegen reads it back with `f64::from_bits`.
-            // Until then, the `is_floating_scalar` self-ty marks
-            // the value so it can't accidentally feed into integer
-            // arithmetic (the binary-op handlers gate on this).
+            // C99 6.4.4.2: floating constant. The lexer parsed
+            // `1.5` etc. into f64 and stored `f64::to_bits()` cast
+            // to i64 in `ival`. The byte pattern flows through
+            // the integer-literal emit unmodified; the codegen
+            // reads it back via `f64::from_bits` when the
+            // surrounding `self.ty` marks the value as floating.
+            let bits = self.lex.ival as u64;
             self.emit_imm(self.lex.ival);
-            self.next()?;
             self.ty = Ty::Double as i64;
+            self.ast_emit_float_lit(bits, self.ty);
+            self.next()?;
         } else if self.lex.tk == '"' {
             // C99 6.4.5 paragraph 6: a string literal has type
             // `char[N+1]` where the +1 is the trailing NUL. The
@@ -182,6 +211,11 @@ impl Compiler {
             self.data.push(0);
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
+            // Dual-emit: capture the decayed `char *` rvalue so
+            // the wrapping expression (typically a call argument,
+            // initializer, or assignment) finds the address on
+            // `ast_acc`.
+            self.ast_emit_str_lit(start_offset, self.ty);
         } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
             // `sizeof <unary-expr>`. The shared helper handles
@@ -192,6 +226,12 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
+            // Dual-emit: sizeof is a compile-time constant per
+            // 6.5.3.4p2. Seed the accumulator with the matching
+            // IntLit so a wrapping expression (call argument,
+            // binary op, assignment) finds the value on
+            // `ast_acc`.
+            self.ast_emit_int_lit(total_bytes, self.ty);
         } else if self.lex.tk == Token::Id
             && !self.current_function_name.is_empty()
             && matches!(
@@ -212,6 +252,11 @@ impl Compiler {
             self.emit_data_imm(offset);
             self.next()?;
             self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+            // Dual-emit the decayed `char *` value so the walker
+            // sees the address on `ast_acc` (identical shape to a
+            // plain string literal -- the same `Expr::StrLit`
+            // carrier).
+            self.ast_emit_str_lit(offset, self.ty);
         } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;
@@ -221,7 +266,7 @@ impl Compiler {
                 // `#pragma intrinsic("name")`. Each intrinsic has
                 // its own fixed arity (alloca / __c5_aarch64_setjmp
                 // take one; __c5_aarch64_longjmp takes two) and the
-                // call site lowering produces `Op::Intrinsic <id>`
+                // call site lowering produces an `Inst::Intrinsic`
                 // with the operand layout each lowering expects.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
@@ -232,14 +277,26 @@ impl Compiler {
                     let longjmp_id = crate::c5::op::Intrinsic::LongjmpAArch64 as i64;
                     let setjmp_id = crate::c5::op::Intrinsic::SetjmpAArch64 as i64;
                     let alloca_id = crate::c5::op::Intrinsic::Alloca as i64;
-                    if intrinsic_id == longjmp_id {
+                    let va_start_id = crate::c5::op::Intrinsic::VaStart as i64;
+                    let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
+                    let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
+                    let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
+                    let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
+                        alloc::vec::Vec::new();
+                    if intrinsic_id == longjmp_id
+                        || intrinsic_id == va_start_id
+                        || intrinsic_id == va_copy_id
+                    {
                         // Two-arg shape: env then val. The first
                         // gets pushed; the second lands in the
                         // accumulator so the AArch64 lowering can
                         // pop env and read val without extra
                         // shuffling.
                         self.expr(Token::Assign as i64)?;
-                        self.emit_op(Op::Psh);
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                        self.ast_psh();
                         if self.lex.tk != ',' {
                             return Err(
                                 self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)"))
@@ -247,18 +304,24 @@ impl Compiler {
                         }
                         self.next()?;
                         self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
                         if is_floating_scalar(self.ty) {
-                            self.emit_op(Op::Fcvtfi);
+                            self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
                     } else {
                         self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
                         // Coerce a float argument to int when the
                         // intrinsic expects an integer size (alloca
                         // and SetjmpAArch64 are both pointer-shape
                         // inputs).
                         if is_floating_scalar(self.ty) {
-                            self.emit_op(Op::Fcvtfi);
+                            self.ast_fpcast();
                             self.ty = Ty::Int as i64;
                         }
                     }
@@ -268,8 +331,7 @@ impl Compiler {
                         )));
                     }
                     self.next()?;
-                    self.emit_op(Op::Intrinsic);
-                    self.emit_val(intrinsic_id);
+                    self.mark_emit_other();
                     // Flag the function for the alloca-arena
                     // patch-up at function-end. We don't reserve
                     // the alloca-top slot here -- the function
@@ -285,11 +347,42 @@ impl Compiler {
                     // has no real return (control never reaches
                     // the next statement) but the parser still
                     // typechecks downstream uses as `int`.
-                    if intrinsic_id == setjmp_id || intrinsic_id == longjmp_id {
+                    // __builtin_va_start / __builtin_va_end /
+                    // __builtin_va_copy don't return a useful
+                    // value, but the parser threads them through
+                    // as int so a statement-context call
+                    // typechecks.
+                    if intrinsic_id == setjmp_id
+                        || intrinsic_id == longjmp_id
+                        || intrinsic_id == va_start_id
+                        || intrinsic_id == va_end_id
+                        || intrinsic_id == va_copy_id
+                    {
                         self.ty = Ty::Int as i64;
+                    } else if intrinsic_id == va_arg_id {
+                        // __builtin_va_arg returns `void *`
+                        // pointing at the just-vacated 8-byte
+                        // slot. The <stdarg.h> macro dereferences
+                        // as the requested type.
+                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }
+                    // Dual-emit `Expr::Intrinsic { kind, args, ty }`.
+                    // The walker dispatches by `kind` to the matching
+                    // `Inst::Intrinsic` op. Args carry through in
+                    // source order.
+                    let intr_ty = self.ty;
+                    let pos = self.ast_src_pos();
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Intrinsic {
+                            kind: intrinsic_id,
+                            args: ast_intrinsic_args,
+                            ty: intr_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,
@@ -332,6 +425,23 @@ impl Compiler {
                         )));
                     }
                     let mut nargs = 0;
+                    // Snapshot the AST parser-side vstack depth so
+                    // the call's per-arg emit sequence (per-arg
+                    // address-of-temp setup, the right-to-left
+                    // re-push, the optional struct-return
+                    // out-pointer push) can leak transient pushes
+                    // without polluting the outer expression's
+                    // lvalue stack. The matching pops on the AST
+                    // side route through `ast_apply_assign` for
+                    // the per-arg `*temp = arg` shape (the only
+                    // store in this region), which consumes one
+                    // vstack slot per store. The right-to-left
+                    // re-push and the out-pointer push are pure
+                    // leaks -- truncate the vstack back to this
+                    // depth right before `ast_emit_call` so the
+                    // outer scalar assign's `ast_apply_assign`
+                    // sees the lvalue it pushed.
+                    let saved_ast_vstack_depth = self.ast_vstack.len();
                     // For struct returns, allocate a result temp now
                     // so its address can be pushed before the
                     // declared-arg pushes.
@@ -355,12 +465,13 @@ impl Compiler {
                     // reverse once they're all evaluated.
                     let saved_loc_offs = self.loc_offs;
                     let mut temp_offsets: Vec<i64> = Vec::new();
-                    // Per-arg FP flag, captured at evaluation time. Used
-                    // below when the call is `Token::Sys` to build a bit
-                    // mask the codegen reads for variadic FP packing
-                    // (`printf("%f", x)` etc.). Order matches
-                    // `temp_offsets`: index 0 = first declared arg.
-                    let mut arg_is_fp: Vec<bool> = Vec::new();
+                    // Per-arg AST ExprId, captured at evaluation time
+                    // (post-conversion, pre-store). Empty slot when
+                    // the dual-emit hasn't wired the arg expression
+                    // yet; the call-site Call node accepts only the
+                    // wired ones today and skips Call build if any
+                    // arg is unwired.
+                    let mut ast_arg_ids: Vec<Option<super::super::ast::ExprId>> = Vec::new();
                     while self.lex.tk != ')' {
                         let arg_line = self.lex.line;
                         // Allocate a temp slot for this arg.
@@ -375,7 +486,7 @@ impl Compiler {
                         // assignment path already supports: address
                         // first, push, then RHS, then Si.
                         self.emit_lea(temp_off);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         self.expr(Token::Assign as i64)?;
 
                         // Type-check before the Si overwrites self.ty.
@@ -402,13 +513,13 @@ impl Compiler {
                             // arguments undergo the same assignment
                             // conversion as the `= expr` rule. If the
                             // prototype expects `double` and the
-                            // actual is an integer, lift via
-                            // `Op::Fcvtif` so the IEEE-754 bit pattern
-                            // reaches the FP-arg register the codegen
-                            // routes through (xmm_N / d_N). Without
-                            // this, the integer bit pattern lands in
-                            // the GPR-arg register and libm reads
-                            // garbage out of the FP register.
+                            // actual is an integer, lift through
+                            // the int-to-float cast so the IEEE-754
+                            // bit pattern reaches the FP-arg register
+                            // the codegen routes through (xmm_N / d_N).
+                            // Without this, the integer bit pattern
+                            // lands in the GPR-arg register and libm
+                            // reads garbage out of the FP register.
                             self.convert_assign_rhs(want);
                         } else if !expected_params.is_empty() && !is_variadic {
                             self.warn_at(
@@ -422,7 +533,6 @@ impl Compiler {
                             );
                         }
 
-                        arg_is_fp.push(is_floating_scalar(self.ty));
                         // Refuse passing a struct by value to a
                         // Token::Sys callee. The c5-internal "push
                         // the address" convention works for c5-to-c5
@@ -432,8 +542,9 @@ impl Compiler {
                         // registers (SysV/AAPCS64: 1-2 GPRs for
                         // structs <= 16 bytes; Win64: a single GPR
                         // for <= 8 bytes, hidden pointer otherwise).
-                        // Implementing those splits is future work;
-                        // for now flag the mismatch loudly.
+                        // Flag the mismatch loudly.
+                        // TODO: split a small struct argument into the
+                        // ABI's argument registers instead of rejecting.
                         if self.symbols[id_idx].class == Token::Sys as i64
                             && is_struct_ty(self.ty)
                             && struct_ptr_depth(self.ty) == 0
@@ -450,7 +561,13 @@ impl Compiler {
                                 ),
                             ));
                         }
-                        self.emit_op(Op::Si);
+                        // Snapshot the arg's AST ExprId before the
+                        // Si consumes both vstack and acc. The Call
+                        // node built below uses these in source
+                        // order regardless of the c5 right-to-left
+                        // push.
+                        ast_arg_ids.push(self.ast_acc);
+                        self.ast_assign();
                         nargs += 1;
                         if self.lex.tk == ',' {
                             self.next()?;
@@ -460,8 +577,8 @@ impl Compiler {
                     // declared param ends up on top of the c5 stack.
                     for &temp_off in temp_offsets.iter().rev() {
                         self.emit_lea(temp_off);
-                        self.emit_op(Op::Li);
-                        self.emit_op(Op::Psh);
+                        self.mark_emit_other();
+                        self.ast_psh();
                     }
                     // For struct-returning callees, push the hidden
                     // out-pointer (address of the result temp) so it
@@ -472,7 +589,7 @@ impl Compiler {
                     // can Mcpy from it.
                     if callee_returns_struct {
                         self.emit_lea(result_temp_off);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                     }
                     // Release the staging slots; they'll be reused by
                     // the next call in this function. The result-temp
@@ -504,57 +621,40 @@ impl Compiler {
                     }
                     self.next()?;
                     if self.symbols[id_idx].class == Token::Sys as i64 {
-                        // External library call. The symbol's `val` is
-                        // the binding's flat index across all
-                        // `#pragma binding(...)` directives the
-                        // preprocessor parsed; the codegen / VM use it
-                        // as the GOT slot lookup key (native) or the
-                        // dispatch-table key (VM).
-                        let jsrext_pc = self.text.len();
-                        self.emit_op(Op::JsrExt);
-                        self.emit_val(self.symbols[id_idx].val);
-                        // Capture per-arg FP-ness for the codegen. Only
-                        // needed when at least one arg is FP; an
-                        // all-integer call rides the existing path.
-                        let mut mask: u32 = 0;
-                        for (i, &is_fp) in arg_is_fp.iter().enumerate() {
-                            if is_fp && i < 32 {
-                                mask |= 1u32 << i;
-                            }
-                        }
-                        if mask != 0 {
-                            self.call_fp_arg_masks.push((jsrext_pc, mask));
-                        }
+                        // External library call. The walker emits
+                        // Inst::CallExt keyed on the binding's flat
+                        // index (taken from Symbol::val); the
+                        // codegen lowers it to the per-target GOT /
+                        // import-table reference.
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = false;
+                        self.ast_acc = None;
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
-                        self.emit_op(Op::Jsr);
-                        // Record a fixup so the operand gets re-resolved
-                        // after the callee's body lands. `val == 0`
-                        // means the body hasn't been parsed yet (the
-                        // symbol is from a forward declaration); the
-                        // value we emit now is a placeholder. After
-                        // every function body is parsed we walk this
-                        // list and rewrite each operand to the
-                        // post-body `ent_pc` of its callee. Calls that
-                        // already see a non-zero `val` (the callee's
-                        // body lands before the call, the common case)
-                        // still record an entry but the post-body walk
-                        // re-emits the same value -- a no-op rather
-                        // than a bug.
-                        let operand_pc = self.text.len();
-                        self.fn_call_fixups.push((operand_pc, id_idx));
-                        self.emit_val(self.symbols[id_idx].val);
+                        // Direct call to a c5 user function. The
+                        // walker resolves Inst::Call::target_pc
+                        // through live_fun_val and the linker's
+                        // extern_call_refs channel.
+                        self.symbols[id_idx].was_referenced = true;
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = false;
+                        self.ast_acc = None;
                     } else if self.symbols[id_idx].class == Token::Loc as i64
                         || self.symbols[id_idx].class == Token::Glo as i64
                     {
+                        // Indirect call through a function pointer:
+                        // a Loc / Glo whose value is the target's
+                        // ent_pc. Mark the symbol as read for the
+                        // dead-store diagnostic; the walker emits
+                        // Inst::CallIndirect from the AST.
                         if self.symbols[id_idx].class == Token::Loc as i64 {
-                            self.emit_lea(self.symbols[id_idx].val);
+                            self.symbols[id_idx].was_referenced = true;
+                            self.symbols[id_idx].was_read = true;
                         } else {
-                            self.emit_data_imm(self.symbols[id_idx].val);
-                            let operand_pc = *self.data_imm_positions.last().unwrap();
-                            self.glo_imm_refs.push((operand_pc, id_idx));
+                            self.glo_imm_refs.push(id_idx);
                         }
-                        self.emit_op(Op::Li);
-                        self.emit_op(Op::Jsri);
+                        self.flush_pending_stores();
+                        self.pending.last_emit_was_indirect_call = true;
+                        self.ast_acc = None;
                     } else {
                         let name = self.symbols[id_idx].name.clone();
                         let suggestion = match super::super::headers::header_declaring(&name) {
@@ -565,14 +665,36 @@ impl Compiler {
                             self.compile_err(format!("unknown function `{name}`{suggestion}"))
                         );
                     }
-                    let total_pushed = if callee_returns_struct {
-                        nargs + 1
+                    // Drop the AST parser-side vstack pushes that
+                    // the call's emit sequence leaked (right-to-
+                    // left re-push, optional struct-return out-
+                    // pointer push) before the outer expression's
+                    // `ast_apply_assign` runs. See the matching
+                    // `saved_ast_vstack_depth` snapshot above.
+                    self.ast_vstack.truncate(saved_ast_vstack_depth);
+                    // Dual-emit the call's AST: build a callee
+                    // Ident node from the call-site symbol idx and
+                    // pair with the per-arg ExprIds captured above.
+                    // Struct-returning calls skip the AST build for
+                    // now; the hidden out-pointer doesn't fit the
+                    // canonical `Call { callee, args, ty }` shape.
+                    if !callee_returns_struct {
+                        let callee_ty = self.symbols[id_idx].type_;
+                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+                        let return_ty = callee_ret_ty;
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
                     } else {
-                        nargs
-                    };
-                    if total_pushed > 0 {
-                        self.emit_op(Op::Adj);
-                        self.emit_val(total_pushed);
+                        // Struct-returning callee: dual-emit a
+                        // `Expr::Call { ty: <struct> }` so the
+                        // walker allocates a synthetic local for
+                        // the hidden out-pointer, prepends its
+                        // address to the arg list, and returns
+                        // the address as the call's value (the
+                        // c5 ABI's address-as-value rule).
+                        let callee_ty = self.symbols[id_idx].type_;
+                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+                        let return_ty = callee_ret_ty;
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
                     }
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,
@@ -601,65 +723,83 @@ impl Compiler {
                     };
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
-                self.emit_imm(self.symbols[id_idx].val);
+                let val = self.symbols[id_idx].val;
+                self.emit_imm(val);
                 self.ty = Ty::Int as i64;
+                // Dual-emit the resolved constant so a wrapping
+                // expression (assignment, call argument, binop)
+                // captures the value on `ast_acc`. Enum
+                // constants and `#define`-via-const-decl idioms
+                // both go through this path; the walker's
+                // `IntLit` arm emits `Inst::Imm(val)`.
+                self.ast_emit_int_lit(val, self.ty);
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                self.symbols[id_idx].was_referenced = true;
                 // Bare function reference (e.g. `fp = add;`). The value
                 // becomes a user-visible pointer, so it gets the CODE_BASE
                 // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
-                self.emit_op(Op::Imm);
-                let operand_pc = self.text.len();
-                self.fn_call_fixups.push((operand_pc, id_idx));
-                // Record the operand_pc so the native codegen knows
-                // this Imm carries (CODE_BASE + bc_pc) -- otherwise
-                // a user constant that happens to land in the
-                // [CODE_BASE, CODE_BASE + text.len()) range would be
-                // misclassified as a function-pointer literal.
-                self.code_imm_positions.push(operand_pc);
-                self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
+                // The integer-literal placeholder runs only to keep the
+                // trailing-emit peek flags honest; the walker's
+                // `imm_code_extern` / `imm_code` emit resolves the
+                // function-pointer literal on the SSA side.
+                self.emit_imm(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
                 // keeps the type-check loose-but-not-wrong.
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Dual-emit: an Ident node so the wrapping shape
+                // (call-arg, assignment, cast) sees the function
+                // reference on `ast_acc`. The walker's
+                // `load_ident_rvalue` for `Token::Fun` emits the
+                // matching `imm_code(val)`.
+                self.ast_emit_ident(id_idx as u32, self.ty);
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare libc reference -- `fp = readlink;`. We can't
-                // fold in the real GOT/IAT address at compile time,
-                // so we point the value at a per-Sys trampoline (a
+                // Bare libc reference -- `fp = readlink;`. There
+                // is no compile-time GOT/IAT address to fold in,
+                // so the value points at a per-Sys trampoline (a
                 // tiny synthetic c5 function that re-dispatches
-                // through `Op::JsrExt`). `apply_fn_call_fixups`
-                // then patches this `Imm` operand to
-                // `CODE_BASE + trampoline_pc` once
-                // [`Self::emit_sys_trampolines`] has placed the
-                // trampolines at the tail of `text`. The
-                // accompanying `code_imm_positions` entry tells the
-                // codegen this Imm carries a code pointer so it
-                // emits the right ADRP/ADD (or RIP-relative LEA)
-                // sequence.
+                // through `Inst::CallExt`). The walker emits
+                // `Inst::ImmCode` keyed on the trampoline's live
+                // `Symbol::val`, which
+                // [`Self::emit_sys_trampolines`] sets to the
+                // trampoline body's `ent_pc`. The codegen lowers
+                // `Inst::ImmCode` to the right ADRP/ADD
+                // (aarch64) or RIP-relative LEA (x86_64)
+                // pointing at the trampoline.
                 let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
-                self.emit_op(Op::Imm);
-                let operand_pc = self.text.len();
-                self.fn_call_fixups.push((operand_pc, tr_idx));
-                self.code_imm_positions.push(operand_pc);
-                self.emit_val(CODE_BASE as i64);
+                // Integer-literal placeholder; the walker reads
+                // the trampoline's live `Symbol::val` through
+                // `imm_code` post-`emit_sys_trampolines` and emits
+                // the matching `Inst::ImmCode`.
+                self.emit_imm(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Dual-emit: the trampoline symbol is Token::Fun
+                // class; the walker reads `Symbol::val` live at
+                // walk time (post-`emit_sys_trampolines`) to get
+                // the trampoline's ent_pc. Push an Ident keyed on
+                // the trampoline symbol so wrapping shapes
+                // (static-init, assign, call-arg) see the address
+                // producer on `ast_acc`.
+                self.ast_emit_ident(tr_idx as u32, self.ty);
             } else {
-                if self.symbols[id_idx].class == Token::Loc as i64 {
+                let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
+                if identifier_is_local {
+                    self.symbols[id_idx].was_referenced = true;
                     self.emit_lea(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64
                     && self.symbols[id_idx].is_thread_local
                 {
-                    // `_Thread_local` global: emit Op::TlsLea so
-                    // the codegen lowers via the per-target TLS
-                    // sequence (TPIDR_EL0 + offset on aarch64,
-                    // fs:0 + offset on x86_64). The operand is the
-                    // byte offset within the program's TLS block.
-                    self.emit_op(Op::TlsLea);
-                    self.emit_val(self.symbols[id_idx].val);
+                    // `_Thread_local` global: emit through the
+                    // TLS-address path so the codegen lowers via
+                    // the per-target TLS sequence (TPIDR_EL0 +
+                    // offset on aarch64, fs:0 + offset on x86_64).
+                    // The operand is the byte offset within the
+                    // program's TLS block.
+                    self.mark_emit_other();
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
-                    let operand_pc = *self.data_imm_positions.last().unwrap();
-                    self.glo_imm_refs.push((operand_pc, id_idx));
+                    self.glo_imm_refs.push(id_idx);
                 } else {
                     return Err(self
                         .compile_err(format!("undefined variable {}", self.symbols[id_idx].name)));
@@ -676,7 +816,34 @@ impl Compiler {
                 // because the `.field` operator needs the struct's
                 // value type to look up offsets.
                 if is_array_var {
+                    if identifier_is_local {
+                        // Array decay produces the array's
+                        // address rather than a scalar value, so
+                        // the load-op path below never runs. The
+                        // address can be indexed, passed to a
+                        // helper, or stored into a pointer; none
+                        // of those are tracked here. Mark
+                        // `address_escaped` so the unused-symbol
+                        // analysis at scope exit conservatively
+                        // treats the array as read.
+                        self.symbols[id_idx].address_escaped = true;
+                    }
                     self.ty += Ty::Ptr as i64;
+                    // C99 6.3.2.1p3 array-to-pointer decay: the
+                    // symbol's address IS the rvalue; no trailing
+                    // load runs. Dual-emit an `Expr::Ident` typed
+                    // at the decayed pointer level so a wrapping
+                    // index / call-arg / assignment site finds the
+                    // array on `ast_acc`. Walker's
+                    // `load_ident_rvalue` for Loc / Glo with this
+                    // shape still routes through `load_local` /
+                    // `imm_data` + load, which is wrong for arrays
+                    // -- the array AST tag is the address-as-value
+                    // rule; the walker's Index / call-arg arms
+                    // re-walk the same Ident and need just the
+                    // address. Push the node; the walker arm fix
+                    // lives separately.
+                    self.ast_emit_ident(id_idx as u32, self.ty);
                     // Stash the array's element count so a
                     // surrounding `sizeof(<arr>)` can compute
                     // `count * sizeof(elem)` instead of the
@@ -699,15 +866,58 @@ impl Compiler {
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     let dims = self.symbols[id_idx].array_dims.clone();
                     self.seed_multi_dim_strides(&dims, elem_size);
-                } else if !is_struct_value {
+                } else if is_struct_value {
+                    if identifier_is_local {
+                        // Struct value rvalue: the symbol's
+                        // address is the rvalue, no Li runs. Field
+                        // access through `.f` emits its own Li
+                        // against the field offset; treat the
+                        // struct itself as address-escaped so the
+                        // unused-symbol analysis stays conservative.
+                        self.symbols[id_idx].address_escaped = true;
+                    }
+                    // Dual-emit: like the array-decay branch, the
+                    // address is the rvalue (C99 6.7.2.1 struct
+                    // assignment semantics + c5's
+                    // address-as-value rule). Push the Ident so
+                    // wrapping shapes (`.field`, call-arg copy,
+                    // struct-to-struct assign) see the producer
+                    // on `ast_acc`. Walker treats Ident-of-struct
+                    // as an address-only producer (no load).
+                    self.ast_emit_ident(id_idx as u32, self.ty);
+                } else {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
-                    self.emit_op(load_op_for(self.ty, self.target));
+                    self.mark_emit_scalar_load();
+                    // The AST node is a single `Expr::Ident` keyed
+                    // on the symbol-table index. The address-of /
+                    // assignment paths re-interpret the same node
+                    // as an lvalue.
+                    self.ast_emit_ident(id_idx as u32, self.ty);
+                    if identifier_is_local {
+                        // Tentative: the load survives by default,
+                        // so the symbol's value is being read. The
+                        // assignment / address-of helpers revert
+                        // `was_read` and `pending_stores` to their
+                        // prior state (preserving genuine earlier
+                        // reads and prior dead-store entries) if
+                        // they retract the load before it
+                        // executes. `last_loaded_local`
+                        // lets those helpers know which symbol the
+                        // trailing load belonged to.
+                        self.pending.last_loaded_local = Some(id_idx);
+                        self.pending.last_loaded_local_prior_was_read =
+                            self.symbols[id_idx].was_read;
+                        self.pending.last_loaded_local_prior_pending =
+                            core::mem::take(&mut self.symbols[id_idx].pending_stores);
+                        self.symbols[id_idx].was_read = true;
+                    }
                     // Seed the fn-pointer chain depth from
-                    // the symbol's recorded indirection. emit_op
-                    // just cleared the field; re-set it now so the
-                    // surrounding unary-`*` chain can recognise
-                    // function-pointer decay. `fn_ptr_indirection`
+                    // the symbol's recorded indirection.
+                    // `mark_emit_scalar_load` just cleared the
+                    // field; re-set it now so the surrounding
+                    // unary-`*` chain can recognise function-
+                    // pointer decay. `fn_ptr_indirection`
                     // is "indirection above fn-ptr, plus 1"; depth
                     // after the load is one less (the load itself
                     // consumed one indirection level).
@@ -849,16 +1059,20 @@ impl Compiler {
                     return Err(self.compile_err("bad cast"));
                 }
                 self.expr(Token::Inc as i64)?;
+                let cast_child_ast = self.ast_acc;
                 // FP-vs-int casts emit conversion ops so the bit
                 // pattern in r13 is consistent with the new type.
                 // Same-class casts (int<->ptr, float<->double) are
                 // bit-pattern-compatible and need no conversion.
                 let target_is_fp = is_floating_scalar(t);
                 let source_is_fp = is_floating_scalar(self.ty);
-                if target_is_fp && !source_is_fp {
-                    self.emit_op(Op::Fcvtif);
-                } else if !target_is_fp && source_is_fp {
-                    self.emit_op(Op::Fcvtfi);
+                if target_is_fp ^ source_is_fp {
+                    // Mixed FP / int cast: route through ast_fpcast
+                    // regardless of direction. The shared call is
+                    // the AST shape for `int -> fp` *and* `fp ->
+                    // int`; the actual register conversion lives in
+                    // the per-arch emit.
+                    self.ast_fpcast();
                 } else if !target_is_fp
                     && !source_is_fp
                     && !is_pointer_ty(t)
@@ -887,7 +1101,7 @@ impl Compiler {
                             _ => -1,
                         };
                         if mask != -1 {
-                            self.emit_binop_with_imm(Op::And, mask);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
                         }
                     } else if target_size == 1 || target_size == 2 || target_size == 4 {
                         // Signed cast: shift-pair to mask + sign-extend
@@ -908,12 +1122,20 @@ impl Compiler {
                             || (target_size == source_size && source_is_unsigned);
                         if needs_extend {
                             let bits = 64i64 - (target_size as i64) * 8;
-                            self.emit_binop_with_imm(Op::Shl, bits);
-                            self.emit_binop_with_imm(Op::Shr, bits);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
+                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
                         }
                     }
                 }
                 self.ty = t;
+                // Overwrite the AST acc with a canonical Cast
+                // node so any intermediate Binary nodes the
+                // conversion-shaping sequence pushed don't surface
+                // as the cast's value. The dropped nodes have no
+                // consumers; the SSA walker won't visit them.
+                if let Some(child) = cast_child_ast {
+                    self.ast_emit_cast(child, t);
+                }
                 // Re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
                 // follows a `(fn_t*)expr` cast (e.g.
@@ -932,10 +1154,25 @@ impl Compiler {
                 // the last. Outside parens, comma stays a separator
                 // (function args, declarators) -- this branch only
                 // fires inside `(...)` because expr(Assign) doesn't
-                // consume `,`.
+                // consume `,`. Build `Expr::Comma { lhs, rhs }`
+                // chains on the AST so the walker visits the lhs
+                // before producing the rhs's value; without the
+                // chain the dropped lhs expressions take their
+                // side effects with them when the walker drives the
+                // codegen.
                 while self.lex.tk == ',' {
+                    let lhs_ast = self.ast_acc;
                     self.next()?;
                     self.expr(Token::Assign as i64)?;
+                    let rhs_ast = self.ast_acc;
+                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let ty = self.ty;
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
+                        self.ast_acc = Some(id);
+                    }
                 }
                 if self.lex.tk == ')' {
                     self.next()?;
@@ -992,9 +1229,8 @@ impl Compiler {
             if self.pending.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
                 // result is itself a fn-ptr rvalue, so any
-                // further `*`s also decay.
-                // Note: emit_op was not called, so the chain
-                // depth is preserved (no clear happened).
+                // further `*`s also decay. No scalar load fired,
+                // so the chain depth is preserved.
             } else if leftover_stride > 0 {
                 // Pointer-to-array operand: `*p` is the row
                 // deref, equivalent to `p[0]`. The row's address
@@ -1022,16 +1258,40 @@ impl Compiler {
                 // the address from `a` directly.
                 let result_is_struct_value =
                     is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                // Capture the operand snapshot before
+                // `mark_emit_scalar_load` clears the chain-depth
+                // state; the snapshot is the deref's child for
+                // the Unary node below.
+                let deref_child_ast = self.ast_acc;
                 if !result_is_struct_value {
                     let prior_depth = self.pending.fn_ptr_chain_depth;
-                    self.emit_op(load_op_for(self.ty, self.target));
-                    // emit_op cleared the chain depth. Restore it
-                    // one level deeper if the operand was tracked:
+                    self.mark_emit_scalar_load();
+                    // `mark_emit_scalar_load` cleared the chain
+                    // depth. Restore it one level deeper if the
+                    // operand was tracked:
                     // a real deref consumes one level of indirection
                     // toward the fn-ptr. (-1 stays -1.)
                     if prior_depth > 0 {
                         self.pending.fn_ptr_chain_depth = prior_depth - 1;
                     }
+                }
+                // Push `Expr::Unary { op: Deref, child, ty }`. For
+                // struct-value `*p` the result type is the struct
+                // and the address-as-value rule means no load
+                // happened; the same Unary node still lets a
+                // wrapping `.field` / `= rhs` lookup the AST shape.
+                if let Some(child) = deref_child_ast {
+                    let result_ty = self.ty;
+                    let pos = self.ast_src_pos();
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Unary {
+                            op: super::super::ast::UnOp::Deref,
+                            child,
+                            ty: result_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
                 }
                 // The operand may have been an array-decayed pointer
                 // (e.g. `*arr` where `arr` is `T arr[N]`), in which
@@ -1063,7 +1323,20 @@ impl Compiler {
             // already in `a` and we leave the IR alone. Only the
             // remaining scalar / pointer-rvalue cases pop the
             // trailing load.
-            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+            // Bump `self.ty` by one pointer level FIRST so the
+            // dual-emit helper called from
+            // `pop_trailing_scalar_load` captures the post-`&`
+            // type. Without the pre-bump the AST `Expr::Unary {
+            // op: AddrOf, ty }` carried the pre-`&` scalar /
+            // pointer type, and a wrapping `(T *)&x` cast saw
+            // the wrong source kind in the walker (e.g. `float`
+            // instead of `float *`, which made the cast walker
+            // pick `FpCast(FpToInt)` instead of the integer
+            // pass-through).
+            let pre_addr_ty = self.ty;
+            let _ = pre_addr_ty;
+            self.ty += Ty::Ptr as i64;
+            if is_struct_ty(pre_addr_ty) && struct_ptr_depth(pre_addr_ty) == 0 {
                 // Struct value -- the parser already left the
                 // address in `a` (no final-load Li). `&s` just
                 // raises the type by one pointer level; no IR
@@ -1071,7 +1344,7 @@ impl Compiler {
             } else if self.pop_trailing_scalar_load() {
                 // Scalar / pointer lvalue: dropped the trailing
                 // load so what's left is the address-producing op.
-            } else if is_pointer_ty(self.ty) {
+            } else if is_pointer_ty(pre_addr_ty) {
                 // Array-decay shape: `&arr` and `&pPager->dbFileVers`
                 // when `dbFileVers` is a `char[16]` field. The
                 // expression already yielded the array's address as
@@ -1081,7 +1354,9 @@ impl Compiler {
             } else {
                 return Err(self.compile_err("bad address-of"));
             }
-            self.ty += Ty::Ptr as i64;
+            // The pointer-level bump was applied above before
+            // `pop_trailing_scalar_load` so the dual-emit
+            // captured the post-`&` type.
             // `&` adds one pointer level toward the fn-ptr
             // for any chain we were tracking. -1 (untracked) stays
             // -1.
@@ -1091,12 +1366,12 @@ impl Compiler {
         } else if self.lex.tk == '!' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(Op::Eq, 0);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Eq, 0);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_binop_with_imm(Op::Xor, -1);
+            self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
             // C99 6.5.3.3: `~` applies integer promotions; the result
             // has the promoted operand's type. `unsigned char` /
             // `unsigned short` promote to signed `int`, so no mask.
@@ -1106,7 +1381,7 @@ impl Compiler {
             // 0xFFFFFFFF.... high pattern from `XOR -1`.
             let operand_ty = self.ty;
             if is_unsigned_ty(operand_ty) && self.size_of_type(operand_ty) == 4 {
-                self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                 self.ty = operand_ty;
             } else {
                 self.ty = Ty::Int as i64;
@@ -1118,7 +1393,7 @@ impl Compiler {
             // promotes to `int`, which the `+` doesn't undo).
             // Critically, FP operands must keep their FP type --
             // otherwise `+0.5` poses as an integer and a later
-            // `r + (+0.5)` lowers to `Op::Add` instead of `Op::Fadd`.
+            // `r + (+0.5)` lowers to `BinOp::Add` instead of `BinOp::Fadd`.
             self.next()?;
             self.expr(Token::Inc as i64)?;
             if !is_floating_scalar(self.ty) {
@@ -1126,13 +1401,14 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::SubOp {
             self.next()?;
-            // Constant-fold `-<int-literal>` into `Imm -N`. Float
-            // literals don't qualify -- we want Op::Fneg to apply
-            // to the parsed f64 bit pattern, not a sign flip on the
-            // integer-shaped operand.
+            // Constant-fold `-<int-literal>` into the negated
+            // integer literal. Float literals don't qualify --
+            // floating negation must apply to the parsed f64 bit
+            // pattern, not a sign flip on the integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;
-                self.emit_imm(val.wrapping_neg());
+                let negated = val.wrapping_neg();
+                self.emit_imm(negated);
                 // C99 6.5.3.3p3: unary `-` returns the integer-
                 // promoted operand type. The literal's type comes
                 // from C99 6.4.4.1p5 (first of int / long / long
@@ -1142,11 +1418,18 @@ impl Compiler {
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
                 self.ty = self.literal_auto_promoted_type(val);
+                // Dual-emit: the constant-folded `-N` collapses
+                // the unary-minus on the AST side too. Seed
+                // `ast_acc` with the matching IntLit so a
+                // wrapping expression (cast, call-arg, assignment)
+                // finds the folded value on the accumulator
+                // instead of whatever stale id the caller left.
+                self.ast_emit_int_lit(negated, self.ty);
                 self.next()?;
             } else {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
-                    self.emit_op(Op::Fneg);
+                    self.ast_fneg();
                     // self.ty already matches the operand's FP type
                 } else {
                     // C99 6.5.3.3 paragraph 3: the integer promotions
@@ -1157,7 +1440,7 @@ impl Compiler {
                     // and run any subsequent comparison or shift on
                     // the negated value in `int`.
                     let operand_ty = self.ty;
-                    self.emit_binop_with_imm(Op::Mul, -1);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
                     self.ty = integer_promote(operand_ty);
                     // C99 6.5.3.3p3: result has the promoted operand
                     // type and follows that type's overflow rules.
@@ -1167,7 +1450,7 @@ impl Compiler {
                     // half set and a downstream Or / Shr operates
                     // on the wider pattern.
                     if is_unsigned_ty(self.ty) && self.size_of_type(self.ty) == 4 {
-                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                     }
                 }
             }
@@ -1175,21 +1458,52 @@ impl Compiler {
             t = self.lex.tk.raw();
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            let reload = self
-                .rewrite_trailing_load_as_psh()
+            // Snapshot the lvalue's AST node before the emit
+            // sequence below: rewrite + reload + Psh + Imm +
+            // Add/Sub + store_op all run through `ast_apply_*`
+            // helpers that pop the vstack regardless of whether the
+            // build succeeded, so by the time `ast_emit_pre_inc`
+            // fires the lvalue would otherwise be gone.
+            let pre_inc_lvalue = self.ast_acc;
+            self.rewrite_trailing_load_as_psh()
                 .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
-            self.emit_op(reload);
+            // ++/-- reads the prior value and stores a new one.
+            // `take_last_loaded_local` restored was_read to its
+            // pre-load state; force it true because the reload
+            // below re-emits the load. The read clears any
+            // pending dead-store entries; the subsequent store
+            // pushes a fresh one.
+            let line = self.lex.line;
+            if let Some(idx) = self.take_last_loaded_local() {
+                self.symbols[idx].was_read = true;
+                self.symbols[idx].was_written = true;
+                self.record_local_read(idx);
+                self.record_local_store(idx, line);
+            }
+            self.mark_emit_other();
             if is_floating_scalar(self.ty) {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
-            self.emit_op(Op::Psh);
-            self.emit_imm(self.pointee_step(self.ty));
-            self.emit_op(if t == Token::Inc as i64 {
-                Op::Add
+            self.ast_psh();
+            let step = self.pointee_step(self.ty);
+            self.emit_imm(step);
+            self.ast_binop(if t == Token::Inc as i64 {
+                super::super::ir::BinOp::Add
             } else {
-                Op::Sub
+                super::super::ir::BinOp::Sub
             });
-            self.emit_op(store_op_for(self.ty, self.target));
+            self.ast_assign();
+            // Build the AST `Expr::PreInc` whose `by` is signed
+            // by the op direction so the walker routes to a
+            // single `binop_imm(Add, lvalue, by)` rather than
+            // matching the sign separately. The lvalue producer
+            // is already on the parser-side vstack from the
+            // trailing-load rewrite.
+            let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
+            let pre_inc_ty = self.ty;
+            if let Some(lvalue) = pre_inc_lvalue {
+                self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
+            }
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
@@ -1218,6 +1532,15 @@ impl Compiler {
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
             if self.lex.tk == '(' {
+                // Snapshot the callee AST + vstack depth before
+                // any of the call's per-arg emit sites perturb
+                // the state. The Expr::Call build at the end of
+                // this branch combines them into a single
+                // `Expr::Call { callee, args, ty }`.
+                let callee_ast = self.ast_acc;
+                let ast_vstack_snapshot = self.ast_vstack.len();
+                let mut indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>> =
+                    alloc::vec::Vec::new();
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
                 //   `s.fp(args)` -- function-pointer struct field
@@ -1234,110 +1557,134 @@ impl Compiler {
                 // `fp` is a function-pointer rvalue) is a no-op:
                 // the dereferenced "function lvalue" auto-decays
                 // back to a function pointer for any subsequent use.
-                // The unary `*` handler emits an `Op::Li` regardless
-                // -- it can't tell at parse time that the operand
-                // will be called rather than loaded -- so the chain
-                // ends one Li too deep, with `a` holding the first
-                // 8 bytes of the callee's code instead of its
-                // address. We undo that here: if `self.ty` says we
-                // ended on a non-pointer (= the last `*` removed
-                // the final pointer level) and the most recent emit
-                // was an `Op::Li`, pop the Li and restore one
-                // pointer level so the spill below sees the actual
-                // function pointer.
+                // The unary `*` handler emits a pointer-sized load
+                // regardless -- it can't tell at parse time that
+                // the operand will be called rather than loaded --
+                // so the chain ends one load too deep, with `a`
+                // holding the first 8 bytes of the callee's code
+                // instead of its address. Undo that here: if
+                // `self.ty` says we ended on a non-pointer (= the
+                // last `*` removed the final pointer level) and the
+                // most recent emit was a pointer-sized load, drop
+                // the trailing-load tag and restore one pointer
+                // level so the spill below sees the actual function
+                // pointer.
                 if !is_pointer_ty(self.ty) {
-                    let last = self.text.last().copied();
+                    let trailing = self.current_scalar_load_kind();
                     let is_load = matches!(
-                        last,
-                        Some(x) if x == Op::Li as i64
-                            || x == Op::Lc as i64
-                            || x == Op::Lw as i64
-                            || x == Op::Lwu as i64
+                        trailing,
+                        Some(LoadKind::I64)
+                            | Some(LoadKind::U8)
+                            | Some(LoadKind::I32)
+                            | Some(LoadKind::U32)
                     );
                     if is_load {
-                        self.text.pop();
-                        self.source_lines.pop();
-                        self.source_functions.pop();
-                        self.source_file_indices.pop();
+                        self.clear_recent_emits();
                         self.ty += Ty::Ptr as i64;
                     }
                 }
                 self.next()?;
-                // Spill the FP into a fresh local temp via Op::StLocI.
-                // The plain `Lea N; Si` shape can't express this
-                // without losing `a` (Lea clobbers `a`), so the c5
-                // dialect carries a dedicated store-local op for the
-                // case where `a` already holds the value.
+                // Spill the FP into a fresh local temp through the
+                // store-local path. The plain "address-of-local
+                // then store" shape can't express this without
+                // losing the accumulator, so the dialect carries a
+                // dedicated store-local op for the case where the
+                // accumulator already holds the value.
                 self.loc_offs += 1;
                 if self.loc_offs > self.max_loc_offs {
                     self.max_loc_offs = self.loc_offs;
                 }
                 let fp_temp = -self.loc_offs;
-                self.emit_op(Op::StLocI);
-                self.emit_val(fp_temp);
+                self.mark_emit_other();
                 // Each arg lands in its own temp slot first
                 // (left-to-right eval), then we push them
                 // right-to-left so the first arg ends up on top of
                 // the c5 stack.
-                let mut temp_offsets: Vec<i64> = Vec::new();
-                let mut nargs: i64 = 0;
                 while self.lex.tk != ')' {
                     self.loc_offs += 1;
                     if self.loc_offs > self.max_loc_offs {
                         self.max_loc_offs = self.loc_offs;
                     }
                     let temp_off = -self.loc_offs;
-                    temp_offsets.push(temp_off);
                     self.emit_lea(temp_off);
-                    self.emit_op(Op::Psh);
+                    self.ast_psh();
                     self.expr(Token::Assign as i64)?;
-                    self.emit_op(Op::Si);
-                    nargs += 1;
+                    indirect_arg_ids.push(self.ast_acc);
+                    self.ast_assign();
                     if self.lex.tk == ',' {
                         self.next()?;
                     }
                 }
                 self.next()?; // consume `)`
-                for &temp_off in temp_offsets.iter().rev() {
-                    self.emit_lea(temp_off);
-                    self.emit_op(Op::Li);
-                    self.emit_op(Op::Psh);
-                }
-                self.emit_lea(fp_temp);
-                self.emit_op(Op::Li);
-                self.emit_op(Op::Jsri);
-                if nargs > 0 {
-                    self.emit_op(Op::Adj);
-                    self.emit_val(nargs);
-                }
+                self.flush_pending_stores();
+                self.pending.last_emit_was_indirect_call = true;
+                self.ast_acc = None;
+                let _ = fp_temp;
                 // The dialect can't declare the return type of a
                 // function pointer, so default to `int`. The actual
                 // register value carries the full 8-byte return
                 // regardless of the tag.
                 self.ty = Ty::Int as i64;
+                // Drop the AST vstack pushes the call's emit
+                // sequence leaked, mirror of the direct-call
+                // truncation.
+                self.ast_vstack.truncate(ast_vstack_snapshot);
+                let return_ty = self.ty;
+                if let Some(callee_id) = callee_ast {
+                    let pos = self.ast_src_pos();
+                    let mut resolved: alloc::vec::Vec<super::super::ast::ExprId> =
+                        alloc::vec::Vec::with_capacity(indirect_arg_ids.len());
+                    let mut all_some = true;
+                    for a in indirect_arg_ids {
+                        match a {
+                            Some(id) => resolved.push(id),
+                            None => {
+                                all_some = false;
+                                break;
+                            }
+                        }
+                    }
+                    if all_some {
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Call {
+                                callee: callee_id,
+                                args: resolved,
+                                ty: return_ty,
+                            },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                    } else {
+                        self.ast_acc = None;
+                    }
+                } else {
+                    self.ast_acc = None;
+                }
             } else if self.lex.tk == Token::Assign {
                 self.next()?;
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
                 if lhs_is_struct_value {
                     // Struct-to-struct copy. The LHS already left
                     // its address in `a`; push it so the RHS can
-                    // produce the source address into `a`. Then
-                    // emit Op::Mcpy with the byte size; the runtime
-                    // (VM and both codegens) takes top-of-stack as
-                    // dst, accumulator as src, and copies `size`
-                    // bytes. Returns dst in `a` to mirror libc
-                    // memcpy.
+                    // produce the source address into `a`. The
+                    // walker emits `Inst::Mcpy` with the byte size;
+                    // the runtime (VM and both codegens) takes
+                    // top-of-stack as dst, accumulator as src, and
+                    // copies `size` bytes. Returns dst in `a` to
+                    // mirror libc memcpy.
                     //
-                    // This branch must run *before* the scalar Li/Lc
-                    // rewrite below: for `*pItem = struct_rvalue`
-                    // where pItem is a struct pointer, the deref
-                    // elides the trailing struct-value load but
-                    // leaves the pointer-load Li in place, so
-                    // `last == Op::Li` would otherwise misroute us
-                    // into the scalar path and rewrite the wrong Li
-                    // into a Psh.
-                    self.emit_op(Op::Psh);
+                    // This branch must run *before* the scalar
+                    // load-rewrite below: for `*pItem =
+                    // struct_rvalue` where pItem is a struct
+                    // pointer, the deref elides the trailing
+                    // struct-value load but leaves the pointer-load
+                    // tag in place, so a `Some(LoadKind::I64)`
+                    // would otherwise misroute us into the scalar
+                    // path and rewrite the wrong tag.
+                    let struct_lhs_ast = self.ast_acc.take();
+                    self.ast_psh();
                     self.expr(Token::Assign as i64)?;
+                    let struct_rhs_ast = self.ast_acc;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
                         return Err(self.compile_err("cannot assign non-struct value to a struct"));
                     }
@@ -1349,15 +1696,39 @@ impl Compiler {
                              (lhs={lhs_s}, rhs={rhs_s})"
                         )));
                     }
-                    let size = self.size_of_type(t);
-                    self.emit_op(Op::Mcpy);
-                    self.emit_val(size as i64);
+                    self.mark_emit_other();
                     self.ty = t;
+                    // Dual-emit `Expr::Assign { lhs, rhs, ty }`
+                    // with the struct type; the walker keys on
+                    // `is_struct_ty(ty) && struct_ptr_depth(ty)
+                    // == 0` to emit `Inst::Mcpy` instead of the
+                    // scalar store.
+                    if let (Some(lhs), Some(rhs)) = (struct_lhs_ast, struct_rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty: t }, pos);
+                        self.ast_acc = Some(id);
+                    } else {
+                        self.ast_acc = None;
+                    }
                 } else if self.rewrite_trailing_load_as_psh().is_some() {
                     // Scalar / pointer assignment: trailing load
                     // rewritten to a push so the address is
                     // preserved on the stack while the RHS evaluates.
+                    // `take_last_loaded_local` reverts the tentative
+                    // `was_read` the identifier-rvalue path set so
+                    // that prior real reads in the function are not
+                    // forgotten. The dead-store record runs after
+                    // the RHS is parsed -- a self-referencing RHS
+                    // like `x = x + 1` reads the prior value and
+                    // must not be charged against the store about
+                    // to land.
                     let line = self.lex.line;
+                    let assigned_local = self.take_last_loaded_local();
+                    if let Some(idx) = assigned_local {
+                        self.symbols[idx].was_written = true;
+                    }
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
@@ -1379,7 +1750,10 @@ impl Compiler {
                     // representation rather than the source's.
                     self.convert_assign_rhs(t);
                     self.ty = t;
-                    self.emit_op(store_op_for(self.ty, self.target));
+                    self.ast_assign();
+                    if let Some(idx) = assigned_local {
+                        self.record_local_store(idx, line);
+                    }
                 } else {
                     return Err(self.compile_err("bad lvalue in assignment"));
                 }
@@ -1387,31 +1761,47 @@ impl Compiler {
                 // Compound assignment `a OP= b`. The lexer stuffed
                 // the underlying binop's Token into `lex.ival`. The
                 // shape mirrors plain `=`: rewrite the trailing
-                // load (Op::Lc / Op::Li) into Op::Psh so the
-                // address sits on the stack, then load it again
-                // via Op::Li (or Op::Lc), push, evaluate the RHS,
-                // emit the binop, and store. Only scalar / pointer
-                // lvalues qualify -- structs and bitfields don't
-                // accept compound assignment in c5.
+                // scalar load into a stack push so the address
+                // sits on the stack, then load it again, push,
+                // evaluate the RHS, emit the binop, and store.
+                // Only scalar / pointer lvalues qualify -- structs
+                // and bitfields don't accept compound assignment
+                // in c5.
                 let binop = self.lex.ival;
+                let compound_lhs_ast = self.ast_acc;
                 self.next()?;
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
                 // op; the helper hands back the matching reload op
                 // so we can put the current value back into `a`
                 // before pushing it for the binop's pop.
-                let reload = self
-                    .rewrite_trailing_load_as_psh()
+                self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
-                self.emit_op(reload);
+                // Compound assignment reads the prior value
+                // (`reload` re-emits the load below) and stores a
+                // new one. `take_last_loaded_local` reverted
+                // was_read to its prior state; force it true
+                // because the reload below survives, and add
+                // was_written. The dead-store record is deferred
+                // until after the binop emits so a self-
+                // referencing RHS does not cancel its own store.
+                let line = self.lex.line;
+                let assigned_local = self.take_last_loaded_local();
+                if let Some(idx) = assigned_local {
+                    self.symbols[idx].was_read = true;
+                    self.symbols[idx].was_written = true;
+                    self.record_local_read(idx);
+                }
+                self.mark_emit_other();
                 // Push the current value so the binop can pop it.
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 // For pointer arithmetic with `+=` / `-=`, scale
                 // the RHS by the element size before applying the
                 // op. We capture lhs ty here; rhs ty is known after
                 // expr().
                 let lhs_ty = self.ty;
                 self.expr(Token::Assign as i64)?;
+                let pre_scale_rhs_ast = self.ast_acc;
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -1419,12 +1809,20 @@ impl Compiler {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     if elem_size > 1 {
-                        self.emit_binop_with_imm(Op::Mul, elem_size);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
                     }
                 }
+                // Capture rhs after the pointer-arithmetic
+                // scale ran; the scale is a wrapping `Binary {
+                // Mul, rhs, IntLit(scale) }` node and the
+                // walker's `CompoundAssign` arm uses the
+                // captured id verbatim, so the walker re-emits
+                // the same `Mul` chain (rather than letting the
+                // walker apply its own pointer scaling).
+                let mut compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
                 // Floating-point lvalue (`double x; x *= 2.0;`) needs
                 // the FP variant of the binop, not the integer one.
-                // Without this, `x *= y` lowered to `Op::Mul` which
+                // Without this, `x *= y` lowered to `BinOp::Mul` which
                 // multiplied the bit patterns of the two doubles as
                 // signed integers, producing a useless result. Same
                 // shape applies to `+=` / `-=` / `/=` on doubles.
@@ -1443,108 +1841,168 @@ impl Compiler {
                 // double before the FP op runs.
                 if lhs_is_fp || is_floating_scalar(self.ty) {
                     self.require_both_float(lhs_ty, "compound assign")?;
+                    // `require_both_float` wrapped `ast_acc` in
+                    // an `Expr::Cast` (via the dual-emit hook in
+                    // `convert.rs`); pick up the cast'd id so
+                    // the walker emits the int->FP lift before
+                    // the FP binop.
+                    compound_rhs_ast = self.ast_acc.or(compound_rhs_ast);
                 }
-                let op = match binop {
+                use super::super::ir::BinOp as B;
+                let bop = match binop {
                     x if x == Token::AddOp as i64 => {
                         if lhs_is_fp {
-                            Op::Fadd
+                            B::Fadd
                         } else {
-                            Op::Add
+                            B::Add
                         }
                     }
                     x if x == Token::SubOp as i64 => {
                         if lhs_is_fp {
-                            Op::Fsub
+                            B::Fsub
                         } else {
-                            Op::Sub
+                            B::Sub
                         }
                     }
                     x if x == Token::MulOp as i64 => {
                         if lhs_is_fp {
-                            Op::Fmul
+                            B::Fmul
                         } else {
-                            Op::Mul
+                            B::Mul
                         }
                     }
                     x if x == Token::DivOp as i64 => {
                         if lhs_is_fp {
-                            Op::Fdiv
+                            B::Fdiv
                         } else if is_unsigned_ty(lhs_ty) {
-                            Op::Divu
+                            B::Divu
                         } else {
-                            Op::Div
+                            B::Div
                         }
                     }
                     x if x == Token::ModOp as i64 => {
                         if is_unsigned_ty(lhs_ty) {
-                            Op::Modu
+                            B::Modu
                         } else {
-                            Op::Mod
+                            B::Mod
                         }
                     }
-                    x if x == Token::AndOp as i64 => Op::And,
-                    x if x == Token::OrOp as i64 => Op::Or,
-                    x if x == Token::XorOp as i64 => Op::Xor,
-                    x if x == Token::ShlOp as i64 => Op::Shl,
+                    x if x == Token::AndOp as i64 => B::And,
+                    x if x == Token::OrOp as i64 => B::Or,
+                    x if x == Token::XorOp as i64 => B::Xor,
+                    x if x == Token::ShlOp as i64 => B::Shl,
                     x if x == Token::ShrOp as i64 => {
                         if is_unsigned_ty(lhs_ty) {
-                            Op::Shru
+                            B::Shru
                         } else {
-                            Op::Shr
+                            B::Shr
                         }
                     }
                     _ => {
                         return Err(self.compile_err("unknown compound-assign opcode"));
                     }
                 };
-                self.emit_op(op);
+                self.ast_binop(bop);
                 self.ty = lhs_ty;
-                self.emit_op(store_op_for(self.ty, self.target));
+                self.ast_assign();
+                if let Some(idx) = assigned_local {
+                    self.record_local_store(idx, line);
+                }
+                if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
+                    let ca_ty = self.ty;
+                    self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty);
+                }
             } else if self.lex.tk == Token::Cond {
+                let cond_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bz);
-                let b_else = self.text.len();
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Assign as i64)?;
                 // Comma operator in the middle of a ternary:
-                // `cond ? (side_effect, value) : alt`. C allows
-                // `e1, e2, ..., eN` in the ternary's then-arm
-                // because the spec says it's an *expression*, not
-                // an assignment-expression. expr(Assign) stops at
-                // `,`; resume the chain here so the colon search
-                // finds its match.
+                // `cond ? (side_effect, value) : alt`. C99 6.5.15
+                // makes the middle slot an `expression`, not an
+                // assignment-expression, so a comma chain is
+                // legal there. `expr(Assign)` stops at `,`; the
+                // chain is resumed here so the colon search finds
+                // its match. Each rhs becomes the new accumulator
+                // value; the lhs side effects evaluate first.
+                // Build an `Expr::Comma { lhs, rhs }` chain so the
+                // walker preserves the lhs side effects; without
+                // the chain, only the rhs reaches the Ternary AST
+                // and the lhs's stores / calls disappear at the
+                // walker tier.
+                let mut then_ast = self.ast_acc;
                 while self.lex.tk == ',' {
                     self.next()?;
+                    let lhs_ast = then_ast;
                     self.expr(Token::Assign as i64)?;
+                    let rhs_ast = self.ast_acc;
+                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let ty = self.ty;
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
+                        self.ast_acc = Some(id);
+                        then_ast = Some(id);
+                    } else {
+                        then_ast = self.ast_acc;
+                    }
                 }
                 if self.lex.tk == ':' {
                     self.next()?;
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
                 }
-                let b_end_val = (self.text.len() + 2) as i64;
-                self.text[b_else] = b_end_val;
-                self.emit_op(Op::Jmp);
-                let b_end = self.text.len();
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Cond as i64)?;
-                self.text[b_end] = self.text.len() as i64;
+                let else_ast = self.ast_acc;
+                // Build Expr::Ternary so the walker lowers the
+                // three sub-expressions with branch + phi-like
+                // join.
+                if let (Some(cond), Some(then_e), Some(else_e)) = (cond_ast, then_ast, else_ast) {
+                    let pos = self.ast_src_pos();
+                    let ty = self.ty;
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Ternary {
+                            cond,
+                            then_e,
+                            else_e,
+                            ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
+                }
             } else if self.lex.tk == Token::Lor {
+                let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bnz);
-                let b = self.text.len();
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::Lan as i64)?;
-                self.text[b] = self.text.len() as i64;
+                let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    self.ast_emit_short_circuit(
+                        super::super::ast::ShortCircuitOp::Lor,
+                        lhs,
+                        rhs,
+                        Ty::Int as i64,
+                    );
+                }
             } else if self.lex.tk == Token::Lan {
+                let lhs_ast = self.ast_acc;
                 self.next()?;
-                self.emit_op(Op::Bz);
-                let b = self.text.len();
-                self.emit_val(0);
+                self.flush_pending_stores();
                 self.expr(Token::OrOp as i64)?;
-                self.text[b] = self.text.len() as i64;
+                let rhs_ast = self.ast_acc;
                 self.ty = Ty::Int as i64;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    self.ast_emit_short_circuit(
+                        super::super::ast::ShortCircuitOp::Lan,
+                        lhs,
+                        rhs,
+                        Ty::Int as i64,
+                    );
+                }
             } else if self.lex.tk == Token::OrOp {
                 // C99 6.5.12: result of `|` is the common type
                 // produced by the usual arithmetic conversions on
@@ -1556,42 +2014,43 @@ impl Compiler {
                 // bits 32..63 for a positive value.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
-                self.emit_op(Op::Or);
+                self.ast_binop(crate::c5::ir::BinOp::Or);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::XorOp {
                 // C99 6.5.11: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
-                self.emit_op(Op::Xor);
+                self.ast_binop(crate::c5::ir::BinOp::Xor);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::AndOp {
                 // C99 6.5.10: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
-                self.emit_op(Op::And);
+                self.ast_binop(crate::c5::ir::BinOp::And);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
                 // variant and the `invert` flag handed to
                 // `emit_eq_with_common_width` differ.
                 let invert = self.lex.tk == Token::NeOp;
+                use super::super::ir::BinOp as B;
                 let (fp_op, name) = if invert {
-                    (Op::Fne, "!=")
+                    (B::Fne, "!=")
                 } else {
-                    (Op::Feq, "==")
+                    (B::Feq, "==")
                 };
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::LtOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
-                    self.emit_op(fp_op);
+                    self.ast_binop(fp_op);
                 } else {
                     self.emit_eq_with_common_width(t, invert);
                 }
@@ -1601,22 +2060,22 @@ impl Compiler {
                 // see `Cmp::ops` for the per-flavour op picks.
                 let (signed_op, unsigned_op, fp_op, name) = cmp.ops();
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::ShlOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, name)?;
-                    self.emit_op(fp_op);
+                    self.ast_binop(fp_op);
                 } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(unsigned_op);
+                    self.ast_binop(unsigned_op);
                 } else {
-                    self.emit_op(signed_op);
+                    self.ast_binop(signed_op);
                 }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                self.emit_op(Op::Shl);
+                self.ast_binop(crate::c5::ir::BinOp::Shl);
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
                 // integer promotion. `char` / `short` (signed or
                 // unsigned, size 1 or 2) promote to signed `int`.
@@ -1629,32 +2088,32 @@ impl Compiler {
                     self.ty = Ty::Int as i64;
                 } else {
                     if is_unsigned_ty(t) && lhs_size == 4 {
-                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                     }
                     self.ty = t;
                 }
             } else if self.lex.tk == Token::ShrOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
                 // The RHS is the shift count; only the LHS sign matters.
 
                 if is_unsigned_ty(t) {
-                    self.emit_op(Op::Shru);
+                    self.ast_binop(crate::c5::ir::BinOp::Shru);
                     // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.
                     self.ty = t;
                 } else {
-                    self.emit_op(Op::Shr);
+                    self.ast_binop(crate::c5::ir::BinOp::Shr);
                     self.ty = Ty::Int as i64;
                 }
             } else if self.lex.tk == Token::AddOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "+")?;
-                    self.emit_op(Op::Fadd);
+                    self.ast_binop(crate::c5::ir::BinOp::Fadd);
                     self.ty = fp_result_ty(t, self.ty);
                 } else if !is_pointer_ty(t) && is_pointer_ty(self.ty) {
                     // `int + ptr`: result is the pointer type.
@@ -1666,100 +2125,168 @@ impl Compiler {
                     // the byte add is already correct -- we just
                     // need to set the result type to ptr.
                     let rhs_ty = self.ty;
+                    let lhs_ty = t;
                     if self.is_ptr_scaling_nontrivial(rhs_ty) {
+                        // Snapshot the AST operands before the
+                        // pointer-scaling sequence: lhs (int) sits
+                        // on the parser-side vstack, rhs (ptr) is
+                        // in `ast_acc`. The store-local / multiply /
+                        // address-of-local / load-int emit chain
+                        // consumes one vstack slot per intermediate
+                        // store. Drain the outer vstack, push a
+                        // sentinel for the inner ops to consume,
+                        // run the sequence, then restore.
+                        let lhs_ast = self.ast_vstack.pop().flatten();
+                        let rhs_ast = self.ast_acc.take();
+                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        self.ast_vstack.push(None);
                         let scale = self.pointee_size(rhs_ty);
                         self.loc_offs += 1;
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
                         }
                         let rhs_temp = -self.loc_offs;
-                        self.emit_op(Op::StLocI);
-                        self.emit_val(rhs_temp);
-                        // Pop the int LHS off the c5 stack into
-                        // `a` via `Imm 0; Or` (Or pops stack-top).
+                        self.mark_emit_other();
                         self.emit_imm(0);
-                        self.emit_op(Op::Or);
-                        self.emit_binop_with_imm(Op::Mul, scale);
-                        self.emit_op(Op::Psh);
+                        self.ast_binop(crate::c5::ir::BinOp::Or);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
+                        self.ast_psh();
                         self.emit_lea(rhs_temp);
-                        self.emit_op(Op::Li);
+                        self.mark_emit_other();
+                        self.ast_binop(crate::c5::ir::BinOp::Add);
+                        self.ast_vstack.clear();
+                        self.ast_vstack.extend(saved_vstack);
+                        // Rebuild AST: `Binary { Add, Binary { Mul,
+                        // lhs_int, scale }, rhs_ptr }`. Type is
+                        // the pointer (C99 6.5.6p8: integer added
+                        // to a pointer keeps the pointer type).
+                        self.ty = rhs_ty;
+                        if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                            let pos = self.ast_src_pos();
+                            let scale_lit = self.ast.push_expr(
+                                super::super::ast::Expr::IntLit {
+                                    val: scale,
+                                    ty: super::super::token::Ty::Int as i64,
+                                },
+                                pos,
+                            );
+                            let scaled = self.ast.push_expr(
+                                super::super::ast::Expr::Binary {
+                                    op: super::super::ir::BinOp::Mul,
+                                    lhs,
+                                    rhs: scale_lit,
+                                    ty: lhs_ty,
+                                },
+                                pos,
+                            );
+                            let added = self.ast.push_expr(
+                                super::super::ast::Expr::Binary {
+                                    op: super::super::ir::BinOp::Add,
+                                    lhs: scaled,
+                                    rhs,
+                                    ty: rhs_ty,
+                                },
+                                pos,
+                            );
+                            self.ast_acc = Some(added);
+                        } else {
+                            self.ast_acc = None;
+                        }
+                    } else {
+                        self.ast_binop(crate::c5::ir::BinOp::Add);
+                        self.ty = rhs_ty;
                     }
-                    self.emit_op(Op::Add);
-                    self.ty = rhs_ty;
                 } else {
                     let rhs_ty = self.ty;
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
-                    self.emit_op(Op::Add);
+                    // Pre-compute the common type so the dual-
+                    // emit binop tracker captures the result-
+                    // shape `ty` rather than the rhs's pre-
+                    // conversion tag.
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    }
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
+                    if !is_pointer_ty(t) {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
                 }
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "-")?;
-                    self.emit_op(Op::Fsub);
+                    self.ast_binop(crate::c5::ir::BinOp::Fsub);
                     self.ty = fp_result_ty(t, self.ty);
                 } else if is_pointer_ty(t) && t == self.ty {
                     // ptr - ptr -> element count (Int). Divide by
                     // the pointee size to convert raw byte distance
                     // into element distance (skipped for `char*`,
                     // where byte and element counts coincide).
-                    self.emit_op(Op::Sub);
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Div, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
                     self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale = self.pointee_size(t);
-                    self.emit_binop_with_imm(Op::Mul, scale);
-                    self.emit_op(Op::Sub);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
                     self.ty = t;
                 } else {
                     let rhs_ty = self.ty;
-                    self.emit_op(Op::Sub);
+                    // Pre-set the post-conversion result type so
+                    // the dual-emit binop tracker captures the
+                    // C99 6.3.1.8 common type.
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    }
+                    self.ast_binop(crate::c5::ir::BinOp::Sub);
+                    if !is_pointer_ty(t) {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
                 }
             } else if self.lex.tk == Token::MulOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "*")?;
-                    self.emit_op(Op::Fmul);
+                    self.ast_binop(crate::c5::ir::BinOp::Fmul);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
                     let rhs_ty = self.ty;
-                    self.emit_op(Op::Mul);
-                    self.maybe_mask_to_unsigned_width(t, rhs_ty);
+                    // Pre-compute the C99 6.3.1.8 common type so
+                    // the dual-emit binop tracker (which reads
+                    // `self.ty` for `Expr::Binary { ty }`) sees
+                    // the post-conversion type, not the rhs's
+                    // pre-conversion tag. Walker's post-op
+                    // narrowing keys off `ty`.
                     self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    self.ast_binop(crate::c5::ir::BinOp::Mul);
+                    self.maybe_mask_to_unsigned_width(t, rhs_ty);
                 }
             } else if self.lex.tk == Token::DivOp {
                 self.next()?;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "/")?;
-                    self.emit_op(Op::Fdiv);
+                    self.ast_binop(crate::c5::ir::BinOp::Fdiv);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
                     // C99 6.3.1.8: when either operand is unsigned, the
                     // common type is unsigned, so the divide is unsigned
-                    // too. Route to Op::Divu (UDIV / DIV instead of
+                    // too. Route to BinOp::Divu (UDIV / DIV instead of
                     // SDIV / IDIV). When the common type is narrower
                     // than the 8-byte register, mix-of-signed-and-
                     // unsigned operands need C99 conversion to the
@@ -1768,10 +2295,44 @@ impl Compiler {
                     // 0xFFFFFFFFFFFFFFFF instead of 0xFFFFFFFF.
                     let common = usual_arith_common_ty(t, self.ty, self.target);
                     if is_unsigned_ty(common) {
+                        // The masking sequence routes intermediate
+                        // store-local / load-or / mask emits through
+                        // the AST tracker, which would corrupt the
+                        // AST vstack / accumulator. Snapshot the AST
+                        // operands first, save the rest of the AST
+                        // vstack, run the emit sequence against a
+                        // sentinel-padded vstack so the inner
+                        // unsigned-divide's embedded pop consumes
+                        // the sentinel rather than an outer
+                        // expression's lvalue, then rebuild the
+                        // Binary node
+                        // manually. The walker re-derives the
+                        // masking from the operand type.
+                        let lhs_ast = self.ast_vstack.pop().flatten();
+                        let rhs_ast = self.ast_acc.take();
+                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                        self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
-                        self.emit_op(Op::Divu);
+                        self.ast_binop(crate::c5::ir::BinOp::Divu);
+                        self.ast_vstack.clear();
+                        self.ast_vstack.extend(saved_vstack);
+                        if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                            let pos = self.ast_src_pos();
+                            let id = self.ast.push_expr(
+                                super::super::ast::Expr::Binary {
+                                    op: super::super::ir::BinOp::Divu,
+                                    lhs,
+                                    rhs,
+                                    ty: common,
+                                },
+                                pos,
+                            );
+                            self.ast_acc = Some(id);
+                        } else {
+                            self.ast_acc = None;
+                        }
                     } else {
-                        self.emit_op(Op::Div);
+                        self.ast_binop(crate::c5::ir::BinOp::Div);
                     }
                     self.ty = common;
                 }
@@ -1780,45 +2341,94 @@ impl Compiler {
                 if is_floating_scalar(t) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
                 let common = usual_arith_common_ty(t, self.ty, self.target);
                 if is_unsigned_ty(common) {
+                    let lhs_ast = self.ast_vstack.pop().flatten();
+                    let rhs_ast = self.ast_acc.take();
+                    let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
+                    self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
-                    self.emit_op(Op::Modu);
+                    self.ast_binop(crate::c5::ir::BinOp::Modu);
+                    self.ast_vstack.clear();
+                    self.ast_vstack.extend(saved_vstack);
+                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Binary {
+                                op: super::super::ir::BinOp::Modu,
+                                lhs,
+                                rhs,
+                                ty: common,
+                            },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                    } else {
+                        self.ast_acc = None;
+                    }
                 } else {
-                    self.emit_op(Op::Mod);
+                    self.ast_binop(crate::c5::ir::BinOp::Mod);
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
-                let reload = self
-                    .rewrite_trailing_load_as_psh()
+                let post_inc_lvalue = self.ast_acc;
+                self.rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
-                self.emit_op(reload);
+                // Post ++/-- reads the prior value and stores a
+                // new one. Same shape as the compound-assign
+                // path: revert via `take_last_loaded_local`,
+                // then force was_read true (reload re-emits the
+                // load), was_written true, and refresh the
+                // dead-store tracker.
+                let line = self.lex.line;
+                if let Some(idx) = self.take_last_loaded_local() {
+                    self.symbols[idx].was_read = true;
+                    self.symbols[idx].was_written = true;
+                    self.record_local_read(idx);
+                    self.record_local_store(idx, line);
+                }
+                self.mark_emit_other();
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("floating-point ++/-- not yet implemented"));
                 }
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc {
-                    Op::Add
+                self.ast_binop(if self.lex.tk == Token::Inc {
+                    super::super::ir::BinOp::Add
                 } else {
-                    Op::Sub
+                    super::super::ir::BinOp::Sub
                 });
-                self.emit_op(store_op_for(self.ty, self.target));
-                self.emit_op(Op::Psh);
+                self.ast_assign();
+                self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc {
-                    Op::Sub
+                self.ast_binop(if self.lex.tk == Token::Inc {
+                    super::super::ir::BinOp::Sub
                 } else {
-                    Op::Add
+                    super::super::ir::BinOp::Add
                 });
+                // Build `Expr::PostInc { lvalue, by, ty }` so
+                // the walker emits load -> binop_imm(Add, by) ->
+                // store -> return the pre-update value per C99
+                // 6.5.2.4p3.
+                let post_step = self.pointee_step(self.ty);
+                let post_signed = if self.lex.tk == Token::Inc {
+                    post_step
+                } else {
+                    -post_step
+                };
+                let post_ty = self.ty;
+                if let Some(lvalue) = post_inc_lvalue {
+                    self.ast_emit_post_inc(lvalue, post_signed, post_ty);
+                }
                 self.next()?;
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
+                let array_ast = self.ast_acc;
                 // Read-and-park the multi-dim stride queue. The
                 // identifier / param / field-decay branches seed
                 // strides for each of the N-1 multi-dim subscript
@@ -1830,8 +2440,9 @@ impl Compiler {
                 let multi_dim_stride = self.pending.index_stride;
                 let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
                 self.pending.index_stride = 0;
-                self.emit_op(Op::Psh);
+                self.ast_psh();
                 self.expr(Token::Assign as i64)?;
+                let idx_ast = self.ast_acc;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -1855,8 +2466,8 @@ impl Compiler {
                     return Err(self.compile_err("pointer type expected"));
                 }
                 if multi_dim_stride > 0 {
-                    self.emit_binop_with_imm(Op::Mul, multi_dim_stride);
-                    self.emit_op(Op::Add);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
                     // Multi-dim row pointer -- ty stays at the same
                     // pointer level; the innermost `[k]` decays it
                     // the regular way to a scalar element.
@@ -1878,9 +2489,24 @@ impl Compiler {
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
-                    self.emit_op(Op::Add);
+                    // Re-snapshot `idx_ast` after the scale `Mul`.
+                    // `emit_binop_with_imm` wrapped the earlier
+                    // `idx_ast` into a fresh
+                    // `Binary { Mul, idx, IntLit(scale) }` whose
+                    // id is now on `ast_acc`. Using the post-scale
+                    // expression here means the walker can emit a
+                    // single `b.binop(Add, array, idx)` (the idx
+                    // already carries the C99 6.5.6 stride
+                    // multiplication) without re-deriving the
+                    // pointee size from `ty`.
+                    let idx_ast_scaled = if self.is_ptr_scaling_nontrivial(t) {
+                        self.ast_acc.or(idx_ast)
+                    } else {
+                        idx_ast
+                    };
+                    self.ast_binop(crate::c5::ir::BinOp::Add);
                     self.ty = t - Ty::Ptr as i64;
                     // `xs[i]` where `xs` is a `struct Foo *` yields a
                     // struct value -- the address-as-value rule. Skip
@@ -1891,17 +2517,25 @@ impl Compiler {
                     let elem_is_struct_value =
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                     if !elem_is_struct_value {
-                        self.emit_op(load_op_for(self.ty, self.target));
+                        self.mark_emit_scalar_load();
+                    }
+                    // Build a canonical `Expr::Index { array,
+                    // idx, ty }` so the walker emits a single
+                    // address+load.
+                    if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
+                        let idx_ty = self.ty;
+                        self.ast_emit_index(array, idx, idx_ty);
                     }
                 }
             } else if self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
                 // upstream: `->` runs on a struct pointer (which the
-                // preceding subexpression loaded into `a` via Op::Li),
+                // preceding subexpression loaded into `a` via LoadKind::I64),
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.
+                let obj_ast = self.ast_acc;
                 let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {
                     is_struct_ty(t) && struct_ptr_depth(t) == 0
@@ -1939,7 +2573,7 @@ impl Compiler {
                     .clone();
 
                 if field.offset > 0 {
-                    self.emit_binop_with_imm(Op::Add, field.offset as i64);
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);
                 }
                 self.ty = field.ty;
 
@@ -1953,12 +2587,102 @@ impl Compiler {
                     //                    extraction that lands the
                     //                    bitfield's value in `a` for
                     //                    the surrounding expression.
-                    self.emit_bitfield_access(
-                        field.bit_offset,
-                        field.bit_width,
-                        field.bit_unit_size,
-                        field.ty,
-                    )?;
+                    let is_bf_assign = self.lex.tk == Token::Assign;
+                    let is_bf_compound = self.lex.tk == Token::AssignOp;
+                    let bf_desc = super::super::ast::BitfieldDesc {
+                        bit_offset: field.bit_offset as u8,
+                        bit_width: field.bit_width as u8,
+                        unit_size: field.bit_unit_size,
+                        signed: !is_unsigned_ty(field.ty),
+                    };
+                    let bf_field_off = field.offset as i64;
+                    let bf_field_ty = field.ty;
+                    self.pending.bf_assign_rhs = None;
+                    self.pending.bf_compound_assign = None;
+                    // emit_bitfield_access drives the c5 stack
+                    // through several Psh/Si rounds that the
+                    // AST-tracking layer treats as a normal
+                    // assignment chain. Snapshot the parser-side
+                    // vstack depth + clear ast_acc so the AST
+                    // side stays in lockstep: the helpers below
+                    // pop the leftover slots back off, and the
+                    // dedicated dual-emit for the bitfield
+                    // produces the only AST node this site needs.
+                    let bf_vstack_depth = self.ast_vstack.len();
+                    self.emit_bitfield_access(field.bit_offset, field.bit_width, field.ty)?;
+                    if self.ast_vstack.len() > bf_vstack_depth {
+                        self.ast_vstack.truncate(bf_vstack_depth);
+                    }
+                    self.ast_acc = None;
+                    // Build the AST shape now that the
+                    // bitfield-emit helper has run.
+                    if let Some(obj) = obj_ast {
+                        if is_bf_assign {
+                            // The rhs was parsed inside
+                            // `emit_bitfield_access` (self.expr).
+                            // Its top-level AST id was stashed in
+                            // `pending.bf_assign_rhs` ahead of the
+                            // storage emit (whose `ast_apply_assign`
+                            // would otherwise have cleared
+                            // `ast_acc`).
+                            if let Some(rhs) = self.pending.bf_assign_rhs.take() {
+                                let res_ty = self.ty;
+                                self.ast_emit_bitfield_assign(
+                                    obj,
+                                    bf_field_off,
+                                    bf_desc,
+                                    rhs,
+                                    res_ty,
+                                );
+                            }
+                        } else if is_bf_compound {
+                            // C99 6.5.16.2: `E1 OP= E2` is
+                            // equivalent to `E1 = E1 OP E2` with
+                            // E1 evaluated once. Synthesise the
+                            // equivalent AST tree here so the
+                            // walker reproduces the same
+                            // load-clear-shift-or-store sequence
+                            // as a plain bitfield assignment.
+                            if let Some((rhs, ir_op)) = self.pending.bf_compound_assign.take() {
+                                let src = self.ast_src_pos();
+                                let read = self.ast.push_expr(
+                                    super::super::ast::Expr::Member {
+                                        obj,
+                                        field_off: bf_field_off,
+                                        bitfield: Some(bf_desc),
+                                        ty: bf_field_ty,
+                                        array_size: 0,
+                                    },
+                                    src,
+                                );
+                                let combined = self.ast.push_expr(
+                                    super::super::ast::Expr::Binary {
+                                        op: ir_op,
+                                        lhs: read,
+                                        rhs,
+                                        ty: bf_field_ty,
+                                    },
+                                    src,
+                                );
+                                let res_ty = self.ty;
+                                self.ast_emit_bitfield_assign(
+                                    obj,
+                                    bf_field_off,
+                                    bf_desc,
+                                    combined,
+                                    res_ty,
+                                );
+                            }
+                        } else {
+                            // Read path: dual-emit
+                            // `Expr::Member { bitfield: Some(_) }`
+                            // so the walker emits the
+                            // load + shift + mask + sign-extend
+                            // sequence at the surrounding rvalue
+                            // site.
+                            self.ast_emit_member(obj, bf_field_off, Some(bf_desc), bf_field_ty, 0);
+                        }
+                    }
                 } else {
                     // Trailing Lc/Li loads the field. The assignment handler
                     // (in the same loop) converts a trailing Li/Lc to Psh, so
@@ -1985,7 +2709,7 @@ impl Compiler {
                         let elem_size = self.size_of_type(field.ty) as i64;
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
-                        self.emit_op(load_op_for(self.ty, self.target));
+                        self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr
                         // chain depth from the field's lineage tag so
                         // a following unary `*` recognises the C99
@@ -2024,6 +2748,18 @@ impl Compiler {
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     }
+                }
+                // Dual-emit `Expr::Member` collapsing the address +
+                // load (or just the address for struct-value /
+                // bitfield) into one node. `bitfield: None` for
+                // regular fields; bitfields use the existing
+                // `emit_bitfield_access` shape and skip Member
+                // synthesis (TODO once the bitfield shape lands).
+                if field.bit_width == 0
+                    && let Some(obj) = obj_ast
+                {
+                    let mty = self.ty;
+                    self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
                 }
             } else {
                 return Err(self.compile_err(format!(

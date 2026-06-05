@@ -31,6 +31,70 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn static_local_shadows_extern_fn() {
+    // C99 6.2.1p4: an inner-block `static const T arr[];` shadows
+    // an outer function declaration of the same name. The parser's
+    // hash-keyed symbol table mutates class/val for the duration
+    // of the block and restores them on block exit; the
+    // link_unit glo_imm_refs filter must look at class==Glo (not
+    // just linkage) so the restored-to-Fun outer state doesn't
+    // surface a cross-TU data reference against the operand.
+    // driver(1) returns 42 only when the static-local `expect[]`
+    // read resolves to the local data segment.
+    assert_eq!(run_fixture("static_local_shadows_extern_fn.c"), 42);
+}
+
+#[test]
+fn indirect_call_through_global_fn_ptr() {
+    // C99 6.5.2.2: Path 1 indirect call (callee is a plain Glo
+    // Ident holding a function pointer). The walker defers the
+    // callee walk past the arg loop so the load-of-function-
+    // pointer Inst::ImmData lands after the arg-evaluating
+    // Inst::*. driver() returns 42 only when the walker emits
+    // every Inst::ImmData against the right Glo offset.
+    assert_eq!(run_fixture("indirect_call_through_global_fn_ptr.c"), 42);
+}
+
+#[test]
+fn for_loop_call_body_and_step() {
+    // C99 6.8.5.3: the walker mirrors the parser's step-before-
+    // body block layout (so the post-merge linker rebase keeps
+    // the i-th `Inst::Call` referring to the same callee the
+    // C source named). driver() returns 7 (add_one count) * 6 =
+    // 42 only when both calls resolve to their own targets.
+    assert_eq!(run_fixture("for_loop_call_body_and_step.c"), 42);
+}
+
+#[test]
+fn vtable_back_to_back_4arg() {
+    // Same contract as `vtable_back_to_back` but with a 4-arg
+    // init call. driver() = 1 + 100 + 100 = 201 only when the
+    // walker's callee-before-args evaluation lays Inst out so
+    // each `Inst::CallIndirect` target resolves through the
+    // right vtable slot.
+    assert_eq!(run_fixture("vtable_back_to_back_4arg.c"), 201);
+}
+
+#[test]
+fn vtable_back_to_back() {
+    // Two adjacent struct-field-then-call expressions where the
+    // second dispatches through a pointer the first stored.
+    // Pins the walker's contract that adjacent call expressions
+    // don't cross-contaminate their dispatch base / argument
+    // evaluations.
+    assert_eq!(run_fixture("vtable_back_to_back.c"), 50);
+}
+
+#[test]
+fn switch_break_calls() {
+    // C99 6.8.4.2: each case marker is a re-entry point regardless
+    // of how the preceding body ended. Pins that contract end-to-
+    // end across break-terminated bodies, fall-through pairs, and
+    // the default arm.
+    assert_eq!(run_fixture("switch_break_calls.c"), 300);
+}
+
+#[test]
 fn control_flow() {
     assert_eq!(run_fixture("control_flow.c"), 1);
 }
@@ -331,9 +395,9 @@ fn bitfield_signed_read_sign_extends() {
     // C99 6.7.2.1p4: a signed bitfield of width N holds values in
     // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the
     // bit pattern `11...1` for width N reads as -1, not the
-    // unsigned `(1 << N) - 1`. Surfaced by stb_connected_components
-    // where a `signed short:2 cluster_dx` storing -1 read back as
-    // 3 and `dx + base_x` produced an out-of-range cluster index.
+    // unsigned `(1 << N) - 1`. A `signed short:2 cluster_dx`
+    // storing -1 must read back as -1, otherwise downstream
+    // signed arithmetic on the field falls out of range.
     assert_eq!(run_fixture("bitfield_signed_read.c"), 0);
 }
 
@@ -409,11 +473,24 @@ fn large_int_literal_auto_promotes() {
 }
 
 #[test]
+fn mcpy_temp_aliases_src() {
+    // Locks the SSA emit's `Inst::Mcpy` lowering against a
+    // regression where the per-iteration scratch register
+    // aliased the source pointer. Picking a temp that only
+    // avoided the destination corrupted the source base on the
+    // first `ldr` and read the rest of the struct from a garbage
+    // address. Reproduces under high register pressure on a
+    // whole-struct assignment shape (`*p = constant_struct;`).
+    assert_eq!(run_fixture("mcpy_temp_aliases_src.c"), 0);
+}
+
+#[test]
 fn return_int_widens_to_double() {
     // C99 6.8.6.4 paragraph 3: the value of a return
     // expression is converted as if by assignment to the
     // function's return type. An int-typed `return` from a
-    // `double`-returning function must lift via `Op::Fcvtif`;
+    // `double`-returning function must lift through the
+    // int-to-float cast;
     // dropping the integer bit pattern into the FP slot would
     // make a `(double)x == 505.0` check compare the bit
     // patterns instead of the values.
@@ -572,7 +649,6 @@ fn array_typedef_dimensions_propagate() {
 }
 
 #[test]
-#[ignore = "TODO: VM walks variadic args in reverse order under explicit per-slot va_arg reads (separate from the native fn-ptr-thunk bug). The fixture verifies the native fn-ptr path through NATIVE_FIXTURES."]
 fn variadic_call_through_fnptr_delivers_all_args() {
     // C99 6.5.2.2: a call through a function pointer must
     // deliver every fixed and variadic argument to the callee.

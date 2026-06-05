@@ -1,23 +1,41 @@
 // locale.h -- locale category selection and numeric formatting
 // conventions (C99 7.11).
 //
-// Values match every supported host's <locale.h>:
-//   * macOS / Linux glibc / Linux musl: LC_ALL=0, LC_COLLATE=1,
-//     LC_CTYPE=2, LC_MONETARY=3, LC_NUMERIC=4, LC_TIME=5,
-//     LC_MESSAGES=6.
-//   * Windows msvcrt: LC_ALL=0, LC_COLLATE=1, LC_CTYPE=2,
-//     LC_MONETARY=3, LC_NUMERIC=4, LC_TIME=5. No LC_MESSAGES.
-// The shared subset matches, so the constants line up across all
-// hosts without per-target conditionals.
+// Category constants are NOT portable across hosts. C99 7.11p1
+// specifies the LC_* macro names but the numeric values are
+// implementation-defined; each libc picks its own enumeration.
+// User code that calls `setlocale(LC_NUMERIC, ...)` must reach
+// the host libc with the host's numeric value of `LC_NUMERIC`,
+// or the wrong category gets switched (and `localeconv()` then
+// returns the wrong decimal separator, etc).
+//
+//   * macOS Darwin / Windows msvcrt:
+//       LC_ALL=0, LC_COLLATE=1, LC_CTYPE=2, LC_MONETARY=3,
+//       LC_NUMERIC=4, LC_TIME=5.
+//   * Linux glibc (sysdeps/generic/bits/locale.h):
+//       LC_CTYPE=0, LC_NUMERIC=1, LC_TIME=2, LC_COLLATE=3,
+//       LC_MONETARY=4, LC_MESSAGES=5, LC_ALL=6.
+//
+// Provide the right enumeration per host.
 
 #pragma once
 
+#if defined(__linux__)
+#define LC_CTYPE    0
+#define LC_NUMERIC  1
+#define LC_TIME     2
+#define LC_COLLATE  3
+#define LC_MONETARY 4
+#define LC_MESSAGES 5
+#define LC_ALL      6
+#else
 #define LC_ALL      0
 #define LC_COLLATE  1
 #define LC_CTYPE    2
 #define LC_MONETARY 3
 #define LC_NUMERIC  4
 #define LC_TIME     5
+#endif
 
 // `struct lconv` layout is implementation-defined (C99 7.11.2.1).
 // Only `decimal_point` is portably read across hosts; the rest are

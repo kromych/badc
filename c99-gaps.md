@@ -36,7 +36,10 @@ fields sharing a storage unit of `sizeof(base_type)` per
 C99 6.7.2.1p11), `#pragma pack(N)`, anonymous struct / union
 members; struct designated initializers (`{.x = 1}`) at file
 and function scope, including non-constant runtime values;
-array designated initializers (`[N] = ...`); `static` /
+array designated initializers (`[N] = ...`); partial brace
+initializers for function-scope arrays zero-fill the trailing
+range per C99 6.7.9p21 (both the constant Mcpy-from-data fast
+path and the per-element runtime store path); `static` /
 `extern` / `_Thread_local`; varargs at the c5-internal
 calling convention; the C99 for-init declaration
 (`for (int i = 0; ...; ...)`); switch with `case` /
@@ -88,10 +91,11 @@ markers.
 | `double`         | 8             | 8       |
 
 LP64 on macOS / Linux, LLP64 on Windows -- both match the
-host platform ABI. `float` is real IEEE 754 single-precision
-storage (4 bytes); the c5 arithmetic pipeline still carries
-f64 bits in the accumulator and narrows / widens at the
-load / store boundary.
+host platform ABI. `float` and `double` are first-class
+floating-point values: the register allocator gives them a
+separate FP register bank. `double` loads / stores with a
+single FP move; `float` is IEEE 754 single-precision storage
+(4 bytes) that widens to f64 on load and narrows on store.
 
 **Bare `char` is unsigned** on every target (1-byte zero-
 extending load). gcc and clang differ on this per host
@@ -217,14 +221,13 @@ C11+ features showing up in modern code:
   export.
 - `#pragma entrypoint(<name>)` -- override the default `main`
   entry point. Used for `WinMain` (Win32 GUI) or any
-  custom non-`main` entry. (gh #55.)
+  custom non-`main` entry.
 - `#pragma subsystem(console | windows)` -- pick the Windows
   PE optional-header `Subsystem` field. Quietly ignored on
   non-PE targets so the same source builds for every OS.
-  (gh #32.)
 - `#pragma once`.
-- `--interp` (bytecode VM with pointer tracking),
-  `--jit` (in-process), `--dump-asm`.
+- `--interp` (SSA interpreter with pointer tracking),
+  `--jit` (in-process), `--dump-ssa`.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include`
   resolution trace on stderr. Missing headers print as
   `! name (missing)`.

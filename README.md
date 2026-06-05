@@ -8,16 +8,18 @@
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
 small compiler of a pretty large chunk of the C language as defined in
-the C99 standard. It used to be a bad one when the projects just started out and the name stuck.
-It supports separate translation units and has a small linker inside it as well.
+the C99 standard. It used to be a bad one when the projects just started out
+and the name stuck. It supports separate translation units and has a small
+linker inside it as well.
 
 Its small footprint and embedded headers (which
 you can override) give a fun one-executable experience. Its codebase
-of moderate size can be a good pedagogical material. It doesn't
-use AST, SSA, graph coloring algorithms and lots of exquisite optimization
-passes which (chances are) might not bother you much. All told,
-to stay slim, it'll never surpass the ability of multi-gigabyte compiler
-suites to squeeze the last drop of perf from the machine, and that's fine.
+of moderate size can be a good pedagogical material. It lowers through
+an SSA intermediate representation and a graph-coloring register
+allocator, but stops short of the exquisite optimization passes a
+production toolchain runs. All told, to stay slim, it'll never surpass
+the ability of multi-gigabyte compiler suites to squeeze the last drop
+of perf from the machine, and that's fine.
 
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
@@ -112,9 +114,9 @@ The three execution modes:
 |------------|--------------------------------------------------------------------|
 | (default)  | Lower to a native Mach-O / ELF / PE32+ at `-o <path>` and exit.    |
 | `--jit`    | Lower in-process, mmap the result, call `main` directly.           |
-| `--interp` | Run the bytecode under a watchful VM (pointer tracking, traces).   |
+| `--interp` | Run the SSA IR under a watchful VM (pointer tracking, traces).     |
 
-Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-asm`,
+Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-ssa`,
 `--list-symbols`, `-H` / `--show-includes`, plus the VM-only
 `--track-pointers` / `--trace`) can appear anywhere before the
 source. `-D NAME[=VALUE]`, `-U NAME`, `-I path`, and `-include
@@ -166,7 +168,7 @@ A single `badc` invocation can mix `.c` source files, `.o`
 object files, and `.a` archives:
 
 ```sh
-badc -c foo.c bar.c               # emits foo.o + bar.o (target-independent bytecode)
+badc -c foo.c bar.c               # emits foo.o + bar.o (native ELF64 ET_REL, target pinned)
 badc -o app foo.o bar.o           # links them into a final binary
 
 badc --ar -o libfoo.a foo.c bar.c # bundles into a SysV ar(5) archive
@@ -174,15 +176,16 @@ badc -o app main.c -L. -l foo     # link against libfoo.a, gcc-style
 ```
 
 `badc` ships its own linker -- there's no `ld` / `lld` /
-`link.exe` dependency. Object files are an ELF wrapper around
-c5 bytecode (target-independent at `.o` time; native lowering
-happens at link), with standard `.symtab` / `.strtab` /
-`.rela.*` for cross-TU symbol resolution and badc-specific
-`.badc.text` / `.badc.data` / `.badc.tdata` / `.badc.tbss` /
-`.badc.meta` sections carrying the payload. Archives are
-ar(5) with a SysV-style symbol index. The `linker` cargo
-feature -- on by default -- gates the entire pipeline; library
-consumers that don't need multi-TU artifacts can opt out via
+`link.exe` dependency. Object files are standard ELF64 ET_REL
+relocatables: a `.text` section of native machine code,
+`.data` / `.bss` for static storage, `.symtab` / `.strtab`
+for the name table, and `.rela.text` carrying the relocations
+the linker applies once each unit's final position is known.
+The target is pinned at `-c` time, and the objects are also
+linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
+symbol index. The `linker` cargo feature -- on by default --
+gates the entire pipeline; library consumers that don't need
+multi-TU artifacts can opt out via
 `default-features = false, features = ["std"]` to keep the
 footprint slim.
 
@@ -204,7 +207,7 @@ host platform's data model (LP64 on macOS / Linux, LLP64 on
 Windows). The doc enumerates rejected idioms, divergent
 behaviour, and the c5-only extensions (`#pragma dylib` /
 `binding` / `export` / `entrypoint` / `subsystem`,
-`#pragma once`, the bytecode VM, the in-process JIT).
+`#pragma once`, the SSA interpreter, the in-process JIT).
 
 One implementation choice worth flagging up front: **bare `char`
 is unsigned** on every target (a 1-byte zero-extending load),
@@ -220,7 +223,7 @@ wrapped in the gcc / clang / msvc convention so they don't collide
 with user identifiers:
 
 ```c
-    __BADC_VERSION__   "0.0.6"           // crate version (string literal)
+    __BADC_VERSION__   "0.0.8"           // crate version (string literal)
     __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
     __aarch64__ / __arm64__              // AArch64 targets
     __x86_64__ / __amd64__               // x86_64 targets
@@ -281,10 +284,10 @@ so the source carries enough context to build with a bare
 #pragma subsystem(windows)         // pick the Windows PE subsystem (windows | console).
 ```
 
-`#pragma entrypoint(<name>)` (gh #55) lets the source declare
-a non-`main` entry without a build-driver flag; the compiler
+`#pragma entrypoint(<name>)` lets the source declare a
+non-`main` entry without a build-driver flag; the compiler
 resolves the name through the same symbol-table lookup it uses
-for `main`. `#pragma subsystem(<kind>)` (gh #32) drives the
+for `main`. `#pragma subsystem(<kind>)` drives the
 PE optional-header `Subsystem` byte -- `console` (default,
 `IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`) or `windows`
 (`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`); together with
@@ -360,48 +363,48 @@ ws2_32, ...) + `GetProcAddress`. macOS uses Apple's `MAP_JIT` +
 per-thread W^X toggle for the hardware-enforced W^X on Apple
 Silicon.
 
-`--dump-asm` produces a textual listing of the lowered code grouped
-by the c5 op that produced each region.
+`--dump-ssa` prints each function's SSA IR plus the register
+allocator's per-value placement to stderr before lowering.
 
 For more, one can use `objdump`, `readelf`, etc.
 
 ### Optimizations
 
-A couple of cheap rewrites the lowering does on its own; one
-heavier pass behind `--optimize`.
+The codegen always lowers through an SSA intermediate
+representation and a graph-coloring register allocator. A
+handful of cheap rewrites run unconditionally; `--optimize`
+adds a set of SSA passes on top.
 
-The cheap ones, always on: drop self-`mov`s and fuse compare +
-branch into `cmp` / `b.cond` (or `cmp` / `jcc`) without
-materializing a 0/1 boolean in between. Saves one uop per pattern
-on aarch64 and three on x86_64.
+Always on: drop self-`mov`s and fuse compare + branch into
+`cmp` / `b.cond` (or `cmp` / `jcc`) without materializing a 0/1
+boolean in between. The register allocator builds an
+interference graph over phi-congruence classes and colors it
+greedily, spilling to frame slots only under pressure.
 
-`--optimize` (or `-O`) adds:
+`--optimize` (or `-O`) adds, in pipeline order:
 
-* **Bytecode optimizer.** Decode into a typed IR, run peephole,
-  branch-threading, and dead-code passes to a fixed point, then
-  re-encode. Fuses `Psh; Imm N; <op>` into immediate-form ops.
-  18-30% smaller bytecode, ~40% faster wall-clock on the c4
-  self-host.
-* **Per-function register allocator.** Routes pushes through a
-  small register pool (callee-saved bank for values live across a
-  call, caller-saved bank for short-lived values) instead of the
-  default `str` / `sub rsp; mov` per arithmetic op.
+* **mem2reg.** Promote address-free local slots to SSA values,
+  dropping their frame load / store traffic.
+* **Inlining.** Inline leaf callees whose body fits under the
+  `--inline-cap=N` instruction budget (default 64; 0 disables).
+* **Rotate recognition.** Collapse `(x >> c) | (x << (W - c))`
+  chains to a single rotate.
+* **Branch const-fold, immediate dedup, redundant-extend
+  drop.** Fold constant branch conditions, share materialized
+  immediates across a function, and remove sign/zero extends
+  whose result already has the needed width.
 
-Bench on macos/aarch64 (Apple M-series, `--release`, 10 iters; see
-`examples/bench.rs`):
+`examples/bench.rs` runs a few pure-computation workloads
+(`fib32`, `quicksort-50k`, `matmul-50`) through the VM and the
+in-process JIT and reports per-iteration timings:
 
-    workload          jit      jit-O
-    fib32          18.05ms  10.65ms
-    quicksort-50k  10.93ms   5.89ms
-    matmul-50       1.31ms 345.12us
-
-Roughly 1.7x on fib, 1.86x on quicksort, 3.8x on matmul. On
-linux/x86_64 the cmp+branch fusion alone is worth 6-10% across
-the same workloads.
+```sh
+cargo run --release --example bench -- --iter 10
+```
 
 ## `--interp`: the safety-net VM
 
-`--interp` runs the program through the bytecode interpreter
+`--interp` runs the program through the SSA interpreter
 instead of compiling to native:
 
 ```sh
@@ -449,22 +452,32 @@ The CLI binary always builds with the default `std` feature.
 cargo test
 ```
 
-Tests are split by what they exercise. `lexer`, `parser`, `codegen`,
-`vm` drive each phase directly. `programs` and `intrinsics` load
-real C sources from `tests/fixtures/c/` and check the exit code under
-the VM. `types` checks the warning-not-error behaviour.
-`pointer_tracking` exercises the opt-in safety net. `optimizer`
-re-runs every fixture under `-O` and asserts the exit code didn't
-change. `native`, `native_elf`, `native_elf_x64`, `native_pe_x64`,
-and `native_pe_arm64` compile each fixture through the matching
-backend and exec it under the host kernel. `jit` covers the
-in-process path the same way.
+Tests are split by what they exercise. `lexer`, `parser`, and
+`codegen` drive each phase directly. `programs` and `intrinsics`
+load real C sources from `tests/fixtures/c/` and check the exit
+code under the SSA interpreter. `types` checks the
+warning-not-error behaviour. `pointer_tracking` exercises the
+opt-in safety net. `native`, `native_elf`, `native_elf_x64`,
+`native_pe_x64`, and `native_pe_arm64` compile each fixture
+through the matching backend and exec it under the host kernel,
+including an `-O` rerun that asserts the exit code is unchanged.
+`jit` covers the in-process path the same way. `linker` exercises
+the multi-TU object / archive path, `dwarf` the debug-info emit,
+and `deferred` the lazy-symbol resolution.
+
+Release builds add the JIT and native fixture-parity paths that
+debug builds skip:
+
+```sh
+cargo test --release --lib
+```
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. Every
-runner additionally runs the demo smokes -- sqlite, miniz,
-kissfft, bzip2, gui_hello -- end-to-end (or build-only for
-the GUI demos, which need a display). See
+runner additionally runs the demo smokes -- sqlite3, miniz,
+kissfft, bzip2, tweetnacl, monocypher, bearssl, lua, stb,
+chibicc, tinycc, scc, gui_hello, nt_loader -- end-to-end (or
+build-only for the GUI demos, which need a display). See
 [`demos/`](./demos/) for what each exercises. The PE-via-
 WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`
 on a developer machine skips it, and CI doesn't currently
@@ -474,12 +487,10 @@ directly).
 ## Tools
 
 `tools/core-walker.py` walks the saved-rbp chain in a Linux ELF
-core dump and resolves every return address to the matching
-`[bc=N] OP` line in a `--dump-asm` listing. Useful when an
-optimized `-O` build crashes -- the source-line debug map is
-dropped at `-O`, but a non-PIE x64 binary lets us subtract the
-fixed `0x400000` load base from each saved return address and
-look the resulting file offset up in the dump. Modes:
+core dump and reports each frame's saved return address as a
+file offset into the original non-PIE x64 binary (load base
+fixed at `0x400000`). Useful for naming the crashing function
+when a higher-level debugger path is blocked. Modes:
 
 * default: walk the rbp chain, resolve each frame's saved
   return address.
@@ -492,12 +503,3 @@ look the resulting file offset up in the dump. Modes:
 * `--list-segments`: list every PT_LOAD in the core file with
   its vaddr range. Useful for understanding where the stack and
   the emulator's mappings ended up after a corruption.
-
-The "subtract the load base, look up in dump-asm" idea was
-suggested by [@kromych](https://github.com/kromych) while we were
-chasing a `-O`-only sqlite3 crash where every higher-level
-debugger path was blocked (orbstack's emulated x86_64 has no
-usable ptrace; lldb on macOS arm64 sees a different binary
-layout). It cuts straight through to "name the function that
-was running when we crashed" without needing a working debugger
-on the target.

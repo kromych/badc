@@ -1,0 +1,147 @@
+
+mul_pow2_to_shift.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xf0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
+               	str	x20, [sp]
+               	str	x21, [sp, #0x8]
+               	str	x19, [sp, #0x10]
+               	mov	x20, x0
+               	sxtw	x20, w20
+               	adrp	x21, <page>
+               	add	x21, x21, #0x100
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	cbz	x0, <addr>
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x18
+               	mov	x1, #0x0                // =0
+               	adrp	x2, <page>
+               	add	x2, x2, #0x118
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	add	x0, x0, #0x8
+               	adrp	x2, <page>
+               	add	x2, x2, #0x11e
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	add	x0, x0, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, #0x125
+               	str	x2, [x0]
+               	sub	x0, x29, #0x18
+               	lsl	x2, x20, #3
+               	add	x0, x0, x2
+               	ldr	x0, [x0]
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
+               	bl	<addr>
+               	cbz	x0, <addr>
+               	lsl	x1, x20, #3
+               	add	x1, x21, x1
+               	ldr	x0, [x0]
+               	str	x0, [x1]
+               	b	<addr>
+               	lsl	x0, x20, #3
+               	add	x0, x21, x0
+               	ldr	x0, [x0]
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0xb0
+               	str	x20, [sp]
+               	str	x19, [sp, #0x10]
+               	mov	x0, #0x7                // =7
+               	lsl	x1, x0, #1
+               	sxtw	x1, w1
+               	lsl	x2, x0, #2
+               	sxtw	x2, w2
+               	lsl	x3, x0, #3
+               	sxtw	x3, w3
+               	lsl	x4, x0, #4
+               	sxtw	x4, w4
+               	lsl	x5, x0, #10
+               	sxtw	x5, w5
+               	lsl	x6, x0, #1
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x6, x6, x17
+               	lsl	x7, x0, #8
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x7, x7, x17
+               	lsl	x8, x0, #5
+               	lsl	x0, x0, #16
+               	sxtw	x1, w1
+               	sxtw	x2, w2
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	sxtw	x2, w3
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	sxtw	x2, w4
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	sxtw	x2, w5
+               	add	x1, x1, x2
+               	sxtw	x1, w1
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x2, x6, x17
+               	add	x1, x1, x2
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x1, x1, x17
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x2, x7, x17
+               	add	x1, x1, x2
+               	mov	x17, #0xffff            // =65535
+               	movk	x17, #0xffff, lsl #16
+               	and	x1, x1, x17
+               	add	x1, x1, x8
+               	add	x20, x1, x0
+               	adrp	x0, <page>
+               	add	x0, x0, #0x150
+               	mov	x1, x20
+               	bl	<addr>
+               	sxtw	x0, w0
+               	mov	x17, #0x24c0            // =9408
+               	movk	x17, #0x7, lsl #16
+               	cmp	x20, x17
+               	b.ne	<addr>
+               	mov	x1, #0x0                // =0
+               	b	<addr>
+               	mov	x1, #0x1                // =1
+               	b	<addr>
+               	mov	x0, x1
+               	ldr	x20, [sp]
+               	ldr	x19, [sp, #0x10]
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret

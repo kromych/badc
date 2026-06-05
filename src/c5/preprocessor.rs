@@ -2,10 +2,9 @@
 //!
 //! The c5 dialect's lexer used to silently skip lines starting with
 //! `#`, leaving every `#define` / `#ifdef` in the source as a
-//! no-op. That worked when the compiler hardcoded a fixed set of
-//! constants and libc bindings into the symbol table -- as soon as
-//! per-target headers want to declare those, we need a real
-//! preprocessor.
+//! no-op. Once per-target headers started declaring constants and
+//! libc bindings, that placeholder shape stopped serving and was
+//! replaced with the implementation below.
 //!
 //! What's supported:
 //!
@@ -96,11 +95,11 @@ pub struct Binding {
     /// `true` if the function's prototype ended with `, ...)` --
     /// e.g. `int printf(char *fmt, ...);`. The lowering reads
     /// this to decide whether the call site needs the
-    /// platform's variadic-ABI dance (macOS arm64
-    /// stack-packing, SysV `xor eax, eax`). Set by the parser
-    /// when it folds a Sys symbol's prototype onto the binding;
-    /// the preprocessor doesn't know about prototypes so it
-    /// leaves this `false`.
+    /// platform's variadic-ABI handling (macOS arm64 stack
+    /// packing, SysV `xor eax, eax`). Set by the parser when it
+    /// folds a Sys symbol's prototype onto the binding; the
+    /// preprocessor doesn't know about prototypes so it leaves
+    /// this `false`.
     pub is_variadic: bool,
     /// Number of fixed (non-variadic) parameters from the
     /// prototype. macOS arm64 passes those in registers per
@@ -256,9 +255,9 @@ pub(crate) struct Preprocessor {
     /// Monotonically-increasing per-translation-unit counter for
     /// the MSVC / GCC `__COUNTER__` predefine. Each expansion
     /// produces the current value as an integer literal and
-    /// post-increments. Used by demos to mint unique identifiers
-    /// at macro-expansion time. Lives in a `Cell` because the
-    /// substitution path takes `&self`.
+    /// post-increments, letting macros mint unique identifiers
+    /// per call site. Lives in a `Cell` because the substitution
+    /// path takes `&self`.
     pub(crate) counter: Cell<i64>,
     /// MSVC-style `#pragma warning(disable : N)` IDs currently
     /// suppressed. Push/pop variants nest via `warning_stack`.
@@ -275,8 +274,7 @@ pub(crate) struct Preprocessor {
     /// asked to disable -- the `-` form. Like `warning_disabled`
     /// above, c5 doesn't currently filter against these but the
     /// parse is real (so typos surface) and the recorded set is
-    /// visible for future per-code filtering. sqlite3 uses this
-    /// form for `-rch` / `-aus` / etc.
+    /// visible for future per-code filtering.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
     /// `#pragma intrinsic("name")` declarations -- a map from
     /// callable identifier to the `Intrinsic` discriminant the
@@ -385,15 +383,16 @@ impl Preprocessor {
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). c5 honours all of these
-        // except `__STDC_HOSTED__` (we don't expose a freestanding /
-        // hosted distinction) and `__STDC_VERSION__` (the dialect is
-        // a c4-shaped subset, not an implementation of any specific
-        // C standard year). `__DATE__` and `__TIME__` are seeded at
-        // badc build time -- C99 says they reflect "the date and
-        // time of translation", and the closest analogue for an
-        // embedded library is the build time of badc itself.
+        // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
+        // is omitted -- the dialect is a c4-shaped subset, not an
+        // implementation of any specific C standard year. `__DATE__`
+        // and `__TIME__` are seeded at badc build time; C99 says they
+        // reflect "the date and time of translation", and the closest
+        // analogue for an embedded library is the build time of badc
+        // itself. `__STDC_HOSTED__` reflects that every supported
+        // target binds the host libc, so the dialect is hosted.
         macros.insert("__STDC__".to_string(), "1".to_string());
+        macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),
@@ -680,7 +679,12 @@ impl Preprocessor {
                         }
                     }
                     Directive::Ifdef(name) => {
-                        let taken = active && self.macros.contains_key(name);
+                        // C99 6.10.1: `#ifdef` is true when the name is
+                        // defined as any macro -- object-like or
+                        // function-like.
+                        let taken = active
+                            && (self.macros.contains_key(name)
+                                || self.fn_macros.contains_key(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -690,7 +694,9 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::Ifndef(name) => {
-                        let taken = active && !self.macros.contains_key(name);
+                        let taken = active
+                            && !(self.macros.contains_key(name)
+                                || self.fn_macros.contains_key(name));
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -1018,7 +1024,7 @@ impl Preprocessor {
     /// `__FILE__` and `__LINE__`, which can't live in the static
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
-        self.substitute_with_blocklist(line, filename, line_no, &[])
+        self.substitute_with_blocklist(line, filename, line_no, &Blocklist::Nil)
     }
 
     /// Scan `text` for identifiers that name a macro currently
@@ -1081,7 +1087,7 @@ impl Preprocessor {
         line: &str,
         filename: &str,
         line_no: usize,
-        blocklist: &[&str],
+        blocklist: &Blocklist,
     ) -> String {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
@@ -1121,7 +1127,7 @@ impl Preprocessor {
                 }
                 // C99 "blue paint": don't re-expand a name that's
                 // already being expanded on the current chain.
-                if blocklist.contains(&ident) {
+                if blocklist.contains(ident) {
                     out.push_str(ident);
                     continue;
                 }
@@ -1170,16 +1176,20 @@ impl Preprocessor {
                         for arg_text in &expanded_args {
                             self.collect_macro_idents_into(arg_text, &mut blue_paint);
                         }
-                        let mut nested: Vec<&str> = blocklist.to_vec();
-                        nested.push(ident);
-                        for bp in &blue_paint {
-                            let s: &str = bp.as_str();
-                            if !nested.contains(&s) {
-                                nested.push(s);
+                        let recursed = if blue_paint.is_empty() {
+                            let frame = Blocklist::Cons(ident, blocklist);
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &frame)
+                        } else {
+                            let mut names: Vec<&str> = alloc::vec![ident];
+                            for bp in &blue_paint {
+                                let s = bp.as_str();
+                                if !names.contains(&s) && !blocklist.contains(s) {
+                                    names.push(s);
+                                }
                             }
-                        }
-                        let recursed =
-                            self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
+                            let frame = Blocklist::Many(&names, blocklist);
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &frame)
+                        };
                         // Token-stream rescan (C99 6.10.3.4): if the
                         // function-like macro's body reduces to a
                         // single identifier and the *source* token
@@ -1196,7 +1206,7 @@ impl Preprocessor {
                                 .bytes()
                                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
                             && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
-                            && !blocklist.contains(&trimmed)
+                            && !blocklist.contains(trimmed)
                             && let Some(inner_def) = self.fn_macros.get(trimmed)
                         {
                             let mut k = next_src;
@@ -1225,8 +1235,7 @@ impl Preprocessor {
                                     })
                                     .collect();
                                 let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
-                                let mut deeper: Vec<&str> = blocklist.to_vec();
-                                deeper.push(trimmed);
+                                let deeper = Blocklist::Cons(trimmed, blocklist);
                                 let inner_recursed = self.substitute_with_blocklist(
                                     &inner_body,
                                     filename,
@@ -1252,8 +1261,7 @@ impl Preprocessor {
                 match self.expand(ident) {
                     None => out.push_str(ident),
                     Some(expanded) => {
-                        let mut nested: Vec<&str> = blocklist.to_vec();
-                        nested.push(ident);
+                        let nested = Blocklist::Cons(ident, blocklist);
                         // Token-stream rescan (C99 6.10.3.4): if the
                         // expansion is a single identifier and the
                         // *source* token immediately after the
@@ -1276,7 +1284,7 @@ impl Preprocessor {
                                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
                             && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
                             && let Some(macro_def) = self.fn_macros.get(trimmed)
-                            && !nested.contains(&trimmed)
+                            && !nested.contains(trimmed)
                         {
                             let mut j = i;
                             while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
@@ -1295,8 +1303,7 @@ impl Preprocessor {
                                     })
                                     .collect();
                                 let body_expanded = expand_fn_macro(macro_def, &expanded_args);
-                                let mut deeper: Vec<&str> = nested.clone();
-                                deeper.push(trimmed);
+                                let deeper = Blocklist::Cons(trimmed, &nested);
                                 let recursed = self.substitute_with_blocklist(
                                     &body_expanded,
                                     filename,
@@ -1474,7 +1481,7 @@ impl Preprocessor {
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr);
         let mut p = IfExprParser::new(&prepared, self);
-        let v = p.parse_or()?;
+        let v = p.parse_ternary()?;
         p.skip_ws();
         if !p.at_end() {
             // Note: `expand_if_expr` doesn't carry a `filename` --
@@ -1538,9 +1545,9 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), line_no, filename);
         }
-        // Borland / Watcom `#pragma warn -<code>` form -- sqlite3
-        // uses `-rch` / `-aus` / etc. Parsed for visibility into
-        // `warn_disabled`; see `parse_pragma_warn` for the syntax.
+        // Borland / Watcom `#pragma warn -<code>` form (`-rch`,
+        // `-aus`, ...). Parsed for visibility into `warn_disabled`;
+        // see `parse_pragma_warn` for the syntax.
         if let Some(inner) = args.strip_prefix("warn ") {
             return self.parse_pragma_warn(inner.trim(), line_no, filename);
         }
@@ -1699,7 +1706,7 @@ impl Preprocessor {
         Ok(())
     }
 
-    /// Borland / Watcom `#pragma warn` -- mostly seen in sqlite3:
+    /// Borland / Watcom `#pragma warn` syntax:
     ///
     /// ```text
     /// #pragma warn -rch  /* disable "unreachable code" */
@@ -1817,8 +1824,8 @@ impl Preprocessor {
     /// declaration time the frontend stamps the matching
     /// `Symbol::intrinsic` field with the [`Intrinsic`]
     /// discriminant from `op.rs`, and the call-site lowering
-    /// emits `Op::Intrinsic <id>` instead of a regular
-    /// Psh/Jsr/JsrExt + Adj sequence. The arg list is
+    /// emits an `Inst::Intrinsic` instead of a regular call +
+    /// stack-cleanup sequence. The arg list is
     /// expected to be a quoted string so future intrinsics
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
@@ -1855,6 +1862,10 @@ impl Preprocessor {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
             "__c5_aarch64_setjmp" => super::op::Intrinsic::SetjmpAArch64 as i64,
             "__c5_aarch64_longjmp" => super::op::Intrinsic::LongjmpAArch64 as i64,
+            "__builtin_va_start" => super::op::Intrinsic::VaStart as i64,
+            "__builtin_va_arg" => super::op::Intrinsic::VaArg as i64,
+            "__builtin_va_end" => super::op::Intrinsic::VaEnd as i64,
+            "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
@@ -1863,7 +1874,9 @@ impl Preprocessor {
                         "`#pragma intrinsic(\"{name}\")` -- unknown \
                          intrinsic; supported today: alloca, \
                          __builtin_alloca, __c5_aarch64_setjmp, \
-                         __c5_aarch64_longjmp"
+                         __c5_aarch64_longjmp, __builtin_va_start, \
+                         __builtin_va_arg, __builtin_va_end, \
+                         __builtin_va_copy"
                     ),
                 )));
             }
@@ -2198,6 +2211,42 @@ impl Preprocessor {
             real_symbol: real_symbol.to_string(),
         });
         Ok(())
+    }
+}
+
+/// Names currently being expanded, threaded through the recursive
+/// macro substitution to implement C99 6.10.3.4 "blue paint" (a
+/// macro does not re-expand while its own expansion is in flight).
+/// A stack-allocated chain: the common frame adds a single name and
+/// borrows its parent, so no heap allocation is needed; a frame that
+/// must add several names (a function-like macro's argument pre-
+/// expansion) borrows a slice instead.
+enum Blocklist<'a> {
+    Nil,
+    Cons(&'a str, &'a Blocklist<'a>),
+    Many(&'a [&'a str], &'a Blocklist<'a>),
+}
+
+impl Blocklist<'_> {
+    fn contains(&self, name: &str) -> bool {
+        let mut cur = self;
+        loop {
+            match cur {
+                Blocklist::Nil => return false,
+                Blocklist::Cons(n, parent) => {
+                    if *n == name {
+                        return true;
+                    }
+                    cur = parent;
+                }
+                Blocklist::Many(names, parent) => {
+                    if names.contains(&name) {
+                        return true;
+                    }
+                    cur = parent;
+                }
+            }
+        }
     }
 }
 
@@ -2906,6 +2955,28 @@ impl<'a> IfExprParser<'a> {
         Ok(left)
     }
 
+    /// C99 6.10.1p1 / 6.5.15: `#if` accepts a ternary at the top of
+    /// the expression precedence. `cond ? then : else` -- both
+    /// branches are evaluated unconditionally and the picked one is
+    /// returned (no short-circuit semantics inside a constant
+    /// expression). Right-associative, so the `else` arm recurses.
+    fn parse_ternary(&mut self) -> Result<IfValue, C5Error> {
+        let cond = self.parse_or()?;
+        self.skip_ws();
+        if !self.eat_byte(b'?') {
+            return Ok(cond);
+        }
+        let then_v = self.parse_ternary()?;
+        self.skip_ws();
+        if !self.eat_byte(b':') {
+            return Err(C5Error::Compile(
+                "preprocessor: missing `:` in `#if` ternary expression".to_string(),
+            ));
+        }
+        let else_v = self.parse_ternary()?;
+        Ok(if cond.truthy() { then_v } else { else_v })
+    }
+
     fn parse_and(&mut self) -> Result<IfValue, C5Error> {
         let mut left = self.parse_bitor()?;
         loop {
@@ -3116,7 +3187,7 @@ impl<'a> IfExprParser<'a> {
     fn parse_primary(&mut self) -> Result<IfValue, C5Error> {
         self.skip_ws();
         if self.eat_byte(b'(') {
-            let v = self.parse_or()?;
+            let v = self.parse_ternary()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
                 return Err(C5Error::Compile(
@@ -3607,6 +3678,24 @@ mod tests {
     }
 
     #[test]
+    fn ifdef_sees_function_like_macro() {
+        // C99 6.10.1: `#ifdef` / `#ifndef` test definedness for any
+        // macro, including function-like ones (kept in a separate
+        // table from object-like macros).
+        let src = "#define F(x) ((x)+1)\n#ifdef F\nint a;\n#else\nint b;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int a;"), "#ifdef should see fn-like macro F");
+        assert!(!out.contains("int b;"));
+        let src2 = "#define F(x) ((x)+1)\n#ifndef F\nint a;\n#else\nint b;\n#endif\n";
+        let out2 = process(src2);
+        assert!(
+            out2.contains("int b;"),
+            "#ifndef of a defined fn-like macro takes #else"
+        );
+        assert!(!out2.contains("int a;"));
+    }
+
+    #[test]
     fn ifndef_keeps_inactive_branch() {
         let src = "#ifndef BAR\nint a;\n#else\nint b;\n#endif\n";
         let out = process(src);
@@ -3830,8 +3919,8 @@ int x_2 = __COUNTER__;
 
     #[test]
     fn pragma_warning_disable_records_ids() {
-        // `#pragma warning(disable : N N N)` -- the headline
-        // sqlite3 case. Each ID lands in `warning_disabled`.
+        // `#pragma warning(disable : N N N)`. Each ID lands in
+        // `warning_disabled`.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let _ = pp
             .process("#pragma warning(disable : 4054 4055 4100)\n")
@@ -3928,9 +4017,8 @@ int x_2 = __COUNTER__;
 
     #[test]
     fn pragma_warn_disable_codes_recorded() {
-        // Borland / Watcom form sqlite3 sprinkles in: `-<code>`
-        // for each warning category it wants silenced. Multiple
-        // tokens per line are accepted.
+        // Borland / Watcom form: `-<code>` per warning category
+        // to silence. Multiple tokens per line are accepted.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let _ = pp
             .process(

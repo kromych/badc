@@ -1,0 +1,41 @@
+
+multi_declarator_prototypes.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	sxtw	x0, w0
+               	ret
+               	sxtw	x0, w0
+               	lsl	x0, x0, #1
+               	sxtw	x0, w0
+               	ret
+               	adrp	x0, <page>
+               	add	x0, x0, #0xd0
+               	mov	x1, #0xa                // =10
+               	str	w1, [x0]
+               	mov	x1, #0x3                // =3
+               	cmp	x1, #0x3
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	ret
+               	mov	x1, #0x3                // =3
+               	lsl	x1, x1, #1
+               	sxtw	x1, w1
+               	cmp	x1, #0x6
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	ret
+               	ldrsw	x0, [x0]
+               	cmp	x0, #0xa
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	ret
+               	mov	x0, #0x0                // =0
+               	ret

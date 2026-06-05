@@ -9,9 +9,9 @@
 // overflowed into the shift bits and the prologue trapped with
 // SIGILL on first call.
 //
-// sqlite3's `do_meta_command` (about 1500 locals across its
-// many dot-command branches) is the in-the-wild trigger; this
-// fixture reproduces the scenario in 30 lines.
+// A function with a few hundred or more locals in branches
+// that the parser keeps live across joins is enough to reach
+// 4096-byte frames; this fixture reproduces that in 30 lines.
 
 int big(int x) {
     // 600 distinct ints -- comfortably past the 511 single-sub

@@ -1,11 +1,9 @@
-// `static const unsigned char arr[]` indexing must use 1-byte
-// stride, not 8-byte. Surfaced inside sqlite3's lexer where
-// `aiClass[(unsigned char)c]` (a 256-entry character-class table)
-// returned wrong values: the per-element size lookup didn't strip
-// the unsigned-bit flag from the type tag, so the backend read
-// 8 bytes per slot and skipped 7 of every 8 entries.
-//
-// Also exercises an u64 array to confirm 8-byte stride still works
+// C99 6.5.6 + 6.7.5.2: `arr[i]` strides by `sizeof(*arr)`.
+// For `static const unsigned char arr[]` that is 1 byte. The
+// per-element size lookup needs to strip the unsigned-bit flag
+// from the type tag so an `unsigned char` array doesn't get
+// the 8-byte stride that bare `Ty::Ptr` would imply. Also
+// covers a `u64` array to confirm 8-byte stride still works
 // when the unsigned bit is set on a wider type.
 #include <stdio.h>
 
@@ -25,9 +23,8 @@ int main() {
     if (wide[0] != 100) { printf("FAIL: wide[0]=%lu\n", wide[0]); return 1; }
     if (wide[4] != 500) { printf("FAIL: wide[4]=%lu\n", wide[4]); return 1; }
 
-    // Index by an unsigned char value (the actual sqlite3 lexer
-    // pattern: classify by char value, with the index itself
-    // arriving from an `unsigned char *`).
+    // Index by an unsigned char value: classify-by-char tables
+    // load their index from an `unsigned char *`.
     unsigned char i = 5;
     if (small[i] != 6)  { printf("FAIL: small[i=5]=%d\n", small[i]); return 1; }
 

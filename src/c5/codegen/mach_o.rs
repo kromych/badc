@@ -1097,8 +1097,8 @@ fn main_command(entry_file_offset: u64) -> Vec<u8> {
 }
 
 /// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams. Phase 1
-/// only uses eager bind; the rest are zero.
+/// rebase / bind / weak-bind / lazy-bind / export streams. Only
+/// eager bind is used; the rest are zero.
 #[allow(clippy::too_many_arguments)]
 fn dyld_info_only(
     rebase_off: u32,
@@ -1279,15 +1279,37 @@ fn patch_adrp_add(
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
 
-    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X19, imm21);
-    let add_word =
-        super::aarch64::enc_add_imm(super::aarch64::Reg::X19, super::aarch64::Reg::X19, in_page);
+    // Recover the destination register encoded by the codegen at the
+    // placeholder site. adrp/add carry the rd in the low 5 bits; the
+    // add additionally carries rn in bits 5..10. Both registers match
+    // by construction (`adrp rd; add rd, rd, #imm`).
+    let prev_adrp = u32::from_le_bytes([
+        out[adrp_file_off],
+        out[adrp_file_off + 1],
+        out[adrp_file_off + 2],
+        out[adrp_file_off + 3],
+    ]);
+    let prev_add = u32::from_le_bytes([
+        out[add_file_off],
+        out[add_file_off + 1],
+        out[add_file_off + 2],
+        out[add_file_off + 3],
+    ]);
+    let rd = (prev_adrp & 0x1F) as u8;
+    let add_rd = (prev_add & 0x1F) as u8;
+    let add_rn = ((prev_add >> 5) & 0x1F) as u8;
+    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
+    let add_word = super::aarch64::enc_add_imm(
+        super::aarch64::Reg(add_rd),
+        super::aarch64::Reg(add_rn),
+        in_page,
+    );
     out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
     out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
     Ok(())
 }
 
-/// Patch each `Op::Imm <data_offset>` site. The target is
+/// Patch each `Inst::ImmData` lowering site. The target is
 /// `data_section_vmaddr + data_offset`.
 fn apply_data_fixups(
     out: &mut [u8],
@@ -1325,10 +1347,9 @@ fn apply_macho_tlv_fixups(
     for fx in fixups {
         let descriptor_vmaddr =
             thread_vars_vmaddr + (fx.descriptor_index as u64) * TLV_DESCRIPTOR_SIZE;
-        // Reuse the existing `patch_adrp_add` helper; the codegen
-        // emitted the adrp/add with rd = x0, but the helper writes
-        // x19. We can't rely on x19 here -- we need x0. Patch the
-        // word directly.
+        // The codegen emitted the adrp/add with rd = x0, but
+        // `patch_adrp_add` writes x19. Patch the words directly
+        // so the encoded rd field stays as the codegen wrote it.
         let adrp_file_off = code_base_in_file + fx.adrp_offset;
         let add_file_off = adrp_file_off + 4;
         let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
@@ -1897,8 +1918,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     for (i, exp) in build.exports.iter().enumerate() {
         let n_strx = str_indices[n_locals + i];
         let native_off = build
-            .bytecode_to_native
-            .get(exp.bytecode_pc)
+            .pc_to_native
+            .get(exp.ent_pc)
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
@@ -1906,7 +1927,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 &format!(
                     "Mach-O: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                    exp.name, exp.bytecode_pc
+                    exp.name, exp.ent_pc
                 ),
             )));
         }
@@ -1943,7 +1964,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // independently.
     // ---- __DWARF layout ----
     //
-    // Phase 1 DWARF sits between __DATA and
+    // __DWARF sits between __DATA and
     // __LINKEDIT in *both* LC order and file order. __LINKEDIT
     // has to remain the last file-resident segment because
     // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
@@ -1966,17 +1987,53 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        // Mach-O routes argc/argv through `LC_MAIN`,
-        // not an emitted stub, so there's no entry-stub range to
-        // describe.
-        let s = dwarf::emit(
-            program,
-            build,
-            super::Target::MacOSAarch64,
-            code_vmaddr_base,
-            &program.source_path,
-            None,
-        );
+        // Mach-O routes argc/argv through `LC_MAIN`, so no
+        // entry-stub range to describe. Multi-TU links hand over
+        // pre-baked DWARF through `Build::merged_dwarf` --
+        // `.debug_info` / `.debug_abbrev` / `.debug_line` /
+        // `.debug_str` use those bytes directly; `.debug_frame`
+        // regenerates from the synth-Build's per-function metadata
+        // (`synth_build` populates that from every Text-section
+        // defined symbol so backtraces unwind through merged code).
+        let s = if let Some(md) = &build.merged_dwarf {
+            // Text-targeting placeholders the linker couldn't
+            // apply (low_pc / high_pc + line-program addresses
+            // need `text_vaddr + merged_text_offset`) are
+            // rewritten here against the writer's committed
+            // text base.
+            let mut debug_info = md.debug_info.clone();
+            let mut debug_line = md.debug_line.clone();
+            for r in &md.debug_info_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_info, r, code_vmaddr_base)?;
+            }
+            for r in &md.debug_line_text_relocs {
+                super::apply_merged_dwarf_text_reloc(&mut debug_line, r, code_vmaddr_base)?;
+            }
+            let fresh = dwarf::emit(
+                program,
+                build,
+                super::Target::MacOSAarch64,
+                code_vmaddr_base,
+                &program.source_path,
+                None,
+            );
+            dwarf::DwarfSections {
+                debug_info,
+                debug_abbrev: md.debug_abbrev.clone(),
+                debug_line,
+                debug_str: md.debug_str.clone(),
+                debug_frame: fresh.debug_frame,
+            }
+        } else {
+            dwarf::emit(
+                program,
+                build,
+                super::Target::MacOSAarch64,
+                code_vmaddr_base,
+                &program.source_path,
+                None,
+            )
+        };
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
         let abbrev = info + s.debug_info.len() as u64;
@@ -2289,24 +2346,29 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // (text vmaddr + native code offset). dyld adds the slide
     // delta when it walks the rebase opcode stream below.
     for r in &build.code_relocs {
-        let bc_pc = r.target_bc_pc as usize;
-        // Prefer the per-function arg-shuffling thunk; see pe.rs's
-        // matching comment. AAPCS64 doesn't require this on its own
-        // but threading both initializer paths through the same
-        // thunk lookup keeps the per-format writers uniform.
+        let ent_pc = r.target_ent_pc as usize;
         let native_off = build
-            .func_thunk_offsets
-            .get(&bc_pc)
+            .pc_to_native
+            .get(ent_pc)
             .copied()
-            .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                &format!("Mach-O: code reloc references missing bytecode pc {bc_pc}"),
+                &format!("Mach-O: code reloc references missing ent_pc {ent_pc}"),
             )));
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
         let off = r.data_offset as usize;
+        #[cfg(feature = "codegen_test")]
+        if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
+            std::eprintln!(
+                "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",
+                r.data_offset,
+                ent_pc,
+                native_off,
+                preferred_va,
+            );
+        }
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -2403,19 +2465,15 @@ mod tests {
     /// output worth asserting on. Real lowering populates this
     /// from the program's `#pragma binding`s.
     /// Empty `Program` paired with `tiny_build`. The DWARF
-    /// emitter needs *a* program to walk for `Op::Ent`s --
-    /// passing the matching empty `text` + `source_*` keeps
+    /// emitter needs *a* program to walk for function entries
+    /// -- passing the matching empty `text` + `source_*` keeps
     /// the debug-segment payload trivial without changing
     /// the structural invariants the tests check.
     fn tiny_program() -> Program {
         Program {
-            text: Vec::new(),
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
-            data_imm_positions: Vec::new(),
-            code_imm_positions: Vec::new(),
-            call_fp_arg_masks: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
@@ -2423,15 +2481,18 @@ mod tests {
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
-            source_lines: Vec::new(),
-            source_functions: Vec::new(),
             source_files: Vec::new(),
-            source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            enums: Vec::new(),
             entry_name: None,
             subsystem: None,
+            finished_functions: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
+            synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            user_ssa_funcs: alloc::vec::Vec::new(),
+            extern_function_imports: alloc::vec::Vec::new(),
         }
     }
 
@@ -2445,8 +2506,15 @@ mod tests {
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
-            bytecode_to_native: Vec::new(),
-            func_thunk_offsets: alloc::collections::BTreeMap::new(),
+            pc_to_native: Vec::new(),
+            func_ent_pcs: Vec::new(),
+            func_names: Vec::new(),
+            func_prologue_native: alloc::collections::BTreeMap::new(),
+            promoted_local_slots: alloc::collections::BTreeMap::new(),
+            reloc_call_sites: Vec::new(),
+            user_extern_call_sites: Vec::new(),
+            user_extern_data_refs: Vec::new(),
+            ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
@@ -2476,6 +2544,7 @@ mod tests {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             debug_info: true,
+            merged_dwarf: None,
             plt_trampoline_offsets: Vec::new(),
         }
     }

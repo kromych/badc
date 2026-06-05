@@ -1,65 +1,62 @@
-//! Cross-translation-unit linker.
+//! Native object linker.
 //!
-//! Gated behind the `linker` feature; absent it the lib has no
-//! way to write or read object / archive files and `Compiler`'s
+//! Gated behind the `linker` feature; absent it the lib has no way
+//! to write or read object / archive files and `Compiler`'s
 //! single-TU compile-to-`Program` shape is the only path.
-//!
-//! ## Model
-//!
-//! A *translation unit* compiles to a [`LinkUnit`] -- the same
-//! bytecode + static-data shape as [`crate::c5::Program`], plus
-//! a symbol table (defined and undefined names) and a list of
-//! relocations that the link step resolves once every required
-//! TU is in memory. Bytecode is target-independent; per-target
-//! native lowering happens only when a [`Program`] flows into the
-//! existing codegen, after the link.
-//!
-//! Object files (`.o`) are an ELF wrapper around a single
-//! [`LinkUnit`]: standard `.symtab` / `.strtab` for the symbol
-//! table, a `.rela.badc.text` relocation section, and badc-
-//! specific sections (`.badc.text` = `Vec<i64>` bytecode,
-//! `.badc.data`, `.badc.tdata` / `.badc.tbss`, `.badc.meta`)
-//! carrying everything else. Archives (`.a`) are ar(5) with a
-//! SysV-style symbol index (`/`) -- one member per object,
-//! pull-in driven by undefined-symbol references in the root
-//! inputs.
 //!
 //! ## Pipeline
 //!
 //! ```text
 //!   foo.c, bar.c
-//!      |  Compiler::compile_to_link_unit
+//!      |  Compiler::compile + emit_native (OutputKind::Relocatable)
 //!      v
-//!   foo.lu, bar.lu  ----  object::write  --->  foo.o, bar.o
+//!   foo.o, bar.o    (ELF64 ET_REL; a `.note.badc` carries dylib
+//!                    routing, exports, and TLS metadata)
 //!                                                  |
-//!                                                  v
 //!                  archive::write_archive ---> libbaz.a
 //!   foo.o, bar.o, libbaz.a, plus -l/-L paths
-//!      |  link_units
+//!      |  parse_native_elf -> link_native_objects -> emit_*_plt
 //!      v
-//!   Program (single-TU shape; ready for emit_native)
+//!   MergedNative  ->  write_native_image_from_merged
+//!      v
+//!   ELF / Mach-O / PE executable or shared library
 //! ```
 //!
-//! `link_units` walks the input list, pulls archive members on
-//! demand (a member is included iff one of its defined symbols
-//! satisfies a still-unresolved reference), concatenates the
-//! `text` / `data` / `tdata` segments with per-unit offsets,
-//! and applies relocations against the merged symbol table.
-//! The result is a single [`Program`] indistinguishable from one
-//! produced by a single-TU compile, plus a merged dylib /
-//! binding table, struct registry, source-file table, and
-//! DWARF variable list.
+//! `link_native_objects` pulls archive members on demand (a member
+//! is included iff one of its defined symbols satisfies a still-
+//! unresolved reference), concatenates the `.text` / `.data` /
+//! `.tdata` sections with per-unit offsets, resolves cross-unit
+//! relocations by symbol name, and dedupes the dylib / binding /
+//! export tables. `write_native_image_from_merged` lays out the
+//! container, the PLT, the dynamic-symbol tables, PT_TLS / the PE
+//! TLS directory / Mach-O TLV descriptors, and the merged DWARF.
 
 mod archive;
+#[cfg(feature = "std")]
+mod image;
+#[cfg(feature = "std")]
 pub(crate) mod link;
+#[cfg(feature = "std")]
 mod object;
-mod reloc;
-mod symbol;
-mod unit;
+#[cfg(feature = "std")]
+mod synth_build;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
-pub use link::{LinkArchive, LinkOptions, link_units};
-pub use object::{read_object, write_object};
-pub use reloc::{Reloc, RelocKind};
-pub use symbol::{LinkSymbol, SymbolKind};
-pub use unit::LinkUnit;
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use image::write_executable_elf64;
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use link::{
+    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
+    emit_x86_64_plt, link_native_objects,
+};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use object::{
+    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
+    parse_native_elf,
+};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use synth_build::write_native_image_from_merged;

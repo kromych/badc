@@ -1,0 +1,181 @@
+
+local_struct_array_brace_init.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	sxtw	x1, w1
+               	mov	x2, #0x0                // =0
+               	stur	x2, [x29, #-0x8]
+               	stur	w2, [x29, #-0x10]
+               	b	<addr>
+               	ldursw	x2, [x29, #-0x10]
+               	cmp	x2, x1
+               	b.ge	<addr>
+               	b	<addr>
+               	sub	x2, x29, #0x10
+               	ldrsw	x3, [x2]
+               	add	x3, x3, #0x1
+               	str	w3, [x2]
+               	b	<addr>
+               	sub	x2, x29, #0x8
+               	ldr	x3, [x2]
+               	ldursw	x4, [x29, #-0x10]
+               	lsl	x4, x4, #4
+               	add	x4, x0, x4
+               	add	x4, x4, #0x8
+               	ldr	x4, [x4]
+               	add	x3, x3, x4
+               	str	x3, [x2]
+               	b	<addr>
+               	ldur	x0, [x29, #-0x8]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0xb0
+               	sub	x0, x29, #0x30
+               	adrp	x1, <page>
+               	add	x1, x1, #0xdc
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [x1, #0x10]
+               	str	x10, [x0, #0x10]
+               	ldr	x10, [x1, #0x18]
+               	str	x10, [x0, #0x18]
+               	ldr	x10, [x1, #0x20]
+               	str	x10, [x0, #0x20]
+               	ldr	x10, [x1, #0x28]
+               	str	x10, [x0, #0x28]
+               	ldr	x10, [sp], #0x10
+               	sub	x0, x29, #0x30
+               	mov	x1, #0x3                // =3
+               	bl	<addr>
+               	cmp	x0, #0xc
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x30
+               	add	x0, x0, #0x8
+               	ldr	x0, [x0]
+               	cmp	x0, #0x3
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x30
+               	add	x0, x0, #0x28
+               	ldr	x0, [x0]
+               	cmp	x0, #0x5
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x98
+               	adrp	x1, <page>
+               	add	x1, x1, #0x11b
+               	str	x10, [sp, #-0x10]!
+               	ldr	x10, [x1]
+               	str	x10, [x0]
+               	ldr	x10, [x1, #0x8]
+               	str	x10, [x0, #0x8]
+               	ldr	x10, [x1, #0x10]
+               	str	x10, [x0, #0x10]
+               	ldr	x10, [x1, #0x18]
+               	str	x10, [x0, #0x18]
+               	ldr	x10, [x1, #0x20]
+               	str	x10, [x0, #0x20]
+               	ldr	x10, [x1, #0x28]
+               	str	x10, [x0, #0x28]
+               	ldr	x10, [sp], #0x10
+               	sub	x0, x29, #0x40
+               	sub	x1, x29, #0x98
+               	str	x0, [x1]
+               	mov	x0, #0x10               // =16
+               	sub	x1, x29, #0x98
+               	add	x1, x1, #0x8
+               	str	x0, [x1]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x98
+               	add	x1, x1, #0x10
+               	str	x0, [x1]
+               	mov	x0, #0x20               // =32
+               	sub	x1, x29, #0x98
+               	add	x1, x1, #0x18
+               	str	x0, [x1]
+               	sub	x0, x29, #0x68
+               	sub	x1, x29, #0x98
+               	add	x1, x1, #0x20
+               	str	x0, [x1]
+               	mov	x0, #0x8                // =8
+               	sub	x1, x29, #0x98
+               	add	x1, x1, #0x28
+               	str	x0, [x1]
+               	sub	x0, x29, #0x98
+               	mov	x1, #0x3                // =3
+               	bl	<addr>
+               	cmp	x0, #0x38
+               	b.eq	<addr>
+               	mov	x0, #0x4                // =4
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x98
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x40
+               	cmp	x0, x1
+               	b.eq	<addr>
+               	mov	x0, #0x5                // =5
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x98
+               	add	x0, x0, #0x10
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x60
+               	cmp	x0, x1
+               	b.eq	<addr>
+               	mov	x0, #0x6                // =6
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x98
+               	add	x0, x0, #0x20
+               	ldr	x0, [x0]
+               	sub	x1, x29, #0x68
+               	cmp	x0, x1
+               	b.eq	<addr>
+               	mov	x0, #0x7                // =7
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x98
+               	add	x0, x0, #0x28
+               	ldr	x0, [x0]
+               	cmp	x0, #0x8
+               	b.eq	<addr>
+               	mov	x0, #0x8                // =8
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0xb0
+               	ldp	x29, x30, [sp], #0x10
+               	ret

@@ -43,27 +43,26 @@
 //! so the CRT atexit chain runs (without it printf to a pipe loses
 //! its tail line because msvcrt block-buffers non-tty stdout).
 //!
-//! ## Op-to-DLL binding
+//! ## POSIX-to-DLL binding
 //!
-//! Most c4 ops map straight onto a msvcrt or kernel32 export. Two
-//! corners worth flagging:
+//! Most c5 intrinsic ops map straight onto a msvcrt or kernel32
+//! export. Two corners worth flagging:
 //!
-//! * `Op::Senv` (POSIX `setenv(name, value, overwrite)`) binds to
-//!   msvcrt's `_putenv_s(name, value)`. The 3rd arg lands in `r8`
-//!   per Win64 calling convention; `_putenv_s` ignores it. The
+//! * `setenv(name, value, overwrite)` binds to msvcrt's
+//!   `_putenv_s(name, value)`. The 3rd arg lands in `r8` per
+//!   Win64 calling convention; `_putenv_s` ignores it. The
 //!   semantics differ when `overwrite == 0`, but most c5 callers
 //!   pass `overwrite = 1` and don't notice.
-//! * `Op::Dler` (POSIX `dlerror()`) binds to kernel32's
-//!   `GetLastError`. Both return zero when there's no pending
-//!   error; a c5 program that *prints* `dlerror()` would see
-//!   garbage on Windows, but the common `if (dlerror()) { ... }`
-//!   shape works.
-//! * `Op::Mpro` (POSIX `mprotect(addr, len, prot)`) is not
-//!   currently supported on Windows; the binding goes to
-//!   `VirtualProtect`, but the calling convention mismatch (Windows
-//!   takes a 4th `OldProt` out-pointer the c5 program doesn't
-//!   provide) makes it unsafe to invoke. Programs that don't call
-//!   `mprotect` are unaffected.
+//! * `dlerror()` binds to kernel32's `GetLastError`. Both return
+//!   zero when there's no pending error; a c5 program that
+//!   *prints* `dlerror()` would see garbage on Windows, but the
+//!   common `if (dlerror()) { ... }` shape works.
+//! * `mprotect(addr, len, prot)` is not currently supported on
+//!   Windows; the binding goes to `VirtualProtect`, but the
+//!   calling convention mismatch (Windows takes a 4th `OldProt`
+//!   out-pointer the c5 program doesn't provide) makes it unsafe
+//!   to invoke. Programs that don't call `mprotect` are
+//!   unaffected.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -203,7 +202,7 @@ fn num_sections(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
 ) -> usize {
     let mut n = 3; // .text, .pdata, .idata
     if data_section_present {
@@ -215,14 +214,15 @@ fn num_sections(
     if edata_section_present {
         n += 1;
     }
-    if dwarf_section_present {
-        // Five `__debug_*` sections (info / abbrev /
-        // line / str / frame). PE caps section names at 8 chars,
-        // so the leading dot is dropped (mingw-w64 convention) --
-        // dwarfdump / lldb / gdb all recognise the truncated
-        // names since they walk by content, not literal name.
-        n += 5;
-    }
+    // One section header per non-empty DWARF blob (info / abbrev /
+    // line / str / frame). The Windows image loader returns
+    // ERROR_BAD_EXE_FORMAT (193) when a SizeOfRawData == 0 section
+    // shares its VirtualAddress with the next one or sits at the
+    // SizeOfImage boundary, so empty blobs are dropped before they
+    // reach the section table. PE caps section names at 8 chars, so
+    // the leading dot is dropped (mingw-w64 convention) -- lldb /
+    // gdb / `llvm-dwarfdump` walk by content, not literal name.
+    n += dwarf_section_count;
     n
 }
 
@@ -239,7 +239,7 @@ fn headers_raw_size(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
 ) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
@@ -250,7 +250,7 @@ fn headers_raw_size(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
-                dwarf_section_present,
+                dwarf_section_count,
             );
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
@@ -396,8 +396,8 @@ pub(super) fn write(
     let dlls = group_imports_by_dll(&imports);
 
     // 4) Compute layout. Combined .text is `entry stub |
-    //    build.text`; the program's `Op::Mpro` calls go through
-    //    the regular IAT lookup just like every other libc op.
+    //    build.text`; the program's `mprotect` calls go through
+    //    the regular IAT lookup just like every other libc call.
     let stub_len = stub.bytes.len() as u32;
     let text_prologue_len = stub_len;
 
@@ -426,14 +426,89 @@ pub(super) fn write(
     // string table are all skipped, `pointer_to_symbol_table`
     // returns to 0, and `SizeOfImage` shrinks accordingly.
     let dwarf_section_present = build.debug_info;
+    let text_rva: u32 = SECTION_ALIGNMENT;
+    // Build the DWARF section payloads up front so the section-
+    // header count is known before the layout pass. The Windows
+    // image loader rejects an image with ERROR_BAD_EXE_FORMAT
+    // (193) when two SizeOfRawData == 0 sections share a
+    // VirtualAddress, so empty blobs are dropped here and never
+    // reach the section table. Multi-TU link path:
+    // `.debug_info` / `.debug_abbrev` / `.debug_line` /
+    // `.debug_str` come from the linker-merged streams;
+    // `.debug_frame` regenerates fresh from the synth-Build's
+    // per-function metadata that `synth_build` populates from
+    // every Text-section defined symbol.
+    let dwarf_sections_raw = if let Some(md) = &build.merged_dwarf {
+        // The linker leaves text-targeting placeholders cleared
+        // because the writer commits the merged-text runtime
+        // address. Apply them here against the actual `text_rva +
+        // text_prologue_len` so DW_AT_low_pc / line-program
+        // addresses point at the function bodies in the final
+        // image.
+        let text_vmaddr = IMAGE_BASE + (text_rva + text_prologue_len) as u64;
+        let mut debug_info = md.debug_info.clone();
+        let mut debug_line = md.debug_line.clone();
+        for r in &md.debug_info_text_relocs {
+            super::apply_merged_dwarf_text_reloc(&mut debug_info, r, text_vmaddr)?;
+        }
+        for r in &md.debug_line_text_relocs {
+            super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
+        }
+        let fresh = dwarf::emit(
+            program,
+            build,
+            target,
+            text_vmaddr,
+            &program.source_path,
+            None,
+        );
+        dwarf::DwarfSections {
+            debug_info,
+            debug_abbrev: md.debug_abbrev.clone(),
+            debug_line,
+            debug_str: md.debug_str.clone(),
+            debug_frame: fresh.debug_frame,
+        }
+    } else if dwarf_section_present {
+        dwarf::emit(
+            program,
+            build,
+            target,
+            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
+            &program.source_path,
+            None,
+        )
+    } else {
+        dwarf::DwarfSections {
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    };
+    // Order matches the original `DWARF_LONG_NAMES` table below;
+    // changing the order would change which section names land in
+    // the COFF string table.
+    let dwarf_blobs: [(&'static str, Vec<u8>); 5] = [
+        (".debug_info", dwarf_sections_raw.debug_info.clone()),
+        (".debug_abbrev", dwarf_sections_raw.debug_abbrev.clone()),
+        (".debug_line", dwarf_sections_raw.debug_line.clone()),
+        (".debug_str", dwarf_sections_raw.debug_str.clone()),
+        (".debug_frame", dwarf_sections_raw.debug_frame.clone()),
+    ];
+    let dwarf_section_count = if dwarf_section_present {
+        dwarf_blobs.iter().filter(|(_, b)| !b.is_empty()).count()
+    } else {
+        0
+    };
     let headers_size = headers_raw_size(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
     ) as u32;
 
-    let text_rva: u32 = SECTION_ALIGNMENT;
     let text_file_off: u32 = headers_size;
     let text_size: u32 = text_prologue_len + build.text.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
@@ -568,7 +643,7 @@ pub(super) fn write(
             edata_rva,
             text_rva + text_prologue_len,
             &build.exports,
-            &build.bytecode_to_native,
+            &build.pc_to_native,
         )?
     } else {
         Vec::new()
@@ -603,39 +678,14 @@ pub(super) fn write(
         idata_rva + idata_size
     };
 
-    // Lay out the five DWARF debug sections after the
-    // existing ones. The mingw-w64 PE convention drops the leading
-    // dot to fit each name in PE's 8-char limit; lldb / gdb / `llvm-
-    // dwarfdump` all walk by section content rather than literal
-    // name and pick them up.
-    //
-    // Each section is `IMAGE_SCN_MEM_DISCARDABLE`, so the loader
-    // skips them at runtime even though they occupy RVA range --
-    // they only matter to the debugger walking the file image.
-    let dwarf_sections = if dwarf_section_present {
-        // PE has its own entry stub, but the symptom
-        // (gdb's "Cannot find bounds of current function" after
-        // stepping past `return 0;` in main) was only verified
-        // on linux/aarch64. Pass `None` here -- the ELF writer
-        // wires up the stub range; PE can opt in when the
-        // symptom surfaces under windbg.
-        dwarf::emit(
-            program,
-            build,
-            target,
-            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
-            &program.source_path,
-            None,
-        )
-    } else {
-        dwarf::DwarfSections {
-            debug_info: Vec::new(),
-            debug_abbrev: Vec::new(),
-            debug_line: Vec::new(),
-            debug_str: Vec::new(),
-            debug_frame: Vec::new(),
-        }
-    };
+    // `dwarf_sections_raw` + `dwarf_blobs` were built earlier so
+    // the section-table count is known before the layout pass; the
+    // mingw-w64 PE convention drops the leading dot from each
+    // name to fit PE's 8-char `Name` field, and the COFF long-name
+    // strtab below carries the full names that lldb / gdb /
+    // `llvm-dwarfdump` walk by content. Each section is
+    // `IMAGE_SCN_MEM_DISCARDABLE`, so the loader skips them at
+    // runtime even though they occupy RVA range.
     /// One entry of the PE DWARF layout: section name (`/<offset>`
     /// indirection into the COFF string table for the full
     /// `.debug_*` name), the section's RVA + file offset, and the
@@ -659,13 +709,9 @@ pub(super) fn write(
     //
     // mingw-w64's `x86_64-w64-mingw32-gcc -g` produces the same
     // shape, which is why `llvm-dwarfdump` and `lldb` accept it.
-    const DWARF_LONG_NAMES: [&str; 5] = [
-        ".debug_info",
-        ".debug_abbrev",
-        ".debug_line",
-        ".debug_str",
-        ".debug_frame",
-    ];
+    // The long names live in `dwarf_blobs` above; the per-section
+    // loop below copies each one into the strtab when it emits
+    // the corresponding section header.
     let mut coff_strtab: Vec<u8> = Vec::new();
     let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
     // Build a per-trampoline COFF symbol table so a
@@ -686,37 +732,32 @@ pub(super) fn write(
         // 4-byte size header, patched at the end.
         coff_strtab.extend_from_slice(&0u32.to_le_bytes());
     }
+    // Per-blob COFF long-name entries are emitted only for the
+    // non-empty payloads so each section header maps to a real
+    // section. Empty blobs were dropped from the count above; this
+    // loop keeps the names aligned with the surviving entries.
+    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
     if dwarf_section_present {
-        for long_name in DWARF_LONG_NAMES {
+        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
+        let mut next_file_off = pre_dwarf_end_file_off;
+        for (long_name, bytes) in dwarf_blobs.iter() {
+            if bytes.is_empty() {
+                continue;
+            }
             let strtab_offset = coff_strtab.len() as u32;
             coff_strtab.extend_from_slice(long_name.as_bytes());
             coff_strtab.push(0);
-            // Format `/N` padded to 8 bytes.
             let mut name_field = [0u8; 8];
             let formatted = format!("/{strtab_offset}");
             let n = formatted.len().min(8);
             name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
             dwarf_section_names.push(name_field);
-        }
-    }
-    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
-    if dwarf_section_present {
-        let blobs: [Vec<u8>; 5] = [
-            dwarf_sections.debug_info.clone(),
-            dwarf_sections.debug_abbrev.clone(),
-            dwarf_sections.debug_line.clone(),
-            dwarf_sections.debug_str.clone(),
-            dwarf_sections.debug_frame.clone(),
-        ];
-        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
-        let mut next_file_off = pre_dwarf_end_file_off;
-        for (i, bytes) in blobs.into_iter().enumerate() {
             let raw_size = round_up(bytes.len() as u32, FILE_ALIGNMENT);
             dwarf_pe_sections.push(DwarfPeSlot {
-                name: dwarf_section_names[i],
+                name: name_field,
                 rva: next_rva,
                 file_off: next_file_off,
-                bytes,
+                bytes: bytes.clone(),
             });
             next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
             next_file_off += raw_size;
@@ -839,8 +880,9 @@ pub(super) fn write(
     }
 
     // Program-side fixups land inside build.text, which is offset
-    // by text_prologue_len in the combined .text. All libc ops --
-    // including `Op::Mpro` -- now go through the regular IAT slot;
+    // by text_prologue_len in the combined .text. All libc calls
+    // -- including `mprotect` -- now go through the regular IAT
+    // slot;
     // the per-target header's `#pragma binding` decides whether
     // mprotect resolves at all (POSIX targets bind it, Windows
     // doesn't, sources gate the call on `__BADC_WINDOWS__`).
@@ -868,7 +910,8 @@ pub(super) fn write(
         patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
 
-    // TLS-index fixups. Every `Op::TlsLea` recorded a code site
+    // TLS-index fixups. Every `Inst::TlsAddr` lowering recorded
+    // a code site
     // that needs the address of the `_tls_index` DWORD slot the
     // loader fills in. The slot lives at the tail of `.data` (see
     // `tls_layout` and the data emission below). Each per-arch
@@ -893,7 +936,7 @@ pub(super) fn write(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
         coff_symtab_file_off,
         n_coff_symbols,
         coff_strtab_file_off,
@@ -914,17 +957,17 @@ pub(super) fn write(
     // `build.text`:
     //   * `--shared` output with a user-defined `DllMain` -- the
     //     loader's `DLL_PROCESS_ATTACH` callback lands directly on
-    //     the user body at `bytecode_to_native[dllmain_pc]`.
+    //     the user body at `pc_to_native[dllmain_pc]`.
     //   * Passthrough subsystems (NT-native, UEFI) -- the loader
     //     invokes the entry at `build.entry_offset` directly.
     // `text_prologue_len` is zero in both bypass cases; it stays
     // in the formula for symmetry with the other text-relative
     // computations in this writer.
     let entry_rva = if let Some(pc) = build.dllmain_pc.filter(|_| is_dll) {
-        let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
+        let off = build.pc_to_native.get(pc).copied().ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "PE writer: user-defined DllMain at bytecode PC {pc} \
-                     has no entry in bytecode_to_native -- the lowering \
+                "PE writer: user-defined DllMain at ent_pc {pc} \
+                     has no entry in pc_to_native -- the lowering \
                      dropped the function?"
             )))
         })?;
@@ -964,7 +1007,7 @@ pub(super) fn write(
         data_section_present,
         reloc_section_present,
         edata_section_present,
-        dwarf_section_present,
+        dwarf_section_count,
     ));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
@@ -1076,25 +1119,15 @@ pub(super) fn write(
         // so the Windows loader adds the slide delta when ASLR
         // moves the image.
         for r in &build.code_relocs {
-            let bc_pc = r.target_bc_pc as usize;
-            // Prefer the per-function arg-shuffling thunk: Win64
-            // Jsri allocates 32 bytes of shadow space before the
-            // call, so a bare-body landing point would have its
-            // `[rbp+16]` reads pointing into the shadow region
-            // instead of the c5-stack args. The thunk re-spills
-            // the host-ABI register args back onto the c5 stack
-            // before falling into the body. Functions with zero
-            // params don't have a thunk -- they don't read args
-            // anyway -- so fall back to the bare body.
+            let ent_pc = r.target_ent_pc as usize;
             let native_off = build
-                .func_thunk_offsets
-                .get(&bc_pc)
+                .pc_to_native
+                .get(ent_pc)
                 .copied()
-                .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
                 return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!("PE: code reloc references missing bytecode pc {bc_pc}"),
+                    &format!("PE: code reloc references missing ent_pc {ent_pc}"),
                 )));
             }
             let preferred_va =
@@ -1273,12 +1306,12 @@ const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPO
 /// All RVAs in the directory are image-relative; the
 /// `text_prologue_rva` is `text_rva + stub_len`, the byte
 /// where `build.text` starts. Each export's runtime RVA is
-/// `text_prologue_rva + bytecode_to_native[bytecode_pc]`.
+/// `text_prologue_rva + pc_to_native[ent_pc]`.
 fn build_export_directory(
     edata_rva: u32,
     text_prologue_rva: u32,
     exports: &[crate::c5::program::ExportedFunction],
-    bytecode_to_native: &[usize],
+    pc_to_native: &[usize],
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
     // Layout offsets within the section.
@@ -1317,16 +1350,13 @@ fn build_export_directory(
 
     // AddressOfFunctions -- RVA of each function.
     for exp in exports {
-        let native_off = bytecode_to_native
-            .get(exp.bytecode_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
+        let native_off = pc_to_native.get(exp.ent_pc).copied().unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "PE: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                    exp.name, exp.bytecode_pc
+                    exp.name, exp.ent_pc
                 ),
             )));
         }
@@ -1700,7 +1730,7 @@ fn write_coff_header(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
-    dwarf_section_present: bool,
+    dwarf_section_count: usize,
     coff_symtab_file_off: u32,
     n_coff_symbols: u32,
     coff_strtab_file_off: u32,
@@ -1723,7 +1753,7 @@ fn write_coff_header(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
-                dwarf_section_present,
+                dwarf_section_count,
             ) as u16,
             time_date_stamp: 0,
             // PE images carry a COFF strtab at the file
@@ -1881,9 +1911,8 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             // c5 uses the mingw default so portable programs that
             // exercise recursion to a depth tuned for the Linux /
             // macOS C stack budget don't fault the guard page on
-            // Windows before whatever counter the program uses to
-            // self-limit fires (`LUAI_MAXCCALLS`, `tcc_state->
-            // nb_errors`, etc.).
+            // Windows before whatever in-program counter would
+            // otherwise enforce the recursion limit.
             size_of_stack_reserve: 0x80_0000, // 8 MiB
             size_of_stack_commit: 0x1000,
             size_of_heap_reserve: 0x10_0000,
@@ -3725,9 +3754,9 @@ mod tests {
     /// inside `build.text` rather than at the start of
     /// `.text`. With the stub suppressed, `build.text` lands
     /// at offset 0 of `.text`, so the expected entry is
-    /// `BaseOfCode + bytecode_to_native[dllmain_pc]`. A
+    /// `BaseOfCode + pc_to_native[dllmain_pc]`. A
     /// secondary `dummy` function before `DllMain` guarantees
-    /// `bytecode_to_native[dllmain_pc] > 0` so the assertion
+    /// `pc_to_native[dllmain_pc] > 0` so the assertion
     /// is genuinely distinguishing the user-DllMain branch
     /// from the no-user-DllMain branch.
     #[test]
@@ -3749,7 +3778,7 @@ mod tests {
             super::super::NativeOptions::new().with_shared_library(),
         )
         .expect("lower");
-        let dllmain_native_off = build.bytecode_to_native[dllmain_pc] as u32;
+        let dllmain_native_off = build.pc_to_native[dllmain_pc] as u32;
         assert!(
             dllmain_native_off > 0,
             "with `dummy` defined before DllMain, the lowering \
@@ -3768,7 +3797,7 @@ mod tests {
             entry,
             base + dllmain_native_off,
             "AddressOfEntryPoint must target the user's DllMain at \
-             BaseOfCode + bytecode_to_native[dllmain_pc]"
+             BaseOfCode + pc_to_native[dllmain_pc]"
         );
     }
 

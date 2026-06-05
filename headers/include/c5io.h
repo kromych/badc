@@ -167,15 +167,17 @@ static int c5_vfprintf(int fd, char *fmt, va_list ap) {
                 total = total + c5_emit_int(fd, va_arg(ap, int));
                 i = i + 1;
             } else if (c == 'u') {
-                // %u: print as unsigned decimal. We share the
+                // %u: print as unsigned decimal. Shares the
                 // signed-decimal path (c5_emit_int operates on the
                 // 32-bit `int` slot's bit pattern); values with the
                 // high bit set come out as the negative-equivalent
                 // signed decimal rather than the strict unsigned
                 // value. Strict %u for full 64-bit values needs
                 // working 64-bit unsigned division, which today
-                // produces wrong results for high-bit-set inputs --
-                // gh #43 tracks the codegen fix.
+                // produces wrong results for high-bit-set inputs.
+                // TODO: route 64-bit unsigned division through a
+                // dedicated codegen path so %u no longer aliases
+                // to %d.
                 total = total + c5_emit_int(fd, va_arg(ap, int));
                 i = i + 1;
             } else if (c == 'x') {

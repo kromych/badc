@@ -1,9 +1,9 @@
 //! End-to-end DWARF-validation tests: compile a fixture with badc,
 //! drop the Mach-O binary into a temp dir, then run `lldb --batch`
 //! against it and assert the type-tree output matches the expected
-//! shape. Anchors gh #57 (per-c5-tag base type DIEs), gh #58
-//! (pointer chains), and gh #59 (struct DIEs with member offsets)
-//! against regressions.
+//! shape. Cover per-c5-tag base-type DIEs, pointer-type chains,
+//! struct DIEs with member offsets, and the multi-TU line-program
+//! file table against regressions.
 //!
 //! Gated to macOS for the same reason `native.rs` is: the produced
 //! binary is a Mach-O the host loader will accept. lldb has to be
@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{CompileOptions, Compiler, LinkOptions, Target, emit_native, link_units};
+use crate::{CompileOptions, Compiler, Target};
 
 /// Compile the inline source with the standard prelude and write
 /// an ad-hoc-signed Mach-O into a unique temp file. The path is
@@ -24,6 +24,10 @@ use crate::{CompileOptions, Compiler, LinkOptions, Target, emit_native, link_uni
 /// responsible for cleanup (best-effort `remove_file` at the
 /// bottom of each test).
 fn build_signed_mach_o(src: &str, stem: &str) -> PathBuf {
+    build_signed_mach_o_opt(src, stem, false)
+}
+
+fn build_signed_mach_o_opt(src: &str, stem: &str, optimize: bool) -> PathBuf {
     let mut program = Compiler::new(super::with_prelude(src))
         .compile()
         .unwrap_or_else(|e| panic!("compile failed for {stem}: {e}"));
@@ -31,8 +35,12 @@ fn build_signed_mach_o(src: &str, stem: &str) -> PathBuf {
     // rather than `<unknown>`; lldb prefers a non-empty CU name
     // when listing types.
     program.source_path = format!("{stem}.c");
-    let bytes = emit_native(&program, Target::MacOSAarch64)
-        .unwrap_or_else(|e| panic!("emit_native failed for {stem}: {e}"));
+    let mut options = crate::NativeOptions::new().with_debug_info(true);
+    if optimize {
+        options = options.with_optimize();
+    }
+    let bytes = crate::emit_native_with_options(&program, Target::MacOSAarch64, options)
+        .unwrap_or_else(|e| panic!("emit_native_with_options failed for {stem}: {e}"));
 
     let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
     {
@@ -89,6 +97,29 @@ fn dwarfdump_debug_info(path: &Path) -> Option<String> {
 /// confirm a multi-TU link produced one file-table entry per
 /// translation-unit `.c` file and that the line program references
 /// each one. `None` when dwarfdump is missing on PATH.
+/// Disassemble a single function by name via lldb. Returns its
+/// instruction listing, or `None` when lldb is missing or the symbol
+/// is absent. Used to inspect prologue / epilogue shape.
+fn lldb_disasm(path: &Path, func: &str) -> Option<String> {
+    let out = Command::new("lldb")
+        .args([
+            "-b",
+            "-o",
+            &alloc::format!("disassemble --name {func}"),
+            "-o",
+            "quit",
+        ])
+        .arg(path)
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    if text.contains("<+0>") {
+        Some(text)
+    } else {
+        None
+    }
+}
+
 fn dwarfdump_debug_line(path: &Path) -> Option<String> {
     let out = Command::new("dwarfdump")
         .arg("--debug-line")
@@ -297,11 +328,10 @@ fn lldb_resolves_union_with_overlapping_fields() {
 
 #[test]
 fn dwarfdump_emits_cfi_with_post_prologue_rules() {
-    // gh #47: emit a CIE describing c5's standard prologue, plus
-    // an FDE per user function. Previously the section didn't
-    // exist and the unwinder fell back to prologue heuristics
-    // (fragile under -O / restructured frames). Verify the
-    // expected CFI rules land in `__debug_frame`.
+    // Verify the CFI section: a CIE describing c5's standard
+    // prologue plus one FDE per user function. Without it the
+    // unwinder falls back to prologue heuristics, which break
+    // under -O / restructured frames.
     let path = build_signed_mach_o(
         r#"
         int helper(int x) { return x + 1; }
@@ -389,12 +419,13 @@ fn lldb_resolves_bitfield_widths() {
     let _ = std::fs::remove_file(&path);
 }
 
-/// Compile two inline TUs with distinct source labels, link them
-/// through `link_units`, and write an ad-hoc-signed Mach-O. The
-/// distinct source labels propagate through the preprocessor into
-/// each unit's `source_files[0]`; after the linker merges them, the
-/// resulting `program.source_files` carries both names and the
-/// DWARF line-program emitter places one file-table entry per TU.
+/// Compile two inline TUs with distinct source labels to ET_REL,
+/// link them through the native path, and write an ad-hoc-signed
+/// Mach-O. The distinct source labels propagate through the
+/// preprocessor into each object's `.debug_*`; after
+/// `link_native_objects` merges them, the DWARF line program places
+/// one file-table entry per TU. The embedded runtime is linked in
+/// too so the image launches under lldb.
 fn build_signed_mach_o_two_units(
     src_a: &str,
     label_a: &str,
@@ -402,32 +433,44 @@ fn build_signed_mach_o_two_units(
     label_b: &str,
     stem: &str,
 ) -> PathBuf {
-    let unit_a = Compiler::with_options(
-        super::with_prelude(src_a),
-        Target::MacOSAarch64,
-        CompileOptions::default().with_source_label(label_a),
-    )
-    .compile_to_link_unit()
-    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_a}: {e}"));
-    let unit_b = Compiler::with_options(
-        super::with_prelude(src_b),
-        Target::MacOSAarch64,
-        CompileOptions::default().with_source_label(label_b),
-    )
-    .compile_to_link_unit()
-    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_b}: {e}"));
-    let mut unit_a = unit_a;
-    let mut unit_b = unit_b;
-    unit_a.source_path = label_a.to_string();
-    unit_b.source_path = label_b.to_string();
-    // `main`-bearing unit first so link_units anchors the entry on it.
-    let mut program = link_units(alloc::vec![unit_b, unit_a], &[], LinkOptions::default())
-        .unwrap_or_else(|e| panic!("link_units failed: {e}"));
-    if program.source_path.is_empty() {
-        program.source_path = label_b.to_string();
+    let target = Target::MacOSAarch64;
+    let mut reloc_opts = crate::NativeOptions::new().with_debug_info(true);
+    reloc_opts.output_kind = crate::OutputKind::Relocatable;
+    let compile_rel = |src: String, label: &str| -> crate::NativeObject {
+        let program = Compiler::with_options(
+            super::with_prelude(&src),
+            target,
+            CompileOptions::default()
+                .with_source_label(label)
+                .with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile failed for {label}: {e}"));
+        let bytes = crate::emit_native_with_options(&program, target, reloc_opts)
+            .unwrap_or_else(|e| panic!("emit_native_with_options failed for {label}: {e}"));
+        crate::parse_native_elf(&bytes)
+            .unwrap_or_else(|e| panic!("parse_native_elf failed for {label}: {e}"))
+    };
+    let mut objs = alloc::vec![
+        compile_rel(src_a.to_string(), label_a),
+        compile_rel(src_b.to_string(), label_b),
+    ];
+    for (rt_name, rt_body) in crate::embedded_runtime() {
+        objs.push(compile_rel(rt_body.to_string(), rt_name));
     }
-    let bytes = emit_native(&program, Target::MacOSAarch64)
-        .unwrap_or_else(|e| panic!("emit_native failed for {stem}: {e}"));
+    let mut merged = crate::link_native_objects(&objs)
+        .unwrap_or_else(|e| panic!("link_native_objects failed: {e}"));
+    let plt = crate::emit_aarch64_plt(&mut merged)
+        .unwrap_or_else(|e| panic!("emit_aarch64_plt failed: {e}"));
+    let bytes = crate::write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        crate::OutputKind::Executable,
+        target,
+    )
+    .unwrap_or_else(|e| panic!("write_native_image_from_merged failed for {stem}: {e}"));
 
     let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
     {
@@ -449,16 +492,15 @@ fn build_signed_mach_o_two_units(
 
 #[test]
 fn multi_tu_dwarf_line_table_carries_both_files() {
-    // gh #88-shape regression: after the cross-TU linker landed, the
-    // DWARF line program must continue to attribute each PC back to
-    // the `.c` file it came from. The DWARF emitter walks
-    // `program.source_files` (skipping the lexer's `<source>`
-    // placeholder) and assigns one DWARF file number per entry; the
-    // line-program rows reach the right file via `DW_LNS_SET_FILE`
-    // through `program.source_file_indices`. If the linker's source-
-    // table merge or the file-index remap regresses, the file table
-    // would either lose one of the TUs or every PC would attribute
-    // back to file 1.
+    // The DWARF line program must attribute each PC back to the
+    // `.c` file it came from across translation units. The
+    // emitter walks `program.source_files` (skipping the lexer's
+    // `<source>` placeholder) and assigns one DWARF file number
+    // per entry; line-program rows reach the right file via
+    // `DW_LNS_SET_FILE` through `program.source_file_indices`.
+    // If the linker's source-table merge or the file-index remap
+    // regresses, the file table loses one TU or every PC
+    // attributes back to file 1.
     let path = build_signed_mach_o_two_units(
         // TU A: a helper that does a couple of statements so its
         // body has more than one line-program row.
@@ -562,6 +604,198 @@ fn multi_tu_lldb_step_crosses_translation_unit_boundary() {
     assert!(
         out.contains("tu_helper.c"),
         "expected lldb to attribute helper's PC to `tu_helper.c`:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn lldb_backtrace_has_no_duplicate_caller_frame() {
+    // A function's `.debug_frame` FDE must mark `DW_CFA_advance_loc`
+    // at the real post-prologue offset. When the post-prologue marker
+    // is stored per-`ent_pc` (not in a shared `pc_to_native` slot that
+    // a neighbouring small function's PC can alias), a tiny callee's
+    // FDE describes its body as established-frame. If it regresses to
+    // a too-late prologue-end, the unwinder reads the return address
+    // from the live link register inside the callee and synthesises a
+    // phantom duplicate of the caller frame.
+    let path = build_signed_mach_o_two_units(
+        r#"
+        int helper(void) {
+            int a = 1;
+            return a;
+        }
+        "#,
+        "tu_helper.c",
+        r#"
+        extern int helper(void);
+        int main(void) {
+            return helper();
+        }
+        "#,
+        "tu_main.c",
+        "no_dup_frame",
+    );
+    let Some(out) = lldb_batch(
+        &path,
+        &["breakpoint set --name helper", "run", "bt", "quit"],
+    ) else {
+        eprintln!("lldb not on PATH -- skipping duplicate-frame backtrace test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    let _ = std::fs::remove_file(&path);
+    // Each `bt` frame prints `<image>`<symbol> at <file>`. `main` is
+    // called once, so exactly one frame should resolve to it; the
+    // duplicate-frame bug printed two `\`main at` rows at the same PC.
+    let main_frames = out.matches("`main at").count();
+    assert_eq!(
+        main_frames, 1,
+        "expected exactly one `main` frame in the backtrace, got {main_frames}:\n{out}"
+    );
+}
+
+/// Per-statement granularity in the line program: a function with
+/// N straight-line statements must produce at least N distinct
+/// `(addr, line)` rows so a debugger can stop on each one. Before
+/// the SSA emit started recording per-`Inst` source positions, the
+/// walker-driven path produced exactly one row per function and
+/// `lldb step` walked straight out of the body in one go.
+#[test]
+fn debug_line_has_per_statement_rows() {
+    let path = build_signed_mach_o(
+        r#"
+        int main(void) {
+            int a;
+            int b;
+            int c;
+            int d;
+            a = 1;
+            b = 2;
+            c = 3;
+            d = 4;
+            return a + b + c + d;
+        }
+        "#,
+        "per_stmt_rows",
+    );
+    let Some(out) = dwarfdump_debug_line(&path) else {
+        eprintln!("dwarfdump not on PATH -- skipping per-statement row test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    // The exact line numbers in the output depend on the prelude's
+    // length, so count distinct source-line values appearing in
+    // line-program rows instead of asserting against absolute
+    // numbers. A function with 5 user-visible statements (4
+    // assignments + return) needs at least 5 distinct lines.
+    let mut distinct: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
+    for line in out.lines() {
+        let parts: alloc::vec::Vec<&str> = line.split_whitespace().collect();
+        // dwarfdump rows start with the address column (0x...).
+        if parts.len() < 2 || !parts[0].starts_with("0x") {
+            continue;
+        }
+        if let Ok(line_no) = parts[1].parse::<u32>()
+            && line_no > 0
+        {
+            distinct.insert(line_no);
+        }
+    }
+    assert!(
+        distinct.len() >= 5,
+        "expected at least 5 distinct line-program rows (one per statement), got {}:\n{out}",
+        distinct.len(),
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A local mem2reg promotes to a register under -O has its frame
+/// stores removed, so the DWARF location for it must be empty rather
+/// than a stale DW_OP_fbreg pointing at uninitialised frame memory.
+/// Locals that stay in the frame keep their fbreg location.
+#[test]
+fn promoted_local_has_empty_location() {
+    let src = "long f(long n){ long base = n + 100; long acc = 0; long i = 0;\
+               while (i < 3) { acc = acc + base; i = i + 1; } return acc; }\
+               int main(void){ return (int)f(5); }";
+    let path = build_signed_mach_o_opt(src, "promoted_local_loc", true);
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    // `base` is single-def and read across the loop -> promoted; its
+    // location is empty. `acc` and `i` are loop-carried (a join phi),
+    // so they stay in the frame with a real fbreg location.
+    let base_at = out
+        .find("(\"base\")")
+        .unwrap_or_else(|| panic!("no `base` variable in:\n{out}"));
+    let after_base = &out[base_at..];
+    let base_loc_end = after_base.find("DW_TAG").unwrap_or(after_base.len());
+    assert!(
+        after_base[..base_loc_end].contains("DW_AT_location\t(<empty>)"),
+        "promoted local `base` should have an empty location, got:\n{}",
+        &after_base[..base_loc_end]
+    );
+    assert!(
+        out.contains("(\"acc\")") && out.contains("DW_OP_fbreg"),
+        "non-promoted locals should keep an fbreg location:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// C99 6.2.1 block scope: a local declared inside a nested `{ ... }`
+/// block needs its own DW_TAG_variable so a debugger can inspect it.
+/// The symbol-table restore at block exit unbinds such locals before
+/// the function-close collection runs, so they are captured at block
+/// exit and merged into the function's variable list.
+#[test]
+fn block_scoped_local_emitted() {
+    let src = "int main(void){ int outer = 1;\
+               for (int k = 0; k < 3; k++) { int inner = outer + k; outer += inner; }\
+               return outer; }";
+    let path = build_signed_mach_o(src, "block_scoped_local");
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    assert!(
+        out.contains("(\"inner\")"),
+        "block-scoped local `inner` should have a DW_TAG_variable:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// x19 is callee-saved (AAPCS64) and the scratch the writer forces
+/// for address materialisation. A function that materialises no
+/// address and makes no indirect / external call never clobbers x19,
+/// so its prologue must not spill it; a function that touches a
+/// CallExt thunk shape still relies on x19 internally.
+#[test]
+fn leaf_function_omits_x19_save() {
+    let src = "extern int puts(const char *);\n\
+               int g_sink;\n\
+               int leaf(int a, int b, int c){ return a * b + c; }\n\
+               int uses(int a){ g_sink = a; return g_sink; }\n\
+               int with_ext(void){ puts(\"hi\"); return 0; }\n\
+               int main(void){ return leaf(1, 2, 3) + uses(4) + with_ext(); }";
+    let path = build_signed_mach_o(src, "leaf_callee_probe");
+    let Some(leaf) = lldb_disasm(&path, "leaf") else {
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    assert!(
+        !leaf.contains("x19"),
+        "address-free leaf must not save/restore x19:\n{leaf}"
+    );
+    let uses =
+        lldb_disasm(&path, "uses").unwrap_or_else(|| panic!("lldb could not disassemble `uses`"));
+    assert!(
+        !uses.contains("x19"),
+        "global-only function (ImmData picks its own dst) must not save x19:\n{uses}"
+    );
+    let with_ext = lldb_disasm(&path, "with_ext")
+        .unwrap_or_else(|| panic!("lldb could not disassemble `with_ext`"));
+    assert!(
+        with_ext.contains("x19"),
+        "function with CallExt must save/restore x19:\n{with_ext}"
     );
     let _ = std::fs::remove_file(&path);
 }

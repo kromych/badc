@@ -134,57 +134,27 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("memory.h", include_str!("../../headers/include/memory.h")),
 ];
 
-/// Search the embedded headers for one that declares `name` and
-/// return its filename. Used by the compiler's "unknown function"
-/// diagnostic to suggest the right `#include` -- e.g. an
-/// undeclared `printf` lookup turns up `stdio.h` because that
-/// header has both `#pragma binding(libc::printf, ...)` and
-/// `int printf(char *fmt, ...);`.
-///
-/// Two patterns count as a hit, so the search works for both
-/// libc-shaped bindings and plain prototypes:
-///   * `::<name>,` -- a `#pragma binding(<dylib>::<name>, ...)`
-///     line. The `,` requirement avoids matching `<name>` as a
-///     prefix of a longer identifier.
-///   * `<name>(`   -- a function prototype. Same anti-prefix rule
-///     via the trailing `(`.
-///
-/// Returns the first matching header in registry order; the order
-/// roughly tracks how prominent each header is (string / stdio /
-/// stdlib first), so the suggestion lands on the conventional
-/// home for any name that lives in more than one.
-pub(super) fn header_declaring(name: &str) -> Option<&'static str> {
-    for &(header, body) in EMBEDDED_HEADERS {
-        if header == "memory.h" {
-            continue;
-        }
-        if header_declares_name(body, name) {
-            return Some(header);
-        }
-    }
-    None
-}
+// Build-time-generated `&[(name, header)]` sorted by name. Produced
+// by `build.rs`'s `emit_binding_to_header_index`, which walks
+// `headers/include/*.h` once per build and harvests every
+// `#pragma binding(<dylib>::<name>, ...)` local symbol plus every
+// file-scope function-prototype identifier. First-occurrence-wins
+// per name in lexicographic header order; a duplicate declaration
+// in a second header is silently dropped.
+include!(concat!(env!("OUT_DIR"), "/binding_to_header.rs"));
 
-fn header_declares_name(body: &str, name: &str) -> bool {
-    let binding_needle = alloc::format!("::{name},");
-    if body.contains(&binding_needle) {
-        return true;
-    }
-    // Prototype shape: a word break, then `name`, then `(`. The
-    // word-break check rules out `xprintf(` matching `printf`.
-    let proto_needle = alloc::format!("{name}(");
-    let bytes = body.as_bytes();
-    let mut start = 0;
-    while let Some(pos) = body[start..].find(&proto_needle) {
-        let abs = start + pos;
-        let prev = if abs == 0 { b' ' } else { bytes[abs - 1] };
-        let is_word = prev.is_ascii_alphanumeric() || prev == b'_';
-        if !is_word {
-            return true;
-        }
-        start = abs + 1;
-    }
-    false
+/// Look up a function name in the build-time-generated index and
+/// return the header that declares it, or `None` for a name we
+/// don't recognise. O(log N) over the binding index. Used by the
+/// compiler's "unknown function" diagnostic to suggest the right
+/// `#include`, and by `Compiler::compile_with_options` to drive
+/// the auto-include retry (force-include the header naming the
+/// missing symbol, then re-compile).
+pub(super) fn header_declaring(name: &str) -> Option<&'static str> {
+    BINDING_TO_HEADER
+        .binary_search_by_key(&name, |&(n, _)| n)
+        .ok()
+        .map(|i| BINDING_TO_HEADER[i].1)
 }
 
 #[cfg(test)]

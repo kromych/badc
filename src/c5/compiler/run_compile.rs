@@ -17,9 +17,10 @@
 //! `Token::Extern`, `Token::Static`, `Token::ThreadLocal`).
 
 use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
@@ -91,6 +92,9 @@ impl Compiler {
                     extern_seen = true;
                     self.next()?;
                 } else if is_decl_modifier(self.lex.tk) {
+                    if self.lex.tk == Token::Inline {
+                        self.pending_is_inline = true;
+                    }
                     self.next()?;
                 } else {
                     break;
@@ -166,12 +170,30 @@ impl Compiler {
                 // `long long x;` (the implicit-int rule).
                 bt = m.int_base();
             } else if self.lex.tk == Token::Id {
-                // Identifier in base-type position with no
-                // matching typedef. Errors here rather than
-                // falling through to the `Ty::Int` default,
-                // which would silently mis-type the declarator.
-                let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                return Err(self.compile_err(format!("unknown type name `{name}`")));
+                // Identifier in base-type position with no matching
+                // typedef. C89 6.5.2 / C99 6.7.2p2 (deprecated)
+                // "implicit int": a declaration without a type
+                // specifier infers `int`. Common at file scope for
+                // `main() { ... }` and K&R-shaped third-party C.
+                // Honour the implicit-int rule only when the
+                // identifier looks like the declarator itself --
+                // i.e. the next non-whitespace byte is `(` (a
+                // function declarator) or `;` / `,` / `=` (a
+                // simple-variable declarator). Other shapes
+                // (`Foo bar;` where `Foo` is supposed to be a type)
+                // continue to error so a typo in a type name is
+                // surfaced at the declaration, not silently
+                // accepted as `int Foo bar;`.
+                if self.lex.peek_after_whitespace(b'(')
+                    || self.lex.peek_after_whitespace(b';')
+                    || self.lex.peek_after_whitespace(b',')
+                    || self.lex.peek_after_whitespace(b'=')
+                {
+                    bt = Ty::Int as i64;
+                } else {
+                    let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                    return Err(self.compile_err(format!("unknown type name `{name}`")));
+                }
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
@@ -359,11 +381,21 @@ impl Compiler {
                     && !self.symbols[id_idx].has_initializer
                     && (!self.symbols[id_idx].is_extern_decl || self.symbols[id_idx].defined_here)
                     && self.lex.tk != '(';
+                // C99 6.9.2: a file-scope declaration with no initializer
+                // is a tentative definition. It is a redundant
+                // declaration of an existing object -- whether or not
+                // that object already carries an initializer -- and is
+                // not an error. A second initializer is still rejected
+                // because the prior symbol keeps `has_initializer`.
+                let new_is_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
+                    && self.lex.tk != Token::Assign
+                    && self.lex.tk != '(';
                 if self.symbols[id_idx].class != 0
                     && !was_sys
                     && !was_fwd_fun
                     && !was_tentative_glo
                     && !was_extern_redecl
+                    && !new_is_tentative_glo
                 {
                     return Err(self.compile_err("duplicate global definition"));
                 }
@@ -378,6 +410,10 @@ impl Compiler {
                 if self.lex.tk == '(' || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
+                        if self.symbols[id_idx].decl_line == 0 {
+                            self.symbols[id_idx].decl_line = self.lex.line;
+                            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+                        }
                         // C99 6.2.2 linkage: `static` at file scope
                         // is internal; everything else (bare or
                         // `extern`) is external. `static` on either
@@ -398,17 +434,20 @@ impl Compiler {
                         }
                         // Leave `val` untouched. For a first-time
                         // prototype it stays at the Symbol default
-                        // (0); calls before the body see that 0 as
-                        // a placeholder, and `apply_fn_call_fixups`
-                        // rewrites them once the body sets `val =
-                        // ent_pc`. For a redeclaration after the
-                        // body has been emitted, `val` already
-                        // points at the real `ent_pc` and we must
-                        // *not* clobber it -- a previous version
-                        // of this code wrote `val = self.text.len()`
-                        // whenever val was 0, which silently broke
-                        // any function whose body legitimately
-                        // started at PC 0.
+                        // (0); the walker reads the live
+                        // `Symbol::val` through `live_fun_val`
+                        // when it lowers a call to this name, so
+                        // a call placed before the body sees the
+                        // post-body `ent_pc` once the body has
+                        // been parsed. For a
+                        // redeclaration after the body has been
+                        // emitted, `val` already points at the
+                        // real `ent_pc` and must not be
+                        // clobbered -- a previous version of this
+                        // code wrote `val = self.next_ent_pc`
+                        // whenever val was 0, which silently
+                        // broke any function whose body
+                        // legitimately started at PC 0.
                     }
                     // Only warn on user-vs-user redeclarations.
                     // Sys symbols (the per-target header's libc
@@ -437,7 +476,7 @@ impl Compiler {
                     self.symbols[id_idx].is_variadic = params.is_variadic;
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
-                    // accumulator before `Op::Lev`, and so a
+                    // accumulator before the trailing return, and so a
                     // future call-site check can reject value-
                     // context use of a void callee. Prototypes
                     // pick it up too -- a later body that
@@ -495,11 +534,11 @@ impl Compiler {
 
                     // For Sys symbols (header-bound libc functions),
                     // also fold the variadic flag onto the matching
-                    // `#pragma binding`. The native lowering reads it
-                    // when it picks the variadic ABI dance (macOS
-                    // arm64 stack-packing, SysV xor eax,eax) instead
-                    // of asking the symbol table at codegen time --
-                    // which has long since gone out of scope.
+                    // `#pragma binding`. The native lowering reads
+                    // it when it picks the variadic ABI path (macOS
+                    // arm64 stack-packing, SysV `xor eax, eax`)
+                    // instead of consulting the symbol table at
+                    // codegen time -- it is out of scope by then.
                     if was_sys {
                         let name = self.symbols[id_idx].name.clone();
                         let fixed = params.types.len();
@@ -531,20 +570,24 @@ impl Compiler {
                         }
                     }
 
-                    if self.lex.tk == ';' {
-                        // Forward declaration / prototype --
-                        // `int foo(int a, ...);`. Restore the param
-                        // symbols' outer class (parse_function_params
-                        // marked them as `Loc`) so subsequent
-                        // declarations of the same names don't trip
-                        // the duplicate-global check.
+                    if self.lex.tk == ';' || self.lex.tk == ',' {
+                        // Function prototype, not a definition. C99 6.7
+                        // permits several declarators in one declaration,
+                        // so a prototype can be followed by `,` and more
+                        // declarators (further prototypes or objects),
+                        // e.g. `int f(int a), g(int a), a;`. Restore the
+                        // param symbols' outer class (parse_function_params
+                        // marked them as `Loc`) so subsequent declarations
+                        // of the same names don't trip the
+                        // duplicate-global check.
                         for sym in self.symbols.iter_mut() {
                             if sym.class == Token::Loc as i64 {
                                 Self::restore_shadowed_symbol(sym);
                             }
                         }
-                        // Outer loop sees `;` and exits; `self.next()`
-                        // after the loop consumes it.
+                        // On `,` consume it and let the outer loop parse
+                        // the next declarator; on `;` the outer loop exits
+                        // and `self.next()` after it consumes the `;`.
                         if self.lex.tk == ',' {
                             self.next()?;
                         }
@@ -598,30 +641,20 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
+                    self.ast_reset();
 
-                    let ent_pc = self.text.len();
-                    // Now that the body is being emitted, point the
-                    // symbol at the real `ent_pc`. Forward-declared
-                    // callers embedded `0` (the prototype-time
-                    // `text.len()`); the fixup pass at end of
-                    // run_compile rewrites their operands to this
-                    // post-body PC.
+                    let ent_pc = self.next_ent_pc;
+                    // Point the symbol at the real `ent_pc`. The
+                    // walker reads Symbol::val through live_fun_val
+                    // when it lowers a call to this name, so any
+                    // call placed before the body sees the post-body
+                    // ent_pc once parsing reaches here.
                     self.symbols[id_idx].val = ent_pc as i64;
                     self.symbols[id_idx].defined_here = true;
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now
                     // defined in this translation unit.
                     self.symbols[id_idx].is_extern_decl = false;
-                    self.emit_op(Op::Ent);
-                    self.emit_val(0); // patched below
-                    // Placeholder AllocaInit. If the function body
-                    // emits any `Op::Intrinsic(Alloca)`, the
-                    // function-end fixup pass writes the
-                    // alloca-top slot index here. Otherwise the 0
-                    // stays and codegen treats the op as a no-op.
-                    self.emit_op(Op::AllocaInit);
-                    self.alloca_init_operand_pc = self.text.len();
-                    self.emit_val(0);
 
                     // Struct-value parameters: the caller pushed
                     // the struct's *address* into the param slot
@@ -633,15 +666,15 @@ impl Compiler {
                     // freshly allocated local and re-point the
                     // param's symbol so subsequent accesses inside
                     // the function go to the local copy. The
-                    // sequence reuses Op::Mcpy so neither codegen
-                    // needs new shapes for parameter passing.
+                    // sequence reuses the struct-copy intrinsic so
+                    // neither codegen needs new shapes for
+                    // parameter passing.
                     for &idx in params.indices.iter() {
                         let pty = self.symbols[idx].type_;
                         if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {
                             continue;
                         }
                         let slots = self.slots_of_type(pty);
-                        let size = self.size_of_type(pty);
                         let param_val = self.symbols[idx].val;
                         self.loc_offs += slots;
                         let local_val = -self.loc_offs;
@@ -650,15 +683,13 @@ impl Compiler {
                         }
                         // dst = &local
                         self.emit_lea(local_val);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         // src = *param_slot (the passed address;
                         // val from the param-base-aware
                         // numbering above)
                         self.emit_lea(param_val);
-                        self.emit_op(Op::Li);
-                        // Mcpy size
-                        self.emit_op(Op::Mcpy);
-                        self.emit_val(size as i64);
+                        self.mark_emit_other();
+                        self.mark_emit_other();
                         // The symbol now points at the local copy.
                         self.symbols[idx].val = local_val;
                     }
@@ -670,16 +701,17 @@ impl Compiler {
                     // c5-stack slot holding the value's `f64::to_bits`
                     // (the caller's `expr` left an `f64` in the
                     // accumulator and `Si` wrote all 8 bytes). With
-                    // `sizeof(float) == 4`, the matching `Op::Lf`
+                    // `sizeof(float) == 4`, the matching `LoadKind::F32`
                     // load that the body would emit reads only the
                     // *low* 4 bytes of the slot, which for a typical
                     // `double`-shaped bit pattern is the *low* half
                     // of the mantissa -- garbage, not the f32 of the
                     // passed value. The fix: at function entry,
                     // narrow each `float`-typed param through the
-                    // `Op::Sf` store path (`Li` reads the caller's
-                    // 8-byte f64 bits, `Sf` narrows to f32 and
-                    // writes 4 bytes into a fresh local slot). The
+                    // 4-byte store path (the 8-byte load reads the
+                    // caller's f64 bits, the 4-byte store narrows
+                    // to f32 and writes 4 bytes into a fresh local
+                    // slot). The
                     // symbol is repointed to that local; every
                     // subsequent body access goes through the
                     // narrow-storage path the rest of the
@@ -698,19 +730,19 @@ impl Compiler {
                         }
                         // dst = &local
                         self.emit_lea(local_val);
-                        self.emit_op(Op::Psh);
+                        self.ast_psh();
                         // Load the caller-pushed f64::to_bits from
                         // the param slot. The full 8-byte load is
                         // intentional -- the caller pushed 8 bytes
                         // and the f32 information lives across all
                         // 8 of them (as an f64).
                         self.emit_lea(param_val);
-                        self.emit_op(Op::Li);
+                        self.mark_emit_other();
                         // Narrow to f32 + write 4 bytes to the local.
                         // The rounding is round-to-nearest-ties-to-
                         // even, matching `f64 as f32` in Rust and
                         // `cvtsd2ss` / `fcvt s, d` on the JIT path.
-                        self.emit_op(Op::Sf);
+                        self.ast_assign();
                         // Symbol now points at the f32-storage local.
                         self.symbols[idx].val = local_val;
                     }
@@ -720,6 +752,8 @@ impl Compiler {
                     // either parses a local decl (with optional
                     // initializer) into the function's symbol
                     // frame, or parses a statement.
+                    let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> =
+                        alloc::vec::Vec::new();
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
@@ -729,14 +763,35 @@ impl Compiler {
                             // through parse_block_stmt).
                             self.parse_static_assert()?;
                         } else if self.lex_is_type_start() {
+                            let item_before = self.ast_stmts_snapshot();
                             self.parse_function_body_local_decl()?;
+                            let item_after = self.ast.stmts.len();
+                            for id in item_before..item_after {
+                                top_level_ids.push(id as super::super::ast::StmtId);
+                            }
                         } else {
+                            let item_before = self.ast_stmts_snapshot();
                             self.stmt()?;
+                            let item_after = self.ast.stmts.len();
+                            let item_id = if item_after > item_before + 1 {
+                                self.ast_wrap_stmts_since(item_before)
+                            } else if item_after > item_before {
+                                (item_after - 1) as super::super::ast::StmtId
+                            } else {
+                                continue;
+                            };
+                            top_level_ids.push(item_id);
                         }
                     }
+                    // Wrap the function's top-level stmts into a
+                    // Compound and pin it as `ast.body` so the
+                    // walker has a single tree root to descend
+                    // without double-walking inner-wrapped stmts.
+                    let body_root = self.ast_wrap_block_items(&top_level_ids);
+                    self.ast.body = Some(body_root);
                     // C99 6.8.6.4p3: a `void`-returning function
                     // doesn't produce a value. Zero the accumulator
-                    // before the trailing synthetic `Op::Lev` so a
+                    // before the trailing synthetic return so a
                     // caller that misclassifies the prototype (or
                     // invokes the function through a typed
                     // function-pointer table whose slot was set
@@ -744,12 +799,41 @@ impl Compiler {
                     // instead of whatever the function body
                     // happened to leave in the accumulator.
                     if self.current_func_returns_void {
-                        self.emit_op(Op::Imm);
-                        self.emit_val(0);
+                        self.emit_imm(0);
                     }
-                    self.emit_op(Op::Lev);
-                    self.current_function_name.clear();
-                    self.current_func_returns_void = false;
+                    self.emit_dead_stores_and_flush();
+                    let n_params = params.indices.len();
+                    let is_variadic = params.is_variadic;
+                    // Snapshot per-param types + the local-copy
+                    // slot the parser allocated for each
+                    // struct-by-value parameter. The walker
+                    // replays the C99 6.5.2.2 entry-Mcpy from
+                    // these so the callee operates on its own
+                    // copy. Scalar / pointer params end up
+                    // with `0` in `param_local_slots`; the
+                    // walker checks the slot and the type both.
+                    let param_tys: alloc::vec::Vec<i64> = params.types.to_vec();
+                    let param_local_slots: alloc::vec::Vec<i64> = params
+                        .indices
+                        .iter()
+                        .map(|&idx| {
+                            let v = self.symbols[idx].val;
+                            // `val < 0` -> local slot reassigned
+                            // by the entry-Mcpy emit; preserve
+                            // it. `val >= 0` -> scalar param
+                            // still sits in its original slot;
+                            // record 0 so the walker skips.
+                            if v < 0 { v } else { 0 }
+                        })
+                        .collect();
+                    let ret_ty_for_finish = self.current_func_return_ty;
+                    let returns_struct_finish =
+                        is_struct_ty(ret_ty_for_finish) && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let return_struct_size_finish = if returns_struct_finish {
+                        self.size_of_type(ret_ty_for_finish) as i64
+                    } else {
+                        0
+                    };
 
                     // Patch Ent's local-slot count. With alloca,
                     // bump it by 1 (the alloca-top bookkeeping
@@ -760,21 +844,28 @@ impl Compiler {
                     // regular locals); the arena occupies indices
                     // `[max_loc_offs + 2, max_loc_offs + 1 + ARENA_SLOTS]`.
                     let regular_locals = self.max_loc_offs.max(self.loc_offs);
-                    if self.uses_alloca_in_current_fn {
-                        let alloca_top_slot = regular_locals + 1;
-                        self.text[ent_pc + 1] =
-                            regular_locals + 1 + crate::c5::op::ALLOCA_ARENA_SLOTS;
-                        self.text[self.alloca_init_operand_pc] = alloca_top_slot;
+                    let alloca_top_slot_finish: i64 = if self.uses_alloca_in_current_fn {
+                        regular_locals + 1
                     } else {
-                        self.text[ent_pc + 1] = regular_locals;
-                    }
+                        0
+                    };
 
-                    for (name, pc) in &self.unresolved_gotos {
-                        match self.labels.iter().find(|(n, _)| n == name) {
-                            Some(&(_, target)) => self.text[*pc] = target as i64,
-                            None => {
-                                return Err(self.compile_err(format!("unresolved label: {}", name)));
-                            }
+                    self.ast_finish_function(
+                        ent_pc,
+                        n_params,
+                        is_variadic,
+                        param_tys,
+                        param_local_slots,
+                        returns_struct_finish,
+                        return_struct_size_finish,
+                        alloca_top_slot_finish,
+                    );
+                    self.current_function_name.clear();
+                    self.current_func_returns_void = false;
+
+                    for name in &self.unresolved_gotos {
+                        if !self.labels.iter().any(|n| n == name) {
+                            return Err(self.compile_err(format!("unresolved label: {}", name)));
                         }
                     }
 
@@ -798,15 +889,107 @@ impl Compiler {
                             && sym.val != 1
                             && !sym.name.is_empty()
                         {
+                            let is_parameter = param_set.contains(&i);
+                            // C99 6.7.5.3p7: a parameter declared as
+                            // `T name[N]` decays to a pointer and
+                            // doesn't carry an array-type DIE; keep
+                            // `array_size` at zero for parameters.
+                            let array_size = if is_parameter {
+                                0
+                            } else {
+                                sym.array_size.max(0) as u32
+                            };
                             self.variables.push(crate::c5::program::VariableInfo {
                                 function_bc_pc: ent_pc as u64,
                                 name: sym.name.clone(),
                                 type_tag: sym.type_,
                                 fp_slot: sym.val,
-                                is_parameter: param_set.contains(&i),
+                                is_parameter,
+                                decl_line: sym.decl_line as u32,
+                                array_size,
+                                decl_file: sym.decl_file,
                             });
                         }
                     }
+                    // Merge block-scoped locals captured during body
+                    // parsing. The symbol walk above misses them: their
+                    // bindings were restored at block exit. Every
+                    // pending entry belongs to this function, since C
+                    // has no nested function definitions.
+                    for mut bl in core::mem::take(&mut self.pending_block_locals) {
+                        bl.function_bc_pc = ent_pc as u64;
+                        self.variables.push(bl);
+                    }
+                    // Collect unused-parameter and unused-local
+                    // diagnostics for the function's top-level
+                    // bindings. Inner-block locals were already
+                    // checked in `parse_block_stmt` at their
+                    // block exit. Must run before the loop below
+                    // restores the outer binding -- once `class`
+                    // is overwritten the Token::Loc test no
+                    // longer holds. Names starting with `_` are
+                    // suppressed (gcc / clang `-Wunused`
+                    // convention).
+                    enum UnusedKind {
+                        Variable,
+                        Parameter,
+                        ValueSet,
+                    }
+                    let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
+                    for (i, sym) in self.symbols.iter().enumerate() {
+                        if sym.class != Token::Loc as i64
+                            || !sym.decl_in_main_source
+                            || sym.address_escaped
+                            || sym.was_read
+                            || sym.name.is_empty()
+                            || sym.name.starts_with('_')
+                        {
+                            continue;
+                        }
+                        let is_param = param_set.contains(&i);
+                        // sym.val < 0 -> stack-frame local
+                        // sym.val >= 2 -> parameter slot
+                        // (slots 0/1 are reserved for caller's
+                        // saved rbp / saved-ret-addr; never
+                        // user-visible names)
+                        if !is_param && sym.val >= 0 {
+                            continue;
+                        }
+                        // `was_referenced` distinguishes "never
+                        // mentioned in any expression" (the only
+                        // write, if any, was the declaration
+                        // initializer) from "mentioned, but every
+                        // mention was a write". The latter is the
+                        // dead-store case. Parameters skip the
+                        // ValueSet diagnostic -- a parameter is
+                        // always implicitly written at call entry,
+                        // and warning "set but never used" on
+                        // every unused parameter would just be
+                        // noise.
+                        let kind = if sym.was_referenced && sym.was_written && !is_param {
+                            UnusedKind::ValueSet
+                        } else if is_param {
+                            UnusedKind::Parameter
+                        } else {
+                            UnusedKind::Variable
+                        };
+                        unused.push((sym.decl_line, sym.name.clone(), kind));
+                    }
+                    for (line, name, kind) in unused {
+                        let msg = match kind {
+                            UnusedKind::Variable => alloc::format!("unused variable `{name}`"),
+                            UnusedKind::Parameter => alloc::format!("unused parameter `{name}`"),
+                            UnusedKind::ValueSet => {
+                                alloc::format!("variable `{name}` set but never used")
+                            }
+                        };
+                        self.warn_at(line, msg);
+                    }
+                    // Drain dead-store entries for this function's
+                    // locals via the shared helper -- a store that
+                    // reaches function exit without an intervening
+                    // read or branch is unambiguously dead.
+                    self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
                             Self::restore_shadowed_symbol(sym);
@@ -901,6 +1084,32 @@ impl Compiler {
                             let sid = struct_id_of(ty);
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
+                                // C99 6.7.8p7 array designator on a
+                                // struct-array element: `[N] = {field, ...}`
+                                // jumps the cursor and writes the
+                                // brace list there.
+                                if self.lex.tk == Token::Brak {
+                                    self.next()?;
+                                    let idx = self.parse_constant_int()?;
+                                    if idx < 0 || idx >= count {
+                                        return Err(self.compile_err(format!(
+                                            "array designator index {idx} out of bounds [0, {count})"
+                                        )));
+                                    }
+                                    if self.lex.tk != ']' {
+                                        return Err(self.compile_err(
+                                            "`]` expected after array designator index",
+                                        ));
+                                    }
+                                    self.next()?;
+                                    if self.lex.tk != Token::Assign {
+                                        return Err(
+                                            self.compile_err("`=` expected after `[N]` designator")
+                                        );
+                                    }
+                                    self.next()?;
+                                    i = idx;
+                                }
                                 if i >= count {
                                     return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
@@ -978,13 +1187,12 @@ impl Compiler {
                         // `Compiler::compile()` path stays
                         // permissive (writing through `a` in
                         // `extern int a; a = 1;` works without a
-                        // link partner). At link-unit assembly
-                        // time, [`Compiler::compile_to_link_unit`]
-                        // re-classifies an `extern`-marked Glo
-                        // with no initializer as an undefined
-                        // external symbol, dropping the local
-                        // storage so the defining TU's bytes are
-                        // the ones in play.
+                        // link partner). In a multi-TU build the
+                        // walker emits a `GloAddr::Extern` reference
+                        // for an `extern`-marked Glo with no
+                        // initializer, so the defining TU's bytes
+                        // are the ones in play and this local
+                        // storage is only the single-TU fallback.
                         let _ = was_extern_only_decl;
                         // Tentative-merge: reuse the storage that was
                         // already allocated for the prior declaration.
@@ -993,7 +1201,17 @@ impl Compiler {
                         // the prior tentative and the new defining
                         // declaration aren't merged here -- the prior
                         // allocation would be too small or too large.
-                        let var_offset = if was_tentative_glo {
+                        // Reuse the prior storage on a tentative merge,
+                        // and also when a redundant tentative declaration
+                        // (no initializer) follows an already-defined
+                        // global -- C99 6.9.2 makes the later `T x;` a
+                        // redeclaration of the same object, so allocating
+                        // fresh zeroed storage would discard its value.
+                        // The two-initializer case already errored at the
+                        // duplicate-definition check above.
+                        let reuse_prior_storage = was_tentative_glo
+                            || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
+                        let var_offset = if reuse_prior_storage {
                             self.symbols[id_idx].val
                         } else if thread_local {
                             let off = self.tls_data.len() as i64;
@@ -1049,6 +1267,32 @@ impl Compiler {
                                 self.next()?;
                                 let mut idx: i64 = 0;
                                 while self.lex.tk != '}' {
+                                    // C99 6.7.8p7 array designator on a
+                                    // struct-array element: `[N] = {field, ...}`
+                                    // jumps the cursor and writes the
+                                    // brace list there.
+                                    if self.lex.tk == Token::Brak {
+                                        self.next()?;
+                                        let desig = self.parse_constant_int()?;
+                                        if desig < 0 || desig >= array_size {
+                                            return Err(self.compile_err(format!(
+                                                "array designator index {desig} out of bounds [0, {array_size})"
+                                            )));
+                                        }
+                                        if self.lex.tk != ']' {
+                                            return Err(self.compile_err(
+                                                "`]` expected after array designator index",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        if self.lex.tk != Token::Assign {
+                                            return Err(self.compile_err(
+                                                "`=` expected after `[N]` designator",
+                                            ));
+                                        }
+                                        self.next()?;
+                                        idx = desig;
+                                    }
                                     if idx >= array_size {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",
@@ -1108,6 +1352,41 @@ impl Compiler {
             }
             self.next()?;
         }
+        self.warn_unused_static_functions();
         Ok(())
+    }
+
+    /// Emit one `unused function` diagnostic per defined-here
+    /// Token::Fun whose `was_referenced` flag is still false and
+    /// whose `linkage` is `Internal`. C99 6.2.2: a `static`
+    /// file-scope function is reachable only from the current
+    /// translation unit, so an unreferenced one really is dead
+    /// code. External-linkage functions cannot be flagged here --
+    /// another TU may call them through the link-unit symbol
+    /// table; the linker is responsible for the cross-TU
+    /// reachability check. Names starting with `_` are suppressed
+    /// (gcc / clang `-Wunused-function` convention). `main` is
+    /// suppressed regardless of linkage: it is the program's
+    /// entry, called by the runtime stub the codegen emits.
+    fn warn_unused_static_functions(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let mut unused: Vec<(usize, String)> = Vec::new();
+        for sym in self.symbols.iter() {
+            if sym.class != Token::Fun as i64
+                || !sym.defined_here
+                || sym.linkage != Linkage::Internal
+                || sym.was_referenced
+                || !sym.decl_in_main_source
+                || sym.name.is_empty()
+                || sym.name.starts_with('_')
+                || sym.name == "main"
+            {
+                continue;
+            }
+            unused.push((sym.decl_line, sym.name.clone()));
+        }
+        for (line, name) in unused {
+            self.warn_at(line, alloc::format!("unused function `{name}`"));
+        }
     }
 }

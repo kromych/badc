@@ -1,54 +1,32 @@
-//! AArch64 instruction encoder + bytecode -> AArch64 lowering.
+//! AArch64 instruction encoder + per-function lowering shell.
 //!
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalogue of
-//! `fn enc_xxx(...) -> u32`. The lowering walks a [`Program`]'s bytecode
-//! once and emits a stream of those.
-//!
-//! ## Register convention
-//!
-//! Phase 1 keeps it simple, with the goal of "obviously correct" over
-//! "fast":
-//!
-//! * `x19` -- VM accumulator (`a` in the bytecode model). Callee-saved,
-//!   so we don't have to spill it across `bl` calls.
-//! * `sp`  -- VM stack pointer. We use the real native stack for VM
-//!   pushes (`Op::Psh` becomes `str x19, [sp, #-16]!`).
-//! * `x29` -- frame pointer (AAPCS64-mandated for unwinding).
-//! * `x30` -- link register (saved/restored on entry/exit).
-//! * `x0..x7` -- argument-passing registers, used at call sites.
-//!
-//! Anything more sophisticated (real allocation, dead-store elimination)
-//! happens in the optimizer pass before we get here.
+//! `fn enc_xxx(...) -> u32`. Per-function code generation routes
+//! through [`super::ssa_shadow::produce_ssa_funcs`] +
+//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_aarch64`; this
+//! module's `lower()` is the shell that drives the SSA pipeline and
+//! the post-pass fixups (PLT trampolines, branch fixups,
+//! data-relocation patching).
 //!
 //! ## Always-on peepholes
 //!
-//! Two rewrites the lowering applies regardless of any flag,
-//! since both are strict wins.
+//! [`emit_mov_reg`] drops `mov xd, xd` instead of emitting it. Used
+//! by both the SSA emit and the start-stub for the few reg-to-reg
+//! moves the lowering produces with potentially-coinciding source
+//! and destination.
 //!
-//! [`emit_mov_reg`] drops `mov xd, xd` instead of emitting it.
-//! Today's lowering doesn't actually produce a self-mov, but the
-//! check costs nothing and protects future refactors -- if a
-//! regalloc tweak ever lets source and destination coincide, it
-//! collapses to zero bytes automatically.
+//! ## What lives here
 //!
-//! The bigger one is compare-and-branch fusion. When a compare op
-//! (`Lt`, `Eq`, ..., or one of the immediate forms `EqI`, `NeI`,
-//! ...) feeds directly into `Op::Bz` / `Op::Bnz`, the compare emits
-//! just `cmp` and the branch emits `b.cond` instead of `cbz` /
-//! `cbnz`. The eliminated `cset` plus the eliminated comparison
-//! against zero buy us 4 bytes and one uop per pattern. The rewrite
-//! is gated by [`fusion_candidate`], which refuses to fuse if any
-//! other branch lands on the `Bz`/`Bnz` PC -- that path would
-//! arrive without our `cmp` having set the flags -- or if either
-//! the taken-target op or the fall-through op reads `x19` before
-//! writing it. The whitelist matters because the elided `cset`
-//! leaves `x19` holding the rhs of the compare instead of the
-//! 0/1 boolean, and c4's `a && b` short-circuit pattern is exactly
-//! a sequence where one `Bz` lands on another `Bz` that wants to
-//! read that boolean. Without the gate the compiler quietly
-//! miscompiles short-circuits; with it we caught the bug while
-//! bringing up the c4 self-host.
+//! * The `enc_*` instruction encoders (used by the SSA emit, the
+//!   start stub, and the PLT trampoline emit).
+//! * [`emit_setjmp_aarch64`] -- a CRT-free setjmp inlined at the call
+//!   site so Windows AArch64 (where msvcrt's longjmp routes through
+//!   SEH) can be supported uniformly with macOS / Linux.
+//! * The lowering shell `lower()` -- frame layout, post-pass fixup
+//!   walks, and the per-arch sticking points the SSA emit can't see
+//!   (PLT trampoline placement, x19 reservation, branch placeholder
+//!   patching).
 
 // Encoder catalogue: a few entries (e.g. unused arithmetic forms,
 // MSR/MRS variants we'd reach for if we ever grow scheduling) sit
@@ -61,80 +39,9 @@ use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::CODE_BASE;
 use super::super::error::C5Error;
-use super::super::op::Op;
 use super::super::program::Program;
-use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
-use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
-
-/// Per-function lowering state for the register-pool optimization.
-/// [`NativeOptions::optimize`] populates `plan` with a
-/// [`regalloc::analyze`] result and the lowering consults it on
-/// every Psh / pop. With the flag off, `plan` is `None` and the
-/// lowering follows the existing real-stack path verbatim.
-struct RegState<'a> {
-    /// Whether the user requested the register-pool pass
-    /// ([`NativeOptions::optimize`]). When `false`, every Pseudo
-    /// `Op::Psh` lands on the real stack regardless of its
-    /// classification. The cmp+branch fusion peephole is *not*
-    /// gated on this flag -- it's a strict, safety-checked
-    /// improvement and runs unconditionally, like self-mov elision.
-    optimize: bool,
-    /// Analyzer output. `None` when [`Self::optimize`] is off.
-    plan: Option<&'a RegStackPlan>,
-    /// True iff we're currently inside a function whose plan opted
-    /// in to the pool. Updated on each `Op::Ent`.
-    use_pool: bool,
-    /// How many *callee-saved* pool slots the current function uses,
-    /// per its plan. The prologue saves this many `xN` registers;
-    /// the epilogue must restore the same number. Caller-saved
-    /// slots don't enter into this count (they're not saved).
-    current_callee_depth: u8,
-    /// Local-byte reservation for the current function, captured on
-    /// `Op::Ent` and read on `Op::Lev`. The epilogue reverses the
-    /// prologue's `sub sp, sp, locals` and adjacent saved-x19 +
-    /// pool slot pushes off of FP; without the saved value
-    /// `Op::Intrinsic(Alloca)`'s `sub sp, sp, n` would leave SP
-    /// below the pool and the epilogue's pop sequence would read
-    /// alloca scratch as register state.
-    current_locals_bytes: u32,
-    /// FP-slot byte offset of the alloca-top pointer for the
-    /// current function, or 0 if the function doesn't use
-    /// alloca. Set by `Op::AllocaInit` and read by the
-    /// `Op::Intrinsic(Alloca)` handler.
-    current_alloca_top_offset: u32,
-    /// Runtime mirror of the c4 push-stack: each Psh appends an
-    /// entry, each pop op pops one. `Some((slot, bank))` means the
-    /// value is live in the bank/slot pool register; `None` means
-    /// it's on the real stack the existing lowering uses.
-    pseudo_stack: Vec<Option<(u8, PoolBank)>>,
-    /// cmp+branch fusion peephole: when a compare op (`Lt`/`Eq`/...
-    /// or `LtI`/`EqI`/...) is followed immediately by `Op::Bz` or
-    /// `Op::Bnz` and the `Bz`/`Bnz` PC is not a branch target, the
-    /// compare op skips emitting `cset` (since the boolean result
-    /// would only be consumed by the matching branch) and stashes
-    /// its condition here. The matching `Op::Bz`/`Op::Bnz` then
-    /// emits a single `b.cond` reading the flags directly. Always
-    /// `None` outside the compare-then-branch window. Independent
-    /// of [`Self::optimize`] -- the fusion is a strict win.
-    pending_cmp_cond: Option<Cond>,
-}
-
-impl<'a> RegState<'a> {
-    fn new(optimize: bool, plan: Option<&'a RegStackPlan>) -> Self {
-        Self {
-            optimize,
-            plan,
-            use_pool: false,
-            current_callee_depth: 0,
-            current_locals_bytes: 0,
-            current_alloca_top_offset: 0,
-            pseudo_stack: Vec::new(),
-            pending_cmp_cond: None,
-        }
-    }
-}
+use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -161,20 +68,17 @@ impl Reg {
     /// and we don't otherwise touch it.
     pub const X18: Reg = Reg(18);
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
-    /// Base of the callee-saved pseudo-stack pool used by the
-    /// native optimizer. Slot N (in [`PoolBank::Callee`]) maps to
-    /// `Reg(CALLEE_POOL_BASE.0 + N)` -- x20..x27. All eight regs
-    /// are AAPCS64 callee-saved, so the prologue only has to save
-    /// the prefix the function actually uses
-    /// (per [`regalloc::FunctionPlan::callee_depth`]).
+    /// Base of the SSA allocator's callee-saved register bank
+    /// (x20..x27). All eight regs are AAPCS64 callee-saved, so
+    /// the prologue only has to save the prefix the function
+    /// actually uses.
     pub const CALLEE_POOL_BASE: Reg = Reg(20);
-    /// Base of the caller-saved pseudo-stack pool. Slot N (in
-    /// [`PoolBank::Caller`]) maps to `Reg(CALLER_POOL_BASE.0 + N)`
-    /// -- x9..x15. AAPCS64 marks these caller-saved, so a `bl` /
-    /// `blr` would clobber them; the regalloc analyzer guarantees a
-    /// caller-bank slot is *never* live across a call op, so no
-    /// spill is needed. The prologue / epilogue likewise saves none
-    /// of these.
+    /// Base of the SSA allocator's caller-saved register bank
+    /// (x9..x15). AAPCS64 marks these caller-saved, so a `bl` /
+    /// `blr` would clobber them; the allocator guarantees a
+    /// caller-bank value is never live across a call, so no
+    /// spill is needed. The prologue / epilogue likewise saves
+    /// none of these.
     pub const CALLER_POOL_BASE: Reg = Reg(9);
     pub const X29: Reg = Reg(29); // frame pointer (fp)
     pub const X30: Reg = Reg(30); // link register (lr)
@@ -182,21 +86,6 @@ impl Reg {
     /// on instruction context. The ARM ARM disambiguates per-encoding;
     /// every instruction we use here treats field-31 as SP.
     pub const SP: Reg = Reg(31);
-}
-
-/// Pool sizes on aarch64. x20..x27 = 8 callee-saved; x9..x15 = 7
-/// caller-saved (x16/x17 stay reserved for scratch in the lowering).
-pub(super) const POOL_SIZES: regalloc::PoolSizes = regalloc::PoolSizes {
-    callee: 8,
-    caller: 7,
-};
-
-/// Map a regalloc pool slot to its physical register.
-fn pool_reg(slot: u8, bank: regalloc::PoolBank) -> Reg {
-    match bank {
-        regalloc::PoolBank::Callee => Reg(Reg::CALLEE_POOL_BASE.0 + slot),
-        regalloc::PoolBank::Caller => Reg(Reg::CALLER_POOL_BASE.0 + slot),
-    }
 }
 
 // ---------------------------------------------------------------
@@ -361,9 +250,9 @@ pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 }
 
 /// Add `bytes` to SP using the same 24-bit reach as
-/// [`emit_sub_sp_imm`]. Used by `Op::Adj` for argument-cleanup
-/// after a call, and by anything else that needs to grow the
-/// stack pointer back by more than 4 KiB in one go.
+/// [`emit_sub_sp_imm`]. Used for stack-arg cleanup after a call
+/// and by anything else that needs to grow the stack pointer
+/// back by more than 4 KiB in one go.
 pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
     if bytes == 0 {
         return;
@@ -469,6 +358,21 @@ pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
+pub(super) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_2C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
+/// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
+pub(super) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    0x93C0_0000
+        | ((rn.0 as u32) << 16)
+        | (((shift as u32) & 63) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
 // ---- Floating-point (double-precision). ----
 //
 // All FP arithmetic happens in d-regs; the c5 stack passes the raw
@@ -492,6 +396,14 @@ pub(super) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> u32 {
 pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
     debug_assert!(dn < 32);
     0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `FMOV <Dd>, <Dn>` -- copy a double-precision register. Used to
+/// move a `double` value into the allocator's chosen d-register
+/// when the producer wrote a different one.
+pub(super) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32);
+    0x1E60_4000 | ((dn as u32) << 5) | (dd as u32)
 }
 
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
@@ -575,7 +487,7 @@ pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
 /// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/4`;
 /// caller passes raw bytes (must be multiple of 4 in 0..16380).
-/// Used by [`Op::Lf`] to load a `float`-typed lvalue's storage
+/// Used by [`LoadKind::F32`] to load a `float`-typed lvalue's storage
 /// directly into the `sN` half of `dN` before the widening fcvt.
 pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
@@ -584,8 +496,8 @@ pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
-/// store. Same encoding family as [`enc_ldr_s_imm`]; companion to
-/// [`Op::Sf`].
+/// store. Same encoding family as [`enc_ldr_s_imm`]; companion
+/// to the `StoreKind::F32` lowering.
 pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(st < 32);
     debug_assert!(imm.is_multiple_of(4) && imm < 16380);
@@ -625,7 +537,7 @@ pub(super) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
 
 /// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
 /// (bit-exact for any finite single value, matching the IEEE
-/// short-to-long conversion). Used by [`Op::Lf`] after the
+/// short-to-long conversion). Used by [`LoadKind::F32`] after the
 /// single-precision load.
 pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
     debug_assert!(dd < 32 && sn < 32);
@@ -634,8 +546,8 @@ pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
 
 /// `FCVT <Sd>, <Dn>` -- narrow double-precision to single-precision
 /// with round-to-nearest-ties-to-even (matching IEEE 754 and the
-/// VM's `f64 as f32` semantics). Used by [`Op::Sf`] before the
-/// single-precision store.
+/// VM's `f64 as f32` semantics). Used by the `StoreKind::F32`
+/// lowering before the single-precision store.
 pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
     debug_assert!(sd < 32 && dn < 32);
     0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
@@ -687,9 +599,9 @@ impl Cond {
 
     /// Logical complement of the condition as another [`Cond`]
     /// variant. Used by the cmp+branch fusion peephole: when a
-    /// compare op `Op::Lt` is followed by `Op::Bz target`, we want
-    /// to "branch when (lhs < rhs) is false" which is "branch when
-    /// lhs >= rhs" -- i.e., `Cond::Lt.flip() == Cond::Ge`.
+    /// `BinOp::Lt` is followed by a `Terminator::Bz`, the
+    /// branch fires on "(lhs < rhs) is false", i.e. "lhs >= rhs"
+    /// -- so `Cond::Lt.flip() == Cond::Ge`.
     fn flip(self) -> Cond {
         match self {
             Cond::Eq => Cond::Ne,
@@ -772,10 +684,10 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
 }
 
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
-/// the `Op::TailExt` lowering to forward control to the IAT/GOT-
-/// resolved libc address without saving a return point: the libc
-/// fn's `RET` lands back at the c5 caller's post-Jsri continuation
-/// instead of bouncing back through the trampoline.
+/// the `Terminator::TailExt` lowering to forward control to the
+/// IAT/GOT-resolved libc address without saving a return point:
+/// the libc fn's `RET` lands back at the c5 caller's post-call
+/// continuation instead of bouncing back through the trampoline.
 pub(super) fn enc_br(rn: Reg) -> u32 {
     0xD61F_0000 | ((rn.0 as u32) << 5)
 }
@@ -818,7 +730,7 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
-/// [`Op::Lw`] for signed `int` lvalue reads -- the C signed-int
+/// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
 pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
@@ -829,7 +741,7 @@ pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
-/// [`enc_ldr32_imm`] for [`Op::Sw`].
+/// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
 pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
     let scaled = imm / 4;
@@ -852,9 +764,74 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSW Xt, [Xn, Xm, LSL #2]` -- sign-extending 32-bit load with
+/// scaled register index. The c5 indexed-load fold uses this for
+/// `int arr[]; arr[i]` reads.
+pub(super) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10 (word), opc=10 (LDRS, sign-extend to 64-bit),
+    // option=011 (LSL/UXTX), S=1 (scale by access_size=4).
+    0xB8A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDR Wt, [Xn, Xm, LSL #2]` -- 32-bit zero-extending load with
+/// scaled register index. Used by the indexed-load fold for
+/// `unsigned int arr[]; arr[i]`.
+pub(super) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10, opc=01 (LDR), option=011, S=1.
+    0xB860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRSH Xt, [Xn, Xm, LSL #1]` -- 16-bit sign-extending load.
+pub(super) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=10, option=011, S=1.
+    0x78A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRH Wt, [Xn, Xm, LSL #1]` -- 16-bit zero-extending load.
+pub(super) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=01, option=011, S=1.
+    0x7860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRSB Xt, [Xn, Xm]` -- 8-bit sign-extending load. No scale.
+pub(super) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=10, option=011, S=0 (byte access has no shift).
+    0x38A0_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRB Wt, [Xn, Xm]` -- 8-bit zero-extending load. No scale.
+pub(super) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=01, option=011, S=0.
+    0x3860_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR Xt, [Xn, Xm, LSL #3]` -- 8-byte store with scaled index.
+pub(super) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=11, opc=00 (STR), option=011, S=1.
+    0xF820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR Wt, [Xn, Xm, LSL #2]` -- 4-byte store with scaled index.
+pub(super) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10, opc=00, option=011, S=1.
+    0xB820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRH Wt, [Xn, Xm, LSL #1]` -- 2-byte store with scaled index.
+pub(super) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=00, option=011, S=1.
+    0x7820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRB Wt, [Xn, Xm]` -- 1-byte store, no scale.
+pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=00, option=011, S=0.
+    0x3820_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
-/// [`Op::Lh`] for `short` lvalue reads. Encoding: opc=10
+/// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
 pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
@@ -865,7 +842,7 @@ pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
 /// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
-/// scaled by 2. Used by [`Op::Lhu`] for `unsigned short` lvalue
+/// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
 pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
@@ -876,7 +853,7 @@ pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
-/// [`enc_ldrh_imm`] for [`Op::Sh`].
+/// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
 pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
     let scaled = imm / 2;
@@ -894,7 +871,7 @@ pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
-/// the full 64-bit `Xt`. Used by [`Op::Lcs`] for `signed char`
+/// the full 64-bit `Xt`. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
 pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
@@ -931,13 +908,130 @@ pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
     0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursw imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
+/// register, zero-extending to the full 64-bit Xt.
+pub(super) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldur32 imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
+/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
+pub(super) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldurh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
+/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
+pub(super) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldurb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
+pub(super) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "stur32 imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
+pub(super) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "sturh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
+pub(super) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "sturb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
+/// Encoded as `UBFM Xd, Xn, #(-shift mod 64), #(63-shift)`.
+pub(super) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "lsl imm: {shift} >= 64");
+    let immr = ((64 - shift as u32) & 63) << 16;
+    let imms = ((63 - shift as u32) & 63) << 10;
+    0xD340_0000 | immr | imms | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `LSR <Xd>, <Xn>, #shift` -- logical shift right by immediate.
+/// Encoded as `UBFM Xd, Xn, #shift, #63`.
+pub(super) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "lsr imm: {shift} >= 64");
+    let immr = ((shift as u32) & 63) << 16;
+    0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ASR <Xd>, <Xn>, #shift` -- arithmetic shift right by immediate.
+/// Encoded as `SBFM Xd, Xn, #shift, #63`.
+pub(super) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "asr imm: {shift} >= 64");
+    let immr = ((shift as u32) & 63) << 16;
+    0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
+/// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
+pub(super) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
+    // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
+    0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SXTH <Xd>, <Wn>` -- sign-extend low 16 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #15`. Companion to `enc_sxtw` for the
+/// short-narrow shape (`Shl 48; Shr 48`).
+pub(super) fn enc_sxth(rd: Reg, rn: Reg) -> u32 {
+    0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SXTB <Xd>, <Wn>` -- sign-extend low 8 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #7`. Companion to `enc_sxtw` for the
+/// char-narrow shape (`Shl 56; Shr 56`).
+pub(super) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
+    0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 // ---- Pre-/post-indexed loads & stores. The c5 VM stack push/pop
 //      compiles to these because they update sp in the same instruction.
 
 /// `STR <Xt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback.
-/// Use with `imm = -16` for `Op::Psh`: store accumulator and bump sp
-/// down by 16 bytes (we keep sp 16-byte aligned even for 8-byte
-/// pushes so calls into libc satisfy AAPCS64).
+/// Use with `imm = -16` for the accumulator push: store
+/// accumulator and bump sp down by 16 bytes (the VM stack stays
+/// 16-byte aligned even for 8-byte pushes so calls into libc
+/// satisfy AAPCS64).
 pub(super) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
     debug_assert!(
         (-256..256).contains(&imm),
@@ -1040,15 +1134,15 @@ pub(super) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
     emit(code, enc_mov_reg(rd, rn));
 }
 
-// ---- Branch fixups. Bytecode branches target absolute bytecode PCs;
+// ---- Branch fixups. Bytecode branches target absolute ent_pcs;
 //      the native PC of those targets isn't known until after the
 //      whole function body is laid out. Two-pass approach: emit a
 //      placeholder branch instruction, record (its native offset, the
-//      target bytecode PC, the kind), then patch the placeholder
+//      target ent_pc, the kind), then patch the placeholder
 //      after lowering completes.
 
 #[derive(Debug, Clone, Copy)]
-enum BranchKind {
+pub(super) enum BranchKind {
     /// Unconditional `B` (PC-relative, 26-bit signed offset).
     B,
     /// Conditional `CBZ <Xt>` (compare-and-branch on zero).
@@ -1064,123 +1158,25 @@ enum BranchKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Fixup {
+pub(super) struct Fixup {
     /// Byte offset within `code` where the placeholder branch lives.
-    native_offset: usize,
+    pub(super) native_offset: usize,
     /// Bytecode PC the branch is supposed to land on.
-    target_bytecode_pc: usize,
-    kind: BranchKind,
+    pub(super) target_ent_pc: usize,
+    pub(super) kind: BranchKind,
 }
 
-/// Mark every bytecode PC that is the target of some `Jmp` / `Bz` /
-/// `Bnz` (or, defensively, `Jsr` -- those land on `Op::Ent` so they
-/// can't collide with the cmp+branch peephole, but the scan is
-/// cheap and the bit map is shared). Returned `Vec<bool>` is
-/// indexed by bytecode PC; the cmp+branch fusion peephole consults
-/// it to skip fusion when the matching `Bz`/`Bnz` PC is reachable
-/// from elsewhere (a branch into the `Bz` would land on a
-/// flags-reading `b.cond` whose flags came from unrelated code,
-/// which would silently miscompile).
-fn collect_branch_targets(text: &[i64]) -> Vec<bool> {
-    let mut targets = vec![false; text.len() + 1];
-    let mut pc = 0usize;
-    while pc < text.len() {
-        let Some(op) = Op::from_i64(text[pc]) else {
-            break;
-        };
-        match op {
-            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr if pc + 1 < text.len() => {
-                let target = text[pc + 1] as usize;
-                if target < targets.len() {
-                    targets[target] = true;
-                }
-            }
-            _ => {}
-        }
-        pc += op.word_size();
-    }
-    targets
-}
-
-/// Decide whether a compare op at `next_pc - <its_width>` can fuse
-/// with the immediately following op. Returns the c4-`Bz` /
-/// c4-`Bnz` opcode if all of:
+/// Lower a [`Program`]'s SSA functions to AArch64 machine code.
+/// Walks every Inst once, emitting native code; control-flow
+/// terminators emit a placeholder branch and record a fixup to be
+/// patched after the whole layout is known.
 ///
-/// * the next op is `Bz`/`Bnz`,
-/// * landing on the `Bz`/`Bnz` from elsewhere is impossible (so a
-///   `b.cond` reading flags from this compare can't be reached
-///   from a branch that bypassed the compare),
-/// * the `Bz`/`Bnz` taken-target op writes `x19` before reading,
-///   AND the fall-through op does the same.
-///
-/// The last gate exists because eliding the `cset` leaves `x19`
-/// holding the rhs of the compare instead of the 0/1 boolean. c4
-/// short-circuit patterns (`a && b`, `a || b`) make the matching
-/// `Bz`/`Bnz` jump to a *second* `Bz`/`Bnz` that reads `x19` as
-/// the boolean -- that downstream op would silently miscompile if
-/// we elided the `cset`. Same hazard if the fall-through path
-/// returns the boolean directly via `Lev`. The target/fall-through
-/// whitelist is conservative: only ops whose lowering writes `x19`
-/// before any read pass.
-///
-/// `next_pc` is the bytecode PC of the candidate `Bz`/`Bnz`, i.e.
-/// `*pc` after the compare op consumed itself.
-fn fusion_candidate(text: &[i64], next_pc: usize, branch_targets: &[bool]) -> Option<Op> {
-    let raw = *text.get(next_pc)?;
-    let next_op = Op::from_i64(raw)?;
-    if !matches!(next_op, Op::Bz | Op::Bnz) {
-        return None;
-    }
-    if branch_targets.get(next_pc).copied().unwrap_or(false) {
-        // Some other branch lands on this Bz/Bnz; we can't elide
-        // the cset since that path would arrive with stale flags.
-        return None;
-    }
-    // Bz/Bnz are 2-word ops (opcode + target operand).
-    let target_pc = (*text.get(next_pc + 1)?) as usize;
-    let target_op = Op::from_i64(*text.get(target_pc)?)?;
-    let fallthrough_op = Op::from_i64(*text.get(next_pc + 2)?)?;
-    if !writes_x19_first(target_op) || !writes_x19_first(fallthrough_op) {
-        return None;
-    }
-    Some(next_op)
-}
-
-/// Set of c4 ops whose aarch64 lowering writes `x19` before reading
-/// any prior value. Used as the safety gate for the cmp+branch
-/// fusion peephole: the fused compare op leaves `x19` holding the
-/// rhs of the compare (no `cset` runs), so the matching branch's
-/// taken-target and fall-through paths must each kick off with an
-/// op that overwrites `x19`. Anything else (Bz/Bnz/Lev/Si/binops/
-/// etc.) reads the stale value first and miscompiles.
-fn writes_x19_first(op: Op) -> bool {
-    use Op::*;
-    matches!(
-        op,
-        // Materialise a value into x19.
-        Imm | Lea
-        // Fused local load: writes x19 unconditionally.
-        | LdLocI | LdLocC
-        // Direct call: `bl <target>; mov x19, x0`. The bl reads no
-        // x19-derived state, and the trailing mov overwrites x19.
-        | Jsr
-        // External library call: load args from stack offsets
-        // (x19-independent), call libc, then `mov x19, x0`. x19
-        // is overwritten before any subsequent c4 op observes it.
-        | JsrExt
-    )
-}
-
-/// Lower a bytecode [`Program`] to AArch64 machine code. Walks the
-/// bytecode once, emitting native code for each op; control-flow ops
-/// emit a placeholder branch and record a fixup to be patched after
-/// the whole layout is known.
-///
-/// Calling convention (Phase 1):
+/// Calling convention:
 /// * VM accumulator `a` lives in `x19` (callee-saved across calls).
-/// * The VM stack rides on the native stack: `Op::Psh` is `str x19,
-///   [sp, #-16]!`, every binary op pops with `ldr <tmp>, [sp], #16`.
-///   Push slots are 16 bytes (not 8) so SP stays aligned for libc calls.
+/// * The VM stack rides on the native stack: an accumulator
+///   push lowers to `str x19, [sp, #-16]!`, every binary op
+///   pops with `ldr <tmp>, [sp], #16`. Push slots are 16 bytes
+///   (not 8) so SP stays aligned for libc calls.
 /// * `x16`/`x17` (IP0/IP1) are the AAPCS64-blessed temporaries we use
 ///   for popped operands and large-immediate scratch.
 /// * Each function's prologue is the standard AAPCS64 sequence;
@@ -1194,29 +1190,15 @@ fn writes_x19_first(op: Op) -> bool {
 pub(super) fn lower(
     program: &Program,
     target: Target,
-    native: NativeOptions,
+    #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
 ) -> Result<Build, C5Error> {
-    let abi = target.abi();
-
-    // Run the regalloc analyzer once if `--optimize` is on. The
-    // plan is consulted at each Op::Ent / Op::Psh / pop op so we
-    // keep it in scope for the entire walk.
-    let plan_storage: Option<RegStackPlan> = if native.optimize {
-        Some(regalloc::analyze(&program.text, POOL_SIZES)?)
-    } else {
-        None
-    };
-    let plan: Option<&RegStackPlan> = plan_storage.as_ref();
-    let mut reg_state = RegState::new(native.optimize, plan);
-
-    // Pre-scan for branch targets so the cmp+branch fusion peephole
-    // can refuse to fuse when the matching Bz/Bnz is reachable from
-    // anywhere else. Cheap: one linear walk of `text`.
-    let branch_targets = collect_branch_targets(&program.text);
-
     let mut code = Vec::new();
-    let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
+    let mut func_ent_pcs: Vec<usize> = Vec::new();
+    let mut func_names: Vec<alloc::string::String> = Vec::new();
+    let mut func_prologue_native: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site emits a placeholder
@@ -1224,117 +1206,216 @@ pub(super) fn lower(
     // laid out at the tail of `code`.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
+    let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk against
-    // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
+    // `pc_to_native`, so we record (adrp_offset, target_ent_pc)
     // here and rewrite into `Build::func_fixups` once the map is final.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
-    // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
-    // when targeting Windows. The PE writer reserves the
-    // `_tls_index` DWORD slot and patches each fixup with the
+    // Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
+    // lowering site when targeting Windows. The PE writer reserves
+    // the `_tls_index` DWORD slot and patches each fixup with the
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     // macOS arm64 TLV: each unique TLS variable's offset gets a
     // descriptor index; the writer emits a 24-byte
-    // `__thread_vars` descriptor per index. Each `Op::TlsLea`
+    // `__thread_vars` descriptor per index. Each `Inst::TlsAddr`
     // site records an `adrp + add` pair via `macho_tlv_fixups`.
     let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
     let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
 
-    // Compiler's data-Imm side channel as a sorted slice (binary search
-    // is fine -- this list grows linearly with the number of distinct
-    // string-literal / global references in the program).
-    let data_imm_positions: &[usize] = &program.data_imm_positions;
-    let code_imm_positions: &[usize] = &program.code_imm_positions;
-
-    // Track which function we're currently inside so the prologue
-    // and epilogue agree on whether to push/pop the entry's
-    // host-passed arguments. Bytecode has no explicit function
-    // boundaries; each `Op::Ent` starts a function and `in_main`
-    // stays set until the next `Ent`.
-    let mut in_main = false;
-
-    // Parameter count of the entry function. The main-style
-    // prologue spills `min(n, 8)` int-arg regs (x0..x7) into the
-    // c5 frame and the epilogue drops the matching slots.
-    // Returns 0 when `entry_pc` doesn't land on `Op::Ent` (DLL /
-    // exports-only builds); the loop's `op_pc == entry_pc` gate
-    // keeps the regular prologue in those cases.
-    let entry_n_params = if program.entry_pc < program.text.len()
-        && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
-    {
-        param_count_for_func(&program.text, program.entry_pc)
-    } else {
-        0
-    };
-
-    let mut pc = 0usize;
-    while pc < program.text.len() {
-        let op_pc = pc;
-        bytecode_to_native[op_pc] = code.len();
-        let raw = program.text[pc];
-        let op = Op::from_i64(raw).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_ice_bytecode(
-                "aarch64 codegen: bad opcode -- the bytecode scanner \
-                 drifted off the op/operand boundary or the op enum \
-                 changed without updating from_i64",
-                program,
-                pc,
-            ))
+    // Lift the program into SSA once and run the linear-scan
+    // allocator per function. Each function lowers through
+    // `ssa_emit_aarch64::emit_function`; a per-function emit bail
+    // is a hard error so any IR + emit coverage gap surfaces
+    // immediately. `--dump-ssa` prints the IR + allocation for
+    // each function.
+    let mut ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
+        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
+            super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
-        pc += 1;
-        if matches!(op, Op::Ent) {
-            in_main = op_pc == program.entry_pc;
-            // Clear any cmp+branch fusion state; pending_cmp_cond
-            // is only legal for the immediate gap between a compare
-            // op and its matching Bz/Bnz, never across a function
-            // boundary.
-            reg_state.pending_cmp_cond = None;
-            // Refresh per-function regalloc state. With no plan,
-            // both stay at their default (use_pool=false, depth=0).
-            if let Some(p) = reg_state.plan {
-                if let Some(f) = p.function_at(op_pc) {
-                    reg_state.use_pool = f.use_pool;
-                    reg_state.current_callee_depth = if f.use_pool { f.callee_depth } else { 0 };
-                } else {
-                    // Should be unreachable -- analyzer records every Ent --
-                    // but stay correct rather than panicking.
-                    reg_state.use_pool = false;
-                    reg_state.current_callee_depth = 0;
+    // -O: promote address-free local slots to SSA values before
+    // register allocation, dropping their frame load / store traffic.
+    // Record the promoted slots per function so the debug-info emitter
+    // can drop their now-stale frame location.
+    let mut promoted_local_slots: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>> =
+        alloc::collections::BTreeMap::new();
+    if native.optimize {
+        super::ssa_emit_common::time_pass("ssa_mem2reg::run (aarch64)", || {
+            for f in &mut ssa_funcs {
+                let promoted = super::ssa_mem2reg::run(f);
+                if !promoted.is_empty() {
+                    promoted_local_slots.insert(f.ent_pc, promoted);
                 }
-                debug_assert!(
-                    reg_state.pseudo_stack.is_empty(),
-                    "pseudo stack non-empty at fn entry"
-                );
+            }
+        });
+        // Inline after mem2reg; see x86_64.rs's matching block for
+        // the ordering rationale.
+        super::ssa_emit_common::time_pass("ssa_inline::run (aarch64)", || {
+            super::ssa_inline::run(&mut ssa_funcs, native.inline_cap);
+        });
+        super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
+            super::ssa_rotate::run(&mut ssa_funcs);
+        });
+        super::ssa_emit_common::time_pass("ssa_constfold_branch::run (aarch64)", || {
+            super::ssa_constfold_branch::run(&mut ssa_funcs);
+        });
+        super::ssa_emit_common::time_pass("ssa_split_crit_edges::run (aarch64)", || {
+            super::ssa_split_crit_edges::run(&mut ssa_funcs);
+        });
+        super::ssa_emit_common::time_pass("ssa_dedup_imm::run (aarch64)", || {
+            super::ssa_dedup_imm::run(&mut ssa_funcs);
+        });
+        super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
+            super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
+        });
+    }
+    // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
+    // and emits one stderr line per function classifying it as
+    // eligible for the host-ABI prologue or as requiring the c5
+    // cdecl 16-byte-cell layout.
+    super::ssa_c5_cdecl_audit::maybe_dump_audit(&ssa_funcs);
+    // Upper bound on ent_pcs the lowering will reference. The
+    // walker stamps `ent_pc` / `end_pc` against the ent_pc
+    // space, and the dense `pc_to_native` table holds
+    // every reachable PC.
+    let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
+    let mut pc_to_native: Vec<usize> = vec![usize::MAX; pc_extent + 1];
+    // Per-callee variadic flag, derived from FunctionSsa::is_variadic
+    // for locally-defined callees and from `Symbol::is_variadic`
+    // for cross-TU extern-declared callees. Each call site reads
+    // it to pick the host-ABI vs c5-stack arg passing shape for
+    // the callee. Without the extern entries here, a cross-TU
+    // call to a variadic function emits a non-variadic register
+    // sequence and the callee reads junk from the c5 stack.
+    let mut variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
+        .iter()
+        .filter(|f| f.is_variadic)
+        .map(|f| f.ent_pc)
+        .collect();
+    {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let extern_pcs: alloc::collections::BTreeSet<usize> = program
+            .extern_function_imports
+            .iter()
+            .map(|(pc, _)| *pc)
+            .collect();
+        for sym in &program.symbols {
+            if sym.class == Token::Fun as i64
+                && !sym.defined_here
+                && sym.linkage == Linkage::External
+                && sym.is_variadic
+                && extern_pcs.contains(&(sym.val as usize))
+            {
+                variadic_targets.insert(sym.val as usize);
             }
         }
-        lower_op(
-            op,
-            &program.text,
-            &mut pc,
+    }
+    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
+        super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {
+            ssa_funcs
+                .iter()
+                .map(|f| super::ssa_alloc::allocate(f, target))
+                .collect()
+        });
+    #[cfg(feature = "std")]
+    if super::ssa_dump::enabled(native) {
+        let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
+            .finished_functions
+            .iter()
+            .map(|ff| (ff.ent_pc, ff.name.as_str()))
+            .collect();
+        for (f, a) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
+            if let Some(name) = name_by_ent.get(&f.ent_pc) {
+                eprintln!("; name={name}");
+            }
+            eprint!("{}", super::ssa_dump::dump_function(f, a));
+        }
+    }
+    #[cfg(feature = "std")]
+    let _ssa_emit_pass_start = std::time::Instant::now();
+    for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
+        let ent_pc = func_ssa.ent_pc;
+        pc_to_native[ent_pc] = code.len();
+        func_ent_pcs.push(ent_pc);
+        func_names.push(func_ssa.name.clone());
+        // Pre-resolve every `imm_data_extern` value-id to the
+        // symbol name once per function so `emit_function` can
+        // tag the matching `DataFixup` with the cross-TU name.
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_imm_data_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
+        let ok = super::ssa_emit_aarch64::emit_function(
+            func_ssa,
+            alloc_for,
+            target,
             &mut code,
             &mut fixups,
             &mut plt_call_fixups,
             &mut data_fixups,
+            &mut user_extern_data_refs,
+            &extern_data_names,
             &mut pending_func_fixups,
+            imports,
+            &variadic_targets,
             &mut tls_index_fixups,
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
-            data_imm_positions,
-            code_imm_positions,
-            in_main,
-            entry_n_params,
-            abi,
-            &mut reg_state,
-            op_pc,
-            &branch_targets,
-            imports,
-            target,
-            &program.call_fp_arg_masks,
-        )?;
+            &mut pc_to_native,
+            &mut func_prologue_native,
+            &mut ssa_line_rows,
+        );
+        if !ok {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &alloc::format!(
+                    "ssa emit (aarch64): function at ent_pc {ent_pc} contains an op outside the implemented subset",
+                ),
+            )));
+        }
     }
-    bytecode_to_native[program.text.len()] = code.len();
+    #[cfg(feature = "std")]
+    if super::ssa_emit_common::time_passes_enabled() {
+        let us = _ssa_emit_pass_start.elapsed().as_micros();
+        eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
+    }
+    pc_to_native[pc_extent] = code.len();
 
-    apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+    // Cross-TU user-function imports surfaced by the parser as
+    // placeholder ent_pcs past `text.len()`. Each `Inst::Call`
+    // emits a `Fixup::Bl` with `target_ent_pc` equal to the
+    // placeholder; we partition those out before
+    // `apply_fixups` and re-emit them as
+    // `Build::user_extern_call_sites` entries that the writer
+    // surfaces as `R_AARCH64_CALL26` relocs against the
+    // callee's symbol. Empty for builds without
+    // `CompileOptions::no_entry_point`.
+    let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, name)| (*pc, name.as_str()))
+        .collect();
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
+        fixups
+    } else {
+        let mut out = Vec::with_capacity(fixups.len());
+        for f in fixups {
+            if let Some(name) = extern_pc_lookup.get(&f.target_ent_pc) {
+                let is_tail = matches!(f.kind, BranchKind::B);
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else {
+                out.push(f);
+            }
+        }
+        out
+    };
+    apply_fixups(&mut code, &resolved_fixups, &pc_to_native, pc_extent)?;
 
     // Append one PLT trampoline per import. Every BL/B
     // placeholder recorded in `plt_call_fixups` now gets its imm26
@@ -1342,110 +1423,107 @@ pub(super) fn lower(
     // trampoline body's adrp+ldr pair is patched by the per-format
     // writer through the same `GotFixup` shape the inline call
     // sequence used before PLT trampolines existed.
-    let plt_trampoline_offsets =
-        emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
-    apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
+    // Capture call sites before the PLT-fixup pass rewrites the
+    // BL imm26 fields. The `OutputKind::Relocatable` writer reads
+    // these to emit `R_AARCH64_CALL26` relocations against each
+    // import's external symbol; final-image writers ignore the
+    // list and rely on the PLT trampolines below.
+    let reloc_call_sites: Vec<super::RelocCallSite> = plt_call_fixups
+        .iter()
+        .map(|f| super::RelocCallSite {
+            instr_offset: f.instr_offset,
+            import_index: f.import_index,
+            is_tail: f.is_tail,
+        })
+        .collect();
+    // Final-image output emits one PLT trampoline per import at
+    // the tail of `.text` and rewrites every BL/B placeholder to
+    // reach the matching trampoline. Relocatable output leaves
+    // the placeholders raw (imm26 = 0) so the linker materialises
+    // the PLT pool when it produces the final image -- the
+    // matching `R_AARCH64_CALL26` reloc in `.rela.text` carries
+    // the call site's import symbol.
+    let plt_trampoline_offsets: Vec<usize> = if native.output_kind != super::OutputKind::Relocatable
+    {
+        let offsets = emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
+        apply_plt_call_fixups(&mut code, &plt_call_fixups, &offsets)?;
+        offsets
+    } else {
+        Vec::new()
+    };
 
-    // Emit per-function arg-shuffling thunks for any function whose
-    // address is taken (`fp = worker_main`). The thunk lets pthread /
-    // CreateThread / qsort / signal handlers etc. hand args in
-    // host-ABI registers and have the c5 callee see them at
-    // `[fp + 16]`, `[fp + 32]`, ... where lea_offset_bytes expects.
-    //
-    // Functions with zero params don't need a thunk -- the host call
-    // can land on the c5 entry directly.
-    let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
-    let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-    for (_, target_bc_pc) in &pending_func_fixups {
-        addr_taken.insert(*target_bc_pc);
-    }
-    // Static-init function-pointer slots (`static fp_t fp = func;`,
-    // dispatch tables) take the function's address too -- without a
-    // thunk the writer would patch the slot with the bare body, and
-    // the call would land on Lev's `[fp+16]` reads with garbage in
-    // the host's argument registers. AAPCS64 happens to work even
-    // without a thunk because Jsri doesn't disturb sp before the
-    // call (no shadow space), but threading both fixup paths
-    // through the same map keeps the per-format writers uniform
-    // with x86_64.
-    for r in &program.code_relocs {
-        addr_taken.insert(r.target_bc_pc as usize);
-    }
-    for &func_pc in &addr_taken {
-        let n_params = param_count_for_func(&program.text, func_pc);
-        if n_params == 0 {
-            continue;
-        }
-        if func_pc >= bytecode_to_native.len() {
-            continue;
-        }
-        let target = bytecode_to_native[func_pc];
-        if target == usize::MAX {
-            continue;
-        }
-        // Variadic c5 functions skip the thunk. The shuffler would
-        // only spill the fixed-arg count of register args and
-        // discard the variadic tail; `Op::Jsri` already pushes
-        // every arg onto the c5 stack, so the bare body reads the
-        // varargs correctly through its declared parameter slots.
-        if function_is_variadic(&program.text, func_pc) {
-            continue;
-        }
-        let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
-        thunk_for_func.insert(func_pc, thunk_offset);
-    }
-
-    // Resolve pending function-pointer fixups now that the bytecode-to-
-    // native map is complete. Prefer a thunk address if we emitted one
-    // for the target function; otherwise the literal points at the
-    // function's own native entry.
+    // Function-pointer fixups resolve to each callee's body offset
+    // directly: every function's prologue already spills the host
+    // arg registers into the c5 cdecl slots that the body reads
+    // through the address-of-local path, so a host caller
+    // (`pthread_create`, `qsort`, a static dispatch table, ...)
+    // can land on the body itself. Variadic c5 functions keep the
+    // c5-stack-based ABI and reach only via indirect c5 callers
+    // that lay args onto the c5 stack first; their fn-pointer
+    // fixups also land on the body, which keeps that contract
+    // intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
-    for (adrp_offset, target_bc_pc) in pending_func_fixups {
-        if target_bc_pc > program.text.len() {
+    for (adrp_offset, target_ent_pc) in pending_func_fixups {
+        // Cross-TU target: the placeholder ent_pc has no entry
+        // in `pc_to_native`. Route to the same named-
+        // symbol channel that data extern refs use; the linker
+        // resolves the ADRP+ADD pair to `text_vaddr + target`
+        // via the data_abs_relocs Text-section path.
+        if let Some(&name) = extern_pc_lookup.get(&target_ent_pc) {
+            user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset: adrp_offset,
+                symbol_name: (*name).into(),
+            });
+            continue;
+        }
+        if target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen: function pointer target {target_bc_pc} past end of bytecode"
+                    "native codegen: function pointer target {target_ent_pc} past end of PC space"
                 ),
             )));
         }
-        let target = match thunk_for_func.get(&target_bc_pc).copied() {
-            Some(t) => t,
-            None => {
-                let t = bytecode_to_native[target_bc_pc];
-                if t == usize::MAX {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
-                        ),
-                    )));
-                }
-                t
-            }
-        };
+        let target = pc_to_native[target_ent_pc];
+        if target == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen: function pointer target {target_ent_pc} did not land on an instruction"
+                ),
+            )));
+        }
         func_fixups.push(FuncFixup {
             adrp_offset,
             target_native_offset: target,
         });
     }
 
-    let entry_offset = bytecode_to_native
-        .get(program.entry_pc)
-        .copied()
-        .ok_or_else(|| {
+    let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
+        // Relocatable objects carry no entry point; the linker picks
+        // it once every TU is merged. `entry_pc` may legitimately be
+        // 0 here (`--no-entry-point` / `-c` on a TU without `main`)
+        // and need not land on a real instruction.
+        pc_to_native
+            .get(program.entry_pc)
+            .copied()
+            .filter(|&n| n != usize::MAX)
+            .unwrap_or(0)
+    } else {
+        let off = pc_to_native.get(program.entry_pc).copied().ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: entry_pc {} is out of bytecode range",
+                "native codegen: entry_pc {} is out of PC range",
                 program.entry_pc
             )))
         })?;
-    if entry_offset == usize::MAX {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!(
-                "native codegen: entry_pc {} did not align with any instruction start",
-                program.entry_pc
-            ),
-        )));
-    }
+        if off == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen: entry_pc {} did not align with any instruction start",
+                    program.entry_pc
+                ),
+            )));
+        }
+        off
+    };
 
     Ok(Build {
         text: code,
@@ -1454,8 +1532,15 @@ pub(super) fn lower(
         got_fixups,
         data_fixups,
         func_fixups,
-        bytecode_to_native,
-        func_thunk_offsets: thunk_for_func,
+        pc_to_native,
+        func_ent_pcs,
+        func_names,
+        func_prologue_native,
+        promoted_local_slots,
+        reloc_call_sites,
+        user_extern_call_sites,
+        user_extern_data_refs,
+        ssa_line_rows,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with
         // both the lowering and the writer. Default-empty here keeps
@@ -1474,20 +1559,9 @@ pub(super) fn lower(
         macho_tlv_descriptors,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
+        merged_dwarf: None,
         plt_trampoline_offsets,
     })
-}
-
-/// Read the i64 operand following an opcode, advancing `pc` past it.
-fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Error> {
-    if *pc >= text.len() {
-        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-            &format!("native codegen: {op_name} missing operand at end of bytecode"),
-        )));
-    }
-    let v = text[*pc];
-    *pc += 1;
-    Ok(v)
 }
 
 /// Walk through the patch list, computing the actual native offset
@@ -1496,24 +1570,24 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Er
 fn apply_fixups(
     code: &mut [u8],
     fixups: &[Fixup],
-    bc_to_native: &[usize],
-    bc_len: usize,
+    pc_to_native: &[usize],
+    pc_extent: usize,
 ) -> Result<(), C5Error> {
     for f in fixups {
-        if f.target_bytecode_pc > bc_len {
+        if f.target_ent_pc > pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
-                    "native codegen: branch target {} past end of bytecode",
-                    f.target_bytecode_pc
+                    "native codegen: branch target {} past end of PC space",
+                    f.target_ent_pc
                 ),
             )));
         }
-        let target = bc_to_native[f.target_bytecode_pc];
+        let target = pc_to_native[f.target_ent_pc];
         if target == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: branch target {} did not land on an instruction",
-                    f.target_bytecode_pc
+                    f.target_ent_pc
                 ),
             )));
         }
@@ -1539,1295 +1613,6 @@ fn apply_fixups(
     Ok(())
 }
 
-/// Lower one bytecode op. Hot-path helpers for common patterns
-/// (`pop into x16`, `binop pop+combine`, etc.) live below.
-#[allow(clippy::too_many_arguments)]
-fn lower_op(
-    op: Op,
-    text: &[i64],
-    pc: &mut usize,
-    code: &mut Vec<u8>,
-    fixups: &mut Vec<Fixup>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
-    data_fixups: &mut Vec<DataFixup>,
-    pending_func_fixups: &mut Vec<(usize, usize)>,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
-    macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
-    macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
-    data_imm_positions: &[usize],
-    code_imm_positions: &[usize],
-    in_main: bool,
-    entry_n_params: usize,
-    abi: Abi,
-    reg_state: &mut RegState<'_>,
-    op_pc: usize,
-    branch_targets: &[bool],
-    imports: &super::ResolvedImports,
-    target: super::Target,
-    fp_arg_masks: &[(usize, u32)],
-) -> Result<(), C5Error> {
-    match op {
-        // ---- Function frame ----
-        Op::Ent => {
-            let locals = read_operand(text, pc, "Ent")?;
-            let aligned_locals = (((locals as u32) * 8) + 15) & !15;
-            reg_state.current_locals_bytes = aligned_locals;
-            // Reset alloca state -- AllocaInit (emitted by the
-            // compiler right after Ent) sets it back if this
-            // function uses alloca.
-            reg_state.current_alloca_top_offset = 0;
-            emit_prologue(
-                code,
-                locals,
-                in_main.then_some(entry_n_params),
-                reg_state.current_callee_depth,
-                target,
-                abi,
-            );
-        }
-        Op::Lev => emit_epilogue(
-            code,
-            in_main.then_some(entry_n_params),
-            reg_state.current_callee_depth,
-            reg_state.current_locals_bytes,
-            abi,
-        ),
-        Op::Adj => {
-            // Adj N drops N pushed slots (each slot is 16 bytes on
-            // our native stack -- see Op::Psh below for why). With
-            // the regalloc plan in play, the analyzer guarantees
-            // every slot popped here was a Real (real-stack) push;
-            // we still update the runtime tracker so the per-op
-            // "what's on top of the pseudo-stack" picture stays
-            // consistent.
-            let n = read_operand(text, pc, "Adj")?;
-            if n != 0 {
-                let bytes = (n as u32) * 16;
-                emit_add_sp_imm(code, bytes);
-            }
-            for _ in 0..(n as usize) {
-                let popped = reg_state.pseudo_stack.pop();
-                debug_assert!(
-                    matches!(popped, None | Some(None)),
-                    "Adj popped a Pseudo slot -- analyzer mis-classified"
-                );
-            }
-        }
-
-        // ---- Constants and addresses ----
-        Op::Imm => {
-            // The operand sits at `*pc` *before* read_operand bumps it;
-            // the side channel uses that index, so capture it first.
-            let operand_pc = *pc;
-            let v = read_operand(text, pc, "Imm")?;
-            if data_imm_positions.binary_search(&operand_pc).is_ok() {
-                // Address of a string literal or global. Emit ADRP+ADD
-                // placeholders against `__data + v`; the writer fills
-                // in the page-relative immediates.
-                let adrp_offset = code.len();
-                data_fixups.push(DataFixup {
-                    adrp_offset,
-                    data_offset: v as u64,
-                });
-                emit_adrp_add_placeholder(code);
-            } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
-                // Function-pointer literal. The compiler tagged this
-                // operand_pc explicitly so we don't have to infer
-                // from the value's range -- a user constant in
-                // [CODE_BASE, CODE_BASE + text.len()) would otherwise
-                // be misclassified as a func ptr (e.g. 0x20000000
-                // == CODE_BASE).
-                let target_bc_pc = (v as usize) - CODE_BASE;
-                let adrp_offset = code.len();
-                pending_func_fixups.push((adrp_offset, target_bc_pc));
-                emit_adrp_add_placeholder(code);
-            } else if code_imm_positions.is_empty()
-                && (v as usize) >= CODE_BASE
-                && ((v as usize) - CODE_BASE) < text.len()
-            {
-                // Fallback heuristic for the optimized (-O) path,
-                // which doesn't carry per-Imm provenance through
-                // its peephole passes. This is the original c5
-                // disambiguation rule and is correct for any
-                // program whose constants stay below CODE_BASE
-                // (= 0x20000000).
-                let target_bc_pc = (v as usize) - CODE_BASE;
-                let adrp_offset = code.len();
-                pending_func_fixups.push((adrp_offset, target_bc_pc));
-                emit_adrp_add_placeholder(code);
-            } else {
-                load_imm64(code, Reg::X19, v as u64);
-            }
-        }
-        Op::Lea => {
-            // c5 emits `Lea` offsets in 8-byte units (its VM uses one
-            // 8-byte slot per push and per local). Our native stack
-            // pushes 16 bytes per arg slot for AAPCS64 alignment, so
-            // for the args region (val >= 2) we use 16-byte spacing
-            // instead. Locals (val < 0) stay 8-byte. See `lea_offset`.
-            let offset = read_operand(text, pc, "Lea")?;
-            let signed_bytes = lea_offset_bytes(offset);
-            let abs = signed_bytes.unsigned_abs();
-            if abs < 4096 {
-                let imm = abs as u32;
-                let word = if signed_bytes >= 0 {
-                    enc_add_imm(Reg::X19, Reg::X29, imm)
-                } else {
-                    enc_sub_imm(Reg::X19, Reg::X29, imm)
-                };
-                emit(code, word);
-            } else {
-                load_imm64(code, Reg::X16, abs);
-                let word = if signed_bytes >= 0 {
-                    enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
-                } else {
-                    enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
-                };
-                emit(code, word);
-            }
-        }
-
-        // ---- Memory loads / stores ----
-        Op::Li => emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0)),
-        Op::Lc => emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0)),
-        Op::Lcs => emit(code, enc_ldrsb_imm(Reg::X19, Reg::X19, 0)),
-        Op::Si => {
-            // pop addr; *addr = x19. With pool: addr is in xN
-            // (skip the ldr). Without pool: pop from real stack.
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_str_imm(Reg::X19, lhs, 0));
-        }
-        Op::Sc => {
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_strb_imm(Reg::X19, lhs, 0));
-        }
-        Op::Lw => emit(code, enc_ldrsw_imm(Reg::X19, Reg::X19, 0)),
-        Op::Lwu => emit(code, enc_ldr32_imm(Reg::X19, Reg::X19, 0)),
-        Op::Sw => {
-            let lhs = pop_lhs_reg(code, reg_state);
-            // STR Wt encodes the same Rt as LDRSW Xt -- the W/X
-            // distinction lives in the opcode bits, not the
-            // register name. Pass X19; the encoder produces the
-            // 32-bit store form regardless.
-            emit(code, enc_str32_imm(Reg::X19, lhs, 0));
-        }
-        Op::Lh => emit(code, enc_ldrsh_imm(Reg::X19, Reg::X19, 0)),
-        Op::Lhu => emit(code, enc_ldrh_imm(Reg::X19, Reg::X19, 0)),
-        Op::Sh => {
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_strh_imm(Reg::X19, lhs, 0));
-        }
-        Op::Lf => {
-            // Single-precision load + widen-to-double:
-            //   ldr  s0, [x19]   ; load 4 bytes through `s0`'s half of `d0`
-            //   fcvt d0, s0      ; widen to double
-            //   fmov x19, d0     ; deliver `f64::to_bits()` to the accumulator
-            // The IEEE 754 single -> double widening is bit-exact
-            // for every finite source value.
-            emit(code, enc_ldr_s_imm(0, Reg::X19, 0));
-            emit(code, enc_fcvt_d_s(0, 0));
-            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
-        }
-        Op::Sf => {
-            // Narrow f64 -> f32 and store 4 bytes:
-            //   fmov d0, x19     ; stage the accumulator as a double
-            //   fcvt s0, d0      ; narrow with round-to-nearest-ties-to-even
-            //   ldr  lhs, [sp]   ; (via pop_lhs_reg) destination address
-            //   str  s0, [lhs]   ; write 4 bytes
-            emit(code, enc_fmov_x_to_d(0, Reg::X19));
-            emit(code, enc_fcvt_s_d(0, 0));
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_str_s_imm(0, lhs, 0));
-        }
-        Op::Psh => {
-            // With the native optimizer on AND a Pseudo classification
-            // for this PC, materialise the push as `mov xN, x19`
-            // into the assigned pool slot. The bank decides which
-            // physical register: callee-saved (x20+) for slots that
-            // outlive a call, caller-saved (x9+) for slots that
-            // don't (no spill needed since they're allocated only
-            // when never live across a call).
-            let slot_and_bank = reg_state
-                .use_pool
-                .then(|| {
-                    reg_state
-                        .plan
-                        .and_then(|p| p.push_kind(op_pc))
-                        .and_then(|k| match k {
-                            PushKind::Pseudo { slot, bank } => Some((slot, bank)),
-                            PushKind::Real => None,
-                        })
-                })
-                .flatten();
-            match slot_and_bank {
-                Some((s, bank)) => {
-                    emit_mov_reg(code, pool_reg(s, bank), Reg::X19);
-                    reg_state.pseudo_stack.push(Some((s, bank)));
-                }
-                None => {
-                    // 16 bytes per push so that SP stays 16-byte
-                    // aligned -- any libc call we make later
-                    // (`Op::Prtf` etc.) needs that, and re-aligning
-                    // on every call would be a wash.
-                    emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
-                    reg_state.pseudo_stack.push(None);
-                }
-            }
-        }
-
-        // ---- Bitwise ----
-        Op::Or => binop_with_pop(code, reg_state, enc_orr_reg),
-        Op::Xor => binop_with_pop(code, reg_state, enc_eor_reg),
-        Op::And => binop_with_pop(code, reg_state, enc_and_reg),
-
-        // ---- Comparisons. The c5 VM does `popped <cmp> a`, which
-        //      maps to `cmp lhs, x19; cset x19, <cond>`. With the
-        //      cmp+branch fusion peephole, when the next op is
-        //      `Bz`/`Bnz` (and not a branch target), we skip the
-        //      `cset` and stash the condition for the branch op
-        //      to consume as a `b.cond`.
-        Op::Eq => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Eq),
-        Op::Ne => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ne),
-        Op::Lt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Lt),
-        Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Gt),
-        Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Le),
-        Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ge),
-        Op::Ult => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Lo),
-        Op::Ugt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hi),
-        Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ls),
-        Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hs),
-
-        // ---- Shifts. Shr is arithmetic (signed); Shru is logical
-        //      (unsigned), emitted when the LHS has an unsigned type.
-        Op::Shl => binop_with_pop(code, reg_state, enc_lslv),
-        Op::Shr => binop_with_pop(code, reg_state, enc_asrv),
-        Op::Shru => binop_with_pop(code, reg_state, enc_lsrv),
-
-        // ---- Arithmetic. Sub, Div, Mod are not commutative, so the
-        //      pop goes on the LHS of the operation.
-        Op::Add => binop_with_pop(code, reg_state, enc_add_reg),
-        Op::Sub => binop_with_pop(code, reg_state, enc_sub_reg),
-        Op::Mul => binop_with_pop(code, reg_state, enc_mul),
-        Op::Div => binop_with_pop(code, reg_state, enc_sdiv),
-        Op::Mod => {
-            // pop lhs; x17 = lhs / x19; x19 = lhs - x17 * x19.
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_sdiv(Reg::X17, lhs, Reg::X19));
-            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, lhs));
-        }
-        Op::Divu => binop_with_pop(code, reg_state, enc_udiv),
-        Op::Modu => {
-            // Same shape as Op::Mod but with UDIV instead of SDIV.
-            // The MSUB stays as-is: subtraction is sign-agnostic at the
-            // 64-bit register level since both operands fit in u64
-            // (the divisor and dividend are both <= 2^63 here, and
-            // wrap-around modulo 2^64 yields the same low bits).
-            let lhs = pop_lhs_reg(code, reg_state);
-            emit(code, enc_udiv(Reg::X17, lhs, Reg::X19));
-            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, lhs));
-        }
-
-        // ---- Control flow ----
-        Op::Jmp => {
-            let target = read_operand(text, pc, "Jmp")? as usize;
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_bytecode_pc: target,
-                kind: BranchKind::B,
-            });
-            emit(code, 0); // placeholder, patched in apply_fixups
-        }
-        Op::Bz => {
-            let target = read_operand(text, pc, "Bz")? as usize;
-            // Fusion: if the previous compare op stashed a
-            // condition, emit `b.<flip(cond)>` instead of
-            // `cbz x19`. Bz tests for "boolean was 0" which is
-            // "the compare condition did NOT hold".
-            let kind = match reg_state.pending_cmp_cond.take() {
-                Some(cond) => BranchKind::Bcc(cond.flip()),
-                None => BranchKind::Cbz(Reg::X19),
-            };
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_bytecode_pc: target,
-                kind,
-            });
-            emit(code, 0);
-        }
-        Op::Bnz => {
-            let target = read_operand(text, pc, "Bnz")? as usize;
-            // Fusion: Bnz tests for "boolean was 1" which is "the
-            // compare condition held" -- same condition as the
-            // compare itself.
-            let kind = match reg_state.pending_cmp_cond.take() {
-                Some(cond) => BranchKind::Bcc(cond),
-                None => BranchKind::Cbnz(Reg::X19),
-            };
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_bytecode_pc: target,
-                kind,
-            });
-            emit(code, 0);
-        }
-        Op::Jsr => {
-            let target = read_operand(text, pc, "Jsr")? as usize;
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_bytecode_pc: target,
-                kind: BranchKind::Bl,
-            });
-            emit(code, 0);
-            // The called function's epilogue moved its return value
-            // into x0. Copy it back into x19 so the caller continues
-            // with `a` set to the return value, matching VM semantics.
-            emit_mov_reg(code, Reg::X19, Reg::X0);
-        }
-        Op::Jsri => {
-            // Indirect call: target address in x19, args already
-            // pushed onto the VM stack in 16-byte slots by preceding
-            // Op::Psh's. The callee may be a libc target (reads from
-            // x0..x7 + the host stack past x7) or a c5 target (reads
-            // from `bp + offset` after the per-function arg-shuffle
-            // thunk re-spills the regs). Either way: load the first
-            // 8 c5-stack args into x0..x7, copy the rest contiguously
-            // onto the host stack (AAPCS64 puts args 9+ at sp+0,
-            // sp+8, ... at the call site), call, clean up.
-            let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
-                Some(Op::Adj) => text[*pc + 1] as usize,
-                _ => 0,
-            };
-            let n_reg = nargs.min(8);
-            let n_stack = nargs - n_reg;
-            let scratch = ((n_stack as u32) * 8 + 15) & !15;
-            if scratch > 0 {
-                emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
-            }
-            // Reg args. With cdecl push order, c5-arg-i sits at
-            // [sp + scratch + i*16] (first declared on top).
-            for i in 0..n_reg {
-                let off = scratch + (i as u32) * 16;
-                emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
-            }
-            // Stack args -- copy from the c5 stack down to the
-            // host's outgoing-args region. x16 is AAPCS64 scratch.
-            for i in 0..n_stack {
-                let src = scratch + ((n_reg + i) as u32) * 16;
-                let dst = (i as u32) * 8;
-                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
-            }
-            // Move the function pointer into x16 so the callee's
-            // prologue/epilogue can't trample our accumulator slot.
-            // (Doing this AFTER the stack-arg copy is OK because the
-            // copy clobbered x16 last; we now reload it.)
-            emit_mov_reg(code, Reg::X16, Reg::X19);
-            emit(code, enc_blr(Reg::X16));
-            if scratch > 0 {
-                emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
-            }
-            emit_mov_reg(code, Reg::X19, Reg::X0);
-        }
-
-        // ---- Immediate-form arithmetic / comparison (optimizer-emitted).
-        //      All of them resolve to "load operand into x16 then run
-        //      the register-form encoder against x19". Comparisons
-        //      additionally do cmp+cset.
-        Op::AddI => imm_arith(code, text, pc, "AddI", enc_add_reg)?,
-        Op::SubI => imm_arith(code, text, pc, "SubI", enc_sub_reg)?,
-        Op::MulI => imm_arith(code, text, pc, "MulI", enc_mul)?,
-        Op::AndI => imm_arith(code, text, pc, "AndI", enc_and_reg)?,
-        Op::OrI => imm_arith(code, text, pc, "OrI", enc_orr_reg)?,
-        Op::XorI => imm_arith(code, text, pc, "XorI", enc_eor_reg)?,
-        Op::ShlI => imm_arith(code, text, pc, "ShlI", enc_lslv)?,
-        Op::ShrI => imm_arith(code, text, pc, "ShrI", enc_asrv)?,
-        Op::ShruI => imm_arith(code, text, pc, "ShruI", enc_lsrv)?,
-        Op::EqI => imm_cmp(code, text, pc, "EqI", Cond::Eq, reg_state, branch_targets)?,
-        Op::NeI => imm_cmp(code, text, pc, "NeI", Cond::Ne, reg_state, branch_targets)?,
-        Op::LtI => imm_cmp(code, text, pc, "LtI", Cond::Lt, reg_state, branch_targets)?,
-        Op::GtI => imm_cmp(code, text, pc, "GtI", Cond::Gt, reg_state, branch_targets)?,
-        Op::LeI => imm_cmp(code, text, pc, "LeI", Cond::Le, reg_state, branch_targets)?,
-        Op::GeI => imm_cmp(code, text, pc, "GeI", Cond::Ge, reg_state, branch_targets)?,
-        Op::UltI => imm_cmp(code, text, pc, "UltI", Cond::Lo, reg_state, branch_targets)?,
-        Op::UgtI => imm_cmp(code, text, pc, "UgtI", Cond::Hi, reg_state, branch_targets)?,
-        Op::UleI => imm_cmp(code, text, pc, "UleI", Cond::Ls, reg_state, branch_targets)?,
-        Op::UgeI => imm_cmp(code, text, pc, "UgeI", Cond::Hs, reg_state, branch_targets)?,
-        Op::LdLocI => {
-            // `Lea N + Li` fused. a = *(bp + N*8)
-            let offset = read_operand(text, pc, "LdLocI")?;
-            emit_local_load(code, offset, /*byte=*/ false);
-        }
-        Op::LdLocC => {
-            let offset = read_operand(text, pc, "LdLocC")?;
-            emit_local_load(code, offset, /*byte=*/ true);
-        }
-        Op::StLocI => {
-            // `*(bp + N*8) = a` -- store accumulator to a local
-            // frame slot. Mirrors `emit_local_load` with a store.
-            let offset = read_operand(text, pc, "StLocI")?;
-            let bytes = lea_offset_bytes(offset);
-            if (-256..256).contains(&bytes) {
-                emit(code, enc_stur(Reg::X19, Reg::X29, bytes as i32));
-            } else {
-                let abs = bytes.unsigned_abs();
-                if abs < 4096 {
-                    let imm = abs as u32;
-                    let word = if bytes >= 0 {
-                        enc_add_imm(Reg::X16, Reg::X29, imm)
-                    } else {
-                        enc_sub_imm(Reg::X16, Reg::X29, imm)
-                    };
-                    emit(code, word);
-                } else {
-                    load_imm64(code, Reg::X17, abs);
-                    let word = if bytes >= 0 {
-                        enc_add_reg(Reg::X16, Reg::X29, Reg::X17)
-                    } else {
-                        enc_sub_reg(Reg::X16, Reg::X29, Reg::X17)
-                    };
-                    emit(code, word);
-                }
-                emit(code, enc_str_imm(Reg::X19, Reg::X16, 0));
-            }
-        }
-
-        // ---- External library call -- lower to a libc call
-        //      through __got. ----
-        Op::JsrExt => {
-            let jsrext_pc = *pc - 1;
-            let binding_idx = read_operand(text, pc, "JsrExt")?;
-            let fp_mask = fp_arg_mask_at(jsrext_pc, fp_arg_masks);
-            emit_libc_call(
-                binding_idx,
-                text,
-                *pc,
-                code,
-                plt_call_fixups,
-                abi,
-                imports,
-                fp_mask,
-                target,
-            )?;
-        }
-        Op::TailExt => {
-            // Tail-jump trampoline body. See the matching x86_64
-            // arm + the `Op::TailExt` doc in op.rs for the
-            // calling-convention bookkeeping; on aarch64 the
-            // sequence is `adrp x16, GOT; ldr x16, [x16, off];
-            // br x16`, which the writer patches the same way as
-            // the regular GOT-call shape.
-            let binding_idx = read_operand(text, pc, "TailExt")?;
-            let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
-                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
-                    "native codegen (aarch64): no import slot for binding {binding_idx} -- \
-                     the resolver should have placed it"
-                )))
-            })?;
-            emit_got_tail_jump(code, plt_call_fixups, import_index);
-        }
-        Op::Intrinsic => {
-            let id = read_operand(text, pc, "Intrinsic")?;
-            let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
-                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
-                    "native codegen (aarch64): unknown intrinsic id {id}"
-                )))
-            })?;
-            match intrinsic {
-                crate::c5::op::Intrinsic::Alloca => {
-                    // alloca(n): bump the per-frame arena's top
-                    // pointer down by n (rounded up to 16), store
-                    // the new top back into the bookkeeping slot,
-                    // and return the new top in x19. The arena
-                    // lives at a fixed FP-relative offset
-                    // reserved by `Op::Ent` and pointed at by
-                    // `current_alloca_top_offset`, which an
-                    // earlier `Op::AllocaInit` filled in. SP is
-                    // untouched, so outstanding `Op::Psh` values
-                    // stay where they are and matching pops still
-                    // resolve correctly -- the design trade-off
-                    // is a fixed per-function arena size rather
-                    // than the unlimited runtime SP bump that a
-                    // native alloca would do.
-                    let top_offset = reg_state.current_alloca_top_offset;
-                    if top_offset == 0 {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            "native codegen (aarch64): Op::Intrinsic(Alloca) emitted \
-                             without a preceding AllocaInit; the compiler should have \
-                             patched both at function-end",
-                        )));
-                    }
-                    // x19 holds the requested size. Round up to a
-                    // 16-byte multiple so each returned pointer is
-                    // aligned for any scalar type.
-                    emit(code, enc_add_imm(Reg::X19, Reg::X19, 15));
-                    // and x19, x19, #~15 -- bit pattern is the
-                    // logical-imm encoding for the 64-bit mask
-                    // 0xFFFF_FFFF_FFFF_FFF0 (4 zero low bits).
-                    emit(code, enc_and_imm_neg16(Reg::X19, Reg::X19));
-                    // Load current alloca-top from `[fp, -top_offset]`.
-                    // Compute the slot's address in x16 to sidestep
-                    // ldr/str's signed-9-bit and unsigned-12-bit
-                    // immediate ranges for deep frames.
-                    if top_offset < 4096 {
-                        emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
-                    } else {
-                        let high = top_offset & !0xfff;
-                        let low = top_offset & 0xfff;
-                        emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
-                        if low != 0 {
-                            emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
-                        }
-                    }
-                    emit(code, enc_ldr_imm(Reg::X17, Reg::X16, 0));
-                    emit(code, enc_sub_reg(Reg::X17, Reg::X17, Reg::X19));
-                    emit(code, enc_str_imm(Reg::X17, Reg::X16, 0));
-                    // Result (the new alloca-top) goes back into
-                    // x19, the c5 accumulator.
-                    emit_mov_reg(code, Reg::X19, Reg::X17);
-                }
-                crate::c5::op::Intrinsic::SetjmpAArch64 => {
-                    emit_setjmp_aarch64(code);
-                }
-                crate::c5::op::Intrinsic::LongjmpAArch64 => {
-                    emit_longjmp_aarch64(code, reg_state);
-                }
-            }
-        }
-        Op::AllocaInit => {
-            // operand = FP-slot index of the alloca-top pointer
-            // (positive, in 8-byte units). Zero means the
-            // function doesn't use alloca -- emit nothing.
-            let slot_idx = read_operand(text, pc, "AllocaInit")?;
-            if slot_idx > 0 {
-                let top_offset = (slot_idx as u32) * 8;
-                reg_state.current_alloca_top_offset = top_offset;
-                // Initial alloca-top points at the bookkeeping
-                // slot itself, i.e. the address one byte past the
-                // top of the arena. The first alloca(n) subtracts
-                // n from this and lands inside the arena
-                // (slot_idx + 1 .. slot_idx + ARENA_SLOTS).
-                if top_offset < 4096 {
-                    emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
-                } else {
-                    let high = top_offset & !0xfff;
-                    let low = top_offset & 0xfff;
-                    emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
-                    if low != 0 {
-                        emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
-                    }
-                }
-                emit(code, enc_str_imm(Reg::X16, Reg::X16, 0));
-            }
-        }
-
-        // ---- Floating-point arithmetic ----
-        //
-        // Pop top into a GPR, stage both operands into d0/d1, run
-        // the FP op into d0, copy back to x19. The arithmetic
-        // ordering matches the c5 stack convention: `top <op> acc`.
-        // d0/d1/d2 are AAPCS64 caller-saved scratch -- safe to
-        // clobber between c5-level ops.
-        Op::Fadd => emit_fp_binop(code, reg_state, enc_fadd_d),
-        Op::Fsub => emit_fp_binop(code, reg_state, enc_fsub_d),
-        Op::Fmul => emit_fp_binop(code, reg_state, enc_fmul_d),
-        Op::Fdiv => emit_fp_binop(code, reg_state, enc_fdiv_d),
-        Op::Fneg => {
-            // Unary -- no pop. Stage acc into d0, negate, copy back.
-            emit(code, enc_fmov_x_to_d(0, Reg::X19));
-            emit(code, enc_fneg_d(0, 0));
-            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
-        }
-        Op::Feq => emit_fp_cmp(code, reg_state, Cond::Eq),
-        Op::Fne => emit_fp_cmp(code, reg_state, Cond::Ne),
-        Op::Flt => emit_fp_cmp(code, reg_state, Cond::Mi),
-        Op::Fgt => emit_fp_cmp(code, reg_state, Cond::Gt),
-        Op::Fle => emit_fp_cmp(code, reg_state, Cond::Ls),
-        Op::Fge => emit_fp_cmp(code, reg_state, Cond::Ge),
-        Op::Fcvtfi => {
-            // x19 <- (i64)(d0 = f64::from_bits(x19))
-            emit(code, enc_fmov_x_to_d(0, Reg::X19));
-            emit(code, enc_fcvtzs_x_d(Reg::X19, 0));
-        }
-        Op::Fcvtif => {
-            // x19 <- (d0 = (f64)x19).to_bits()
-            emit(code, enc_scvtf_d_x(0, Reg::X19));
-            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
-        }
-        Op::TlsLea => {
-            // `_Thread_local` global access. Two lowerings live
-            // here:
-            //
-            // * Linux/aarch64 -- variant-1 layout:
-            //   `var_addr = TPIDR_EL0 + 16 + offset` where 16 is
-            //   the TLS_TCB_SIZE constant glibc reserves ahead of
-            //   the TLS image. Encoding stays inside `add
-            //   (immediate)`'s 12-bit field for variables under
-            //   4080 bytes from the start of `.tdata`.
-            //
-            // * Windows/aarch64 -- TLS directory + `_tls_index`:
-            //   the loader fills in `_tls_index` (a DWORD) with
-            //   the slot it picked, and stores per-thread TLS
-            //   pointers in `TEB->ThreadLocalStoragePointer` at
-            //   `[x18 + 0x58]`. Per access:
-            //       ldr  x16, [x18, #0x58]           ; tls_array
-            //       adrp x17, _tls_index_page        ; (writer-patched)
-            //       ldr  w17, [x17, #_tls_index_off] ; (writer-patched)
-            //       ldr  x16, [x16, x17, lsl #3]     ; tls_array[index]
-            //       add  x19, x16, #offset           ; final address
-            //   Same `add (immediate)` 12-bit limit on the
-            //   per-variable offset.
-            let offset = read_operand(text, pc, "TlsLea")?;
-            match target {
-                Target::LinuxAarch64 => {
-                    let imm = (offset + 16) as u32;
-                    if imm >= 4096 {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "_Thread_local offset {imm} doesn't fit in \
-                             `add` imm12; extend the lowering to emit \
-                             movz/movk if you need larger TLS blocks"
-                            ),
-                        )));
-                    }
-                    emit(code, enc_mrs_tpidr_el0(Reg::X19));
-                    emit(code, enc_add_imm(Reg::X19, Reg::X19, imm));
-                }
-                Target::WindowsAarch64 => {
-                    if offset >= 4096 {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &format!(
-                                "_Thread_local offset {offset} doesn't fit in \
-                             `add` imm12; extend the lowering to emit \
-                             movz/movk if you need larger TLS blocks"
-                            ),
-                        )));
-                    }
-                    // ldr x16, [x18, #0x58]
-                    emit(code, enc_ldr_imm(Reg::X16, Reg::X18, 0x58));
-                    // adrp x17, _tls_index ; ldr w17, [x17, #_tls_index_off]
-                    // The pair is patched by the PE writer once the
-                    // _tls_index slot's RVA is known.
-                    let pair_off = code.len();
-                    tls_index_fixups.push(super::TlsIndexFixup {
-                        instr_offset: pair_off,
-                    });
-                    emit(code, enc_adrp(Reg::X17, 0));
-                    emit(code, enc_ldr32_imm(Reg::X17, Reg::X17, 0));
-                    // ldr x16, [x16, x17, lsl #3]
-                    emit(code, enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17));
-                    // add x19, x16, #offset
-                    emit(code, enc_add_imm(Reg::X19, Reg::X16, offset as u32));
-                }
-                Target::MacOSAarch64 => {
-                    // Apple TLV (Thread-Local Variables): each
-                    // `_Thread_local` global gets a 24-byte
-                    // `__thread_vars` descriptor in `__DATA`.
-                    // Slot 0 of the descriptor is a function
-                    // pointer to a getter routine -- bound to
-                    // `__tlv_bootstrap` from libSystem at load
-                    // time, replaced with a fast getter on first
-                    // access. The getter takes the descriptor
-                    // address in x0 and returns the variable's
-                    // per-thread address in x0.
-                    //
-                    // Sequence:
-                    //     adrp x0, descriptor_page    (writer-patched)
-                    //     add  x0, x0, #descriptor_off (writer-patched)
-                    //     ldr  x16, [x0]              ; thunk getter
-                    //     blr  x16                    ; x0 = &var
-                    //     mov  x19, x0                ; copy to acc
-                    let descriptor_index = match macho_tlv_descriptors
-                        .iter()
-                        .position(|d| d.offset_in_block == offset as u64)
-                    {
-                        Some(i) => i,
-                        None => {
-                            macho_tlv_descriptors.push(super::MachoTlvDescriptor {
-                                offset_in_block: offset as u64,
-                            });
-                            macho_tlv_descriptors.len() - 1
-                        }
-                    };
-                    let adrp_off = code.len();
-                    macho_tlv_fixups.push(super::MachoTlvFixup {
-                        adrp_offset: adrp_off,
-                        descriptor_index,
-                    });
-                    // adrp x0, _ ; add x0, x0, #_ -- placeholder.
-                    emit(code, enc_adrp(Reg::X0, 0));
-                    emit(code, enc_add_imm(Reg::X0, Reg::X0, 0));
-                    // ldr x16, [x0]
-                    emit(code, enc_ldr_imm(Reg::X16, Reg::X0, 0));
-                    // blr x16
-                    emit(code, enc_blr(Reg::X16));
-                    // mov x19, x0
-                    emit_mov_reg(code, Reg::X19, Reg::X0);
-                }
-                _ => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "{:?}: `_Thread_local` codegen is only implemented for \
-                         Linux/aarch64, Windows/aarch64, and macOS/aarch64",
-                            target
-                        ),
-                    )));
-                }
-            }
-        }
-        Op::Mcpy => {
-            // src = x19, dst = pop. Copy `size` bytes (size is a
-            // compile-time constant), then x19 = dst (memcpy
-            // returns dst). Compile-time unrolled into 8-byte
-            // word copies + a tail of byte copies for any sub-8
-            // remainder. Struct fields land on 8-byte alignment so
-            // the byte tail is nominal, but lowering it inline
-            // means the IR doesn't need a separate "small-mcpy"
-            // op. Note: `pop_lhs_reg` may hand back x16 from the
-            // real-stack path, so the per-iteration temp uses x17
-            // (the other AAPCS64-reserved scratch) to avoid
-            // overwriting `dst`.
-            let size = read_operand(text, pc, "Mcpy")?;
-            let dst = pop_lhs_reg(code, reg_state);
-            // Copy whole 8-byte words via the scaled 12-bit
-            // unsigned-offset `LDR/STR` form (byte offsets
-            // 0..32760, multiples of 8). The earlier shape used
-            // `ldur/stur`, whose 9-bit signed offset silently
-            // wrapped for any byte offset >= 256, mis-copying
-            // every word past the 32nd; struct-copy of types
-            // > 256 bytes (sqlite's internal handles, stb_vorbis's
-            // ~1.9 KB stb_vorbis struct, ...) produced zeroed
-            // or shifted regions and downstream "the field I
-            // just wrote reads back as 0" mysteries.
-            let words = size / 8;
-            for w in 0..words {
-                let off = (w * 8) as u32;
-                emit(code, enc_ldr_imm(Reg::X17, Reg::X19, off));
-                emit(code, enc_str_imm(Reg::X17, dst, off));
-            }
-            // Byte tail. `ldrb`/`strb` (immediate, unscaled) take
-            // a 12-bit unsigned offset (range 0..4095), so any
-            // sub-word tail fits without the wrap-around risk.
-            let tail_start = words * 8;
-            for i in 0..(size - tail_start) {
-                let off = (tail_start + i) as u32;
-                emit(code, enc_ldrb_imm(Reg::X17, Reg::X19, off));
-                emit(code, enc_strb_imm(Reg::X17, dst, off));
-            }
-            emit_mov_reg(code, Reg::X19, dst);
-        }
-    }
-    Ok(())
-}
-
-/// Two-operand FP arithmetic lowering: pop top into a GPR, stage
-/// both operands into d0/d1, run `enc_op(0, 0, 1)` (so the result
-/// is `top <op> acc`), and copy d0 back to x19.
-fn emit_fp_binop(
-    code: &mut Vec<u8>,
-    reg_state: &mut RegState<'_>,
-    enc_op: impl Fn(u8, u8, u8) -> u32,
-) {
-    let lhs = pop_lhs_reg(code, reg_state);
-    emit(code, enc_fmov_x_to_d(0, lhs)); // d0 = top
-    emit(code, enc_fmov_x_to_d(1, Reg::X19)); // d1 = acc
-    emit(code, enc_op(0, 0, 1)); // d0 = d0 <op> d1
-    emit(code, enc_fmov_d_to_x(Reg::X19, 0));
-}
-
-/// jmp_buf field offsets for the AArch64 setjmp / longjmp
-/// intrinsics. Lays out 10 callee-saved x-regs, FP (x29), the
-/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
-/// the `<setjmp.h>` typedef reserves 256 to leave slack for
-/// future additions.
-const JB_X19_OFF: u32 = 0;
-const JB_X21_OFF: u32 = 16;
-const JB_X23_OFF: u32 = 32;
-const JB_X25_OFF: u32 = 48;
-const JB_X27_OFF: u32 = 64;
-const JB_X29_OFF: u32 = 80;
-const JB_PC_OFF: u32 = 88;
-const JB_SP_OFF: u32 = 96;
-const JB_D8_OFF: u32 = 104;
-const JB_D10_OFF: u32 = 120;
-const JB_D12_OFF: u32 = 136;
-const JB_D14_OFF: u32 = 152;
-/// Total instruction count emitted by `emit_setjmp_aarch64` --
-/// every entry is one 4-byte AArch64 word. Used to compute the
-/// PC-relative offset the ADR captures so a matching longjmp
-/// branches to exactly the byte after the inline expansion.
-/// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
-/// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
-/// 25 instructions; ADR sits at zero-based index 12.
-const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
-const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
-
-/// AArch64 setjmp inlined at the call site. The `env` pointer
-/// arrives in `x19` (c5's accumulator). On the initial call this
-/// writes the resume context into `[env]` and sets `x19 = 0`; on
-/// a matching longjmp control jumps to the address right after
-/// the inline expansion with `x19` carrying the longjmp value.
-///
-/// This is CRT-independent so it works on Windows AArch64, whose
-/// msvcrt `longjmp` routes through SEH and refuses an SEH-free
-/// `jmp_buf`. The Linux / macOS bindings continue to use the
-/// host libc setjmp -- that's already CRT-independent.
-fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
-    let start = code.len();
-    // Move env from x19 into x16 (the existing IP0 scratch the
-    // surrounding code already treats as a compiler temp) so the
-    // upcoming saves can write x19 itself before x19 is clobbered
-    // with the return value 0.
-    emit(code, enc_mov_reg(Reg::X16, Reg::X19));
-    // Save x19-x28 one by one. STR / LDR keeps the code simple
-    // (no STP encoder family beyond pre-indexed) and the linear
-    // sequence costs ~10 extra instructions per pair, irrelevant
-    // for a routine called once per pcall.
-    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
-        emit(code, enc_str_imm(Reg(19 + i as u8), Reg::X16, off));
-    }
-    emit(code, enc_str_imm(Reg::X29, Reg::X16, JB_X29_OFF));
-    // ADR's PC-relative offset is from this instruction's PC to
-    // the byte after the inline expansion. The expansion is
-    // SETJMP_AARCH64_INSN_COUNT instructions long, and the ADR
-    // sits at index SETJMP_AARCH64_ADR_INSN_INDEX.
-    let adr_off_bytes = (SETJMP_AARCH64_INSN_COUNT - SETJMP_AARCH64_ADR_INSN_INDEX) * 4;
-    debug_assert_eq!(
-        code.len() - start,
-        (SETJMP_AARCH64_ADR_INSN_INDEX as usize) * 4,
-        "setjmp ADR offset out of sync with instruction count"
-    );
-    emit(code, enc_adr(Reg::X17, adr_off_bytes));
-    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_PC_OFF));
-    // mov x17, sp -- ADD form because the source is SP.
-    emit(code, enc_add_imm(Reg::X17, Reg::SP, 0));
-    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_SP_OFF));
-    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
-        emit(code, enc_str_d_imm(8 + i as u8, Reg::X16, off));
-    }
-    // First-call return value: 0.
-    emit(code, enc_movz(Reg::X19, 0, 0));
-    debug_assert_eq!(
-        code.len() - start,
-        (SETJMP_AARCH64_INSN_COUNT as usize) * 4,
-        "setjmp instruction count drift"
-    );
-    // Fall through. A future longjmp lands here too with x19=val.
-}
-
-/// AArch64 longjmp inlined at the call site. The c5 emitter
-/// pushed `env` onto the 16-byte VM stack slot before evaluating
-/// `val`, so on entry `env` is at `[sp]` and `val` is in `x19`.
-/// Does not return to its own caller -- branches back to the
-/// PC saved by the matching setjmp with the C99-required value
-/// in `x19` (1 if `val` was 0, otherwise `val`).
-fn emit_longjmp_aarch64(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) {
-    // env was pushed before val was evaluated. pop_lhs_reg
-    // handles both the real-stack push (`ldr x16, [sp], #16`)
-    // and the pseudo-promotion case (the value lives in a pool
-    // register the analyzer assigned). Move env into x16
-    // unconditionally so the rest of this routine has a single
-    // base reg to address.
-    let env_src = pop_lhs_reg(code, reg_state);
-    emit_mov_reg(code, Reg::X16, env_src);
-    // Stash val in a scratch before the upcoming restores
-    // clobber x19. x17 (IP1) is already a compiler scratch in
-    // this module.
-    emit(code, enc_mov_reg(Reg::X17, Reg::X19));
-    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
-        emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg::X16, off));
-    }
-    emit(code, enc_ldr_imm(Reg::X29, Reg::X16, JB_X29_OFF));
-    // Hoist the resume PC out of the env into x10 (a caller-
-    // saved AAPCS64 temp; setjmp's caller has no expectation
-    // that x10 survives). x18 is reserved on Windows AArch64
-    // for the TEB pointer, so anything that loads through it
-    // (TLS, msvcrt internals) must see TEB unmodified.
-    emit(code, enc_ldr_imm(Reg(10), Reg::X16, JB_PC_OFF));
-    emit(code, enc_ldr_imm(Reg(9), Reg::X16, JB_SP_OFF));
-    // mov sp, x9 -- ADD form because the destination is SP.
-    emit(code, enc_add_imm(Reg::SP, Reg(9), 0));
-    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
-        emit(code, enc_ldr_d_imm(8 + i as u8, Reg::X16, off));
-    }
-    // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1, anything
-    // else passes through. `subs xzr, x17, 0` is `cmp x17, #0`.
-    emit(code, enc_subs_imm(Reg(31), Reg::X17, 0));
-    emit(code, enc_cinc(Reg::X19, Reg::X17, Cond::Eq));
-    // Branch to the saved resume PC (loaded into x10 above).
-    emit(code, enc_br(Reg(10)));
-}
-
-/// FP comparison: `x19 = (top <cond> acc) ? 1 : 0`. d0/d1 hold
-/// `top` and `acc` respectively; FCMP sets NZCV; CSET reads the
-/// requested condition into x19.
-fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cond: Cond) {
-    let lhs = pop_lhs_reg(code, reg_state);
-    emit(code, enc_fmov_x_to_d(0, lhs));
-    emit(code, enc_fmov_x_to_d(1, Reg::X19));
-    emit(code, enc_fcmp_d(0, 1));
-    emit(code, enc_cset(Reg::X19, cond));
-}
-
-/// Lower a intrinsic op to a libc call. Args were already pushed onto
-/// our 16-byte VM stack slots by the c5 emitter; we *peek* (not pop)
-/// to load them into x0..x7. The c5 emitter follows every call with
-/// `Op::Adj N` which the next loop iteration will lower into the SP
-/// adjustment that drops them.
-///
-/// Variadic functions (`printf`) need extra setup: AAPCS64 on macOS
-/// puts variadic args entirely on the native stack at SP, 8-byte
-/// spaced -- not on the 16-byte slots we used for VM pushes. So
-/// `printf("%d %d", a, b)` looks like:
-///   * x0 = format
-///   * sub sp, sp, #16        (room for 2 8-byte slots, padded to 16)
-///   * str a, [sp, #0]
-///   * str b, [sp, #8]
-///   * call printf
-///   * add sp, sp, #16        (free that scratch)
-#[allow(clippy::too_many_arguments)]
-fn emit_libc_call(
-    binding_idx: i64,
-    text: &[i64],
-    pc_after_op: usize,
-    code: &mut Vec<u8>,
-    plt_call_fixups: &mut Vec<PltCallFixup>,
-    abi: Abi,
-    imports: &super::ResolvedImports,
-    fp_arg_mask: u32,
-    target: super::Target,
-) -> Result<(), C5Error> {
-    let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
-        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-            "native codegen: no import slot for binding {binding_idx} -- the resolver should have placed it"
-        )))
-    })?;
-    let local_name: &str = imports.imports[import_index].local_name.as_str();
-
-    // Peek at the next instruction; if it's `Adj N`, that gives us
-    // the arg count. The c5 compiler omits the `Adj` for 0-arg
-    // calls (like `dlerror()`), so a missing `Adj` collapses to
-    // `arg_count = 0`.
-    let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
-        Some(Op::Adj) => text[pc_after_op + 1] as usize,
-        _ => 0,
-    };
-
-    // macOS arm64 has a non-standard variadic ABI that puts the
-    // variadic args on the stack rather than in x0..x7. Standard
-    // AAPCS64 (Linux) treats variadic args identically to fixed
-    // ones, so the register-loading path handles both. Whether
-    // the binding is variadic comes from its prototype's
-    // `, ...)` -- the parser folds that flag onto the binding
-    // when it parses `int printf(char *, ...);` in `<stdio.h>`,
-    // so any header-declared variadic function (printf, sscanf,
-    // sprintf, fprintf, ...) gets the macOS dance, not just
-    // `printf`.
-    let _ = local_name;
-    let imp = &imports.imports[import_index];
-    let win_arm64_variadic = imp.is_variadic && target == super::Target::WindowsAarch64;
-    let is_variadic = imp.is_variadic && abi.variadic_on_stack;
-
-    if win_arm64_variadic {
-        // Windows AArch64 variadic ABI: fixed args follow
-        // standard AAPCS64 (ints in x0..x7, FP scalars in
-        // d0..d7); the variadic tail is passed through the
-        // integer registers x0..x7 and then on the stack at
-        // sp+0, sp+8, ..., with FP values transferred as their
-        // 8-byte bit pattern. Microsoft's va_arg(double) reads
-        // them from the integer side (`__gr_top`), not the FP
-        // side, which is why msvcrt's `snprintf` / `printf`
-        // see denormal garbage when AAPCS64-style d-reg
-        // placement is used.
-        let fixed = imp.fixed_args.min(arg_count);
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        for i in 0..fixed {
-            let off = (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, off));
-                int_idx += 1;
-            } else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "windows arm64 variadic call: fixed arg {i} \
-                         exceeds register banks (int_idx={int_idx}, \
-                         fp_idx={fp_idx})"
-                    ),
-                )));
-            }
-        }
-        let n_var = arg_count - fixed;
-        // Variadic args after the fixed prefix use the
-        // remaining int-arg registers, then spill at
-        // sp+0, sp+8, ... regardless of c5's int / FP
-        // classification.
-        let var_int_regs = abi.int_arg_regs.len().saturating_sub(int_idx);
-        let n_var_in_regs = n_var.min(var_int_regs);
-        let n_var_on_stack = n_var - n_var_in_regs;
-        let scratch_bytes = ((n_var_on_stack as u32) * 8 + 15) & !15;
-        if scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
-        }
-        for i in 0..n_var_in_regs {
-            let src = scratch_bytes + ((fixed + i) as u32) * 16;
-            let r = Reg(abi.int_arg_regs[int_idx + i]);
-            emit(code, enc_ldr_imm(r, Reg::SP, src));
-        }
-        for i in 0..n_var_on_stack {
-            let src = scratch_bytes + ((fixed + n_var_in_regs + i) as u32) * 16;
-            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-            emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
-        }
-        emit_got_call(code, plt_call_fixups, import_index);
-        if scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
-        }
-    } else if is_variadic {
-        // macOS arm64 variadic ABI: the first `fixed_args`
-        // arguments follow standard AAPCS64 (ints to x0..x7,
-        // FP scalars to d0..d7); the variadic tail ALL spills
-        // to a fresh stack region with 8-byte spacing -- no FP
-        // registers are used for variadic args on Apple
-        // platforms (the AAPCS64 quirk), and we transfer the
-        // raw bit pattern, which is what va_arg(double) reads
-        // back off the stack.
-        let fixed = imp.fixed_args.min(arg_count);
-        // With cdecl push order, c5-arg-i sits at sp + i*16.
-        // Walk fixed args with independent int / FP counters,
-        // matching the non-variadic AAPCS64 path so that any FP
-        // value among the fixed args lands in d0..d7 instead of
-        // x0..x7.
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        for i in 0..fixed {
-            let off = (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, off));
-                int_idx += 1;
-            } else {
-                // Out of registers in the fixed prefix. macOS
-                // arm64 spills any overflow onto the same stack
-                // region as the variadic tail; fall through to
-                // the variadic packer by re-classing this arg
-                // as "variadic" for placement purposes. Today's
-                // bindings (printf, sprintf, ...) don't fill the
-                // 8-reg int bank with fixed args, so this is a
-                // future-proofing branch -- diagnostic-only.
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "macOS arm64 variadic call: fixed arg {i} \
-                     exceeds register banks (int_idx={int_idx}, \
-                     fp_idx={fp_idx}); stack-overflow for fixed \
-                     args isn't wired up yet"
-                    ),
-                )));
-            }
-        }
-        let n_var = arg_count - fixed;
-        if n_var > 0 {
-            // Pack variadic args into a fresh stack region.
-            // 8-byte slots; round up to 16 to keep SP aligned.
-            // FP variadic args ride the same int-style transfer
-            // because the c5 IR already stores doubles as their
-            // bit pattern in a GPR slot, and macOS va_arg(double)
-            // reads 8 raw bytes off the stack -- bit-for-bit
-            // identical to the integer transfer.
-            let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
-            for i in 0..n_var {
-                // Variadic arg `i` is c5-arg-(fixed+i); its pre-sub
-                // slot is `(fixed + i) * 16`, shifted up by
-                // scratch_bytes after the sub.
-                let src = scratch_bytes + ((fixed + i) as u32) * 16;
-                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
-            }
-            emit_got_call(code, plt_call_fixups, import_index);
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
-        } else {
-            emit_got_call(code, plt_call_fixups, import_index);
-        }
-    } else {
-        // Non-variadic AAPCS64 (Linux/aarch64 takes this path for
-        // both fixed and variadic calls). c5-arg-K is at sp + K*16
-        // (cdecl push order, first decl on top). Walk args with
-        // independent int / FP counters: ints go to x0..x7, FP
-        // scalars to d0..d7, overflow spills to host stack at
-        // sp+0, sp+8, ...
-        //
-        // The FP-arg bitmap (`fp_arg_mask`, low bit = arg 0) marks
-        // FP-vs-int per position; a missing bit defaults to int.
-        // Standard AAPCS64 puts variadic FP args in d-regs the
-        // same way fixed FP args ride them; the macOS-on-stack
-        // path branched away above.
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        let mut stack_used: usize = 0;
-        for i in 0..arg_count {
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp {
-                if fp_idx >= 8 {
-                    stack_used += 1;
-                } else {
-                    fp_idx += 1;
-                }
-            } else if int_idx >= abi.int_arg_regs.len() {
-                stack_used += 1;
-            } else {
-                int_idx += 1;
-            }
-        }
-        let scratch = ((stack_used as u32) * 8 + 15) & !15;
-        if scratch > 0 {
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
-        }
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        let mut stack_idx = 0usize;
-        for i in 0..arg_count {
-            let src = scratch + (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, src));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, src));
-                int_idx += 1;
-            } else {
-                let dst = (stack_idx as u32) * 8;
-                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
-                stack_idx += 1;
-            }
-        }
-        emit_got_call(code, plt_call_fixups, import_index);
-        if scratch > 0 {
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
-        }
-    }
-
-    {
-        use crate::c5::compiler::types as ty_helpers;
-        let return_type_tag = imports.imports[import_index].return_type_tag;
-        let bare = ty_helpers::strip_unsigned(return_type_tag);
-        let returns_long_double = imports.imports[import_index].returns_long_double;
-        // AAPCS64 returns `long double` as IEEE binary128 in v0
-        // (full 128-bit Q register). c5 stores `long double` in
-        // an 8-byte FP64 slot, so any libc function whose
-        // prototype is `long double f(...)` needs a truncation
-        // pass before the value becomes the c5 accumulator. Emit
-        // a `bl __trunctfdf2` here -- the libgcc helper takes
-        // binary128 in v0 (already there from the libc call) and
-        // returns FP64 in d0. The fmov below then copies d0 to
-        // x19 as usual. Only fires on `Target::LinuxAarch64`; the
-        // macOS / Windows AArch64 ABIs alias `long double` to
-        // `double`, so v0 is already FP64 on the way out.
-        if returns_long_double && target == super::Target::LinuxAarch64 {
-            let trunc_idx = imports
-                .imports
-                .iter()
-                .position(|i| i.local_name == "__trunctfdf2")
-                .ok_or_else(|| {
-                    C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        "native codegen: `returns_long_double` libc call on \
-                         LinuxAarch64 but `__trunctfdf2` was not force-included",
-                    ))
-                })?;
-            emit_got_call(code, plt_call_fixups, trunc_idx);
-        }
-        // FP-returning libc fns hand the result back in d0 on
-        // AAPCS64. The integer path below routes x0 -> x19 and
-        // would leave the c5 accumulator holding whatever junk
-        // x0 had. `fmov x19, d0` copies the f64 bit pattern into
-        // c5's accumulator, ready for downstream `Op::Sf` /
-        // `Op::Fmul` / etc.
-        if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
-            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
-        } else {
-            // Sign- or zero-extend a sub-word return into the full
-            // 64-bit accumulator before downstream consumers read
-            // it. AAPCS64 doesn't promise the upper bits of X0
-            // for an `int` return, so a downstream `x19 != -17`
-            // comparison would see junk above EAX otherwise.
-            // Emitted on every aarch64 target -- the extension is
-            // a no-op when the prototype is already 64-bit
-            // (pointer, `long long`, LP64 `long`).
-            let ext = super::return_extension(return_type_tag, target);
-            emit_extend_x19_for_return(code, ext);
-            if matches!(ext, super::ReturnExt::None) {
-                // Move the libc return value into x19 so the caller
-                // sees it as the new accumulator. (For functions
-                // that don't return -- e.g. `exit` -- the call
-                // doesn't reach this point at runtime, so the mov
-                // is harmless dead code.) The extension emitter
-                // above already wrote x19 for non-None cases.
-                emit_mov_reg(code, Reg::X19, Reg::X0);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Extend a libc return value sitting in X0 into the c5
-/// accumulator (X19), per `ext`. AAPCS64 leaves the upper bits of
-/// X0 unspecified for sub-word returns, so this is the bridge
-/// between the host return-register convention and c5's 64-bit
-/// accumulator. Sequences mirror the x86_64 helper -- per AAPCS64
-/// the unsigned-half encodings (`uxtw`, etc.) implicitly clear the
-/// upper bits, and the signed half uses the matching `sxtw` /
-/// `sxth` / `sxtb`.
-fn emit_extend_x19_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
-    use super::ReturnExt;
-    // Encodings (X19 = reg 19, X0 / W0 = reg 0):
-    //   sxtb x19, w0   -- 0x93401C13
-    //   sxth x19, w0   -- 0x93403C13
-    //   sxtw x19, w0   -- 0x93407C13
-    //   uxtb w19, w0   -- 0x53001C13  (upper 32 bits zeroed by 32-bit form)
-    //   uxth w19, w0   -- 0x53003C13
-    //   mov  w19, w0   -- 0x2A0003F3  (32-bit ORR; zero-extends)
-    let word: u32 = match ext {
-        ReturnExt::None => return,
-        ReturnExt::Sign8 => 0x93401C13,
-        ReturnExt::Sign16 => 0x93403C13,
-        ReturnExt::Sign32 => 0x93407C13,
-        ReturnExt::Zero8 => 0x53001C13,
-        ReturnExt::Zero16 => 0x53003C13,
-        ReturnExt::Zero32 => 0x2A0003F3,
-    };
-    emit(code, word);
-}
-
-/// Lookup the per-call FP-arg bitmap by JsrExt PC. Linear scan;
-/// the table only carries entries for calls with at least one FP
-/// arg, which in practice is rare.
-fn fp_arg_mask_at(call_pc: usize, masks: &[(usize, u32)]) -> u32 {
-    masks
-        .iter()
-        .find_map(|(pc, m)| if *pc == call_pc { Some(*m) } else { None })
-        .unwrap_or(0)
-}
-
-/// Emit a placeholder `adrp x19, 0; add x19, x19, #0` pair that
-/// materializes a PC-relative absolute address into the VM accumulator.
-/// The writer patches both immediates once the target's vmaddr is
-/// known. We still emit valid skeleton bytes (rd = x19 in both halves)
-/// so an unpatched binary disassembles cleanly for debugging.
-fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
-    emit(code, enc_adrp(Reg::X19, 0));
-    emit(code, enc_add_imm(Reg::X19, Reg::X19, 0));
-}
-
 /// A single 4-byte `BL <plt_trampoline>` placeholder at
 /// every libc call site, plus a per-import trampoline appended at
 /// the tail of `Build::text`. The trampoline holds the
@@ -2846,38 +1631,24 @@ fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
 /// Resolved by `lower()` once trampoline byte offsets are known --
 /// the call instruction's `imm26` is rewritten in place.
 #[derive(Debug, Clone, Copy)]
-struct PltCallFixup {
+pub(super) struct PltCallFixup {
     /// Byte offset within the lower-pass `code` of the BL/B
-    /// instruction whose `imm26` we need to backfill.
-    instr_offset: usize,
+    /// instruction whose `imm26` the fixup pass backfills.
+    pub(super) instr_offset: usize,
     /// Import slot the call should reach via its trampoline.
-    import_index: usize,
+    pub(super) import_index: usize,
     /// `true` -> emit `B <tramp>` (tail jump); `false` -> emit
     /// `BL <tramp>` (call). Both share the same imm26 encoding;
     /// only the link bit at 0x80000000 differs.
-    is_tail: bool,
-}
-
-/// Emit a 4-byte `BL <plt_trampoline>` placeholder + record a
-/// `PltCallFixup` for the post-pass to patch. Replaces the pre-#61
-/// inline `adrp + ldr + blr` sequence.
-fn emit_got_call(code: &mut Vec<u8>, plt_call_fixups: &mut Vec<PltCallFixup>, import_index: usize) {
-    plt_call_fixups.push(PltCallFixup {
-        instr_offset: code.len(),
-        import_index,
-        is_tail: false,
-    });
-    // Placeholder displacement; rewritten in `apply_plt_call_fixups`
-    // once trampolines have been laid out.
-    emit(code, enc_bl(0));
+    pub(super) is_tail: bool,
 }
 
 /// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
 /// `B <plt_trampoline>` placeholder. libc's `RET` returns
 /// directly to the c5 caller of the trampoline, skipping
 /// both this `B` and the trampoline entirely on the way back.
-/// Used by `Op::TailExt`.
-fn emit_got_tail_jump(
+/// Used by the `Terminator::TailExt` lowering.
+pub(super) fn emit_got_tail_jump(
     code: &mut Vec<u8>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     import_index: usize,
@@ -2953,573 +1724,62 @@ fn apply_plt_call_fixups(
     Ok(())
 }
 
-/// Pop the top of the VM push-stack -- either a pool register `xN`
-/// or `x16` after a `ldr` from the real stack -- and return whatever
-/// register now holds the LHS value. Updates `reg_state.pseudo_stack`.
+/// jmp_buf field offsets for the AArch64 setjmp / longjmp
+/// intrinsics. Lays out 10 callee-saved x-regs, FP (x29), the
+/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
+/// the `<setjmp.h>` typedef reserves 256 to leave slack for
+/// future additions.
+pub(super) const JB_X19_OFF: u32 = 0;
+pub(super) const JB_X29_OFF: u32 = 80;
+pub(super) const JB_PC_OFF: u32 = 88;
+pub(super) const JB_SP_OFF: u32 = 96;
+pub(super) const JB_D8_OFF: u32 = 104;
+/// Total instruction count emitted by `emit_setjmp_aarch64` --
+/// every entry is one 4-byte AArch64 word. Used to compute the
+/// PC-relative offset the ADR captures so a matching longjmp
+/// branches to exactly the byte after the inline expansion.
+/// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
+/// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
+/// 25 instructions; ADR sits at zero-based index 12.
+pub(super) const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
+pub(super) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
+
+/// AArch64 setjmp inlined at the call site. The `env` pointer
+/// arrives in `x19` (c5's accumulator). On the initial call this
+/// writes the resume context into `[env]` and sets `x19 = 0`; on
+/// a matching longjmp control jumps to the address right after
+/// the inline expansion with `x19` carrying the longjmp value.
 ///
-/// The choice between the two paths is per-Psh, recorded by the
-/// analyzer in `reg_state.pseudo_stack`. With the native optimizer
-/// off, every push went to the real stack and this function is
-/// exactly the old `ldr x16, [sp], 16` sequence.
-fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
-    match reg_state.pseudo_stack.pop() {
-        Some(Some((slot, bank))) => {
-            // Value lives in a pool register; nothing to emit.
-            // The slot itself stays valid for re-use on the next
-            // push (slot allocation is a depth counter, not a
-            // free-list).
-            pool_reg(slot, bank)
-        }
-        // Real stack push -- the existing path.
-        Some(None) | None => {
-            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-            Reg::X16
-        }
+/// CRT-independent so it works on Windows AArch64, whose msvcrt
+/// `longjmp` routes through SEH and refuses an SEH-free
+/// `jmp_buf`. The Linux / macOS bindings continue to use the
+/// host libc setjmp -- that's already CRT-independent.
+pub(super) fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
+    let start = code.len();
+    emit(code, enc_mov_reg(Reg::X16, Reg::X19));
+    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
+        emit(code, enc_str_imm(Reg(19 + i as u8), Reg::X16, off));
     }
-}
-
-/// Pop the LHS, then run a register-form encoder against (x19, lhs,
-/// x19) to produce `x19 = lhs OP x19`. The c5 VM has the popped
-/// value as the LHS for sub / div / shifts; for the commutative ops
-/// the operand order doesn't matter.
-fn binop_with_pop<F: Fn(Reg, Reg, Reg) -> u32>(
-    code: &mut Vec<u8>,
-    reg_state: &mut RegState<'_>,
-    enc: F,
-) {
-    let lhs = pop_lhs_reg(code, reg_state);
-    emit(code, enc(Reg::X19, lhs, Reg::X19));
-}
-
-/// Pop the LHS, compare against x19, condition-set into x19.
-fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cond: Cond) {
-    let lhs = pop_lhs_reg(code, reg_state);
-    emit(code, enc_cmp_reg(lhs, Reg::X19));
-    emit(code, enc_cset(Reg::X19, cond));
-}
-
-/// Lower a register-register compare op (`Lt`/`Eq`/...). When the
-/// next bytecode op is `Bz`/`Bnz` and the peephole gate
-/// ([`fusion_candidate`]) clears it, emit `cmp` only and stash the
-/// condition in `reg_state.pending_cmp_cond` for the matching
-/// branch op to consume as a `b.cond`. Otherwise fall back to
-/// `cmp + cset`.
-///
-/// `next_pc` is the bytecode PC of the next op (i.e. `*pc` after
-/// the compare op consumed itself; the compare ops are 1-word, so
-/// the caller has already advanced `*pc` to point past).
-fn lower_cmp(
-    code: &mut Vec<u8>,
-    text: &[i64],
-    next_pc: usize,
-    reg_state: &mut RegState<'_>,
-    branch_targets: &[bool],
-    cond: Cond,
-) {
-    let lhs = pop_lhs_reg(code, reg_state);
-    emit(code, enc_cmp_reg(lhs, Reg::X19));
-    if fusion_candidate(text, next_pc, branch_targets).is_some() {
-        // Skip cset; the matching Bz/Bnz will read flags via b.cond.
-        reg_state.pending_cmp_cond = Some(cond);
-    } else {
-        emit(code, enc_cset(Reg::X19, cond));
+    emit(code, enc_str_imm(Reg::X29, Reg::X16, JB_X29_OFF));
+    let adr_off_bytes = (SETJMP_AARCH64_INSN_COUNT - SETJMP_AARCH64_ADR_INSN_INDEX) * 4;
+    debug_assert_eq!(
+        code.len() - start,
+        (SETJMP_AARCH64_ADR_INSN_INDEX as usize) * 4,
+        "setjmp ADR offset out of sync with instruction count"
+    );
+    emit(code, enc_adr(Reg::X17, adr_off_bytes));
+    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_PC_OFF));
+    emit(code, enc_add_imm(Reg::X17, Reg::SP, 0));
+    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_SP_OFF));
+    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
+        emit(code, enc_str_d_imm(8 + i as u8, Reg::X16, off));
     }
-}
-
-/// Optimizer-emitted `<op>I N` lowering: load `N` into x16, then run
-/// the register-form encoder. A future enhancement could fold small
-/// `N` into the immediate form of add/sub directly; for now we keep
-/// the 1-instruction-per-immediate-op count predictable.
-fn imm_arith<F: Fn(Reg, Reg, Reg) -> u32>(
-    code: &mut Vec<u8>,
-    text: &[i64],
-    pc: &mut usize,
-    name: &str,
-    enc: F,
-) -> Result<(), C5Error> {
-    let v = read_operand(text, pc, name)?;
-    load_imm64(code, Reg::X16, v as u64);
-    emit(code, enc(Reg::X19, Reg::X19, Reg::X16));
-    Ok(())
-}
-
-/// Same shape as [`imm_arith`] but for comparison-immediate ops.
-/// Participates in the cmp+branch fusion peephole the same way
-/// [`lower_cmp`] does -- if the next op is `Bz`/`Bnz` and
-/// fusion-eligible, the `cset` is skipped and the condition stashed.
-fn imm_cmp(
-    code: &mut Vec<u8>,
-    text: &[i64],
-    pc: &mut usize,
-    name: &str,
-    cond: Cond,
-    reg_state: &mut RegState<'_>,
-    branch_targets: &[bool],
-) -> Result<(), C5Error> {
-    let v = read_operand(text, pc, name)?;
-    load_imm64(code, Reg::X16, v as u64);
-    emit(code, enc_cmp_reg(Reg::X19, Reg::X16));
-    if fusion_candidate(text, *pc, branch_targets).is_some() {
-        reg_state.pending_cmp_cond = Some(cond);
-    } else {
-        emit(code, enc_cset(Reg::X19, cond));
-    }
-    Ok(())
-}
-
-/// Translate a c4 `Lea` offset (in 8-byte VM-slot units) into the
-/// matching native byte offset from x29 (the frame pointer).
-///
-/// Locals (val < 0) keep the c4 `* 8` mapping because the prologue
-/// reserves them as 8-byte slots. Args (val >= 2) get `* 16` because
-/// `Op::Psh` writes 16-byte slots on the native stack -- AAPCS64
-/// requires SP 16-byte aligned at libc-call sites and re-aligning
-/// per call would dwarf the wasted half-slot. The two outliers --
-/// val == 0 and val == 1 -- aren't emitted by the c4 compiler, but
-/// fall through to `* 8` so a stray reference still lands inside
-/// the saved x29/x30 region rather than past the args.
-fn lea_offset_bytes(offset: i64) -> i64 {
-    if offset >= 2 {
-        (offset - 1) * 16
-    } else {
-        offset * 8
-    }
-}
-
-/// Walk a function body starting at `ent_pc` and return the number of
-/// parameter slots it actually reads. The c5 parser hands params
-/// `Op::Lea` operands `2..=N+1`; locals get `<= -1`. The optimizer's
-/// local-load fusion rewrites `Lea N; Li` / `Lea N; Lc` into
-/// `LdLocI N` / `LdLocC N`, so we scan all three opcodes; otherwise
-/// the optimized bytecode would look like the function never reads
-/// its params. Mirror of x86_64::param_count_for_func; kept per-arch
-/// so neither backend needs to import the other.
-/// Walk a function body starting at its `Op::Ent` and look for the
-/// c5 expansion of `va_start(ap, last)`. The macro lowers to a
-/// `Lea LAST; Psh; Imm 2; Psh; Imm 8; Mul; Add; Si` sequence: take
-/// the address of the last fixed parameter, add `2 * 8 == 16`
-/// (one c5 stack slot), and store the result into the `va_list`
-/// local. The `Imm 2; Psh; Imm 8; Mul` triple is unique enough to
-/// the va_start path that no other c5 IR emits it.
-///
-/// Variadic functions can't go through the standard arg-shuffling
-/// thunk because the thunk only spills the fixed parameter count
-/// of register args -- the variadic tail in x1..x7 would be lost.
-/// `Op::Jsri` already pushes every arg onto the c5 stack, so a
-/// variadic callee reached through a c5 fn-pointer reads its args
-/// from the bare body. Host-ABI callbacks (`pthread_create`,
-/// `qsort`, ...) don't pass variadic c5 callees anyway -- the
-/// missing thunk doesn't lose a real use case.
-pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
-    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
-        return false;
-    }
-    let mut pc = ent_pc + Op::Ent.word_size();
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            break;
-        }
-        if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
-            // The full c5 va_start expansion is
-            // `Lea -K; Psh; Lea P (positive); Psh;
-            //  Imm 2; Psh; Imm 8; Mul; Add; Si`
-            // -- compute `&last + 16` and store into the va_list
-            // local. The trailing `Add; Si` distinguishes this
-            // from `xs[2]` on an 8-byte-element array (which
-            // shares the leading `Imm 2; Psh; Imm 8; Mul` but
-            // ends in `Add; Lw / Li`).
-            let after_imm2 = pc + Op::Imm.word_size();
-            if after_imm2 < text.len() && Op::from_i64(text[after_imm2]) == Some(Op::Psh) {
-                let imm8_pc = after_imm2 + Op::Psh.word_size();
-                if imm8_pc + 1 < text.len()
-                    && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
-                    && text[imm8_pc + 1] == 8
-                {
-                    let mul_pc = imm8_pc + Op::Imm.word_size();
-                    if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
-                        let add_pc = mul_pc + Op::Mul.word_size();
-                        if add_pc < text.len() && Op::from_i64(text[add_pc]) == Some(Op::Add) {
-                            let si_pc = add_pc + Op::Add.word_size();
-                            if si_pc < text.len() && Op::from_i64(text[si_pc]) == Some(Op::Si) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        pc += op.word_size();
-    }
-    false
-}
-
-pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
-    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
-        return 0;
-    }
-    let mut max_param_offset: Option<i64> = None;
-    let mut pc = ent_pc + Op::Ent.word_size();
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            break;
-        }
-        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
-            let off = text[pc + 1];
-            if off >= 2 {
-                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
-            }
-        }
-        pc += op.word_size();
-    }
-    max_param_offset.map_or(0, |off| (off - 1) as usize)
-}
-
-/// Emit a host-ABI -> c5-ABI argument-shuffling thunk for a function
-/// at `target_offset`. AAPCS64 puts the first 8 integer args in
-/// x0..x7; the c5 callee reads them off the c5 stack at
-/// `[fp + 16]`, `[fp + 32]`, ... per `lea_offset_bytes`. The thunk
-/// shape mirrors the x86_64 emit_arg_thunk: standard frame, reserve
-/// N c5 arg slots below fp, store the regs into them, branch-and-
-/// link to the real function, tear down the frame, return.
-pub(super) fn emit_arg_thunk(
-    code: &mut Vec<u8>,
-    n_params: usize,
-    target_offset: usize,
-    abi: super::Abi,
-) -> usize {
-    let thunk_offset = code.len();
-    // stp x29, x30, [sp, #-16]!  ; save host fp + lr
-    emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
-    // mov x29, sp                ; new frame
-    emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
-
-    let n_reg = n_params.min(abi.int_arg_regs.len());
-    let n_stack = n_params - n_reg;
-    if n_params > 0 {
-        // sub sp, sp, #16*N      ; reserve c5 arg slots
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, (16 * n_params) as u32));
-        // C arg `i` is the i'th source-order parameter. With c5's
-        // cdecl push order, the i'th declared param has val = i + 2,
-        // so F-real reads it at `[fp + 16*(i+1)]`, which after F's
-        // `stp x29,x30,[sp,#-16]!` + `mov x29, sp` is
-        // `thunk_x29 - 16*(N - i)`. 9-bit signed stur range is
-        // -256..256; N is capped further down by reach.
-        //
-        // Reg args first (i = 0 .. n_reg).
-        for i in 0..n_reg {
-            let disp = -((16 * (n_params - i)) as i32);
-            emit(code, enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp));
-        }
-        // Stack args (i = n_reg .. N). AAPCS64 puts host stack args
-        // at the call-site sp; after the thunk's stp pre-indexed,
-        // those addresses are [x29 + 16], [x29 + 24], ... x16 is
-        // AAPCS64 scratch -- safe courier here.
-        for i in 0..n_stack {
-            let host_off = 16 + (i as u32) * 8;
-            let disp = -((16 * (n_stack - i)) as i32);
-            emit(code, enc_ldr_imm(Reg::X16, Reg::X29, host_off));
-            emit(code, enc_stur(Reg::X16, Reg::X29, disp));
-        }
-    }
-
-    // bl F_real -- imm26 is the byte offset / 4. enc_bl asserts on
-    // overflow, which is the right behaviour: thunks are colocated
-    // with the function body so the offset is small in practice.
-    let bl_addr = code.len() as i64;
-    let rel_bytes = (target_offset as i64) - bl_addr;
-    debug_assert!(rel_bytes % 4 == 0, "arg thunk: bl target misaligned");
-    let imm26 = (rel_bytes / 4) as i32;
-    emit(code, enc_bl(imm26));
-
-    // mov sp, x29 (= add sp, x29, #0)
-    emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
-    // ldp x29, x30, [sp], #16
-    emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
-    // ret
-    emit(code, enc_ret(Reg::X30));
-    thunk_offset
-}
-
-/// Fused `Lea N; Li/Lc` -- load the local at the matching native
-/// byte offset (see [`lea_offset_bytes`]) into x19. Picks `ldur` for
-/// offsets that fit in the 9-bit signed range (covers locals up to
-/// fp - 256), otherwise computes the address explicitly via
-/// `Lea`-style add/sub then loads.
-fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
-    let bytes = lea_offset_bytes(offset);
-    if (-256..256).contains(&bytes) {
-        if byte {
-            // No `ldurb` in our encoder; do the compute-address path.
-            // Locals stored as char are rare enough that the extra
-            // instruction won't matter.
-        } else {
-            emit(code, enc_ldur(Reg::X19, Reg::X29, bytes as i32));
-            return;
-        }
-    }
-    // Fallback: address compute, then load.
-    let abs = bytes.unsigned_abs();
-    if abs < 4096 {
-        let imm = abs as u32;
-        let word = if bytes >= 0 {
-            enc_add_imm(Reg::X19, Reg::X29, imm)
-        } else {
-            enc_sub_imm(Reg::X19, Reg::X29, imm)
-        };
-        emit(code, word);
-    } else {
-        load_imm64(code, Reg::X16, abs);
-        let word = if bytes >= 0 {
-            enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
-        } else {
-            enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
-        };
-        emit(code, word);
-    }
-    if byte {
-        emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0));
-    } else {
-        emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0));
-    }
-}
-
-/// Standard AAPCS64 prologue: save fp/lr in one paired store, set the
-/// new frame pointer, and (if the function declares locals) allocate
-/// the slot space. Locals are 8 bytes each; we round up to 16 to keep
-/// SP 16-byte aligned, which the AAPCS requires at every call site.
-///
-/// For the program's entry function (`is_main = true`) we additionally
-/// push x1 (argv) then x0 (argc) into their own 16-byte slots, the same
-/// shape user-function args use. After the prologue's stp(x29,x30) the
-/// layout is:
-///   bp + 16: argc  (top arg, c5 val=2 -- first declared)
-///   bp + 24: argv  (next slot, c5 val=3 -- second declared)
-/// matching [`lea_offset_bytes`] under c5's cdecl push order.
-fn emit_prologue(
-    code: &mut Vec<u8>,
-    locals: i64,
-    entry_n_params: Option<usize>,
-    callee_pool_depth: u8,
-    target: Target,
-    abi: super::Abi,
-) {
-    if let Some(n_params) = entry_n_params {
-        // Spill the entry's host-passed arguments into c5's
-        // cdecl 16-byte-stride slots: loader passes them in
-        // x0..x7 (capped at the int-arg-reg count); the function
-        // body reads param `i` at `[fp + 16*(i+1)]`. Reverse
-        // order so arg 0 lands on top.
-        //
-        // `main(argc, argv)` ends up with the historical 2-slot
-        // layout; `WinMain` (4 params) places `nShowCmd` at
-        // `[fp + 64]`.
-        let n_reg = n_params.min(abi.int_arg_regs.len());
-        for i in (0..n_reg).rev() {
-            emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg::SP, -16));
-        }
-    }
-    // Save fp/lr; set up the new frame; reserve local storage; save
-    // x19 below the locals; save the callee-saved pool registers
-    // below that.
-    //
-    // x19 is callee-saved per AAPCS64. Self-hosted c4-to-c4 calls
-    // don't actually rely on the saved value (the caller refills
-    // its accumulator from the return value), but JIT entry from
-    // Rust and any other external caller does -- without this
-    // save, the host's x19 gets silently clobbered and downstream
-    // Rust crashes once it tries to use a value it had stashed
-    // there. Stashing x19 *below* the locals keeps the c4 `Lea`
-    // mapping (bp - 8*N for local N) intact.
-    //
-    // The callee-saved pool (x20..x20+callee_pool_depth-1) is
-    // AAPCS64 callee-saved. The regalloc analyzer told us how many
-    // of those slots this function actually uses; we save exactly
-    // that many. The caller-saved pool (x9..x15) is NOT saved here
-    // -- the analyzer routes pushes there only when their value is
-    // never live across a call, so a `bl` clobbering them can't
-    // hurt anyone.
-    emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
-    emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
-    if locals > 0 {
-        let bytes = (locals as u32) * 8;
-        let aligned = (bytes + 15) & !15;
-        // For frames that cross a stack guard page, walk SP down
-        // page-by-page touching each page so the OS's guard
-        // mechanism fires on overflow instead of silently
-        // mapping unrelated memory. Threshold is the target's
-        // page size (16 KB on Apple Silicon, 4 KB elsewhere).
-        // Below the threshold the single SUB is fine -- the
-        // first real local access touches the (sole) crossed
-        // page before any later access wanders further.
-        let page_size = stack_probe_page_size(target);
-        if aligned > page_size {
-            emit_stack_probe(code, aligned, page_size);
-        } else {
-            // SUB (immediate) only takes 12 bits unshifted, so
-            // for frames > ~4 KB we need the two-instruction
-            // shifted-12 split. Without it the immediate silently
-            // overflows into the shift bits and the prologue
-            // traps with SIGILL on first call.
-            emit_sub_sp_imm(code, aligned);
-        }
-    }
-    emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
-    emit_save_pool(code, callee_pool_depth);
-}
-
-/// Stack-guard page size used by the prologue's probe decision.
-/// The host kernel's page size is what really matters; we
-/// hard-code the value the target's OS uses by default rather
-/// than querying at runtime. Apple Silicon defaults to 16 KB;
-/// every other lane (Linux x86_64, Linux aarch64, Windows on
-/// either ISA) uses 4 KB. Over-probing on a system configured
-/// with larger pages is harmless; under-probing risks jumping
-/// past the guard without touching it.
-fn stack_probe_page_size(target: Target) -> u32 {
-    match target {
-        Target::MacOSAarch64 => 16384,
-        _ => 4096,
-    }
-}
-
-/// Walk SP down `frame_bytes` in `page_size` steps, touching
-/// each page before sliding past it so the OS's stack-guard
-/// page fires on overflow. Used by `emit_prologue` when the
-/// frame would otherwise skip a guard page in a single SUB.
-/// `frame_bytes` is the 16-byte-aligned local reservation
-/// (caller's responsibility); the loop emits exactly
-/// `frame_bytes / page_size` iterations and a single trailing
-/// `sub sp, sp, #remainder` for the leftover bytes.
-fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
-    let pages = frame_bytes / page_size;
-    let remainder = frame_bytes - pages * page_size;
-    // x16 = page counter. The probe scratches x16 only -- AAPCS64
-    // marks x16/x17 as IP0/IP1, intra-procedure-call scratch, so
-    // clobbering them in the prologue is safe.
-    load_imm64(code, Reg::X16, pages as u64);
-    let loop_start = code.len();
-    // sub sp, sp, #page_size  -- single instruction since
-    // page_size is 4096 (immediate) or 16384 (LSL12 form).
-    if page_size == 4096 {
-        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
-    } else if page_size == 16384 {
-        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 4));
-    } else {
-        emit_sub_sp_imm(code, page_size);
-    }
-    // str xzr, [sp]  -- touch the page so the guard maps it (or
-    // faults on overflow). Reg(31) is XZR in store-rt position
-    // (the same encoding doubles as SP in base-rn position).
-    emit(code, enc_str_imm(Reg(31), Reg::SP, 0));
-    // subs x16, x16, #1; b.ne loop_start.
-    emit(code, enc_subs_imm(Reg::X16, Reg::X16, 1));
-    let loop_pc = code.len() as i64;
-    let target_pc = loop_start as i64;
-    let imm19 = ((target_pc - loop_pc) / 4) as i32;
-    emit(code, enc_b_cond(Cond::Ne, imm19));
-    // Finally drop the partial-page remainder.
-    if remainder != 0 {
-        emit_sub_sp_imm(code, remainder);
-    }
-}
-
-/// Mirror of [`emit_prologue`]. Moves the VM accumulator into
-/// `x0`, restores the pool and the saved x19, tears down the
-/// frame, and returns. For the entry function it also drops the
-/// 16-byte slots the prologue inserted (one per int-arg-register
-/// parameter) so sp returns to the value the caller handed in.
-fn emit_epilogue(
-    code: &mut Vec<u8>,
-    entry_n_params: Option<usize>,
-    callee_pool_depth: u8,
-    locals_bytes: u32,
-    abi: super::Abi,
-) {
-    emit_mov_reg(code, Reg::X0, Reg::X19);
-    let _ = locals_bytes; // see commentary below
-    // Stack layout below this point (top-down):
-    //   callee pool regs (`callee_pool_depth` of them, 16 bytes per slot)
-    //   saved x19
-    //   locals
-    //   saved fp/lr
-    // Pop in reverse order. The caller-saved pool is not on the
-    // stack -- it was never saved.
-    emit_restore_pool(code, callee_pool_depth);
-    emit(code, enc_ldr_post(Reg::X19, Reg::SP, 16));
-    emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
-    emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
-    if let Some(n_params) = entry_n_params {
-        let n_reg = n_params.min(abi.int_arg_regs.len());
-        if n_reg > 0 {
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, (16 * n_reg) as u32));
-        }
-    }
-    emit(code, enc_ret(Reg::X30));
-}
-
-/// Save the callee-saved pool x20..x20+depth-1 to the stack as a
-/// contiguous run of 16-byte slots. Pairs (`stp`) when possible --
-/// 2 regs per 16 bytes -- with a single `str` for an odd trailing
-/// register. The caller-saved bank (x9..) is never saved.
-fn emit_save_pool(code: &mut Vec<u8>, depth: u8) {
-    let mut i = 0u8;
-    while i + 1 < depth {
-        emit(
-            code,
-            enc_stp_pre(
-                Reg(Reg::CALLEE_POOL_BASE.0 + i),
-                Reg(Reg::CALLEE_POOL_BASE.0 + i + 1),
-                Reg::SP,
-                -16,
-            ),
-        );
-        i += 2;
-    }
-    if i < depth {
-        emit(
-            code,
-            enc_str_pre(Reg(Reg::CALLEE_POOL_BASE.0 + i), Reg::SP, -16),
-        );
-    }
-}
-
-/// Reverse of [`emit_save_pool`]. Pop in opposite order so a
-/// solo top-of-stack register (odd `depth`) gets restored before
-/// the paired ones.
-fn emit_restore_pool(code: &mut Vec<u8>, depth: u8) {
-    if depth == 0 {
-        return;
-    }
-    let mut i = depth;
-    if depth.is_multiple_of(2) {
-        // pair-only restore
-    } else {
-        i -= 1;
-        emit(
-            code,
-            enc_ldr_post(Reg(Reg::CALLEE_POOL_BASE.0 + i), Reg::SP, 16),
-        );
-    }
-    while i >= 2 {
-        i -= 2;
-        emit(
-            code,
-            enc_ldp_post(
-                Reg(Reg::CALLEE_POOL_BASE.0 + i),
-                Reg(Reg::CALLEE_POOL_BASE.0 + i + 1),
-                Reg::SP,
-                16,
-            ),
-        );
-    }
+    emit(code, enc_movz(Reg::X19, 0, 0));
+    debug_assert_eq!(
+        code.len() - start,
+        (SETJMP_AARCH64_INSN_COUNT as usize) * 4,
+        "setjmp instruction count drift"
+    );
 }
 
 #[cfg(test)]

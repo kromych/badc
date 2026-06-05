@@ -15,6 +15,32 @@
 // landing mid-slot. `int *` has the same 4-byte-stride problem
 // on every target.
 //
+// TODO: replace this c5-specific cursor with the host's native
+// `va_list` representation. That requires:
+//
+//   * Variadic c5 functions reached via the host-ABI call shape
+//     (host arg regs + host stack overflow) instead of the
+//     bare-bl + c5-stack-args path. The compiler's
+//     `Symbol::is_variadic` flag plus `Program::variadic_functions`
+//     already plumbs the declarator info to the codegen; today
+//     the codegen still routes variadic targets through the
+//     legacy c5-stack path to keep this header's macros valid.
+//   * A per-host-ABI variadic register save area emitted in the
+//     prologue of every variadic c5 function. AAPCS64: x0..x7
+//     contiguous in the gr-save area + d0..d7 contiguous in the
+//     vr-save area. SysV x86_64: rdi..r9 + xmm0..xmm7. Windows
+//     (both ISAs): variadic_int_only -- save only the int arg
+//     bank; FP args ride int regs as bit patterns.
+//   * `va_list` becomes the platform's documented struct (or
+//     `char *` on Windows). `va_start` initialises the offsets
+//     and pointers to the prologue-spilled save area; `va_arg`
+//     walks per the host's variadic protocol.
+//
+// Net effect: libc's `vfprintf` / `vsnprintf` / etc. would take
+// c5's `va_list` directly, retiring the c5_v* shims in
+// `<c5io.h>` and the `#define vsnprintf c5_vsnprintf` redirects
+// in `<stdio.h>`.
+//
 // Usage:
 //
 //   int sum(int count, ...) {
@@ -39,19 +65,40 @@
 
 #pragma once
 
-// `va_list` is just a cursor over the c5 stack. Storing it as
-// `long long *` means pointer arithmetic strides 8 bytes
-// everywhere -- one half of a c5 16-byte slot -- so the `+2` in
-// the macros below advances exactly one slot on LP64 (Linux/macOS)
-// and LLP64 (Windows) alike. `int *` (4-byte stride) and `long *`
-// (4 on Windows, 8 on LP64) would both land mid-slot somewhere.
-typedef long long *va_list;
+// `va_list` is opaque to user code. The four intrinsics below
+// own the layout, so the header advertises `void *` and lets the
+// per-target codegen pick the representation. Today's cursor
+// model uses one pointer's worth of storage; the per-host-ABI
+// variants (AAPCS64 / SysV gr/vr structs) will keep `va_list`
+// pointer-sized only when the underlying region is a single
+// cursor and otherwise widen the typedef to match the platform.
+typedef void *va_list;
 
-#define va_start(ap, last) ap = ((long long *)&(last)) + 2
-#define va_arg(ap, T)      (ap = ap + 2, *(T *)(ap - 2))
-#define va_end(ap)
-// C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the same
-// list position as `src`. With `va_list` defined as a plain cursor,
-// the copy is just pointer assignment -- two walkers proceed
-// independently from the same point.
-#define va_copy(dst, src)  ((dst) = (src))
+// The four operations are codegen intrinsics rather than open-
+// coded macros. The frontend recognises each name via
+// `#pragma intrinsic(...)` and emits `Op::Intrinsic` with the
+// per-target expansion picked at lowering time. The header just
+// declares prototypes so c5's type checker sees a callable.
+#pragma intrinsic("__builtin_va_start")
+#pragma intrinsic("__builtin_va_arg")
+#pragma intrinsic("__builtin_va_end")
+#pragma intrinsic("__builtin_va_copy")
+void __builtin_va_start(va_list *ap, void *last_addr);
+void *__builtin_va_arg(va_list *ap);
+void __builtin_va_end(va_list *ap);
+void __builtin_va_copy(va_list *dst, va_list *src);
+
+#define va_start(ap, last) __builtin_va_start(&(ap), (void *)&(last))
+// `__builtin_va_arg(&ap)` returns the address of the just-vacated
+// 8-byte slot and advances the cursor by one slot. The macro
+// dereferences as the requested type; on every supported target
+// the c5 stack stores each value in the low bytes of an 8-byte
+// (or larger) slot so a typed dereference reads the right
+// width regardless of T's size.
+#define va_arg(ap, T)      (*(T *)__builtin_va_arg(&(ap)))
+#define va_end(ap)         __builtin_va_end(&(ap))
+// C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
+// same list position as `src`. On the cursor model this is just
+// pointer assignment; the intrinsic gives per-target code a
+// hook for struct-shaped `va_list` layouts.
+#define va_copy(dst, src)  __builtin_va_copy(&(dst), &(src))

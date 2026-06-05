@@ -97,13 +97,12 @@ impl Compiler {
             // ptr" convention. For `T (**name)(args)` the inner
             // added two Ptrs, depth = 2 (one more deref needed).
             //
-            // The "is this actually a function pointer" check
-            // happens after the trailing decorations are scanned
-            // -- only then do we know whether the parenthesised
-            // declarator was followed by `(args)` (fn-ptr) or by
-            // `[N]` (pointer-to-array, NOT a fn-ptr). Set the
-            // indirection unconditionally for now and clear it
-            // back to None if the shape resolves to an array.
+            // The function-pointer determination happens after the
+            // trailing decorations are scanned -- only then is it known
+            // whether the parenthesised declarator was followed by
+            // `(args)` (fn-ptr) or by `[N]` (pointer-to-array, not a
+            // fn-ptr). Set the indirection unconditionally here and clear
+            // it back to None if the shape resolves to an array.
             let ty_delta = inner_ty - outer_ty_before_inner;
             let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
             // The inner declarator may have stopped on `(` if it
@@ -230,6 +229,15 @@ impl Compiler {
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
             self.next()?;
+            // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
+            // prefixed by `static` and / or any type qualifier
+            // (`const` / `volatile` / `restrict`) in a parameter
+            // declarator. The keywords are hints to the compiler;
+            // c5 doesn't act on them but consumes them so the
+            // dimension expression parses cleanly.
+            while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
             if self.lex.tk == ']' {
                 // `int xs[]` -- empty brackets. The dimension is
                 // deferred: in parameter position the caller decays
@@ -272,6 +280,12 @@ impl Compiler {
             }
             while self.lex.tk == Token::Brak {
                 self.next()?;
+                // Same C99 6.7.5.3p7 qualifier-skip as the leading
+                // dimension above; applies to every trailing
+                // dimension too.
+                while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
                 if self.lex.tk == ']' {
                     self.next()?;
                     continue;

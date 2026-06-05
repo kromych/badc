@@ -215,8 +215,8 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
     // it walks the dylibs the preprocessor parsed and seeds each
     // binding's `local_name` as a `Token::Sys` symbol with `val` set
     // to the binding's flat-index. A program reaching for
-    // `malloc(...)` then lowers via `Op::JsrExt 0` (or whichever
-    // index `malloc` ended up at).
+    // `malloc(...)` then lowers via `Inst::CallExt` with
+    // binding_idx 0 (or whichever index `malloc` ended up at).
     use crate::c5::lexer::{Lexer, SymbolIndex, init_symbols};
     use crate::c5::preprocessor::{Binding, DylibSpec};
 

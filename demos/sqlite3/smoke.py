@@ -435,6 +435,18 @@ def main() -> int:
         check=True,
     )
 
+    # `BADC_SMOKE_KEEP_TMPDIR` (path) collects the run's tempdir
+    # contents into the named directory before exit, regardless
+    # of pass / fail. Used by the CI gdb-diagnostic step to grab
+    # the produced shell binary even when the smoke flagged
+    # failure.
+    keep_dir = os.environ.get("BADC_SMOKE_KEEP_TMPDIR")
+
+    def _maybe_keep(work_str: str) -> None:
+        if keep_dir and Path(work_str).is_dir():
+            import shutil
+            shutil.copytree(work_str, keep_dir, dirs_exist_ok=True)
+
     with tempfile.TemporaryDirectory(prefix="sqlite3-smoke-") as work_str:
         work = Path(work_str)
         # Run the amalgamator (scripts/amalgamate.py) once and
@@ -466,16 +478,24 @@ def main() -> int:
             build_shell(badc, combined, shell_noopt, optimize=False)
         except subprocess.CalledProcessError:
             print("smoke FAIL: build (no -O) failed", file=sys.stderr)
+            _maybe_keep(work_str)
             return 1
         try:
             build_shell(badc, combined, shell_opt, optimize=True)
         except subprocess.CalledProcessError:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
+            _maybe_keep(work_str)
             return 1
 
         ok = True
-        ok &= run_scenarios("no-O", shell_noopt, work)
-        ok &= run_scenarios("-O", shell_opt, work)
+        try:
+            ok &= run_scenarios("no-O", shell_noopt, work)
+            ok &= run_scenarios("-O", shell_opt, work)
+        except subprocess.CalledProcessError as e:
+            print(f"smoke FAIL: scenario run died with {e}", file=sys.stderr)
+            ok = False
+        finally:
+            _maybe_keep(work_str)
         return 0 if ok else 1
 
 

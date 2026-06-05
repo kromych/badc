@@ -17,9 +17,9 @@ you can override) give a fun one-executable experience. Its codebase
 of moderate size can be a good pedagogical material. It lowers through
 an SSA intermediate representation and a graph-coloring register
 allocator, but stops short of the exquisite optimization passes a
-production toolchain runs. All told, to stay slim, it'll never surpass
+production toolchain runs. All told, to stay slim, it's unlikely to surpass
 the ability of multi-gigabyte compiler suites to squeeze the last drop
-of perf from the machine, and that's fine.
+of perf from the machine, and that's fine
 
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),

@@ -7,7 +7,7 @@
 //!
 //! [`Program`] -> [`ssa_shadow::produce_ssa_funcs`] (per-function
 //! SSA + CFG, sourced from the walker / cached `user_ssa_funcs`) ->
-//! [`ssa_alloc::allocate`] (linear-scan register allocation) ->
+//! [`ssa_alloc::allocate`] (graph-coloring register allocation) ->
 //! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
 //! raw machine code -> per-OS image writer -> bytes on disk ->
 //! (Apple Silicon only) shell to `codesign --sign -`.
@@ -1243,11 +1243,11 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
-    /// Reserved for a future walker-side optimisation pass.
-    /// Currently a no-op: the SSA walker and per-arch lowering
-    /// run the same code path regardless of this flag. Left on
-    /// the public API so callers can opt in once the pass
-    /// lands without a signature break.
+    /// Run the SSA optimization passes before register allocation:
+    /// mem2reg promotion of address-free local slots, function
+    /// inlining (bounded by `inline_cap`), rotate-idiom recognition,
+    /// branch const-folding, and immediate deduplication. Off by
+    /// default; the per-arch lowering runs these passes only when set.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
@@ -1382,8 +1382,8 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 }
 
 /// Variant of [`emit_native`] that accepts user-controllable
-/// [`NativeOptions`]. `options.optimize` is currently a no-op
-/// (see [`NativeOptions::optimize`]).
+/// [`NativeOptions`]. `options.optimize` gates the SSA optimization
+/// passes (see [`NativeOptions::optimize`]).
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,

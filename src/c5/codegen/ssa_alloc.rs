@@ -1,4 +1,4 @@
-//! Linear-scan register allocator over the [`FunctionSsa`] output
+//! Graph-coloring register allocator over the [`FunctionSsa`] output
 //! of [`super::ssa`]. Produces a per-`Inst` [`Place`] (a host
 //! register or a spill slot) that the per-arch SSA emit
 //! (`ssa_emit_aarch64.rs` / `ssa_emit_x86_64.rs`) consumes when

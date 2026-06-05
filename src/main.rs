@@ -46,9 +46,9 @@ Multi-TU knobs:
                            library. Members are pulled in on demand.
 
 Compile knobs:
-  -O, --optimize           Reserved for a future optimization pass;
-                           currently a no-op (the peephole folds and
-                           register allocator always run).
+  -O, --optimize           Run the SSA optimization passes (mem2reg,
+                           inlining, rotate and branch const-fold,
+                           immediate dedup). Off by default.
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size.
   -g0, --no-debug          Skip DWARF emission (the default).

@@ -94,8 +94,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	scvtf	d0, x0
                	sub	x0, x29, #0x10
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -136,8 +136,8 @@ Disassembly of section .text:
                	mov	x0, #0x3039             // =12345
                	scvtf	d0, x0
                	sub	x0, x29, #0x20
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -205,8 +205,8 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	scvtf	d0, x0
                	sub	x0, x29, #0x40
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x40
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -247,9 +247,9 @@ Disassembly of section .text:
                	movk	x0, #0x9999, lsl #32
                	movk	x0, #0x400d, lsl #48
                	sub	x1, x29, #0x48
-               	fmov	d0, x0
-               	fcvt	s0, d0
-               	str	s0, [x1]
+               	fmov	d16, x0
+               	fcvt	s17, d16
+               	str	s17, [x1]
                	sub	x16, x29, #0x48
                	ldr	s0, [x16]
                	fcvt	d0, s0

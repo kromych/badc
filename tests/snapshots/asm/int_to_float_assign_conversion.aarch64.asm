@@ -91,22 +91,22 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	scvtf	d0, x0
                	sub	x0, x29, #0x10
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x0, x29, #0x8
                	add	x0, x0, #0x1
                	ldrb	w0, [x0]
                	scvtf	d0, x0
                	sub	x0, x29, #0x18
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x0, x29, #0x8
                	add	x0, x0, #0x2
                	ldrb	w0, [x0]
                	scvtf	d0, x0
                	sub	x0, x29, #0x20
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -156,8 +156,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	ldrb	w1, [x1]
                	scvtf	d0, x1
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x28
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -207,8 +207,8 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fsub	d0, d0, d17
                	sub	x0, x29, #0x30
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x30
                	ldr	s0, [x16]
                	fcvt	d0, s0
@@ -238,8 +238,8 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	scvtf	d0, x0
                	sub	x0, x29, #0x40
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x40
                	ldr	s0, [x16]
                	fcvt	d0, s0

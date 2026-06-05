@@ -93,9 +93,9 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x18
-               	fmov	d0, x0
-               	fcvt	s0, d0
-               	str	s0, [x1]
+               	fmov	d16, x0
+               	fcvt	s17, d16
+               	str	s17, [x1]
                	stur	w0, [x29, #-0x8]
                	b	<addr>
                	ldursw	x0, [x29, #-0x10]
@@ -185,8 +185,8 @@ Disassembly of section .text:
                	fcvt	d2, s2
                	fadd	d1, d1, d2
                	fadd	d0, d0, d1
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	b	<addr>
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]

@@ -510,6 +510,50 @@ fn fp_loop_carried_phi_under_pressure() {
 }
 
 #[test]
+fn fp_store_f32_preserves_live_numerator() {
+    // A single `float` numerator reused as the dividend of two
+    // consecutive `float` stores: `1.0f` is computed once and divided
+    // by two different denominators, each result stored to a `float`
+    // lvalue. The aarch64 `float` store narrows the f64 result with
+    // `fcvt Sd, Dn`; writing the S view zeroes the rest of the V
+    // register per AAPCS64, so narrowing over a pooled d-register
+    // would destroy the still-live numerator before the second store.
+    // The narrow must land in a scratch register outside the allocator
+    // pool (mirrors the stb_image_write JPEG quantization-table build,
+    // where the second `1 / (table[..] * a * a)` came out zero).
+    let src = r#"
+        int main() {
+            float a[2];
+            float b[2];
+            float t[2];
+            t[0] = 4.0f; t[1] = 8.0f;
+            int k;
+            for (k = 0; k < 2; ++k) {
+                // The `1` is an int divided by a float: the dividend is an
+                // IntToFp cast (scvtf) materialised once and reused for both
+                // stores. The first store's narrow must not clobber it.
+                a[k] = 1 / (t[k] * 2.0f);
+                b[k] = 1 / (t[k] * 4.0f);
+            }
+            // a[0]=1/8=0.125, a[1]=1/16=0.0625, b[0]=1/16=0.0625, b[1]=1/32=0.03125
+            // *10000: 1250 + 625 + 625 + 312 = 2812
+            return (int)(a[0]*10000.0f) + (int)(a[1]*10000.0f)
+                 + (int)(b[0]*10000.0f) + (int)(b[1]*10000.0f);
+        }
+    "#;
+    assert_eq!(
+        jit_exit(src, &["fp-f32-store-numerator"]),
+        2812,
+        "float store narrowing clobbered a live FP numerator"
+    );
+    assert_eq!(
+        jit_exit_native_optimized(src, &["fp-f32-store-numerator-opt"]),
+        2812,
+        "float store narrowing clobbered a live FP numerator (-O)"
+    );
+}
+
+#[test]
 fn printf_through_libc_got() {
     // printf's libc address is dlsym'd at JIT time and patched into
     // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or

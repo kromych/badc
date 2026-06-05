@@ -79,9 +79,9 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldur	x1, [x29, #0x20]
                	sub	x2, x29, #0x8
-               	fmov	d0, x1
-               	fcvt	s0, d0
-               	str	s0, [x2]
+               	fmov	d16, x1
+               	fcvt	s17, d16
+               	str	s17, [x2]
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cbz	x0, <addr>
@@ -89,16 +89,16 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	sub	x0, x29, #0x10
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	fneg	d0, d0
                	sub	x0, x29, #0x10
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	b	<addr>
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
@@ -117,14 +117,14 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	ldur	x1, [x29, #0x20]
                	sub	x2, x29, #0x8
-               	fmov	d0, x1
-               	fcvt	s0, d0
-               	str	s0, [x2]
+               	fmov	d16, x1
+               	fcvt	s17, d16
+               	str	s17, [x2]
                	ldur	x1, [x29, #0x30]
                	sub	x2, x29, #0x10
-               	fmov	d0, x1
-               	fcvt	s0, d0
-               	str	s0, [x2]
+               	fmov	d16, x1
+               	fcvt	s17, d16
+               	str	s17, [x2]
                	mov	x17, #0x1               // =1
                	and	x1, x0, x17
                	cbz	x1, <addr>
@@ -132,23 +132,23 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	sub	x1, x29, #0x28
-               	fcvt	s0, d0
-               	str	s0, [x1]
+               	fcvt	s17, d0
+               	str	s17, [x1]
                	b	<addr>
                	sub	x16, x29, #0x8
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	fneg	d0, d0
                	sub	x1, x29, #0x28
-               	fcvt	s0, d0
-               	str	s0, [x1]
+               	fcvt	s17, d0
+               	str	s17, [x1]
                	b	<addr>
                	sub	x16, x29, #0x28
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	sub	x1, x29, #0x18
-               	fcvt	s0, d0
-               	str	s0, [x1]
+               	fcvt	s17, d0
+               	str	s17, [x1]
                	mov	x17, #0x2               // =2
                	and	x0, x0, x17
                	cbz	x0, <addr>
@@ -156,23 +156,23 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	sub	x0, x29, #0x30
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	b	<addr>
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	fneg	d0, d0
                	sub	x0, x29, #0x30
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	b	<addr>
                	sub	x16, x29, #0x30
                	ldr	s0, [x16]
                	fcvt	d0, s0
                	sub	x0, x29, #0x20
-               	fcvt	s0, d0
-               	str	s0, [x0]
+               	fcvt	s17, d0
+               	str	s17, [x0]
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	fcvt	d0, s0

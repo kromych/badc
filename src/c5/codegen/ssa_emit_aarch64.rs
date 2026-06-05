@@ -2970,13 +2970,19 @@ fn emit_store(
                     Some(r) => r,
                     None => return false,
                 };
-                emit(code, enc_fmov_x_to_d(0, rs));
-                0u8
+                emit(code, enc_fmov_x_to_d(SCRATCH_FP0, rs));
+                SCRATCH_FP0
             }
             Place::None => return false,
         };
-        emit(code, enc_fcvt_s_d(0, dn));
-        emit(code, enc_str_s_imm(0, rn, 0));
+        // Narrow into SCRATCH_FP1 (d17, outside the allocator's d0..d15
+        // pool) so dn -- which may be an allocator-held d-reg whose f64
+        // value is still live across this store -- is not clobbered.
+        // `fcvt Sd, Dn` writes the S view and zeroes the rest of the
+        // V register, so narrowing in place over a pooled register
+        // would destroy a value the surrounding code still reads.
+        emit(code, enc_fcvt_s_d(SCRATCH_FP1, dn));
+        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, 0));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, enc_fmov_d_to_x(scratch.primary, dn));

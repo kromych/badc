@@ -260,8 +260,7 @@ Disassembly of section .text:
                	popq	%rdx
                	popq	%rax
                	xorq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0x15, %eax
@@ -294,4 +293,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

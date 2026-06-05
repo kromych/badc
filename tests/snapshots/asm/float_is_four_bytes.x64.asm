@@ -453,8 +453,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	-0x50(%rbp), %eax
                	xorq	$0x3f800000, %rax       # imm = 0x3F800000
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -485,4 +484,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

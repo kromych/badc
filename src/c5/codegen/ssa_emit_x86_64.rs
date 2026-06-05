@@ -250,14 +250,106 @@ fn param_elidable_mask(
             _ => {}
         }
     }
+    // A parameter whose incoming argument register the per-inst
+    // `ParamRef` path clobbers before it is read must keep its c5 cdecl
+    // home cell so it can read the value back from that cell rather than
+    // from the clobbered register (see `compute_param_from_home`).
+    // mem2reg may otherwise have promoted the parameter into a register
+    // and left its slot unobserved, which would mark it elidable and
+    // drop the home spill the per-inst read depends on.
+    let clobbered = param_home_clobber_set(func, alloc, abi);
     let mut elidable = alloc::vec::Vec::with_capacity(n_reg);
     for i in 0..n_reg {
         let slot = (i as i64) + 2;
-        let ok =
-            seeded.contains(&(i as u32)) && !addr_taken.contains(&slot) && !needed.contains(&slot);
+        let ok = seeded.contains(&(i as u32))
+            && !addr_taken.contains(&slot)
+            && !needed.contains(&slot)
+            && !clobbered.get(i).copied().unwrap_or(false);
         elidable.push(ok);
     }
     (elidable, n_reg, n_stack)
+}
+
+/// A register parameter that the entry parallel copy
+/// ([`emit_function`]'s prebatch) cannot place atomically and that the
+/// per-inst `Inst::ParamRef` path therefore lowers with a register read
+/// whose incoming argument register an earlier-emitted `ParamRef`'s
+/// home write already clobbered.
+///
+/// The entry parallel copy avoids the hazard by placing every register
+/// parameter from its (distinct) argument register at once. It runs only
+/// when the parameter homes are pairwise distinct, the parallel-copy
+/// precondition. When two homes coincide the batch is skipped and the
+/// per-inst path runs; a parameter whose argument register is then
+/// clobbered must read its prologue-spilled c5 cdecl home cell instead.
+/// This returns the per-parameter mask of exactly those at-risk
+/// parameters; it is empty whenever the batch runs (every parameter is
+/// placed atomically, so none is at risk). The mask depends only on
+/// `alloc.places` and `Inst::ParamRef` order, neither of which the
+/// resulting home-cell spill changes, so the elidability scan and the
+/// prologue both consult it without a fixpoint.
+fn param_home_clobber_set(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> alloc::vec::Vec<bool> {
+    let n_reg = if func.is_variadic || func.n_params == 0 {
+        0
+    } else {
+        func.n_params.min(abi.int_arg_regs.len())
+    };
+    let mut mask = alloc::vec![false; n_reg];
+    if n_reg == 0 {
+        return mask;
+    }
+    // Mirror the prebatch eligibility and the `homes_distinct` gate in
+    // `emit_function`: the entry parallel copy batches every register
+    // parameter whose home is an integer register or a spill slot, and
+    // runs only when those homes are pairwise distinct. When it runs no
+    // parameter is at risk.
+    let mut batch_homes: alloc::vec::Vec<Place> = alloc::vec::Vec::new();
+    for (vid, inst) in func.insts.iter().enumerate() {
+        let Inst::ParamRef { idx, .. } = inst else {
+            continue;
+        };
+        if (*idx as usize) >= n_reg {
+            continue;
+        }
+        if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+            continue;
+        }
+        let dst = alloc.places.get(vid).copied().unwrap_or(Place::None);
+        if matches!(dst, Place::IntReg(_) | Place::Spill(_)) {
+            batch_homes.push(dst);
+        }
+    }
+    let homes_distinct = (0..batch_homes.len()).all(|a| {
+        ((a + 1)..batch_homes.len()).all(|b| !place_same_loc(batch_homes[a], batch_homes[b]))
+    });
+    if !batch_homes.is_empty() && homes_distinct {
+        return mask;
+    }
+    // Per-inst path: a later parameter whose argument register was
+    // already written by an earlier `ParamRef`'s home placement is
+    // clobbered before it can be read.
+    let mut written: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+    for (vid, inst) in func.insts.iter().enumerate() {
+        let Inst::ParamRef { idx, .. } = inst else {
+            continue;
+        };
+        let i = *idx as usize;
+        if i >= n_reg {
+            continue;
+        }
+        let arg_reg = abi.int_arg_regs[i];
+        if written.contains(&arg_reg) {
+            mask[i] = true;
+        }
+        if let Some(Place::IntReg(r)) = alloc.places.get(vid).copied() {
+            written.insert(r);
+        }
+    }
+    mask
 }
 
 fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
@@ -289,42 +381,18 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
 /// `ParamRef` writes is a later parameter's incoming argument register,
 /// the write clobbers that argument value before the later `ParamRef`
 /// reads it. The home cell is immune because the prologue stored it
-/// before any body instruction ran. A parameter is flagged only when it
-/// is non-elidable (so the prologue stored its home cell) and some
-/// earlier `ParamRef`'s destination is its argument register; otherwise
-/// the argument register is still live and the cheaper register read is
-/// kept.
+/// before any body instruction ran. The set is exactly the clobber set
+/// from [`param_home_clobber_set`]: each at-risk parameter is forced
+/// non-elidable by [`param_elidable_mask`], so its home cell exists. A
+/// mem2reg-promoted parameter is at risk too -- the earlier
+/// non-elidable-only gate left such a promoted parameter reading a
+/// clobbered argument register.
 fn compute_param_from_home(
     func: &FunctionSsa,
     alloc: &Allocation,
     abi: super::Abi,
 ) -> alloc::vec::Vec<bool> {
-    let (elidable, n_reg, _) = param_elidable_mask(func, alloc, abi);
-    let mut mask = alloc::vec![false; n_reg];
-    if n_reg == 0 {
-        return mask;
-    }
-    // Destination registers of the `ParamRef` values seen so far in
-    // instruction (emit) order. A later parameter whose argument
-    // register appears here was clobbered before it could be read.
-    let mut written: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
-    for (vid, inst) in func.insts.iter().enumerate() {
-        let Inst::ParamRef { idx, .. } = inst else {
-            continue;
-        };
-        let i = *idx as usize;
-        if i >= n_reg {
-            continue;
-        }
-        let arg_reg = abi.int_arg_regs[i];
-        if !elidable.get(i).copied().unwrap_or(false) && written.contains(&arg_reg) {
-            mask[i] = true;
-        }
-        if let Some(Place::IntReg(r)) = alloc.places.get(vid).copied() {
-            written.insert(r);
-        }
-    }
-    mask
+    param_home_clobber_set(func, alloc, abi)
 }
 
 fn bail_msg(reason: &str) {
@@ -1543,6 +1611,51 @@ enum LocalBranchKind {
 /// before `call`, so the prologue needs to interleave the saved
 /// rbp with the param slots: pop the return address into r11,
 /// push each arg in caller order, push the return address back,
+/// Lower a `sub rsp, bytes` frame allocation, inserting a page-walk
+/// stack probe on Windows when the frame is at least one page.
+///
+/// The Win64 ABI (and the OS guard-page mechanism) requires the
+/// prologue to touch every 4 KiB page it allocates, in descending
+/// order, so the kernel's guard page commits the next page before the
+/// frame reaches it. A single `sub rsp, bytes` that skips past the
+/// guard page faults on the first access into an uncommitted page.
+/// System V Linux grows the stack on demand and needs no probe.
+///
+/// The probe walks one page at a time, writing through `rsp` to fault
+/// in (commit) each page, then subtracts the sub-page remainder. r11 is
+/// caller-saved and carries no live value in the prologue, so it serves
+/// as the running counter.
+fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi) {
+    const PAGE: u32 = 4096;
+    // SysV (shadow_space 0) and any sub-page Win64 frame allocate with a
+    // single `sub rsp`. A guard page sits at most one page below rsp, so
+    // a frame smaller than a page cannot skip it.
+    if abi.shadow_space == 0 || bytes < PAGE {
+        emit_sub_rsp_imm32(code, bytes);
+        return;
+    }
+    // r11 = bytes remaining to allocate.
+    super::x86_64::emit_mov_r_imm64(code, Reg::R11, bytes as i64);
+    // loop: while r11 >= PAGE { sub rsp, PAGE; touch [rsp]; r11 -= PAGE }
+    let loop_start = code.len();
+    emit_sub_rsp_imm32(code, PAGE);
+    // Touch the freshly-decremented page so the guard-page handler
+    // commits it and relocates the guard one page lower.
+    super::x86_64::emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
+    super::x86_64::emit_sub_r_imm32(code, Reg::R11, PAGE as i32);
+    super::x86_64::emit_cmp_r_imm32(code, Reg::R11, PAGE as i32);
+    // jae loop_start (unsigned: r11 still at least one page).
+    let after_cmp = code.len();
+    super::x86_64::emit_jcc_rel32(code, super::x86_64::Cc::Ae, 0);
+    let rel = (loop_start as i64) - (code.len() as i64);
+    let rel32 = rel as i32;
+    let patch_at = code.len() - 4;
+    code[patch_at..patch_at + 4].copy_from_slice(&rel32.to_le_bytes());
+    let _ = after_cmp;
+    // Sub-page remainder left in r11.
+    emit_sub_rr(code, Reg::RSP, Reg::R11);
+}
+
 /// then save rbp and proceed.
 fn emit_prologue(
     code: &mut Vec<u8>,
@@ -1601,7 +1714,7 @@ fn emit_prologue(
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
     if frame.frame_bytes > 0 {
-        emit_sub_rsp_imm32(code, frame.frame_bytes);
+        emit_stack_alloc(code, frame.frame_bytes, abi);
     }
     // The x86_64 prologue/epilogue and `Frame` reserve no space for
     // FP-register saves, so the allocator must never hand back a
@@ -2543,10 +2656,24 @@ fn emit_store(
         }
         return true;
     }
-    let value_scratch = if base.0 == SCRATCH_R10.0 {
-        Reg::RCX
-    } else {
-        SCRATCH_R10
+    // The value scratch must be disjoint from `base` and must not be a
+    // register the allocator parked a value live across this Store in.
+    // The earlier fixed `RCX` fallback (used when `base` landed in
+    // SCRATCH_R10) clobbered a long-lived value the allocator had
+    // placed in rcx -- e.g. a base pointer read by a later indexed
+    // load -- because rcx carries SSA values once the bank flattening
+    // lets the allocator use it. A spilled value materialised into rcx
+    // then overwrote that live value before its last use. `base` is
+    // either the addr register place or the live-aware addr scratch,
+    // both inside the allocator's caller-saved bank; r13 is reserved
+    // outside both allocator banks (see the `SCRATCH_R10` note) so it
+    // can never be `base` and never holds a live allocator value, which
+    // makes it a safe value scratch under any register pressure. A
+    // value-Place already in an int register needs no scratch and
+    // `materialize_int` returns it directly.
+    let value_scratch = match value_place {
+        Place::IntReg(r) => Reg(r),
+        _ => SCRATCH_R13,
     };
     let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
         bail_msg("Store: value Place not int reg / spill");
@@ -2952,10 +3079,25 @@ fn emit_binop(
     // `op rd, rm` and land the result in rd. A spilled rhs for an
     // arithmetic or compare op was already handled in place above; the
     // remaining spilled-rhs case is a shift, whose count this scratch
-    // carries (rcx == cl when rd already claims the dedicated r10
-    // scratch). A register rhs needs the scratch only to preserve
-    // itself when it aliases rd.
-    let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
+    // carries. A register rhs needs the scratch only to preserve itself
+    // when it aliases rd.
+    //
+    // The scratch must not be rcx for a shift: the shift count is moved
+    // into rcx (cl) by the shift arm below, which preserves any live SSA
+    // value the allocator parked in rcx with a push / pop around that
+    // move. Materialising a spilled count straight into rcx here would
+    // overwrite that live value before the push could save it. r13 is
+    // reserved outside both allocator banks (see the `SCRATCH_R10`
+    // note), so it is always a safe count scratch; the non-shift path
+    // keeps the cheaper r10 / rcx choice.
+    let is_shift = matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror);
+    let rhs_scratch = if is_shift {
+        if rd.0 == SCRATCH_R10.0 {
+            SCRATCH_R13
+        } else {
+            SCRATCH_R10
+        }
+    } else if rd.0 == SCRATCH_R10.0 {
         Reg::RCX
     } else {
         SCRATCH_R10
@@ -3456,6 +3598,16 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             super::x86_64::emit_sub_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
+        // `x & 0xffffffff` is a zero-extension of the low 32 bits. A
+        // 32-bit `mov rd, rn` clears the upper half, materialising the
+        // mask in one instruction with no immediate-scratch register.
+        // The imm32 AND form cannot encode this value: `and r64, imm32`
+        // sign-extends the immediate, so 0xffffffff would become
+        // 0xffffffffffffffff and mask nothing.
+        BinOp::And if rhs_imm == 0xffff_ffff => {
+            super::x86_64::emit_mov_r32_r32(code, rd, rn);
             true
         }
         BinOp::And if imm_fits_i32 => {

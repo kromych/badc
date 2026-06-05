@@ -95,12 +95,10 @@ Disassembly of section .text:
                	movslq	%r8d, %r8
                	movq	%rax, %r9
                	shlq	$0x1, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%rax, %r11
                	shlq	$0x8, %r11
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %r11
+               	movl	%r11d, %r11d
                	movq	%rax, %rbx
                	shlq	$0x5, %rbx
                	shlq	$0x10, %rax
@@ -117,16 +115,12 @@ Disassembly of section .text:
                	movslq	%r8d, %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	andq	%r9, %rdx
+               	movl	%r9d, %edx
                	addq	%rdx, %rcx
-               	movl	$0xffffffff, %r10d      # imm = 0xFFFFFFFF
-               	andq	%r10, %rcx
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	andq	%r11, %rdx
+               	movl	%ecx, %ecx
+               	movl	%r11d, %edx
                	addq	%rdx, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	addq	%rbx, %rcx
                	movq	%rcx, %rbx
                	addq	%rax, %rbx

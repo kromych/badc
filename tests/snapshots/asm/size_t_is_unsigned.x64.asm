@@ -59,11 +59,9 @@ Disassembly of section .text:
                	jae	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	andq	%rax, %rdx
+               	movl	%eax, %edx
                	jmp	<addr>
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	andq	%rdx, %rax
+               	movl	%edx, %eax
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x4, %eax

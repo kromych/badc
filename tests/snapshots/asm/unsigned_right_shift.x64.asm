@@ -77,11 +77,9 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	shrq	$0x1, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	xorq	$0x40000000, %rax       # imm = 0x40000000
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -101,5 +99,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

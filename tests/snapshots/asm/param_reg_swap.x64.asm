@@ -13,29 +13,23 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	addq	$0x3, %rcx
                	movzbq	(%rcx), %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	shlq	$0x8, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	movq	%rax, %rdx
                	addq	$0x2, %rdx
                	movzbq	(%rdx), %rdx
                	orq	%rdx, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	shlq	$0x8, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	movq	%rax, %rdx
                	addq	$0x1, %rdx
                	movzbq	(%rdx), %rdx
                	orq	%rdx, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	shlq	$0x8, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	movzbq	(%rax), %rax
                	orq	%rcx, %rax
                	retq
@@ -70,29 +64,23 @@ Disassembly of section .text:
                	movq	%r8, %r9
                	addq	$0x3, %r9
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x2, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x1, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movzbq	(%r8), %r8
                	orq	%r9, %r8
                	movl	%r8d, (%rdi)
@@ -109,29 +97,23 @@ Disassembly of section .text:
                	movq	%r8, %r9
                	addq	$0x3, %r9
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x2, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x1, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movzbq	(%r8), %r8
                	orq	%r9, %r8
                	movl	%r8d, (%rdi)
@@ -148,29 +130,23 @@ Disassembly of section .text:
                	movq	%r8, %r9
                	addq	$0x3, %r9
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x2, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x1, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movzbq	(%r8), %r8
                	orq	%r9, %r8
                	movl	%r8d, (%rdi)
@@ -189,29 +165,23 @@ Disassembly of section .text:
                	movq	%r8, %r9
                	addq	$0x3, %r9
                	movzbq	(%r9), %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x2, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movq	%r8, %r11
                	addq	$0x1, %r11
                	movzbq	(%r11), %r11
                	orq	%r11, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	shlq	$0x8, %r9
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %r9
+               	movl	%r9d, %r9d
                	movzbq	(%r8), %r8
                	orq	%r9, %r8
                	movl	%r8d, (%rdi)
@@ -286,4 +256,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

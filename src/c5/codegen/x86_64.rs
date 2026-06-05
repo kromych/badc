@@ -189,6 +189,20 @@ pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
 }
 
+/// `mov r32, r32` (89 /r without REX.W). Writing a 32-bit register
+/// zero-extends it to the full 64-bit register, so this materialises
+/// `dst = src & 0xffffffff` in one instruction with no scratch. The
+/// REX prefix is emitted only when either operand is a high (r8..r15)
+/// register; for low registers the 32-bit form needs no REX so the
+/// upper-half clear stays intact.
+pub(super) fn emit_mov_r32_r32(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    if src.high() || dst.high() {
+        emit_byte(code, rex(false, src.high(), false, dst.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
+}
+
 /// Extend a libc return value sitting in `RAX` to fill the
 /// full 64-bit register, per `ext`. msvcrt's int-typed returns
 /// (atoi, fclose, isatty, ...) leave the upper 32 bits undefined,

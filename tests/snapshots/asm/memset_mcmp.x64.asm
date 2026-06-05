@@ -28,8 +28,7 @@ Disassembly of section .text:
                	movb	%cl, (%rax)
                	movzbq	(%rbx), %rax
                	xorq	$0x41, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	jne	<addr>
                	movl	$0x2a, %eax
@@ -47,4 +46,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

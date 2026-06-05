@@ -78,11 +78,9 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	addq	$0x1, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	jmp	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -92,8 +90,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	subq	$0x1, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x1, %ebx
@@ -109,8 +106,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	sete	%al
@@ -122,8 +118,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	movl	$0x1, %ecx
                	subq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x2, %ebx
@@ -139,8 +134,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	movl	$0xfffffffe, %r11d      # imm = 0xFFFFFFFE
                	cmpq	%r11, %rax
                	sete	%al
@@ -152,8 +146,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	movl	$0x1, %ecx
                	imulq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x3, %ebx
@@ -169,8 +162,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rax
                	sete	%al
@@ -207,8 +199,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	movl	$0x1, %ecx
                	addq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x5, %ebx
@@ -224,8 +215,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -275,8 +265,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -323,3 +312,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

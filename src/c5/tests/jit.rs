@@ -450,6 +450,134 @@ fn multiply_by_immediate_with_spilled_result_under_pressure() {
 }
 
 #[test]
+fn and_with_low_32_bit_mask_lowers_without_scratch() {
+    // `x & 0xffffffff` is a 32-bit zero-extension. The immediate does
+    // not fit a signed i32 (the `and r64, imm32` form sign-extends, so
+    // 0xffffffff would mask nothing), and the rcx-scratch fallback for a
+    // 64-bit immediate bailed the whole function out of the implemented
+    // subset when no caller-saved register was free under pressure. The
+    // lowering must emit a 32-bit `mov rd, rn`, which clears the upper
+    // half with no scratch. Capping the integer bank to one register
+    // spills the masked result and removes any free scratch, reproducing
+    // the bail (this is the shape monocypher's little-endian load
+    // helpers hit at -O on x86_64).
+    let src = r#"
+        unsigned long g[8];
+        int main() {
+            g[0] = 0x1122334455667788UL;
+            g[1] = 0xaabbccddeeff0011UL;
+            unsigned long s = 0;
+            int i;
+            for (i = 0; i < 2; i++) {
+                s = s + (g[i] & 0xffffffffUL);
+            }
+            // 0x55667788 + 0xeeff0011 = 0x144657799
+            return (int)(s & 0xffffffffUL); // 0x44657799
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["and-lo32-mask"])
+    });
+    assert_eq!(
+        result, 0x4465_7799,
+        "x & 0xffffffff was not lowered as a 32-bit zero-extension under pressure"
+    );
+}
+
+#[test]
+fn long_lived_base_pointer_survives_shift_count_and_store_scratch() {
+    // A base pointer kept live across many indexed loads while the body
+    // also runs 64-bit rotations and stores under register pressure. On
+    // x86_64 a shift reads its count from cl (rcx). When the destination
+    // is a spill the shift's spilled count was materialised straight into
+    // rcx through the rhs scratch -- before the shift arm's push / pop
+    // could preserve a long-lived SSA value the allocator had parked in
+    // rcx -- so the base pointer was overwritten by a shift count and the
+    // next indexed load faulted. The shift now stages a spilled count
+    // through r13 (reserved outside both allocator banks) instead of rcx,
+    // so the rcx-preserving push / pop in the shift arm covers the move.
+    // This is the BLAKE2b compress shape (a 16-word work vector plus the
+    // `input` pointer, all live across an unrolled mixing round) that
+    // monocypher hits at -O once the rotate helper is inlined.
+    let src = r#"
+        static unsigned long rotr64(unsigned long x, unsigned long n) {
+            return (x >> n) ^ (x << (64 - n));
+        }
+        unsigned long out[8];
+        unsigned long in[16];
+        static void mix(unsigned long *h, unsigned long *m) {
+            unsigned long v0=h[0],v1=h[1],v2=h[2],v3=h[3];
+            unsigned long v4=h[4],v5=h[5],v6=h[6],v7=h[7];
+            unsigned long a=v0,b=v4,c=v0^v4,d=v0+v4;
+            a += b + m[0];  d = rotr64(d ^ a, 32);
+            c += d;         b = rotr64(b ^ c, 24);
+            a += b + m[1];  d = rotr64(d ^ a, 16);
+            c += d;         b = rotr64(b ^ c, 63);
+            a += b + m[2];  d = rotr64(d ^ a, 32);
+            c += d;         b = rotr64(b ^ c, 24);
+            a += b + m[3];  d = rotr64(d ^ a, 16);
+            c += d;         b = rotr64(b ^ c, 63);
+            h[0] = a ^ v1; h[1] = b ^ v2; h[2] = c ^ v3; h[3] = d ^ v5;
+            h[4] = a ^ m[4]; h[5] = b ^ m[5]; h[6] = c ^ m[6]; h[7] = d ^ m[7];
+        }
+        int main() {
+            int i;
+            for (i = 0; i < 8; i++) out[i] = 0x0101010101010101UL * (i + 1);
+            for (i = 0; i < 16; i++) in[i] = 0xfedcba9876543210UL * (i + 3);
+            mix(out, in);
+            unsigned long acc = 0;
+            for (i = 0; i < 8; i++) acc ^= out[i] + i;
+            return (int)(acc & 0xffffffffUL);
+        }
+    "#;
+    // The -O path inlines `rotr64`, which raises register pressure to the
+    // level that forces the clobber; the interpreter and the unoptimised
+    // path both compute the reference value.
+    let expected = jit_exit(src, &["mix-ref"]);
+    let optimized = jit_exit_native_optimized(src, &["mix-opt"]);
+    assert_eq!(
+        optimized, expected,
+        "a long-lived base pointer was clobbered by a shift-count or store scratch under pressure"
+    );
+}
+
+#[test]
+fn large_stack_frame_is_page_probed() {
+    // A function whose frame exceeds one 4 KiB page. On Win64 the
+    // prologue must touch every page it allocates, in descending order,
+    // so the OS guard-page mechanism commits the next page before the
+    // frame reaches it; a single `sub rsp, bytes` that jumps past the
+    // guard page faults on the first access into an uncommitted page.
+    // System V Linux grows the stack on demand. The large local arrays
+    // force a multi-page frame; the loops touch the high and low ends so
+    // an unprobed frame faults on the first write. (Heavily-spilled -O
+    // functions reach this frame size on their own -- monocypher's
+    // BLAKE2b compress allocates tens of kilobytes after the rotate
+    // helper inlines.)
+    let src = r#"
+        int main() {
+            volatile int a[3000];
+            volatile int b[3000];
+            int i;
+            for (i = 0; i < 3000; i++) { a[i] = i; b[i] = 3000 - i; }
+            long sum = 0;
+            for (i = 0; i < 3000; i++) sum += a[i] + b[i];
+            return (int)(sum % 100000); // 3000 * 3000 = 9000000 -> 0
+        }
+    "#;
+    assert_eq!(
+        jit_exit(src, &["large-frame"]),
+        0,
+        "a multi-page stack frame was not page-probed; the prologue skipped a guard page"
+    );
+    assert_eq!(
+        jit_exit_native_optimized(src, &["large-frame-opt"]),
+        0,
+        "a multi-page stack frame was not page-probed under -O"
+    );
+}
+
+#[test]
 fn fp_diamond_phi_under_pressure() {
     // A double-valued local assigned on both arms of an if/else: the
     // slot merges two FP definitions at the join, so mem2reg promotes

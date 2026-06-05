@@ -219,8 +219,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movzbq	-0x8(%rbp), %rax
                	xorq	$0xff, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -276,8 +275,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movzbq	-0x8(%rbp), %rax
                	xorq	$0xff, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -355,8 +353,7 @@ Disassembly of section .text:
                	movsbq	-0x18(%rbp), %rax
                	andq	$0xff, %rax
                	xorq	$0x7f, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -383,8 +380,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movzwq	-0x20(%rbp), %rax
                	xorq	$0xffff, %rax           # imm = 0xFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -442,8 +438,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movzwq	-0x20(%rbp), %rax
                	xorq	$0xffff, %rax           # imm = 0xFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -516,8 +511,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x8000, %rax           # imm = 0x8000
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -590,11 +584,9 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	andq	%rbx, %rax
+               	movl	%ebx, %eax
                	xorq	$0xffff, %rax           # imm = 0xFFFF
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -775,8 +767,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	andq	%rbx, %rax
+               	movl	%ebx, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x87, %r12d
@@ -1044,8 +1035,7 @@ Disassembly of section .text:
                	movq	%rbx, %rax
                	andq	$0xff, %rax
                	xorq	$0xd4, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	sete	%al
                	movzbq	%al, %rax
@@ -1264,8 +1254,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	shlq	$0x1f, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	movl	$0x80000000, %r11d      # imm = 0x80000000
                	cmpq	%r11, %rax
                	sete	%al
@@ -1363,4 +1352,3 @@ Disassembly of section .text:
                	addq	$0x160, %rsp            # imm = 0x160
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

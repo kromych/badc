@@ -14,8 +14,7 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	movl	$0x1, %eax
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
                	je	<addr>
@@ -24,8 +23,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	orq	%rax, %rcx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rcx
@@ -35,8 +33,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	orq	%rax, %rcx
                	shrq	$0x1f, %rcx
                	cmpq	$0x1, %rcx
@@ -47,8 +44,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	imulq	$-0x1, %rcx, %rdx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rdx
+               	movl	%edx, %edx
                	orq	%rdx, %rcx
                	shrq	$0x1f, %rcx
                	cmpq	$0x0, %rcx
@@ -58,10 +54,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
-               	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
-               	andq	%rcx, %rdx
+               	movl	%ecx, %ecx
+               	movl	%ecx, %edx
                	orq	%rax, %rdx
                	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
                	cmpq	%r11, %rdx
@@ -70,8 +64,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	orq	%rcx, %rax
                	shrq	$0x1f, %rax
                	cmpq	$0x1, %rax
@@ -83,16 +76,13 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	xorq	%rcx, %rcx
                	xorq	%rcx, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	orq	%rcx, %rax
                	shrq	$0x1f, %rax
                	xorq	$0x1, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movl	$0x7, %eax
@@ -101,16 +91,13 @@ Disassembly of section .text:
                	retq
                	movl	$0x5, %eax
                	xorq	%rax, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	imulq	$-0x1, %rax, %rcx
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rcx
+               	movl	%ecx, %ecx
                	orq	%rcx, %rax
                	shrq	$0x1f, %rax
                	xorq	$0x1, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x8, %eax
@@ -121,3 +108,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

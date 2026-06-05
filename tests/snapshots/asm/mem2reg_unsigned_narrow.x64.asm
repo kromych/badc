@@ -38,8 +38,7 @@ Disassembly of section .text:
                	xorq	%r8, %r8
                	andq	$0xff, %rax
                	xorq	$0x2c, %rax
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movq	%r8, %rax
@@ -49,8 +48,7 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x2345, %rax           # imm = 0x2345
-               	movl	$0xffffffff, %r11d      # imm = 0xFFFFFFFF
-               	andq	%r11, %rax
+               	movl	%eax, %eax
                	cmpq	$0x0, %rax
                	je	<addr>
                	movslq	%r8d, %rax
@@ -79,5 +77,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

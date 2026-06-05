@@ -511,6 +511,19 @@ pub(super) fn emit_imul_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `IMUL dst, src, imm32` -- three-operand signed multiply with an
+/// immediate source. Encoding: `REX.W + 69 /r id`, ModR/M.reg = dst,
+/// ModR/M.r/m = src. Computes `dst = src * sign_extend(imm32)`; `dst`
+/// and `src` may be the same register, so no staging mov or scratch
+/// is needed for a multiply by a constant that fits a signed 32-bit
+/// immediate.
+pub(super) fn emit_imul_r_r_imm32(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: i32) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x69);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    code.extend_from_slice(&imm.to_le_bytes());
+}
+
 /// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
 /// remainder -> rdx. The caller must sign-extend rax into rdx with
 /// [`emit_cqo`] first.

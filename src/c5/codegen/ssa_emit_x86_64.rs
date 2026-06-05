@@ -3045,6 +3045,15 @@ fn emit_binop_imm(
             super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
             true
         }
+        // `imul rd, rn, imm32` reads `rn` and writes `rd` in one
+        // instruction, so it needs neither a staging mov nor an
+        // immediate-scratch register. This covers the multiply by a
+        // non-power-of-two constant that the scratch path below cannot
+        // lower when no caller-saved register is free.
+        BinOp::Mul if imm_fits_i32 => {
+            super::x86_64::emit_imul_r_r_imm32(code, rd, rn, rhs_imm as i32);
+            true
+        }
         BinOp::Shl if shift_amount.is_some() => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);

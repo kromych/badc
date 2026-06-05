@@ -328,6 +328,33 @@ fn division_with_spilled_dividend_under_pressure() {
 }
 
 #[test]
+fn multiply_by_immediate_with_spilled_result_under_pressure() {
+    // `BinopI { op: Mul }` by a non-power-of-two constant. The x86_64
+    // lowering must not depend on a free caller-saved scratch to
+    // materialise the immediate: with the bank capped to one register
+    // the product spills and no scratch is free, so the three-operand
+    // `imul rd, rn, imm32` form is required. The earlier scratch path
+    // bailed the whole function out of the implemented subset here.
+    let src = r#"
+        int main() {
+            int s = 0;
+            int i;
+            for (i = 0; i < 6; i++) {
+                s = s + i * 7;
+            }
+            return s; // 7 * (0+1+2+3+4+5) = 105
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit(src, &["mul-imm-spill"])
+    });
+    assert_eq!(
+        result, 105,
+        "multiply by an immediate with a spilled result was not lowered under pressure"
+    );
+}
+
+#[test]
 fn printf_through_libc_got() {
     // printf's libc address is dlsym'd at JIT time and patched into
     // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or

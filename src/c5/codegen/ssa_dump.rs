@@ -291,13 +291,20 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
 #[allow(dead_code)]
 fn _block_check(_b: BlockId) {}
 
-/// True when SSA-dump output is requested through either the CLI
-/// flag (`NativeOptions::dump_ssa`) or the legacy `BADC_DUMP_SSA`
-/// env var. The env-var fallback is honoured so existing scripts
-/// keep working alongside the new `--dump-ssa` flag.
+/// True when SSA-dump output is requested through the CLI flag
+/// (`NativeOptions::dump_ssa`). Under the `codegen_test` feature the
+/// `BADC_DUMP_SSA` environment variable is also honoured; a production
+/// build relies solely on the flag and never reads the environment.
 pub(super) fn enabled(options: super::NativeOptions) -> bool {
     if options.dump_ssa {
         return true;
     }
-    std::env::var("BADC_DUMP_SSA").is_ok()
+    #[cfg(feature = "codegen_test")]
+    {
+        std::env::var("BADC_DUMP_SSA").is_ok()
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        false
+    }
 }

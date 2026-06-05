@@ -332,15 +332,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             hint: None,
         });
         entry.is_fp = produces_fp_result(inst);
-        // `BADC_BUG_I2` (codegen_test only) suppresses the
-        // cross-call must-callee constraint so a value live across a
-        // call lands in a caller-saved register, to confirm the
-        // verifier's I2 check fires.
-        #[cfg(feature = "codegen_test")]
-        let calls_after = calls_after_def[v] && std::env::var("BADC_BUG_I2").is_err();
-        #[cfg(not(feature = "codegen_test"))]
-        let calls_after = calls_after_def[v];
-        entry.must_callee |= calls_after;
+        entry.must_callee |= calls_after_def[v];
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
@@ -511,12 +503,15 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
 ///
 /// Invariants checked:
 ///
-/// * I1 -- two values that interfere (overlapping live ranges) must
-///   not share a physical location (register or spill slot).
-/// * I2 -- a value whose live range spans a call must be callee-saved
-///   or spilled, never caller-saved (the call clobbers the caller bank).
-/// * I3 -- a value's place must match its register class (FP value in
-///   an FP register, integer value in an integer register or slot).
+/// * Distinct location: two values that interfere (overlapping live
+///   ranges) must not share a physical location (register or spill slot).
+/// * Cross-call discipline: a value whose live range spans a call must
+///   be callee-saved or spilled, never caller-saved (the call clobbers
+///   the caller bank).
+/// * Register class: a value's place must match its register class (FP
+///   value in an FP register, integer value in an integer register or
+///   slot).
+/// * FP phi class: a phi's register class must match every operand's.
 #[cfg(feature = "codegen_test")]
 fn verify_allocation(
     func: &FunctionSsa,
@@ -535,7 +530,7 @@ fn verify_allocation(
         );
     };
 
-    // I2: cross-call caller-saved discipline.
+    // Cross-call discipline: caller-saved registers do not survive a call.
     for (c, inst) in func.insts.iter().enumerate() {
         if !matches!(
             inst,
@@ -551,17 +546,17 @@ fn verify_allocation(
             }
             match places.get(v).copied().unwrap_or(Place::None) {
                 Place::IntReg(r) if banks.caller_gprs.contains(&r) => report(alloc::format!(
-                    "I2 cross-call: v{v} in caller-saved int reg {r} is live across the call at v{c}"
+                    "cross-call: v{v} in caller-saved int reg {r} is live across the call at v{c}"
                 )),
                 Place::FpReg(r) if banks.caller_fprs.contains(&r) => report(alloc::format!(
-                    "I2 cross-call: v{v} in caller-saved fp reg {r} is live across the call at v{c}"
+                    "cross-call: v{v} in caller-saved fp reg {r} is live across the call at v{c}"
                 )),
                 _ => {}
             }
         }
     }
 
-    // I3: register-class correctness.
+    // Register class: a value's place must match its register file.
     for (v, inst) in func.insts.iter().enumerate() {
         if !produces_value(inst) {
             continue;
@@ -569,16 +564,16 @@ fn verify_allocation(
         let is_fp = produces_fp_result(inst);
         match places.get(v).copied().unwrap_or(Place::None) {
             Place::FpReg(_) if !is_fp => report(alloc::format!(
-                "I3 class: integer v{v} placed in an fp register"
+                "class: integer v{v} placed in an fp register"
             )),
             Place::IntReg(_) if is_fp => report(alloc::format!(
-                "I3 class: fp v{v} placed in an integer register"
+                "class: fp v{v} placed in an integer register"
             )),
             _ => {}
         }
     }
 
-    // I3b: a phi's register class must match every operand's class.
+    // FP phi class: a phi's register class must match every operand's.
     // An FP phi is permitted (its root and operands all live in the FP
     // file), but a phi must never merge an FP value with an integer one
     // -- the predecessor-exit move that lowers the phi copies within one
@@ -596,14 +591,14 @@ fn verify_allocation(
             let op_fp = produces_fp_result(&func.insts[src as usize]);
             if op_fp != phi_fp {
                 report(alloc::format!(
-                    "I3b class: phi v{v} (fp={phi_fp}) merges operand v{src} (fp={op_fp}) of a different register class"
+                    "phi class: phi v{v} (fp={phi_fp}) merges operand v{src} (fp={op_fp}) of a different register class"
                 ));
             }
         }
     }
 
-    // I1: interfering values must hold distinct physical locations.
-    // Group by place and check interference only within a group.
+    // Distinct location: interfering values must hold distinct physical
+    // locations. Group by place and check interference only within a group.
     let key = |p: Place| -> Option<(u8, u32)> {
         match p {
             Place::IntReg(r) => Some((0, r as u32)),
@@ -624,7 +619,7 @@ fn verify_allocation(
             for j in (i + 1)..vs.len() {
                 if liveness.interfere(func, vs[i] as ValueId, vs[j] as ValueId) {
                     report(alloc::format!(
-                        "I1 interference: v{} and v{} share place {k:?} yet interfere",
+                        "interference: v{} and v{} share place {k:?} yet interfere",
                         vs[i],
                         vs[j]
                     ));
@@ -737,19 +732,6 @@ pub(super) fn color_graph(
     max_fpr: usize,
 ) -> Coloring {
     let n = node_of.len();
-    // Fault injection for verifier validation, off unless the
-    // `codegen_test` feature is built and the corresponding env var is
-    // set. `BADC_BUG_I1` ignores the interference constraint (so a node
-    // can take a neighbour's colour); `BADC_BUG_I3` labels a value's
-    // place with the wrong register class. They exist only to confirm
-    // `verify_allocation` actually detects each invariant violation.
-    #[cfg(feature = "codegen_test")]
-    let (bug_i1, bug_i3) = (
-        std::env::var("BADC_BUG_I1").is_ok(),
-        std::env::var("BADC_BUG_I3").is_ok(),
-    );
-    #[cfg(not(feature = "codegen_test"))]
-    let (bug_i1, bug_i3) = (false, false);
     let mut color: Vec<Place> = vec![Place::None; n];
     let mut spill_count: u32 = 0;
     for node in 0..n {
@@ -757,13 +739,11 @@ pub(super) fn color_graph(
             continue;
         };
         let mut forbidden: [bool; 64] = [false; 64];
-        if !bug_i1 {
-            for &nb in interference.neighbors(node as ValueId) {
-                match color[nb as usize] {
-                    Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
-                    Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
-                    _ => {}
-                }
+        for &nb in interference.neighbors(node as ValueId) {
+            match color[nb as usize] {
+                Place::IntReg(r) if !c.is_fp => forbidden[r as usize] = true,
+                Place::FpReg(r) if c.is_fp => forbidden[r as usize] = true,
+                _ => {}
             }
         }
         // Bank size cap: BADC_MAX_GPR / BADC_MAX_FPR truncate each bank
@@ -796,7 +776,7 @@ pub(super) fn color_graph(
                 }
             });
         color[node] = match pick {
-            Some(r) if c.is_fp != bug_i3 => Place::FpReg(r),
+            Some(r) if c.is_fp => Place::FpReg(r),
             Some(r) => Place::IntReg(r),
             None => {
                 let slot = spill_count;

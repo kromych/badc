@@ -1171,7 +1171,7 @@ pub(super) struct Fixup {
 /// terminators emit a placeholder branch and record a fixup to be
 /// patched after the whole layout is known.
 ///
-/// Calling convention (Phase 1):
+/// Calling convention:
 /// * VM accumulator `a` lives in `x19` (callee-saved across calls).
 /// * The VM stack rides on the native stack: an accumulator
 ///   push lowers to `str x19, [sp, #-16]!`, every binary op

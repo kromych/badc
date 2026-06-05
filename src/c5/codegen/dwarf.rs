@@ -38,9 +38,6 @@
 //! per-attribute encodings) keep their hand-rolled byte writes;
 //! the schema treatment is reserved for the spec's fixed-layout
 //! tables.
-//!
-//! Phase 2: `.debug_frame` / `__eh_frame` for unwinding.
-//! Phase 3: wire DWARF into the PE writer.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -2653,7 +2650,7 @@ fn advance_line(buf: &mut Vec<u8>, delta: i64) {
 
 struct StrTable {
     bytes: Vec<u8>,
-    // Phase 1 didn't dedupe string contents; the table is small
+    // The table does not dedupe string contents; it is small
     // (one entry per user function plus the CU name and producer)
     // and the writer reads it sequentially. The base-type names
     // come from a small `&'static str` set, so dedup
@@ -2861,7 +2858,7 @@ mod tests {
     #[test]
     fn classify_struct_value_routes_to_struct_entry() {
         // Plain struct id 0 (no pointer level) lands on the
-        // dedicated `Struct` variant; phase 1C emits a real
+        // dedicated `Struct` variant, which emits a real
         // DW_TAG_structure_type.
         let struct_ty = types::STRUCT_BASE;
         assert_eq!(

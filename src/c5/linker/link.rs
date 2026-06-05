@@ -266,7 +266,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
              `_Thread_local` storage -- merging multiple TLS blocks needs \
              per-unit TPOFF relocations against the merged layout, which \
              aren't wired yet (TODO). Combine the `_Thread_local` \
-             definitions into a single translation unit for now.",
+             definitions into a single translation unit.",
         ));
     }
     let (tls_data, tls_init_size) = match tls_objs.first() {
@@ -1060,8 +1060,8 @@ pub struct PltTrampoline {
 ///     trampoline in order of first occurrence (one entry per
 ///     import index that had at least one call-site reloc).
 ///
-/// Limited to `NativeMachine::X86_64` for now; aarch64 needs the
-/// matching `adrp + ldr + br` shape and lands separately.
+/// Limited to `NativeMachine::X86_64`.
+/// TODO: emit the matching aarch64 `adrp + ldr + br` trampoline shape.
 pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
     if merged.machine != NativeMachine::X86_64 {
         return Err(err(&format!(

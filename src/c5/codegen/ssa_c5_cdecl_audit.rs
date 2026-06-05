@@ -15,7 +15,7 @@
 //! The downstream prologue / call-marshal switches use the
 //! classification once the per-arch emit consumes it.
 
-#![cfg_attr(not(feature = "std"), allow(dead_code))]
+#![cfg_attr(not(feature = "codegen_test"), allow(dead_code))]
 
 use alloc::collections::BTreeSet;
 
@@ -113,10 +113,11 @@ pub(crate) fn audit_function(func: &FunctionSsa) -> C5CdeclAudit {
     }
 }
 
-/// Emit one audit line per function to stderr when the env var
-/// is set. No-op when the feature is off or the variable is not
-/// set so a default release build pays no per-function cost.
-#[cfg(feature = "std")]
+/// Emit one audit line per function to stderr when the env var is set.
+/// The `BADC_C5_CDECL_AUDIT` variable is consulted only under the
+/// `codegen_test` feature; a production build compiles this to a no-op
+/// and never reads the environment or walks the functions.
+#[cfg(feature = "codegen_test")]
 pub(crate) fn maybe_dump_audit(funcs: &[FunctionSsa]) {
     if std::env::var("BADC_C5_CDECL_AUDIT").is_err() {
         return;
@@ -156,5 +157,5 @@ pub(crate) fn maybe_dump_audit(funcs: &[FunctionSsa]) {
     );
 }
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(feature = "codegen_test"))]
 pub(crate) fn maybe_dump_audit(_funcs: &[FunctionSsa]) {}

@@ -1,9 +1,10 @@
 # badc demos
 
 End-to-end programs that exercise badc on something more substantial
-than a fixture. Build with the c5 dialect badc supports today (no
-struct array indexing, no struct-member function calls, parallel int
-arrays for everything).
+than a fixture. Build with the c5 dialect badc supports today
+(structs / unions / bitfields / enums, arrays of structs, function
+pointers, varargs, `_Thread_local`); see [`../c99-gaps.md`](../c99-gaps.md)
+for the divergences from C99.
 
 Each demo runs on **macOS** (aarch64), **Linux** (x86_64 and aarch64),
 and **Windows** (x86_64 and aarch64). The platform-specific bits
@@ -13,17 +14,18 @@ Win32 thread bindings come from the shipped `<sys/socket.h>`,
 
 ## Build flavours
 
-The multi-source library demos (miniz, kissfft, bzip2) each build
-their smoke harness three different ways at both `-O0` and `-O`:
+The multi-source library demos (miniz, kissfft, bzip2, tweetnacl,
+monocypher, bearssl) each build their smoke harness three different
+ways at both `-O0` and `-O`:
 
 1. **Amalgamation** -- one combined source file straight through
    `badc`. The classic single-TU path; same shape `sqlite3.c +
    shell.c` already exercises.
 2. **Translation units** -- `badc -c` on each `.c` file (emitting
-   ELF-wrapped `.badc.text` / `.badc.data` `.o` files), then
-   `badc -o app *.o` to link them. Exercises the linker's
-   cross-TU `Op::JsrExt` binding-merge and the C99 6.2.2
-   internal / external linkage rules.
+   native ELF64 ET_REL `.o` files with machine code, `.symtab`,
+   and `.rela.text` relocs), then `badc -o app *.o` to link them.
+   Exercises the linker's cross-TU symbol resolution and the
+   C99 6.2.2 internal / external linkage rules.
 3. **Archive** -- `badc --ar -o libfoo.a *.c` to bundle the
    library into a SysV ar(5) archive with `/` symbol index, then
    `badc -o app main.c -L. -l foo` to pull members in by

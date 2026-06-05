@@ -34,9 +34,9 @@ use super::super::ir::{Block, FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 
 /// `inst.is_inline_candidate(cap)`-style predicate. See module docs.
 fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     let say = |reason: &str| {
         if trace {
             eprintln!(
@@ -47,7 +47,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             );
         }
     };
-    #[cfg(not(feature = "std"))]
+    #[cfg(not(feature = "codegen_test"))]
     let say = |_: &str| {};
 
     if func.is_variadic {
@@ -58,7 +58,8 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
     // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
     // FallThrough) drive intra-callee control flow; the splice
     // rewrites the single Return to a `Jmp(postfix)`. Multi-Return
-    // shapes would need a postfix phi and stay rejected for now.
+    // shapes would need a postfix phi and are rejected.
+    // TODO: support multi-Return callees via a postfix phi.
     let mut return_blocks = 0usize;
     for blk in &func.blocks {
         match blk.terminator {
@@ -803,13 +804,17 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
 /// callee is eligible per `is_inline_candidate`; `cap == 0` disables
 /// the pass.
 pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     let trace = std::env::var("BADC_LOG_INLINE").is_ok();
     // Env-var override for the `is_inline` attribute pending parser
     // plumbing for the `inline` keyword: a comma-separated list of
     // function names flips `is_inline = true` so the body-size cap
-    // is bypassed at candidate evaluation.
-    #[cfg(feature = "std")]
+    // is bypassed at candidate evaluation. Read only under the
+    // `codegen_test` feature so a production build never consults the
+    // environment.
+    // TODO: drive `is_inline` from the parsed `inline` specifier and
+    // drop this override.
+    #[cfg(feature = "codegen_test")]
     if let Ok(names) = std::env::var("BADC_FORCE_INLINE") {
         let want: alloc::collections::BTreeSet<&str> = names
             .split(',')
@@ -824,7 +829,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
     }
     let any_marked = funcs.iter().any(|f| f.is_inline);
     if funcs.is_empty() || (cap == 0 && !any_marked) {
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if trace {
             eprintln!(
                 "[inline] short-circuit cap={cap} funcs={n} any_marked={m}",
@@ -847,7 +852,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
                 candidates.insert(f.ent_pc, f);
             }
         }
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if trace {
             eprintln!(
                 "[inline] iter={i} cap={cap} funcs={n} candidates={c}",

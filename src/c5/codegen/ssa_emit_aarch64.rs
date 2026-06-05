@@ -266,7 +266,7 @@ fn bail_msg(reason: &str) {
 }
 
 fn bail(reason: &str, value: u32, place: Place) {
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!(
             "ssa emit aarch64: bailed -- {reason} v{value} place={:?}",
@@ -608,7 +608,7 @@ pub(super) fn emit_function(
                 macho_tlv_descriptors,
                 &mut current_alloca_top,
             ) {
-                #[cfg(feature = "std")]
+                #[cfg(feature = "codegen_test")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
                     eprintln!(
                         "ssa emit: bailed on inst v{v}: {:?} (place {:?})",

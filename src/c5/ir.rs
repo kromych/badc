@@ -397,10 +397,10 @@ pub(crate) struct FunctionSsa {
     /// `__attribute__((always_inline))`. The inliner bypasses the
     /// `--inline-cap=N` body-size gate for these, matching the
     /// gcc / clang policy that `inline` is a hint the optimiser
-    /// should honour at every -O level. Parser plumbing for the
-    /// keyword is pending; for now the field is set via the
-    /// `BADC_FORCE_INLINE=name1,name2,...` env var so the path is
-    /// testable without touching every decl-spec call site.
+    /// should honour at every -O level. The `codegen_test`-only
+    /// `BADC_FORCE_INLINE=name1,name2,...` env var sets this field for
+    /// named functions so the path is testable.
+    /// TODO: set this from the parsed `inline` function specifier.
     pub is_inline: bool,
     /// Flat list of all SSA instructions in the function, indexed
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous

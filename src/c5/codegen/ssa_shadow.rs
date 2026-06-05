@@ -159,7 +159,7 @@ fn drop_unreachable_statics(funcs: &mut Vec<FunctionSsa>, program: &Program) {
 
     funcs.retain(|f| {
         let keep = reachable.contains(&f.ent_pc);
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if !keep && std::env::var("BADC_DEBUG_STATIC_DCE").is_ok() {
             std::eprintln!(
                 "[static_dce] dropping unreachable function `{}` ent_pc={}",

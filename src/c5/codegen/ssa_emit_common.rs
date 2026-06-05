@@ -25,22 +25,27 @@ pub(super) fn slots16(n_slots: u32) -> u32 {
     align16(n_slots * 8)
 }
 
-/// Whether the `BADC_TIME_PASSES` environment variable is set.
-/// Gates the wall-clock timer instrumentation in the codegen
-/// pipeline so a default release build pays no per-pass
-/// std::time::Instant cost.
-#[cfg(feature = "std")]
+/// Whether per-pass wall-clock instrumentation is enabled. The
+/// `BADC_TIME_PASSES` environment variable is consulted only under the
+/// `codegen_test` feature; a production build always reports `false`
+/// and never reads the environment or pays the per-pass
+/// `std::time::Instant` cost.
+#[cfg(feature = "codegen_test")]
 pub(super) fn time_passes_enabled() -> bool {
     std::env::var("BADC_TIME_PASSES").is_ok()
 }
 
-/// Run `f`, measure wall-clock with `Instant::elapsed`, and
-/// print one `pass: <label> -- <us>us` line on stderr when
-/// `BADC_TIME_PASSES` is set. Returns whatever `f` returned so
-/// the caller can wrap a value-producing closure in place.
-/// No-op when the feature is off or the env var is unset
-/// (the closure still runs).
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(feature = "codegen_test")))]
+pub(super) fn time_passes_enabled() -> bool {
+    false
+}
+
+/// Run `f`, measure wall-clock with `Instant::elapsed`, and print one
+/// `pass: <label> -- <us>us` line on stderr when `time_passes_enabled`.
+/// Returns whatever `f` returned so the caller can wrap a
+/// value-producing closure in place. A no-op (the closure still runs)
+/// outside the `codegen_test` feature.
+#[cfg(feature = "codegen_test")]
 pub(super) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
     if !time_passes_enabled() {
         return f();
@@ -52,20 +57,20 @@ pub(super) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
     r
 }
 
-#[cfg(not(feature = "std"))]
+#[cfg(not(feature = "codegen_test"))]
 pub(super) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
     f()
 }
 
 /// Diagnostic surface for a per-function SSA-emit fallback. The
 /// per-arch emit paths call this when they hit a shape they
-/// don't cover; the message lands on stderr only when
-/// `BADC_DUMP_SSA` is set, so production builds stay quiet. The
-/// caller passes its own backend tag (`"x86_64"`, `"aarch64"`)
-/// so logs from a single run with both targets emit can be
-/// disambiguated by source.
+/// don't cover; the message lands on stderr only under the
+/// `codegen_test` feature when `BADC_DUMP_SSA` is set, so production
+/// builds never read the environment. The caller passes its own
+/// backend tag (`"x86_64"`, `"aarch64"`) so logs from a single run
+/// with both targets emit can be disambiguated by source.
 pub(super) fn bail_msg(backend: &str, reason: &str) {
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
         eprintln!("ssa emit {backend}: bailed -- {reason}");
     }

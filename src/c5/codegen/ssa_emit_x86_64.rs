@@ -173,7 +173,7 @@ fn pick_caller_saved_scratch_live_aware(
 ///   `n_reg * 16`, or 0 when every register-passed parameter is
 ///   `ParamRef`-seeded with no address taken and no surviving
 ///   `Load/StoreLocal` -- in which case the entire register
-///   stripe drops out and no `pop r10` / `push r10` dance is
+///   stripe drops out and no `pop r10` / `push r10` sequence is
 ///   needed to preserve the return address.
 /// * Non-variadic, host-stack overflow: full `n_params * 16`.
 /// * Struct-returning callees: the walker excludes them from
@@ -1341,7 +1341,7 @@ pub(super) fn emit_function(
                 &mut current_alloca_top,
                 &param_from_home,
             ) {
-                #[cfg(feature = "std")]
+                #[cfg(feature = "codegen_test")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
                     eprintln!(
                         "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
@@ -1670,7 +1670,7 @@ fn emit_prologue(
     // bytes. Variadic callees, fully-Native callees with every
     // parameter `ParamRef`-seeded, and 0-param callees all
     // produce 0 and skip the entire `pop r10` / `push r10`
-    // dance (the return address stays at the top of the stack
+    // sequence (the return address stays at the top of the stack
     // where the caller pushed it).
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
@@ -4621,7 +4621,7 @@ fn emit_mcpy(
 ///     tail call has just populated. Restricted on this first pass
 ///     for tractability; the more general path can drop this gate
 ///     once it is shown to be safe via an explicit save-before-marshal
-///     dance.
+///     sequence.
 fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
     block: &super::super::ir::Block,
@@ -4847,7 +4847,7 @@ fn emit_return(
     // read from there so the two sides agree across every
     // branch the prologue takes (variadic, host-stack overflow,
     // ParamRef-elided, n_params == 0). When 0, the `pop r11`
-    // / `push r11` dance is skipped entirely because the return
+    // / `push r11` sequence is skipped entirely because the return
     // address is already on top of the stack.
     let _ = func;
     if frame.param_spill_bytes > 0 {

@@ -771,8 +771,9 @@ pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -
 
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // Opt out of promotion for A/B measurement against the unpromoted
-    // frame-slot codegen.
-    #[cfg(feature = "std")]
+    // frame-slot codegen. Diagnostic only: read under the `codegen_test`
+    // feature so a production build never consults the environment.
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return Vec::new();
     }
@@ -884,7 +885,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     // A slot that needs a join phi (its definition reaches a merge
     // from more than one block) is not promoted by the redirect; count
     // these to size the remaining opportunity.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_MEM2REG_STATS").is_ok() {
         let phi_gated = promotable
             .iter()
@@ -899,7 +900,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     if slots.is_empty() {
         return Vec::new();
     }
-    #[cfg(feature = "std")]
+    #[cfg(feature = "codegen_test")]
     if std::env::var("BADC_DUMP_MEM2REG").is_ok() {
         eprintln!(
             "mem2reg: fn {} ent_pc={} promoting slots {:?}",

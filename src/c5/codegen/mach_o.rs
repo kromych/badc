@@ -1097,8 +1097,8 @@ fn main_command(entry_file_offset: u64) -> Vec<u8> {
 }
 
 /// `LC_DYLD_INFO_ONLY` -- pointers into __LINKEDIT for dyld's
-/// rebase / bind / weak-bind / lazy-bind / export streams. Phase 1
-/// only uses eager bind; the rest are zero.
+/// rebase / bind / weak-bind / lazy-bind / export streams. Only
+/// eager bind is used; the rest are zero.
 #[allow(clippy::too_many_arguments)]
 fn dyld_info_only(
     rebase_off: u32,
@@ -1964,7 +1964,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // independently.
     // ---- __DWARF layout ----
     //
-    // Phase 1 DWARF sits between __DATA and
+    // __DWARF sits between __DATA and
     // __LINKEDIT in *both* LC order and file order. __LINKEDIT
     // has to remain the last file-resident segment because
     // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
@@ -2359,7 +2359,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
         let off = r.data_offset as usize;
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
             std::eprintln!(
                 "[code_reloc] data_off={:#x} target_ent_pc={} native_off={:#x} preferred_va={:#x}",

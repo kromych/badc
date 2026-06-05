@@ -542,8 +542,9 @@ impl Compiler {
                         // registers (SysV/AAPCS64: 1-2 GPRs for
                         // structs <= 16 bytes; Win64: a single GPR
                         // for <= 8 bytes, hidden pointer otherwise).
-                        // Implementing those splits is future work;
-                        // for now flag the mismatch loudly.
+                        // Flag the mismatch loudly.
+                        // TODO: split a small struct argument into the
+                        // ABI's argument registers instead of rejecting.
                         if self.symbols[id_idx].class == Token::Sys as i64
                             && is_struct_ty(self.ty)
                             && struct_ptr_depth(self.ty) == 0

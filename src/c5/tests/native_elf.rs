@@ -214,7 +214,7 @@ fn recursion_factorial() {
 
 #[test]
 fn printf_through_libc_got() {
-    // Phase B regression: printf needs the format string in __data
+    // printf needs the format string in __data
     // and the libc symbol resolved through .got. Linux follows
     // standard AAPCS64 so variadic args go in x1..x7 just like fixed
     // ones (no macOS-style stack packing).

@@ -1590,9 +1590,7 @@ pub(crate) struct Abi {
     /// Arch the lowering should produce instructions for. The
     /// `lower_for` dispatch already keys on this, but having it
     /// inside `Abi` lets ABI-aware helpers (entry stubs, fixup
-    /// patchers) carry one struct around rather than two. Read
-    /// in step 3 of the ABI plan when the entry-stub builder
-    /// lands.
+    /// patchers) carry one struct around rather than two.
     #[allow(dead_code)]
     pub arch: Arch,
     /// Integer arg-passing registers, in declaration order. The

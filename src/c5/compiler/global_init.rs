@@ -438,10 +438,9 @@ impl Compiler {
             }
         }
 
-        // Type-check: warn (don't error) if the constant
-        // doesn't match the declared type. For now we only
-        // care about pointer-vs-int mismatches the way the
-        // assignment path does.
+        // Type-check: warn (don't error) if the constant doesn't match
+        // the declared type. Only pointer-vs-int mismatches are
+        // diagnosed here, matching the assignment path.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
         if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
             let var_s = super::types::format_type(var_ty, &self.structs);

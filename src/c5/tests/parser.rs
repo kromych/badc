@@ -393,10 +393,8 @@ fn pragma_export_with_unknown_name_is_refused() {
 
 #[test]
 fn pragma_export_with_global_data_is_refused() {
-    // Today `#pragma export(...)` only handles functions.
-    // Pointing it at a global variable surfaces a clear "not
-    // a function" diagnostic so a future "data export"
-    // milestone has somewhere to land.
+    // `#pragma export(...)` only handles functions. Pointing it at a
+    // global variable surfaces a clear "not a function" diagnostic.
     let src = "
         int counter;
         #pragma export(counter)

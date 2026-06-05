@@ -91,10 +91,11 @@ markers.
 | `double`         | 8             | 8       |
 
 LP64 on macOS / Linux, LLP64 on Windows -- both match the
-host platform ABI. `float` is real IEEE 754 single-precision
-storage (4 bytes); the c5 arithmetic pipeline still carries
-f64 bits in the accumulator and narrows / widens at the
-load / store boundary.
+host platform ABI. `float` and `double` are first-class
+floating-point values: the register allocator gives them a
+separate FP register bank. `double` loads / stores with a
+single FP move; `float` is IEEE 754 single-precision storage
+(4 bytes) that widens to f64 on load and narrows on store.
 
 **Bare `char` is unsigned** on every target (1-byte zero-
 extending load). gcc and clang differ on this per host
@@ -225,8 +226,8 @@ C11+ features showing up in modern code:
   PE optional-header `Subsystem` field. Quietly ignored on
   non-PE targets so the same source builds for every OS.
 - `#pragma once`.
-- `--interp` (bytecode VM with pointer tracking),
-  `--jit` (in-process), `--dump-asm`.
+- `--interp` (SSA interpreter with pointer tracking),
+  `--jit` (in-process), `--dump-ssa`.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include`
   resolution trace on stderr. Missing headers print as
   `! name (missing)`.

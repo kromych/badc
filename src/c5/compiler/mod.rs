@@ -1007,22 +1007,22 @@ impl Compiler {
         for name in &opts.undefines {
             pp.undef(name);
         }
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         let pp_start = std::time::Instant::now();
         let (preprocessed, deferred_error) = match pp.process(&source) {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!("pass: preprocess -- {}us", pp_start.elapsed().as_micros());
         }
         // Debug knob: when BADC_DUMP_PP is set, write the post-
-        // preprocessor source to /tmp/badc-pp.c so a developer
-        // chasing a parser failure can inspect the exact token
-        // stream the lexer is about to see. Uses std::env so it
-        // only fires under the std feature; no_std builds skip it.
-        #[cfg(feature = "std")]
+        // preprocessor source to /tmp/badc-pp.c so the exact token
+        // stream the lexer is about to see can be inspected. Read
+        // only under the `codegen_test` feature so a production build
+        // never consults the environment.
+        #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_DUMP_PP").is_ok() {
             let _ = std::fs::write("/tmp/badc-pp.c", &preprocessed);
         }
@@ -1298,10 +1298,10 @@ impl Compiler {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         let parse_start = std::time::Instant::now();
         self.run_compile()?;
-        #[cfg(feature = "std")]
+        #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
                 "pass: run_compile (parse + AST build) -- {}us",

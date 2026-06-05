@@ -93,18 +93,18 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     terminator Jmp(b5)   (exit_acc=v17)
   block 5  start_pc=0
     v18  LoadLocal { off=-7, kind=F64 }                   -> d0
-    v19  StoreLocal { off=-2, value=v18, kind=F64 }       -> -
-    v20  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v19  Imm(0)                                           -> x0
+    v20  LoadLocal { off=-2, kind=F64 }                   -> d1
     v21  Imm(4602678819172646912)                         -> x0
-    v22  Binop { op=fne, lhs=v20, rhs=v21 }               -> x0
+    v22  Binop { op=fne, lhs=v18, rhs=v21 }               -> x0
     terminator Bz { cond=v22, target=b7, fall=b6 }   (exit_acc=v22)
   block 6  start_pc=0
     v23  Imm(2)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
   block 7  start_pc=0
-    v24  LoadLocal { off=-1, kind=F64 }                   -> d0
-    v25  LoadLocal { off=-2, kind=F64 }                   -> d1
-    v26  Binop { op=fadd, lhs=v24, rhs=v25 }              -> d0
+    v24  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v25  LoadLocal { off=-2, kind=F64 }                   -> d2
+    v26  Binop { op=fadd, lhs=v24, rhs=v18 }              -> d0
     v27  Imm(4611686018427387904)                         -> x0
     v28  Binop { op=fne, lhs=v26, rhs=v27 }               -> x0
     terminator Bz { cond=v28, target=b9, fall=b8 }   (exit_acc=v28)
@@ -181,10 +181,10 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v70  Binop { op=fadd, lhs=v60, rhs=v69 }              -> d0
     v71  FpCast { kind=FpToInt, value=v70 }               -> x0
     v72  FpCast { kind=IntToFp, value=v71 }               -> d0
-    v73  StoreLocal { off=-4, value=v72, kind=F64 }       -> -
-    v74  LoadLocal { off=-4, kind=F64 }                   -> d0
+    v73  Imm(0)                                           -> x0
+    v74  LoadLocal { off=-4, kind=F64 }                   -> d1
     v75  Imm(4611686018427387904)                         -> x0
-    v76  Binop { op=fne, lhs=v74, rhs=v75 }               -> x0
+    v76  Binop { op=fne, lhs=v72, rhs=v75 }               -> x0
     terminator Bz { cond=v76, target=b24, fall=b23 }   (exit_acc=v76)
   block 23  start_pc=0
     v77  Imm(6)                                           -> x0
@@ -212,11 +212,11 @@ fn ent_pc=14 n_params=0 variadic=false locals=11
     v91  Binop { op=fadd, lhs=v81, rhs=v90 }              -> d0
     v92  FpCast { kind=FpToInt, value=v91 }               -> x0
     v93  FpCast { kind=IntToFp, value=v92 }               -> d0
-    v94  StoreLocal { off=-5, value=v93, kind=F64 }       -> -
-    v95  LoadLocal { off=-5, kind=F64 }                   -> d0
+    v94  Imm(0)                                           -> x0
+    v95  LoadLocal { off=-5, kind=F64 }                   -> d1
     v96  Imm(4611686018427387904)                         -> x0
     v97  Fneg(v96)                                        -> d1
-    v98  Binop { op=fne, lhs=v95, rhs=v97 }               -> x0
+    v98  Binop { op=fne, lhs=v93, rhs=v97 }               -> x0
     terminator Bz { cond=v98, target=b29, fall=b28 }   (exit_acc=v98)
   block 28  start_pc=0
     v99  Imm(7)                                           -> x0

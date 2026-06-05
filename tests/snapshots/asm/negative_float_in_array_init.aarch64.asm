@@ -119,10 +119,6 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	ldr	d1, [x0]
                	fadd	d0, d0, d1
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x94000000         // =2483027968
                	movk	x0, #0x449a, lsl #32
                	movk	x0, #0x421e, lsl #48
@@ -134,8 +130,6 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	cset	x1, gt
                	cbnz	x1, <addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x94000000         // =2483027968
                	movk	x0, #0x449a, lsl #32
                	movk	x0, #0x421e, lsl #48

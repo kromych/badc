@@ -113,20 +113,20 @@ fn ent_pc=16 n_params=0 variadic=false locals=7
     terminator Return(v17)   (exit_acc=v17)
   block 6  start_pc=0
     v18  Call { target_pc=15, args=[], fp_return=true }   -> d0
-    v19  StoreLocal { off=-2, value=v18, kind=F64 }       -> -
-    v20  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v19  Imm(0)                                           -> x0
+    v20  LoadLocal { off=-2, kind=F64 }                   -> d1
     v21  Imm(4607182418800017408)                         -> x0
     v22  Fneg(v21)                                        -> d1
-    v23  Binop { op=fne, lhs=v20, rhs=v22 }               -> x0
+    v23  Binop { op=fne, lhs=v18, rhs=v22 }               -> x0
     terminator Bz { cond=v23, target=b8, fall=b7 }   (exit_acc=v23)
   block 7  start_pc=0
     v24  Imm(3)                                           -> x0
     terminator Return(v24)   (exit_acc=v24)
   block 8  start_pc=0
-    v25  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v25  LoadLocal { off=-2, kind=F64 }                   -> d1
     v26  Imm(-1)                                          -> x0
     v27  FpCast { kind=IntToFp, value=v26 }               -> d1
-    v28  Binop { op=fne, lhs=v25, rhs=v27 }               -> x0
+    v28  Binop { op=fne, lhs=v18, rhs=v27 }               -> x0
     terminator Bz { cond=v28, target=b10, fall=b9 }   (exit_acc=v28)
   block 9  start_pc=0
     v29  Imm(4)                                           -> x0

@@ -91,12 +91,8 @@ Disassembly of section .text:
                	str	x19, [sp]
                	bl	<addr>
                	fmov	d0, x0
-               	sub	x17, x29, #0x8
-               	str	d0, [x17]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, mi
@@ -107,8 +103,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -120,8 +114,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -133,8 +125,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -146,8 +136,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -159,8 +147,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -173,8 +159,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fcmp	d0, d0
                	cset	x0, mi
                	cbz	x0, <addr>
@@ -184,8 +168,6 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	w1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	fcmp	d0, d0
                	cset	x0, eq
                	cbz	x0, <addr>

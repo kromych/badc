@@ -86,8 +86,6 @@ Disassembly of section .text:
                	mulsd	%xmm1, %xmm0
                	cvtsi2sd	%rax, %xmm1
                	mulsd	%xmm1, %xmm0
-               	movsd	%xmm0, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -174,4 +172,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

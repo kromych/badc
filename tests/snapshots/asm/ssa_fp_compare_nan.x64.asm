@@ -88,10 +88,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	callq	<addr>
-               	movsd	%xmm0, -0x8(%rbp,%riz)
                	xorq	%rax, %rax
                	movl	%eax, -0x10(%rbp)
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	setb	%al
@@ -106,7 +104,6 @@ Disassembly of section .text:
                	orq	$0x1, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -119,7 +116,6 @@ Disassembly of section .text:
                	orq	$0x2, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -135,7 +131,6 @@ Disassembly of section .text:
                	orq	$0x4, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -148,7 +143,6 @@ Disassembly of section .text:
                	orq	$0x8, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -164,7 +158,6 @@ Disassembly of section .text:
                	orq	$0x10, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	xorq	%rax, %rax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -180,7 +173,6 @@ Disassembly of section .text:
                	orq	$0x20, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	ucomisd	%xmm0, %xmm0
                	setb	%al
                	movzbq	%al, %rax
@@ -194,7 +186,6 @@ Disassembly of section .text:
                	orq	$0x40, %rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>
-               	movsd	-0x8(%rbp,%riz), %xmm0
                	ucomisd	%xmm0, %xmm0
                	sete	%al
                	movzbq	%al, %rax
@@ -228,3 +219,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

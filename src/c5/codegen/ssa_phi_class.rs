@@ -69,6 +69,18 @@ impl PhiClasses {
                 if rr == rs {
                     continue;
                 }
+                // Never coalesce two values whose register class differs:
+                // the allocator places every class member in one physical
+                // location, and an FP value and an integer value cannot
+                // share a register or a slot's classification. An FP phi's
+                // operands are FP, so this normally never fires, but it
+                // guards against an FP-classed operand merging with an
+                // integer-classed one (a class-crossing location share).
+                if super::ssa_alloc::produces_fp_result(&func.insts[idx])
+                    != super::ssa_alloc::produces_fp_result(&func.insts[src as usize])
+                {
+                    continue;
+                }
                 if classes_interfere(func, live, &members[rr as usize], &members[rs as usize]) {
                     continue;
                 }
@@ -220,6 +232,73 @@ mod tests {
         let root = classes.find(3);
         assert_eq!(classes.find(1), root, "v1 operand must join the phi class");
         assert_eq!(classes.find(2), root, "v2 operand must join the phi class");
+    }
+
+    #[test]
+    fn class_differing_operand_is_not_coalesced() {
+        // b0: v0=Imm(0); Bz v0 -> b1 else b2
+        // b1: v1=Fneg(...)  (FP-classed); Jmp b3
+        // b2: v2=Imm(2)     (integer-classed); Jmp b3
+        // b3: v3=Phi[b1:v1, b2:v2] kind F64 (FP-classed); Return v3
+        // v1 and v2 both die on their edge and neither interferes with
+        // v3, but v2 is integer-classed while the phi is FP-classed: the
+        // class guard must keep v2 in its own singleton class even though
+        // the interference test would otherwise allow the merge.
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::Fneg(0),
+            Inst::Imm(2),
+            Inst::Phi {
+                incoming: vec![(1, 1), (2, 2)],
+                kind: LoadKind::F64,
+            },
+        ];
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Bz {
+                    cond: 0,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..2,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 1,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 2..3,
+                terminator: Terminator::Jmp(3),
+                exit_acc: 2,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 3..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            },
+        ];
+        let func = func_with(insts, blocks);
+        let live = Liveness::compute(&func);
+        let mut classes = PhiClasses::build(&func, &live);
+        let root = classes.find(3);
+        // The FP-classed operand v1 joins the FP phi class.
+        assert_eq!(
+            classes.find(1),
+            root,
+            "FP operand v1 must join the phi class"
+        );
+        // The integer-classed operand v2 must stay in its own class.
+        assert_ne!(
+            classes.find(2),
+            root,
+            "integer operand v2 must not coalesce with an FP phi"
+        );
     }
 
     #[test]

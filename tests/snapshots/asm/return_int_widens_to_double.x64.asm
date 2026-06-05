@@ -130,8 +130,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movsd	%xmm0, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
@@ -152,7 +150,6 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	movabsq	$-0x1, %rax
                	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
@@ -194,4 +191,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

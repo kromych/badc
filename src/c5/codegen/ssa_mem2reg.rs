@@ -614,22 +614,112 @@ fn narrow_load_replacement(kind: LoadKind, value: ValueId) -> Inst {
     }
 }
 
-/// A slot whose value lives in the integer register file at every
-/// definition. An `I64` slot load is integer-classed, so its
-/// consumers read an integer register; promoting a slot whose store
-/// value is FP-classed (a `double` produced by an FP op, stored via
-/// the `StoreLocal { kind: I64 }` bit-pattern path) would redirect
-/// those consumers to an FP register and cross the register files.
-fn slot_stores_only_int(func: &FunctionSsa, slot: i64) -> bool {
+/// Register class of a promotable slot, decided by the register
+/// class of every value stored into it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SlotClass {
+    /// Every stored value is integer-classed. The slot promotes to an
+    /// integer phi / direct redirect: its loads read an integer
+    /// register.
+    Int,
+    /// Every stored value is FP-classed (a `double` / `float` produced
+    /// by an FP op or an FP-classed load). The slot promotes to an FP
+    /// phi; its loads read an FP register. `kind` is the full-width FP
+    /// `LoadKind` (`F64` or `F32`) the inserted phi carries.
+    Fp(LoadKind),
+}
+
+/// Classify a slot by the register class of its stored values and the
+/// kind of its loads. A slot whose stores are all integer-classed
+/// promotes through the integer path. A slot promotes through the FP
+/// path only when every store value is FP-classed AND every load reads
+/// it at a matching full-width FP kind: such a slot's loads and stores
+/// all live in the FP register file, so the redirect / phi keeps every
+/// reference FP-classed.
+///
+/// The load-kind check is load-bearing. c5 reinterprets an `f64` as an
+/// `i64` bit pattern for the integer-register argument window of a
+/// c5-internal call: an FP value is stored via `StoreLocal { kind: I64 }`
+/// and reloaded via `LoadLocal { kind: I64 }` into an integer register.
+/// That load's consumer (the call's argument marshal) expects an
+/// integer register, so the slot must stay frame-resident -- promoting
+/// it as FP would redirect the integer-classed consumer to an FP
+/// register and cross the register files. A slot whose stores are FP
+/// but whose loads are integer (or mixed) returns `None`.
+///
+/// A slot that mixes integer and FP stores is a union / type-pun
+/// (C99 6.5.2.3) and also returns `None`.
+///
+/// A slot with no stores (write-free) is treated as integer-classed;
+/// such a slot is read before any definition and the rename pass
+/// records it in `failed`, leaving it in memory.
+fn slot_class(func: &FunctionSsa, slot: i64) -> Option<SlotClass> {
+    let mut saw_int_store = false;
+    let mut fp_store_kind: Option<LoadKind> = None;
+    let mut saw_fp_load = false;
+    let mut saw_non_fp_load = false;
+    let mut fp_load_kind: Option<LoadKind> = None;
     for inst in &func.insts {
-        if let Inst::StoreLocal { off, value, .. } = inst
-            && *off == slot
-            && super::ssa_alloc::produces_fp_result(&func.insts[*value as usize])
-        {
-            return false;
+        match inst {
+            Inst::StoreLocal {
+                off, value, kind, ..
+            } if *off == slot => {
+                if super::ssa_alloc::produces_fp_result(&func.insts[*value as usize]) {
+                    // A full-width FP store kind selects the slot's
+                    // width. A narrowing FP store cannot occur (there is
+                    // no sub-width FP store kind), so the store kind is
+                    // F32 or F64 directly.
+                    let k = match kind {
+                        StoreKind::F32 => LoadKind::F32,
+                        _ => LoadKind::F64,
+                    };
+                    match fp_store_kind {
+                        None => fp_store_kind = Some(k),
+                        // A slot written at two FP widths would need a
+                        // width-changing phi; keep it in memory.
+                        Some(prev) if prev != k => return None,
+                        Some(_) => {}
+                    }
+                } else {
+                    saw_int_store = true;
+                }
+            }
+            Inst::LoadLocal { off, kind } if *off == slot => match kind {
+                LoadKind::F32 | LoadKind::F64 => {
+                    saw_fp_load = true;
+                    match fp_load_kind {
+                        None => fp_load_kind = Some(*kind),
+                        Some(prev) if prev != *kind => return None,
+                        Some(_) => {}
+                    }
+                }
+                _ => saw_non_fp_load = true,
+            },
+            _ => {}
         }
     }
-    true
+    match (saw_int_store, fp_store_kind) {
+        // FP-classed stores only: promote as FP only when every load is
+        // also FP and at the same width as the store. Any integer load
+        // (the bit-pattern reinterpret path) or a width mismatch keeps
+        // the slot frame-resident.
+        (false, Some(store_k)) => {
+            if saw_non_fp_load {
+                return None;
+            }
+            if saw_fp_load && fp_load_kind != Some(store_k) {
+                return None;
+            }
+            Some(SlotClass::Fp(store_k))
+        }
+        // Mixed int + fp stores: union / type-pun, keep in memory.
+        (_, Some(_)) => None,
+        // No FP store: an integer slot. (Any FP load of an integer slot
+        // is itself a type-pun handled by the existing narrow / full
+        // width gates, which an FP load fails, so the slot stays in
+        // memory there.)
+        (_, None) => Some(SlotClass::Int),
+    }
 }
 
 // Promote address-free, full-width local slots that need no phi to
@@ -750,25 +840,47 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     let phi_promote = true;
     // Slots read at one narrow width promote by extending the reaching
     // value at each load; full-width I64 slots redirect the load to
-    // the value directly.
+    // the value directly. An FP-classed slot (all stores produce a
+    // floating-point value) promotes to an FP phi -- recorded in
+    // `fp_slot_kind` so the inserted phi carries the FP `LoadKind` and
+    // the allocator classes its root in the FP register file.
     let mut narrow_load: alloc::collections::BTreeMap<i64, LoadKind> =
+        alloc::collections::BTreeMap::new();
+    let mut fp_slot_kind: alloc::collections::BTreeMap<i64, LoadKind> =
         alloc::collections::BTreeMap::new();
     let slots: BTreeSet<i64> = promotable
         .iter()
         .copied()
         .filter(|s| phi_promote || !phi_blocks.contains_key(s))
-        .filter(|s| slot_stores_only_int(func, *s))
         .filter(|s| {
-            if slot_is_full_width(func, *s) {
-                return true;
+            match slot_class(func, *s) {
+                // Mixed int + fp stores (a union / type-pun): keep
+                // frame-resident.
+                None => false,
+                Some(SlotClass::Fp(kind)) => {
+                    // An FP slot is full width (no sub-width FP store
+                    // kind), so it never takes the narrow-load path.
+                    fp_slot_kind.insert(*s, kind);
+                    true
+                }
+                Some(SlotClass::Int) => {
+                    if slot_is_full_width(func, *s) {
+                        return true;
+                    }
+                    if let Some(kind) = slot_narrow_load_kind(func, *s) {
+                        narrow_load.insert(*s, kind);
+                        return true;
+                    }
+                    false
+                }
             }
-            if let Some(kind) = slot_narrow_load_kind(func, *s) {
-                narrow_load.insert(*s, kind);
-                return true;
-            }
-            false
         })
         .collect();
+    // Drop FP-kind entries for slots that did not survive the filter
+    // (a mixed slot returns `None` before reaching the insert, so this
+    // only prunes FP slots excluded by an earlier filter such as the
+    // phi-promote gate).
+    fp_slot_kind.retain(|s, _| slots.contains(s));
     // A slot that needs a join phi (its definition reaches a merge
     // from more than one block) is not promoted by the redirect; count
     // these to size the remaining opportunity.
@@ -807,9 +919,14 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             .filter(|(s, _)| slots.contains(s))
             .map(|(s, b)| (*s, b.clone()))
             .collect();
+        // An FP-classed slot's phi carries its FP `LoadKind` so
+        // `result_kind` classes the phi in the FP register file; every
+        // other slot uses the full-width integer kind (a narrow-load
+        // slot extends the reaching value at each load, on top of an
+        // `I64` phi).
         let phi_slot_kind: alloc::collections::BTreeMap<i64, LoadKind> = promoted_phi_blocks
             .keys()
-            .map(|s| (*s, LoadKind::I64))
+            .map(|s| (*s, fp_slot_kind.get(s).copied().unwrap_or(LoadKind::I64)))
             .collect();
         insert_phis(func, &promoted_phi_blocks, &phi_slot_kind)
     } else {

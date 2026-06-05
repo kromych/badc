@@ -93,10 +93,6 @@ Disassembly of section .text:
                	fmul	d0, d0, d1
                	scvtf	d1, x0
                	fmul	d0, d0, d1
-               	sub	x17, x29, #0x10
-               	str	d0, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	fmov	x0, d0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

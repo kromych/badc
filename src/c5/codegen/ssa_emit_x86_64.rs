@@ -546,6 +546,7 @@ fn emit_phi_predecessor_moves(
         // operands must be scheduled together rather than in two
         // independent passes.
         let mut moves: Vec<(Place, Place)> = Vec::new();
+        let mut fp_moves: Vec<(Place, Place)> = Vec::new();
         for id in head..end {
             let inst = &func.insts[id as usize];
             let super::super::ir::Inst::Phi { incoming, kind } = inst else {
@@ -566,26 +567,26 @@ fn emit_phi_predecessor_moves(
                 .unwrap_or(Place::None);
             // A phi merges one value per predecessor into a single
             // location, so the predecessor-exit move must stay within
-            // one register file: an FP value cannot be copied into a
-            // GPR phi home (or vice versa) by an integer mov without
-            // reinterpreting the bits. The location scheduler below
-            // lowers only integer-register and stack-slot moves; an FP
-            // phi (kind F32 / F64) would need a separate FP move path.
-            // Bail loudly rather than emit a class-crossing copy.
+            // one register file. An FP phi (kind F32 / F64) has its
+            // home and operands FP-classed; its move is scheduled over
+            // the FP locations (xmm registers and spill slots). Every
+            // other phi is integer-classed and scheduled over the
+            // integer locations. The two files do not alias, so the
+            // two parallel copies are independent.
             let phi_is_fp = matches!(
                 kind,
                 super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
             );
-            if phi_is_fp
-                || matches!(src_place, Place::FpReg(_))
-                || matches!(dst_place, Place::FpReg(_))
-            {
-                bail_msg("Phi: FP-classed phi predecessor move not lowered");
-                return false;
-            }
-            match (src_place, dst_place) {
-                (Place::None, _) | (_, Place::None) => {}
-                _ => moves.push((src_place, dst_place)),
+            if phi_is_fp {
+                match (src_place, dst_place) {
+                    (Place::None, _) | (_, Place::None) => {}
+                    _ => fp_moves.push((src_place, dst_place)),
+                }
+            } else {
+                match (src_place, dst_place) {
+                    (Place::None, _) | (_, Place::None) => {}
+                    _ => moves.push((src_place, dst_place)),
+                }
             }
         }
         // `hold` carries one cycle source persistently; `stage`
@@ -600,6 +601,10 @@ fn emit_phi_predecessor_moves(
         if !schedule_place_moves(code, &mut moves, frame, SCRATCH_R10, Reg(13)) {
             return false;
         }
+        // FP phi edges: xmm14 / xmm15 are reserved scratch outside the
+        // allocator's xmm pool, so they hold no live FP value across
+        // the terminator.
+        schedule_fp_place_moves(code, &mut fp_moves, frame, SCRATCH_XMM15, SCRATCH_XMM14);
     }
     true
 }
@@ -731,6 +736,80 @@ fn schedule_xmm_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
             for m in moves.iter_mut() {
                 if m.0 == cycle_src {
                     m.0 = scratch.0;
+                }
+            }
+        }
+    }
+}
+
+/// Emit a single resolved FP location-to-location move over `FpReg`
+/// and `Spill` places. `stage` is the scratch xmm for the
+/// spill-to-spill case (load then store); it must lie outside the
+/// allocator's xmm pool. `IntReg` and `None` places never reach here
+/// (an FP phi's home and its operands are FP-classed).
+fn emit_fp_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage: Reg) {
+    match (src, dst) {
+        (Place::FpReg(s), Place::FpReg(t)) => emit_movapd_xmm_xmm(code, Reg(t), Reg(s)),
+        (Place::FpReg(s), Place::Spill(slot)) => {
+            emit_movsd_mem_xmm(code, Reg::RSP, spill_slot_sp_offset(frame, slot), Reg(s));
+        }
+        (Place::Spill(slot), Place::FpReg(t)) => {
+            emit_movsd_xmm_mem(code, Reg(t), Reg::RSP, spill_slot_sp_offset(frame, slot));
+        }
+        (Place::Spill(ss), Place::Spill(ts)) => {
+            emit_movsd_xmm_mem(code, stage, Reg::RSP, spill_slot_sp_offset(frame, ss));
+            emit_movsd_mem_xmm(code, Reg::RSP, spill_slot_sp_offset(frame, ts), stage);
+        }
+        // Integer and None locations never reach here: an FP phi edge
+        // is FP-classed on both ends.
+        _ => {}
+    }
+}
+
+/// Sequentialize a parallel copy over FP locations (xmm registers and
+/// stack spill slots) for FP-classed phi predecessor moves. Mirrors
+/// [`schedule_place_moves`] with `movsd` / `movapd`: leaves first,
+/// then break a residual cycle by holding one cycle source in `hold`.
+/// `hold` and `stage` must lie outside the allocator's xmm pool so
+/// they collide with no pending source or destination.
+fn schedule_fp_place_moves(
+    code: &mut Vec<u8>,
+    moves: &mut Vec<(Place, Place)>,
+    frame: Frame,
+    hold: Reg,
+    stage: Reg,
+) {
+    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            if !tgt_still_a_source {
+                emit_fp_place_move(code, s, t, frame, stage);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            // Only cycle members remain. Save one cycle source into
+            // the `hold` xmm and redirect every move that reads it.
+            let cyc = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|s| !place_same_loc(*s, Place::FpReg(hold.0)))
+                .unwrap_or(moves[0].0);
+            // Copy the cycle source into `hold` (a register move or a
+            // spill reload). `materialize_fp` is unsuitable: for an
+            // `FpReg` source it returns the register without emitting,
+            // leaving `hold` unloaded.
+            emit_fp_place_move(code, cyc, Place::FpReg(hold.0), frame, stage);
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, cyc) {
+                    m.0 = Place::FpReg(hold.0);
                 }
             }
         }

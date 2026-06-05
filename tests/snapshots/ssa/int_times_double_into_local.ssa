@@ -79,9 +79,9 @@ fn ent_pc=14 n_params=2 variadic=false locals=3
     v11  LoadLocal { off=3, kind=I32 }                    -> x1
     v12  FpCast { kind=IntToFp, value=v3 }                -> d1
     v13  Binop { op=fmul, lhs=v10, rhs=v12 }              -> d0
-    v14  StoreLocal { off=-2, value=v13, kind=F64 }       -> -
-    v15  LoadLocal { off=-2, kind=F64 }                   -> d0
-    terminator Return(v15)   (exit_acc=v15)
+    v14  Imm(0)                                           -> x0
+    v15  LoadLocal { off=-2, kind=F64 }                   -> d1
+    terminator Return(v13)   (exit_acc=v13)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=main
 fn ent_pc=15 n_params=0 variadic=false locals=2

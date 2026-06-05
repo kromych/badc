@@ -565,6 +565,30 @@ fn verify_allocation(
         }
     }
 
+    // I3b: a phi's register class must match every operand's class.
+    // An FP phi is permitted (its root and operands all live in the FP
+    // file), but a phi must never merge an FP value with an integer one
+    // -- the predecessor-exit move that lowers the phi copies within one
+    // register file, so a class-crossing operand would emit a bit-
+    // reinterpreting move into the wrong file.
+    for (v, inst) in func.insts.iter().enumerate() {
+        let Inst::Phi { incoming, .. } = inst else {
+            continue;
+        };
+        let phi_fp = produces_fp_result(inst);
+        for &(_, src) in incoming {
+            if (src as usize) >= func.insts.len() {
+                continue;
+            }
+            let op_fp = produces_fp_result(&func.insts[src as usize]);
+            if op_fp != phi_fp {
+                report(alloc::format!(
+                    "I3b class: phi v{v} (fp={phi_fp}) merges operand v{src} (fp={op_fp}) of a different register class"
+                ));
+            }
+        }
+    }
+
     // I1: interfering values must hold distinct physical locations.
     // Group by place and check interference only within a group.
     let key = |p: Place| -> Option<(u8, u32)> {

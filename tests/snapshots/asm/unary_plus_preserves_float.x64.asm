@@ -119,8 +119,6 @@ Disassembly of section .text:
                	movsd	%xmm14, -0x38(%rbp,%riz)
                	jmp	<addr>
                	movsd	-0x38(%rbp,%riz), %xmm0
-               	movsd	%xmm0, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -135,9 +133,10 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	movsd	-0x8(%rbp,%riz), %xmm0
-               	movsd	-0x10(%rbp,%riz), %xmm1
-               	addsd	%xmm1, %xmm0
+               	movsd	-0x8(%rbp,%riz), %xmm1
+               	movapd	%xmm0, %xmm15
+               	movapd	%xmm1, %xmm0
+               	addsd	%xmm15, %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -247,8 +246,6 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	cvtsi2sd	%rax, %xmm0
-               	movsd	%xmm0, -0x20(%rbp,%riz)
-               	movsd	-0x20(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -295,8 +292,6 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rax
                	cvtsi2sd	%rax, %xmm0
-               	movsd	%xmm0, -0x28(%rbp,%riz)
-               	movsd	-0x28(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm1
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
@@ -325,4 +320,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

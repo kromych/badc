@@ -112,10 +112,10 @@ fn ent_pc=16 n_params=2 variadic=false locals=8
     v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x0
     v20  FpCast { kind=IntToFp, value=v19 }               -> d0
     v21  Binop { op=fadd, lhs=v16, rhs=v20 }              -> d0
-    v22  StoreLocal { off=-2, value=v21, kind=F64 }       -> -
-    v23  LoadLocal { off=-2, kind=F64 }                   -> d0
+    v22  Imm(0)                                           -> x0
+    v23  LoadLocal { off=-2, kind=F64 }                   -> d1
     v24  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v25  StoreLocal { off=-5, value=v23, kind=I64 }       -> -
+    v25  StoreLocal { off=-5, value=v21, kind=I64 }       -> -
     v26  LoadLocal { off=-5, kind=I64 }                   -> x7
     v27  Call { target_pc=14, args=[v26, v14], fp_return=false } -> x0
     v28  BinopI { op=ne, lhs=v27, rhs_imm=1 }             -> x0

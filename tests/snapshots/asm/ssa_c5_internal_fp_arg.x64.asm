@@ -134,8 +134,6 @@ Disassembly of section .text:
                	movapd	%xmm0, %xmm15
                	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
-               	movsd	%xmm0, -0x10(%rbp,%riz)
-               	movsd	-0x10(%rbp,%riz), %xmm0
                	movq	%xmm0, %r11
                	movq	%r11, -0x28(%rbp)
                	movq	-0x28(%rbp), %rdi
@@ -206,4 +204,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

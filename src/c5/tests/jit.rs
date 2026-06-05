@@ -355,6 +355,66 @@ fn multiply_by_immediate_with_spilled_result_under_pressure() {
 }
 
 #[test]
+fn fp_diamond_phi_under_pressure() {
+    // A double-valued local assigned on both arms of an if/else: the
+    // slot merges two FP definitions at the join, so mem2reg promotes
+    // it through an FP-classed `Phi { kind: F64 }`. The predecessor-exit
+    // move runs over the FP register / spill file. Capping the FP bank
+    // to one register forces the merged value across registers and spill
+    // slots, exercising the spilled-FP-phi edge.
+    let src = r#"
+        double pick(int c, double a, double b) {
+            double x;
+            if (c) { x = a * 2.0; }
+            else   { x = b + 1.0; }
+            return x * 3.0;
+        }
+        int main() {
+            // c=1: (2.5*2)*3 = 15.0 ; c=0: (4.0+1)*3 = 15.0
+            double t = pick(1, 2.5, 99.0) + pick(0, 99.0, 4.0);
+            return (int)t; // 15 + 15 = 30
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(8, 1, || {
+        jit_exit(src, &["fp-diamond"])
+    });
+    assert_eq!(
+        result, 30,
+        "FP diamond phi miscomputed under FP register pressure"
+    );
+}
+
+#[test]
+fn fp_loop_carried_phi_under_pressure() {
+    // A double accumulator carried across a loop back-edge: the slot's
+    // reaching value at the head block merges the entry seed with the
+    // body's update, so mem2reg promotes it through an FP-classed phi
+    // whose operand on the back edge is the in-body sum. With the FP
+    // bank capped to one register the accumulator and the per-iteration
+    // operands compete for registers and spill, exercising the FP-phi
+    // predecessor move on a back edge.
+    let src = r#"
+        int main() {
+            double a[5];
+            a[0] = 1.5; a[1] = 2.5; a[2] = 3.0; a[3] = 4.0; a[4] = 9.0;
+            double sum = 0.0;
+            int i;
+            for (i = 0; i < 5; i++) {
+                sum = sum + a[i];
+            }
+            return (int)sum; // 1.5+2.5+3+4+9 = 20
+        }
+    "#;
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(8, 1, || {
+        jit_exit(src, &["fp-loop-acc"])
+    });
+    assert_eq!(
+        result, 20,
+        "FP loop-carried accumulator phi miscomputed under FP register pressure"
+    );
+}
+
+#[test]
 fn printf_through_libc_got() {
     // printf's libc address is dlsym'd at JIT time and patched into
     // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or

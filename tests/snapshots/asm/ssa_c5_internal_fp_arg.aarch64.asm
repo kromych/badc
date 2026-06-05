@@ -112,10 +112,6 @@ Disassembly of section .text:
                	scvtf	d0, x0
                	fmov	d16, x1
                	fadd	d0, d16, d0
-               	sub	x17, x29, #0x10
-               	str	d0, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	fmov	x16, d0
                	stur	x16, [x29, #-0x28]
                	ldur	x0, [x29, #-0x28]

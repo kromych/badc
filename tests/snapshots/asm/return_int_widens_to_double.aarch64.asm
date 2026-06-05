@@ -130,10 +130,6 @@ Disassembly of section .text:
                	ret
                	bl	<addr>
                	fmov	d0, x0
-               	sub	x17, x29, #0x10
-               	str	d0, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d16, x0
                	fneg	d1, d16
@@ -146,8 +142,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	mov	x0, #0xffff             // =65535
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32

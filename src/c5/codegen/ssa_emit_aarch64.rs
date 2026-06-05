@@ -3646,6 +3646,7 @@ fn emit_phi_predecessor_moves(
         // all locations together preserves the parallel-copy
         // semantics across both register and stack-slot operands.
         let mut moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
+        let mut fp_moves: Vec<(super::ssa_alloc::Place, super::ssa_alloc::Place)> = Vec::new();
         for id in head..end {
             let inst = &func.insts[id as usize];
             let super::super::ir::Inst::Phi { incoming, kind } = inst else {
@@ -3666,31 +3667,35 @@ fn emit_phi_predecessor_moves(
                 .unwrap_or(super::ssa_alloc::Place::None);
             use super::ssa_alloc::Place;
             // The predecessor-exit move must stay within one register
-            // file: an FP value copied into a GPR phi home (or the
-            // reverse) by an integer mov would reinterpret the bits.
-            // The scheduler below lowers only d-register and stack-slot
-            // moves for the integer file; an FP phi (kind F32 / F64)
-            // would need a separate FP move path. Bail loudly rather
-            // than emit a class-crossing copy.
+            // file. An FP phi (kind F32 / F64) has its home and operands
+            // FP-classed; its move is scheduled over the FP locations
+            // (d-registers and spill slots). Every other phi is
+            // integer-classed and scheduled over the integer locations.
+            // The two files do not alias, so the two parallel copies are
+            // independent.
             let phi_is_fp = matches!(
                 kind,
                 super::super::ir::LoadKind::F32 | super::super::ir::LoadKind::F64
             );
-            if phi_is_fp
-                || matches!(src_place, Place::FpReg(_))
-                || matches!(dst_place, Place::FpReg(_))
-            {
-                bail_msg("Phi: FP-classed phi predecessor move not lowered");
-                return false;
-            }
-            match (src_place, dst_place) {
-                (Place::None, _) | (_, Place::None) => {}
-                _ => moves.push((src_place, dst_place)),
+            if phi_is_fp {
+                match (src_place, dst_place) {
+                    (Place::None, _) | (_, Place::None) => {}
+                    _ => fp_moves.push((src_place, dst_place)),
+                }
+            } else {
+                match (src_place, dst_place) {
+                    (Place::None, _) | (_, Place::None) => {}
+                    _ => moves.push((src_place, dst_place)),
+                }
             }
         }
         if !schedule_place_moves(code, &mut moves, frame, scratch.primary, scratch.secondary) {
             return false;
         }
+        // FP phi edges: d16 / d17 are reserved scratch outside the
+        // allocator's d-register pool (d0..d15), so they hold no live
+        // FP value across the terminator.
+        schedule_fp_place_moves(code, &mut fp_moves, frame, 17, 16);
     }
     true
 }
@@ -3788,6 +3793,81 @@ fn schedule_place_moves(
         }
     }
     true
+}
+
+/// Emit a single resolved FP location-to-location move over `FpReg`
+/// and `Spill` places. `stage_d` is the scratch d-reg for the
+/// spill-to-spill case (load then store); it must lie outside the
+/// allocator's FP pool. `IntReg` and `None` places never reach here
+/// (an FP phi's home and its operands are FP-classed).
+fn emit_fp_place_move(code: &mut Vec<u8>, src: Place, dst: Place, frame: Frame, stage_d: u8) {
+    match (src, dst) {
+        (Place::FpReg(s), Place::FpReg(t)) => emit(code, super::aarch64::enc_fmov_d_d(t, s)),
+        (Place::FpReg(s), Place::Spill(slot)) => {
+            emit(code, enc_str_d_imm(s, Reg(31), spill_off(frame, slot)));
+        }
+        (Place::Spill(slot), Place::FpReg(t)) => {
+            emit(code, enc_ldr_d_imm(t, Reg(31), spill_off(frame, slot)));
+        }
+        (Place::Spill(ss), Place::Spill(ts)) => {
+            emit(code, enc_ldr_d_imm(stage_d, Reg(31), spill_off(frame, ss)));
+            emit(code, enc_str_d_imm(stage_d, Reg(31), spill_off(frame, ts)));
+        }
+        // Integer and None locations never reach here: an FP phi edge
+        // is FP-classed on both ends.
+        _ => {}
+    }
+}
+
+/// Sequentialize a parallel copy over FP locations (d-registers and
+/// stack spill slots) for FP-classed phi predecessor moves. Mirrors
+/// [`schedule_place_moves`] with `fmov d, d` / `ldr d` / `str d`:
+/// leaves first, then break a residual cycle by holding one cycle
+/// source in `hold_d`. `hold_d` and `stage_d` must lie outside the
+/// allocator's FP pool so they collide with no pending source or
+/// destination.
+fn schedule_fp_place_moves(
+    code: &mut Vec<u8>,
+    moves: &mut Vec<(Place, Place)>,
+    frame: Frame,
+    hold_d: u8,
+    stage_d: u8,
+) {
+    moves.retain(|(s, t)| !place_same_loc(*s, *t));
+    while !moves.is_empty() {
+        let mut progress = false;
+        let mut i = 0;
+        while i < moves.len() {
+            let (s, t) = moves[i];
+            let tgt_still_a_source = moves.iter().any(|(os, _)| place_same_loc(*os, t));
+            if !tgt_still_a_source {
+                emit_fp_place_move(code, s, t, frame, stage_d);
+                moves.swap_remove(i);
+                progress = true;
+            } else {
+                i += 1;
+            }
+        }
+        if !progress {
+            // Only cycle members remain. Save one cycle source into
+            // the `hold_d` d-reg and redirect every move that reads it.
+            let cyc = moves
+                .iter()
+                .map(|(s, _)| *s)
+                .find(|s| !place_same_loc(*s, Place::FpReg(hold_d)))
+                .unwrap_or(moves[0].0);
+            // Copy the cycle source into `hold_d` (a register move or a
+            // spill reload). `materialize_fp` is unsuitable: for an
+            // `FpReg` source it returns the register without emitting,
+            // leaving `hold_d` unloaded.
+            emit_fp_place_move(code, cyc, Place::FpReg(hold_d), frame, stage_d);
+            for m in moves.iter_mut() {
+                if place_same_loc(m.0, cyc) {
+                    m.0 = Place::FpReg(hold_d);
+                }
+            }
+        }
+    }
 }
 
 /// Place every call argument into its AAPCS64 target slot in an

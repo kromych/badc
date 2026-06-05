@@ -272,6 +272,46 @@ fn phi_predecessor_parallel_copy_handles_reg_spill_conflict() {
 }
 
 #[test]
+fn spill_slot_beyond_imm12_reach() {
+    // aarch64 LDR/STR (unsigned offset) reaches a byte displacement of
+    // `4095 * size`; for 8-byte spill slots that caps SP-relative
+    // access at 0x7FF8. A function that spills more than ~4096 values
+    // pushes its lowest-numbered (deepest) spill slots past that reach.
+    // The encoders only `debug_assert` the bound, so in release the
+    // scaled imm12 overflowed into the opcode's load/store bit and a
+    // spill store silently became a load (and vice versa), leaving the
+    // slot uninitialised. The SP-relative spill helpers now materialise
+    // the base into a scratch register for out-of-reach offsets.
+    //
+    // With the integer bank capped to one register, every local spills,
+    // producing well over 4096 slots. The function stores each local to
+    // its slot, then reloads all of them in a sum -- exercising the
+    // store-to-slot and reload-from-slot paths at out-of-reach offsets.
+    const N: u64 = 5000;
+    let mut src = String::from("long f() {\n");
+    for i in 0..N {
+        src.push_str(&format!("  long a{i} = {};\n", i + 1));
+    }
+    src.push_str("  long s = 0;\n");
+    for i in 0..N {
+        src.push_str(&format!("  s = s + a{i};\n"));
+    }
+    // Sum of 1..=N. Return a small sentinel so the value survives the
+    // exit-code byte truncation while still depending on every slot.
+    let expected: u64 = N * (N + 1) / 2;
+    src.push_str(&format!("  return s == {expected} ? 7 : 0;\n"));
+    src.push_str("}\n");
+    src.push_str("int main() { return (int)f(); }\n");
+    let result = crate::c5::codegen::ssa_alloc::with_pool_size_override(1, 1, || {
+        jit_exit_native_optimized(&src, &["spill-imm12-reach"])
+    });
+    assert_eq!(
+        result, 7,
+        "an out-of-reach spill slot was accessed with a corrupt LDR/STR encoding"
+    );
+}
+
+#[test]
 fn modulo_with_spilled_divisor_under_pressure() {
     // The modulo lowering computes `rem = n - (n / d) * d`. The
     // quotient must occupy a register distinct from the divisor; when

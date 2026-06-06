@@ -945,7 +945,25 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         Inst::Fneg(v) => f(*v),
         Inst::Extend { value, .. } => f(*value),
         Inst::FpCast { value, .. } => f(*value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Intrinsic { kind, args } => {
+            // The VaArg intrinsic's second operand is a compile-time
+            // packed type descriptor (`(kind << 16) | size`); the
+            // per-target emit reads it from the constant `Inst::Imm`
+            // directly (System V routes the gp / fp save area by it; the
+            // cursor / stack targets ignore it). It is never a runtime
+            // value, so it must not contribute a use that would force the
+            // descriptor `Inst::Imm` to be materialised into a register.
+            // Skipping it keeps the descriptor dead (DCE'd at emit time)
+            // and the stack-based targets byte-identical.
+            let is_va_arg = *kind == crate::c5::op::Intrinsic::VaArg as i64;
+            for (i, &a) in args.iter().enumerate() {
+                if is_va_arg && i == 1 {
+                    continue;
+                }
+                f(a);
+            }
+        }
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
             for &a in args {
                 f(a);
             }

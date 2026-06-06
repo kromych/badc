@@ -378,8 +378,13 @@ fn build_pe_bytes(src: &str) -> Vec<u8> {
     let program = Compiler::with_target(super::with_prelude(src), Target::WindowsX64)
         .compile()
         .expect("compile");
-    emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
-        .expect("emit_native")
+    // Byte-exact assertions hold only with the full register file; pin
+    // the allocator to the full pool so the codegen_test pressure knobs
+    // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
+    crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
+            .expect("emit_native")
+    })
 }
 
 #[test]

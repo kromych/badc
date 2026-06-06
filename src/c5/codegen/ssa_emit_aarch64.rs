@@ -2050,8 +2050,14 @@ fn emit_intrinsic(
             } else {
                 16
             };
-            if args.len() != 1 {
-                bail_msg("VaArg: expected 1 arg");
+            // `__builtin_va_arg(self, descriptor)`: args[0] is the
+            // va_list-storage address, args[1] the packed
+            // `(kind << 16) | size` type descriptor. These stack-based
+            // ABIs (macOS arm64, Windows aarch64, the Linux aarch64
+            // c5-internal cdecl) walk a single region at a fixed stride,
+            // so the kind descriptor is unused; only args[0] matters.
+            if args.is_empty() {
+                bail_msg("VaArg: expected at least the ap argument");
                 return false;
             }
             let ap_place = alloc

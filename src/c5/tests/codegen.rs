@@ -433,9 +433,14 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     let program = Compiler::with_target(super::with_prelude(src), Target::WindowsAarch64)
         .compile()
         .expect("compile");
+    // Byte-exact assertions hold only with the full register file; pin
+    // the allocator to the full pool so the codegen_test pressure knobs
+    // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     let bytes =
-        emit_native_with_options(&program, Target::WindowsAarch64, NativeOptions::default())
-            .expect("emit_native windows-arm64");
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(&program, Target::WindowsAarch64, NativeOptions::default())
+                .expect("emit_native windows-arm64")
+        });
 
     // Callee gr-save spill of x7: `str x7, [sp, #0x38]` (the eighth and
     // last 8-byte slot of the 64-byte gr-save area). A non-variadic

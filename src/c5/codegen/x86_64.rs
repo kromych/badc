@@ -337,6 +337,40 @@ pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
     emit_modrm_mem(code, src, base, disp);
 }
 
+/// `MOV DWORD PTR [base + disp], imm32` -- 32-bit immediate store.
+/// Encoding: `C7 /0 id` (with REX only when `base` needs the high
+/// bank). Used to initialise the System V `__va_list_tag`
+/// `gp_offset` / `fp_offset` (4-byte each) in `va_start`.
+pub(super) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, base.high()));
+    }
+    emit_byte(code, 0xC7);
+    // Reg field is the /0 opcode extension.
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
+/// `ADD dword [base + disp], imm32` -- add an immediate to a 32-bit
+/// memory operand in place. Encoding: `81 /0 id`.
+pub(super) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, base.high()));
+    }
+    emit_byte(code, 0x81);
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
+/// `ADD qword [base + disp], imm32` -- add a sign-extended immediate to
+/// a 64-bit memory operand in place. Encoding: `REX.W 81 /0 id`.
+pub(super) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    emit_byte(code, rex(true, false, false, base.high()));
+    emit_byte(code, 0x81);
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// sign-extended into a 64-bit register. Used by [`LoadKind::I16`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
@@ -671,6 +705,16 @@ pub(super) fn emit_movapd_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 pub(super) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
     emit_byte(code, 0xB0);
     emit_byte(code, imm);
+}
+
+/// `TEST AL, AL` -- set ZF from the low byte of rax. The System V
+/// variadic-ABI XMM-register count rides AL (3.2.3); a variadic
+/// callee's prologue tests it to skip the XMM save when the caller
+/// passed no floating-point arguments (`al == 0`).
+pub(super) fn emit_test_al_al(code: &mut Vec<u8>) {
+    // 84 /r -- TEST r/m8, r8 with both operands AL.
+    emit_byte(code, 0x84);
+    emit_byte(code, modrm(0b11, Reg::RAX.lo(), Reg::RAX.lo()));
 }
 
 /// Internal: emit a `F2 0F <op> /r` SSE2 SD instruction with two

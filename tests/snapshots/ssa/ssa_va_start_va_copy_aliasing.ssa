@@ -61,57 +61,59 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=va_start_then_two_args
-fn ent_pc=14 n_params=1 variadic=true locals=3
+fn ent_pc=14 n_params=1 variadic=true locals=5
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
+    v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
     v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
-    v4   LocalAddr(-1)                                    -> x0
-    v5   Intrinsic { kind=5, args=[v4] }                  -> x0
-    v6   Load { addr=v5, kind=I64 }                       -> x0
-    v7   Imm(0)                                           -> x1
-    v8   LocalAddr(-1)                                    -> x1
-    v9   Intrinsic { kind=5, args=[v8] }                  -> x1
-    v10  Load { addr=v9, kind=I64 }                       -> x1
-    v11  Imm(0)                                           -> x2
-    v12  LocalAddr(-1)                                    -> x2
-    v13  Intrinsic { kind=6, args=[v12] }                 -> x2
-    v14  LoadLocal { off=-2, kind=I64 }                   -> x2
-    v15  LoadLocal { off=-3, kind=I64 }                   -> x2
-    v16  BinopI { op=mul, lhs=v10, rhs_imm=1000 }         -> x1
-    v17  Binop { op=add, lhs=v6, rhs=v16 }                -> x0
-    terminator Return(v17)   (exit_acc=v17)
+    v4   LocalAddr(-3)                                    -> x0
+    v5   Imm(8)                                           -> x1
+    v6   Intrinsic { kind=5, args=[v4, v5] }              -> x0
+    v7   Load { addr=v6, kind=I64 }                       -> x0
+    v8   Imm(0)                                           -> x1
+    v9   LocalAddr(-3)                                    -> x1
+    v10  Intrinsic { kind=5, args=[v9, v5] }              -> x1
+    v11  Load { addr=v10, kind=I64 }                      -> x1
+    v12  Imm(0)                                           -> x2
+    v13  LocalAddr(-3)                                    -> x2
+    v14  Intrinsic { kind=6, args=[v13] }                 -> x2
+    v15  LoadLocal { off=-4, kind=I64 }                   -> x2
+    v16  LoadLocal { off=-5, kind=I64 }                   -> x2
+    v17  BinopI { op=mul, lhs=v11, rhs_imm=1000 }         -> x1
+    v18  Binop { op=add, lhs=v7, rhs=v17 }                -> x0
+    terminator Return(v18)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=copy_then_walk_twice
-fn ent_pc=15 n_params=1 variadic=true locals=4
+fn ent_pc=15 n_params=1 variadic=true locals=8
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
+    v1   LocalAddr(-3)                                    -> x0
     v2   LocalAddr(2)                                     -> x1
     v3   Intrinsic { kind=4, args=[v1, v2] }              -> x0
-    v4   LocalAddr(-2)                                    -> x0
-    v5   LocalAddr(-1)                                    -> x1
+    v4   LocalAddr(-6)                                    -> x0
+    v5   LocalAddr(-3)                                    -> x1
     v6   Intrinsic { kind=7, args=[v4, v5] }              -> x0
-    v7   LocalAddr(-1)                                    -> x0
-    v8   Intrinsic { kind=5, args=[v7] }                  -> x0
-    v9   Load { addr=v8, kind=I64 }                       -> x0
-    v10  Imm(0)                                           -> x1
-    v11  LocalAddr(-2)                                    -> x1
-    v12  Intrinsic { kind=5, args=[v11] }                 -> x1
-    v13  Load { addr=v12, kind=I64 }                      -> x1
-    v14  Imm(0)                                           -> x2
-    v15  LocalAddr(-1)                                    -> x2
-    v16  Intrinsic { kind=6, args=[v15] }                 -> x2
-    v17  LocalAddr(-2)                                    -> x2
-    v18  Intrinsic { kind=6, args=[v17] }                 -> x2
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x2
-    v20  BinopI { op=mul, lhs=v9, rhs_imm=17 }            -> x0
-    v21  LoadLocal { off=-4, kind=I64 }                   -> x2
-    v22  Binop { op=add, lhs=v20, rhs=v13 }               -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    v7   LocalAddr(-3)                                    -> x0
+    v8   Imm(8)                                           -> x1
+    v9   Intrinsic { kind=5, args=[v7, v8] }              -> x0
+    v10  Load { addr=v9, kind=I64 }                       -> x0
+    v11  Imm(0)                                           -> x1
+    v12  LocalAddr(-6)                                    -> x1
+    v13  Intrinsic { kind=5, args=[v12, v8] }             -> x1
+    v14  Load { addr=v13, kind=I64 }                      -> x1
+    v15  Imm(0)                                           -> x2
+    v16  LocalAddr(-3)                                    -> x2
+    v17  Intrinsic { kind=6, args=[v16] }                 -> x2
+    v18  LocalAddr(-6)                                    -> x2
+    v19  Intrinsic { kind=6, args=[v18] }                 -> x2
+    v20  LoadLocal { off=-7, kind=I64 }                   -> x2
+    v21  BinopI { op=mul, lhs=v10, rhs_imm=17 }           -> x0
+    v22  LoadLocal { off=-8, kind=I64 }                   -> x2
+    v23  Binop { op=add, lhs=v21, rhs=v14 }               -> x0
+    terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=main
 fn ent_pc=16 n_params=0 variadic=false locals=4

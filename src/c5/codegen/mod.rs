@@ -1695,6 +1695,25 @@ pub(crate) struct Abi {
     pub variadic_zero_xmm_count: bool,
 }
 
+impl Abi {
+    /// True when variadic c5 callees use the System V AMD64 host
+    /// variadic ABI (Linux x86_64): the named and variadic arguments
+    /// ride the standard integer + FP argument-register banks
+    /// (System V AMD64 3.2.3) and the callee spills a register save
+    /// area (3.5.7). System V is the x86_64 target with no shadow
+    /// space, no by-position argument placement, and the `al`
+    /// XMM-count convention; this distinguishes it from Win64
+    /// (`position_indexed_args`, shadow space, no `al`) and from
+    /// the aarch64 targets. The caller passes the real `fp_arg_mask`
+    /// for such a callee so floating-point varargs land in xmm0..xmm7.
+    pub(crate) fn sysv_host_variadic(self) -> bool {
+        matches!(self.arch, Arch::X86_64)
+            && self.shadow_space == 0
+            && !self.position_indexed_args
+            && self.variadic_zero_xmm_count
+    }
+}
+
 impl Default for Abi {
     /// Picks `MacOSAarch64`'s row. Only the
     /// `#[derive(Default)]` on `Build` reaches this path; real

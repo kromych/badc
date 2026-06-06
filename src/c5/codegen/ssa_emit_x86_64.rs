@@ -76,6 +76,20 @@ pub(super) struct Frame {
     /// later phase can shrink non-variadic cells in one place;
     /// `c5_slot_to_fp_offset` and the prologue both read it.
     pub param_cell_stride: i64,
+    /// Bytes of System V AMD64 register save area (3.5.7) reserved
+    /// inside the frame for a System V variadic callee:
+    /// `SYSV_REG_SAVE_BYTES` (176) for one, 0 otherwise.
+    pub va_save_bytes: u32,
+    /// rbp-relative byte offset (always negative) of the System V
+    /// register save area's base -- the start of the gp area, with the
+    /// fp area at `+48`. The area sits between the spill region above it
+    /// (locals + allocator spills, addressed top-down from rbp) and the
+    /// saved-callee-GPR region below it (addressed bottom-up from rsp),
+    /// so both keep their existing offset formulas: `base =
+    /// -(locals_bytes + alloc_spill_bytes + va_save_bytes)`. `va_start`
+    /// stores it as `reg_save_area`; `va_arg` reads from it. 0 when the
+    /// callee is not a System V variadic callee.
+    pub va_reg_save_off: i32,
 }
 
 impl Frame {
@@ -101,7 +115,28 @@ impl Frame {
         };
         let alloc_spill_bytes = super::ssa_emit_common::slots16(alloc.spill_count);
         let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
-        let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
+        // System V variadic callees reserve the 176-byte register save
+        // area (System V AMD64 3.5.7) at the bottom of the frame. It is
+        // added to `frame_bytes` only; `alloc_spill_base` (and thus the
+        // spill / locals offsets, which are measured from rbp down by
+        // `alloc_spill_base`) is unchanged, so the existing regions keep
+        // their rbp-relative positions and the save area takes the lowest
+        // bytes.
+        let va_save_bytes = if sysv_variadic_callee(func, abi) {
+            SYSV_REG_SAVE_BYTES
+        } else {
+            0
+        };
+        // The save area sits above the saved-callee-GPR region
+        // (addressed bottom-up from rsp) and below the locals / spill
+        // region (addressed top-down from rbp), so neither region's
+        // offset formula changes. Its base is the gp area start.
+        let va_reg_save_off = if va_save_bytes > 0 {
+            -((locals_bytes + alloc_spill_bytes + va_save_bytes) as i32)
+        } else {
+            0
+        };
+        let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes + va_save_bytes;
         let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
         // A Win64 variadic callee receives every argument (named and
         // variadic) in a contiguous 8-byte-per-argument region: the
@@ -122,6 +157,8 @@ impl Frame {
             alloc_spill_base: locals_bytes,
             param_spill_bytes,
             param_cell_stride,
+            va_save_bytes,
+            va_reg_save_off,
         }
     }
 }
@@ -143,6 +180,40 @@ fn win64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
         "position_indexed_args is a Win64 x86_64 property"
     );
     func.is_variadic && abi.position_indexed_args
+}
+
+/// Bytes the System V AMD64 register save area occupies (ABI 3.5.7):
+/// the six integer argument registers (rdi rsi rdx rcx r8 r9) at
+/// `[base + 0 .. 48]` followed by the eight XMM argument registers
+/// (xmm0..xmm7) at `[base + 48 .. 176]`. `va_start`'s gp_offset /
+/// fp_offset and `va_arg`'s 48 / 176 bounds all derive from this
+/// single layout.
+const SYSV_GP_SAVE_BYTES: u32 = 6 * 8;
+const SYSV_FP_SAVE_BYTES: u32 = 8 * 16;
+const SYSV_REG_SAVE_BYTES: u32 = SYSV_GP_SAVE_BYTES + SYSV_FP_SAVE_BYTES;
+
+/// True when the function is a variadic c5 callee compiled for the
+/// System V AMD64 host variadic ABI (Linux x86_64). System V is the
+/// x86_64 target with `shadow_space == 0`, no `position_indexed_args`
+/// (the standard rdi/rsi/.../xmm bank placement), and
+/// `variadic_zero_xmm_count` set (the caller passes the XMM-argument
+/// count in `al`). Win64 (shadow_space 32, position_indexed_args,
+/// no al) and every aarch64 target are excluded, so this gate selects
+/// Linux x86_64 alone.
+///
+/// Under this ABI the named arguments arrive in the standard argument
+/// registers (integer bank rdi.. + FP bank xmm0..), the variadic tail
+/// rides the same banks then the incoming stack, the callee prologue
+/// spills rdi..r9 + xmm0..xmm7 into a register save area (System V
+/// AMD64 3.5.7), `va_start` initialises the `__va_list_tag` offsets and
+/// pointers, and `va_arg` walks the gp area, fp area, then the overflow
+/// area per `kind`.
+fn sysv_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
+    func.is_variadic
+        && matches!(abi.arch, super::Arch::X86_64)
+        && abi.shadow_space == 0
+        && !abi.position_indexed_args
+        && abi.variadic_zero_xmm_count
 }
 
 /// Registers that are caller-saved on both SysV AMD64 and Win64.
@@ -235,6 +306,12 @@ fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super
     // and the body / `va_arg` can address that area through rbp; it is
     // never leaf-elided.
     if win64_variadic_callee(func, abi) {
+        return false;
+    }
+    // A System V variadic callee must establish rbp and a frame for its
+    // register save area (System V AMD64 3.5.7) and named-parameter
+    // cells; it is never leaf-elided.
+    if sysv_variadic_callee(func, abi) {
         return false;
     }
     if !alloc.gpr_used.is_empty() {
@@ -1501,6 +1578,7 @@ pub(super) fn emit_function(
                 inst,
                 v,
                 place,
+                func,
                 alloc,
                 frame,
                 abi,
@@ -1952,6 +2030,43 @@ fn emit_prologue(
     if frame.frame_bytes > 0 {
         emit_stack_alloc(code, frame.frame_bytes, abi);
     }
+    // System V variadic callee register save area (System V AMD64
+    // 3.5.7). Spill the six integer argument registers rdi rsi rdx rcx
+    // r8 r9 into the gp area at `[reg_save + 0 .. 48]` and the eight XMM
+    // argument registers xmm0..xmm7 into the fp area at
+    // `[reg_save + 48 .. 176]`. The named parameters read their values
+    // from this area too (`local_slot_off` redirects positive c5 cdecl
+    // slots here), and `va_start` / `va_arg` walk it for the variadic
+    // tail. `reg_save` is `[rbp + va_reg_save_off]`; the spill writes
+    // address it through rbp so it is independent of the rsp moves the
+    // body makes for outgoing-call scratch.
+    //
+    // The XMM spill is guarded by the caller-passed XMM-register count
+    // in `al` (System V AMD64 3.2.3): when the caller passed no
+    // floating-point arguments (`al == 0`) the XMM save area is unused,
+    // and skipping the eight `movsd` stores avoids touching xmm regs the
+    // caller never set. The integer spill is unconditional -- the gp
+    // area always holds the (named + variadic) integer arguments.
+    if sysv_variadic_callee(func, abi) {
+        let reg_save = frame.va_reg_save_off;
+        for (i, &reg) in abi.int_arg_regs.iter().enumerate() {
+            emit_mov_mem_r(code, Reg::RBP, reg_save + (i as i32) * 8, Reg(reg));
+        }
+        // test al, al ; je past_fp_save
+        super::x86_64::emit_test_al_al(code);
+        super::x86_64::emit_jcc_rel32(code, Cc::E, 0);
+        // The rel32 operand occupies the four bytes just emitted; the
+        // jump is relative to the end of the je instruction (which is
+        // where the XMM stores begin).
+        let rel32_at = code.len() - 4;
+        let fp_save_start = code.len();
+        for i in 0..8u32 {
+            let off = reg_save + SYSV_GP_SAVE_BYTES as i32 + (i as i32) * 16;
+            emit_movsd_mem_xmm(code, Reg::RBP, off, Reg(i as u8));
+        }
+        let rel = (code.len() - fp_save_start) as i32;
+        code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
+    }
     // The x86_64 prologue/epilogue and `Frame` reserve no space for
     // FP-register saves, so the allocator must never hand back a
     // callee-saved (non-volatile) xmm in `fp_used`: `RegBanks` for
@@ -2031,6 +2146,7 @@ fn emit_inst(
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -2211,11 +2327,12 @@ fn emit_inst(
                 return false;
             };
             // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)];
-            // locals (i < 0) sit at [rbp + 8*i]. Compute the byte
-            // offset and emit `lea rd, [rbp + disp]`. The 32-bit
-            // signed `disp` covers any frame our compiler emits;
-            // larger frames bail.
-            let bytes = c5_slot_to_fp_offset(*off, frame.param_cell_stride);
+            // locals (i < 0) sit at [rbp + 8*i]. A System V variadic
+            // callee redirects named-parameter slots into the register
+            // save area (see `local_slot_off`). Compute the byte offset
+            // and emit `lea rd, [rbp + disp]`. The 32-bit signed `disp`
+            // covers any frame our compiler emits; larger frames bail.
+            let bytes = local_slot_off(*off, func, frame, abi);
             let disp = match i32::try_from(bytes) {
                 Ok(d) => d,
                 Err(_) => {
@@ -2234,10 +2351,10 @@ fn emit_inst(
             emit_store(code, dst, v, *addr, *value, *kind, alloc, frame)
         }
         Inst::LoadLocal { off, kind } => {
-            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame)
+            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
         Inst::StoreLocal { off, value, kind } => {
-            emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame)
+            emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi)
         }
         Inst::LoadIndexed {
             base,
@@ -2330,6 +2447,7 @@ fn emit_inst(
             args,
             dst,
             v,
+            func,
             alloc,
             frame,
             abi,
@@ -2523,6 +2641,69 @@ fn emit_tls_addr(
 
 use super::ssa_emit_common::c5_slot_to_fp_offset;
 
+/// rbp-relative byte offset of the c5 cdecl slot `off` for the
+/// current callee, accounting for the System V variadic register
+/// save area.
+///
+/// For a non-variadic callee (and every non-SysV target) this is the
+/// plain `c5_slot_to_fp_offset`: positive c5 cdecl parameter cells at
+/// `[rbp + 16 + (off-2)*stride]`, negative locals at `[rbp + off*8]`.
+///
+/// For a System V variadic callee (System V AMD64 3.5.7) the named
+/// parameters are not pushed as positive cells -- they arrive in the
+/// argument registers and the prologue spills them into the register
+/// save area at the bottom of the frame. A named-parameter access
+/// (`off >= 2`, parameter index `off - 2`) is therefore redirected to
+/// that parameter's slot in the save area: an integer / pointer
+/// parameter to `[reg_save + int_rank*8]` within the 48-byte gp area,
+/// a floating-point parameter to `[reg_save + 48 + fp_rank*16]` within
+/// the 128-byte fp area, where `reg_save = rbp - frame_bytes` and the
+/// rank is the parameter's position within its argument-register bank
+/// (the independent int / FP banks of System V AMD64 3.2.3). Locals
+/// (`off < 0`) are unaffected.
+fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
+    if off >= 2 && sysv_variadic_callee(func, abi) {
+        let reg_save = frame.va_reg_save_off as i64;
+        let p = (off - 2) as usize;
+        // Rank within the int / FP argument-register bank: a named
+        // floating-point parameter consumes an FP register and does not
+        // advance the integer bank, and vice versa, so each parameter's
+        // bank rank is the count of same-bank parameters before it.
+        let is_fp = |i: usize| (func.param_fp_mask & (1u32 << i)) != 0;
+        let mut int_rank = 0i64;
+        let mut fp_rank = 0i64;
+        for i in 0..p {
+            if is_fp(i) {
+                fp_rank += 1;
+            } else {
+                int_rank += 1;
+            }
+        }
+        if is_fp(p) {
+            // A named floating-point parameter past the eight FP argument
+            // registers (System V AMD64 3.2.3) overflows to the incoming
+            // stack, which the register save area does not cover. The
+            // walker classifies such parameters the same on both ends;
+            // this redirect assumes every named parameter is
+            // register-passed. TODO: read a stack-overflow named parameter
+            // from the incoming stack rather than the save area.
+            debug_assert!(
+                fp_rank < 8,
+                "named FP parameter {p} overflowed the System V fp save area"
+            );
+            reg_save + SYSV_GP_SAVE_BYTES as i64 + fp_rank * 16
+        } else {
+            debug_assert!(
+                int_rank < 6,
+                "named integer parameter {p} overflowed the System V gp save area"
+            );
+            reg_save + int_rank * 8
+        }
+    } else {
+        c5_slot_to_fp_offset(off, frame.param_cell_stride)
+    }
+}
+
 /// Single-instruction rbp-relative load for `Inst::LoadLocal`.
 /// The c5 slot offset folds into the load's ModR/M disp
 /// directly, skipping the `LocalAddr` materialisation the
@@ -2534,8 +2715,10 @@ fn emit_load_local(
     kind: LoadKind,
     keep_f32: bool,
     frame: Frame,
+    func: &FunctionSsa,
+    abi: super::Abi,
 ) -> bool {
-    let disp = match i32::try_from(c5_slot_to_fp_offset(off, frame.param_cell_stride)) {
+    let disp = match i32::try_from(local_slot_off(off, func, frame, abi)) {
         Ok(v) => v,
         Err(_) => {
             bail_msg("LoadLocal: offset doesn't fit in disp32");
@@ -2604,12 +2787,14 @@ fn emit_store_local(
     kind: StoreKind,
     alloc: &Allocation,
     frame: Frame,
+    func: &FunctionSsa,
+    abi: super::Abi,
 ) -> bool {
     if matches!(kind, StoreKind::F32) {
         bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
         return false;
     }
-    let disp = match i32::try_from(c5_slot_to_fp_offset(off, frame.param_cell_stride)) {
+    let disp = match i32::try_from(local_slot_off(off, func, frame, abi)) {
         Ok(v) => v,
         Err(_) => {
             bail_msg("StoreLocal: offset doesn't fit in disp32");
@@ -4271,6 +4456,61 @@ fn emit_call(
         }
         return true;
     }
+    if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
+        // System V AMD64 host variadic ABI (Linux x86_64). The named
+        // and variadic arguments ride the standard argument-register
+        // banks (integer rdi.. + FP xmm0..) then overflow to the stack,
+        // exactly like a libc variadic call (System V AMD64 3.2.3). The
+        // walker passes the real `fp_arg_mask` (FP varargs ride
+        // xmm0..xmm7), so `plan_call_args` places floating-point
+        // arguments in the FP bank. `al` carries the number of XMM
+        // argument registers used so the callee prologue's guarded XMM
+        // save runs only when needed.
+        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        let xmm_used = plan
+            .placements
+            .iter()
+            .filter(|p| matches!(p, super::ArgPlacement::FpReg(_)))
+            .count() as u8;
+        if plan.scratch_bytes > 0 {
+            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        }
+        if !marshal_args(code, &plan, args, alloc, frame, "Call (SysV variadic)") {
+            return false;
+        }
+        super::x86_64::emit_mov_al_imm8(code, xmm_used);
+        let call_site = code.len();
+        fixups.push(Fixup {
+            native_offset: call_site,
+            target_ent_pc: target_pc,
+            kind: super::x86_64::BranchKind::Call,
+        });
+        super::x86_64::emit_call_rel32(code, 0);
+        if plan.scratch_bytes > 0 {
+            emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        // c5 internal call return convention: an integer / pointer
+        // result lives in rax, a floating-point result in xmm0 (C99
+        // 6.2.5p10).
+        if fp_return {
+            match dst {
+                Place::FpReg(r) => {
+                    if r != Reg::XMM0.0 {
+                        emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
+                    }
+                }
+                Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
+                Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+                Place::None => {}
+            }
+        } else if let Some(rd) = int_or_spill_dst(dst) {
+            if rd.0 != Reg::RAX.0 {
+                emit_mov_rr(code, rd, Reg::RAX);
+            }
+            spill_dst_to_slot(code, dst, rd, frame);
+        }
+        return true;
+    }
     if callee_is_variadic {
         // c5's variadic ABI keeps the c5 stack: each arg is pushed
         // at a 16-byte stride matching the accumulator push. The
@@ -4566,6 +4806,14 @@ fn emit_call_indirect(
         blocked.push(Reg(r));
     }
     blocked.push(SCRATCH_R10);
+    // A System V variadic indirect call sets `al` to the XMM-argument
+    // count just before the `call` (System V AMD64 3.2.3). The target
+    // pointer must not be staged in rax, or the `mov al, imm8` would
+    // corrupt its low byte; block rax for the target scratch.
+    let sysv_variadic_call = callee_variadic && abi.sysv_host_variadic();
+    if sysv_variadic_call {
+        blocked.push(Reg::RAX);
+    }
     // Capture the target pointer into a caller-saved scratch
     // before arg marshalling can clobber it. R11 is the usual
     // pick because no ABI assigns it to an argument slot, so it is
@@ -4593,6 +4841,14 @@ fn emit_call_indirect(
         args.len()
     };
     let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    // System V AMD64 3.2.3: a variadic call passes the XMM-argument
+    // count in `al`. Computed from the plan and emitted after the
+    // marshal (which never writes rax, blocked above for the target).
+    let xmm_used = plan
+        .placements
+        .iter()
+        .filter(|p| matches!(p, super::ArgPlacement::FpReg(_)))
+        .count() as u8;
     if let Some(target_scratch) = target_scratch {
         // A free caller-saved register is available: stage the
         // target there, then marshal. The marshal never writes
@@ -4612,6 +4868,9 @@ fn emit_call_indirect(
         }
         if !marshal_args(code, &plan, args, alloc, frame, "CallIndirect") {
             return false;
+        }
+        if sysv_variadic_call {
+            super::x86_64::emit_mov_al_imm8(code, xmm_used);
         }
         super::x86_64::emit_call_r(code, target_scratch);
         if plan.scratch_bytes > 0 {
@@ -4644,6 +4903,9 @@ fn emit_call_indirect(
         // The target slot sits just above the marshal's scratch
         // window, at [rsp + scratch_bytes] after the second sub.
         emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, plan.scratch_bytes as i32);
+        if sysv_variadic_call {
+            super::x86_64::emit_mov_al_imm8(code, xmm_used);
+        }
         super::x86_64::emit_call_r(code, SCRATCH_R10);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
@@ -4679,12 +4941,125 @@ fn emit_call_indirect(
     true
 }
 
+/// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the
+/// `__va_list_tag` pointer; `args[1]` is the packed
+/// `(kind << 16) | size` descriptor the parser folded as an
+/// `Inst::Imm`. The intrinsic returns the address of the slot holding
+/// the next argument (the `<stdarg.h>` macro dereferences it as the
+/// requested type) and advances the matching offset / pointer in the
+/// struct.
+///
+/// Integer / pointer (kind 0): if `gp_offset < 48` the value sits in
+/// the register save area at `reg_save_area + gp_offset` and
+/// `gp_offset` advances by 8; otherwise it sits in the overflow area
+/// at `overflow_arg_area`, which advances by 8.
+///
+/// Floating-point (kind 1): if `fp_offset < 176` the value sits at
+/// `reg_save_area + fp_offset` and `fp_offset` advances by 16;
+/// otherwise it sits at `overflow_arg_area`, which advances by 8.
+///
+/// Struct layout (matching `<stdarg.h>` / libc): gp_offset at +0,
+/// fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
+fn emit_va_arg_sysv(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaArg: expected 2 args (ap, descriptor)");
+        return false;
+    }
+    // Recover the packed descriptor from the `Inst::Imm` the parser
+    // folded for the type operand.
+    let descriptor = match func.insts.get(args[1] as usize) {
+        Some(Inst::Imm(d)) => *d,
+        _ => {
+            bail_msg("VaArg: descriptor operand is not a constant");
+            return false;
+        }
+    };
+    let kind = (descriptor >> 16) & 0xffff;
+    let is_fp = kind == 1;
+    // Cursor pointer (struct address) held in r13, outside the
+    // allocator's banks. The result address is computed in r10; both
+    // are disjoint from the allocator-chosen `dst`.
+    let ap_place = match alloc.places.get(args[0] as usize).copied() {
+        Some(p) => p,
+        None => {
+            bail_msg("VaArg: &ap value id out of range");
+            return false;
+        }
+    };
+    let Some(ap) = materialize_int(code, ap_place, SCRATCH_R13, frame) else {
+        bail_msg("VaArg: &ap not in int reg / spill");
+        return false;
+    };
+    // r13 must hold the struct pointer across the whole sequence; if
+    // `materialize_int` returned an allocator register, move it into r13
+    // so the offset writebacks don't clobber a live value.
+    let ap = if ap.0 != SCRATCH_R13.0 {
+        emit_mov_rr(code, SCRATCH_R13, ap);
+        SCRATCH_R13
+    } else {
+        ap
+    };
+    let (off_disp, bound, step): (i32, i32, i32) = if is_fp { (4, 176, 16) } else { (0, 48, 8) };
+    // r10 = current offset (gp_offset or fp_offset, a u32 field; the
+    // 32-bit load zero-extends into r10). The whole sequence touches
+    // only r10 and r13 -- both reserved outside the allocator's banks --
+    // plus the in-memory va_list fields, so it never clobbers a live
+    // allocator value (the consuming `t += va_arg(...)` keeps `t` in an
+    // allocator register that an earlier draft overwrote via rcx).
+    super::x86_64::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+    // cmp r10d, bound ; jae use_overflow
+    super::x86_64::emit_cmp_r_imm32(code, SCRATCH_R10, bound);
+    super::x86_64::emit_jcc_rel32(code, Cc::Ae, 0);
+    let jae_rel32_at = code.len() - 4;
+    // --- register-save path ---
+    // r10 = offset + reg_save_area (at [ap + 16]) = the argument slot,
+    // then bump the offset field in memory by step.
+    super::x86_64::emit_add_r_mem(code, SCRATCH_R10, ap, 16);
+    super::x86_64::emit_add_mem32_imm32(code, ap, off_disp, step);
+    // jmp done
+    super::x86_64::emit_jmp_rel32(code, 0);
+    let jmp_rel32_at = code.len() - 4;
+    // --- overflow path ---
+    let overflow_start = code.len();
+    let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
+    code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
+    // r10 = overflow_arg_area (at [ap + 8]) = the argument slot, then
+    // bump it in memory by 8. The overflow area uses an 8-byte stride
+    // for every argument class (System V AMD64 3.5.7 rounds each to an
+    // eightbyte; a `double` overflow argument still occupies one).
+    emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
+    super::x86_64::emit_add_mem64_imm32(code, ap, 8, 8);
+    // --- done: r10 holds the argument address; deliver it to dst. ---
+    let done = code.len();
+    let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
+    code[jmp_rel32_at..jmp_rel32_at + 4].copy_from_slice(&rel_to_done.to_le_bytes());
+    match dst {
+        Place::IntReg(r) => {
+            if Reg(r).0 != SCRATCH_R10.0 {
+                emit_mov_rr(code, Reg(r), SCRATCH_R10);
+            }
+        }
+        Place::Spill(_) => spill_dst_to_slot(code, dst, SCRATCH_R10, frame),
+        Place::FpReg(r) => super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10),
+        Place::None => {}
+    }
+    true
+}
+
 fn emit_intrinsic(
     code: &mut Vec<u8>,
     kind: i64,
     args: &[u32],
     dst: Place,
     _v: super::super::ir::ValueId,
+    func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -4710,6 +5085,112 @@ fn emit_intrinsic(
         }
     };
     match intrinsic {
+        I::VaStart if sysv_variadic_callee(func, abi) => {
+            // System V AMD64 `va_start` (ABI 3.5.7). args[0] = the
+            // `__va_list_tag` pointer (the array-form `va_list` decayed
+            // to `&ap[0]`), args[1] = &last (unused -- the named-argument
+            // counts come from the prototype, not the last named
+            // argument's address). Initialise the struct:
+            //   gp_offset        = num_named_int * 8
+            //   fp_offset        = 48 + num_named_fp * 16
+            //   overflow_arg_area = first incoming stack argument
+            //   reg_save_area     = base of the prologue-spilled area
+            if args.len() != 2 {
+                bail_msg("VaStart: expected 2 args");
+                return false;
+            }
+            // Named integer / FP argument counts from the prototype:
+            // `param_fp_mask` bit i set means named parameter i is
+            // floating-point. The gp area skips the named integer
+            // arguments (each 8 bytes); the fp area starts at offset 48
+            // and skips the named FP arguments (each 16 bytes).
+            let n = func.n_params;
+            let mut named_int = 0u32;
+            let mut named_fp = 0u32;
+            for i in 0..n {
+                if (func.param_fp_mask & (1u32 << i)) != 0 {
+                    named_fp += 1;
+                } else {
+                    named_int += 1;
+                }
+            }
+            let gp_offset = named_int * 8;
+            let fp_offset = SYSV_GP_SAVE_BYTES + named_fp * 16;
+            let ap_place = match alloc.places.get(args[0] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaStart: &ap value id out of range");
+                    return false;
+                }
+            };
+            let Some(ap) = materialize_int(code, ap_place, SCRATCH_R13, frame) else {
+                bail_msg("VaStart: &ap not in int reg / spill");
+                return false;
+            };
+            // gp_offset (u32) at [ap + 0], fp_offset (u32) at [ap + 4].
+            super::x86_64::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
+            super::x86_64::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
+            // overflow_arg_area (ptr) at [ap + 8] = first incoming stack
+            // argument. With every named argument register-passed, the
+            // first variadic stack argument sits just above the return
+            // address at [rbp + 16].
+            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16);
+            emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
+            // reg_save_area (ptr) at [ap + 16] = base of the spilled gp
+            // area.
+            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, frame.va_reg_save_off);
+            emit_mov_mem_r(code, ap, 16, SCRATCH_R10);
+            true
+        }
+        // The System V `va_list` is a `__va_list_tag` struct on this
+        // target, so `va_arg` walks the gp/fp save areas regardless of
+        // whether the current function is itself variadic: a non-
+        // variadic forwarder (the `c5_v*printf` shims) receives a
+        // forwarded `va_list` and must read it the same way. Gate on the
+        // target ABI, not `func.is_variadic`.
+        I::VaArg if abi.sysv_host_variadic() => {
+            emit_va_arg_sysv(code, args, dst, func, alloc, frame)
+        }
+        I::VaCopy if abi.sysv_host_variadic() => {
+            // System V `va_copy` is a 24-byte `__va_list_tag` struct copy
+            // (ABI 3.5.7). args[0] = &dst struct, args[1] = &src struct.
+            if args.len() != 2 {
+                bail_msg("VaCopy: expected 2 args");
+                return false;
+            }
+            let src_place = match alloc.places.get(args[1] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaCopy: &src value id out of range");
+                    return false;
+                }
+            };
+            let Some(src_p) = materialize_int(code, src_place, SCRATCH_R13, frame) else {
+                bail_msg("VaCopy: &src not in int reg / spill");
+                return false;
+            };
+            let dst_place = match alloc.places.get(args[0] as usize).copied() {
+                Some(p) => p,
+                None => {
+                    bail_msg("VaCopy: &dst value id out of range");
+                    return false;
+                }
+            };
+            // Three distinct registers: src pointer in r13, dst pointer
+            // in rcx, the copied word in r10 (all outside the allocator's
+            // live values for this instruction). Copy the three 8-byte
+            // words -- gp_offset + fp_offset packed in the first, then
+            // overflow_arg_area and reg_save_area.
+            let Some(dst_p) = materialize_int(code, dst_place, SCRATCH_RCX, frame) else {
+                bail_msg("VaCopy: &dst not in int reg / spill");
+                return false;
+            };
+            for off in [0i32, 8, 16] {
+                emit_mov_r_mem(code, SCRATCH_R10, src_p, off);
+                emit_mov_mem_r(code, dst_p, off, SCRATCH_R10);
+            }
+            true
+        }
         I::VaStart => {
             // __builtin_va_start(&ap, &last). args[0] = &ap,
             // args[1] = &last. *ap = &last + va_stride, the address of
@@ -4768,8 +5249,11 @@ fn emit_intrinsic(
         }
         I::VaArg => {
             // Returns *ap, advances *ap by va_stride. args[0] = &ap.
-            if args.len() != 1 {
-                bail_msg("VaArg: expected 1 arg");
+            // args[1] (when present) is the packed type descriptor; the
+            // Win64 / cursor single-region walk ignores the kind, so only
+            // args[0] is read.
+            if args.is_empty() {
+                bail_msg("VaArg: expected at least the ap argument");
                 return false;
             }
             // The cursor address `ap`, the loaded result, and the

@@ -1785,15 +1785,54 @@ impl<'a> Walker<'a> {
                             }
                             return Ok(call);
                         }
+                        // System V AMD64 host variadic ABI (Linux x86_64):
+                        // a variadic callee receives its floating-point
+                        // arguments in the FP argument-register bank
+                        // (xmm0..xmm7), so the call passes the real
+                        // `fp_arg_mask` rather than force-routing FP
+                        // arguments through the integer bank. Variadic
+                        // `float` arguments are still widened to `double`
+                        // (C99 6.5.2.2p6 default argument promotions) but
+                        // kept FP-classed so they ride an xmm register.
+                        if callee_variadic && abi.sysv_host_variadic() {
+                            for (i, a) in args.iter().enumerate() {
+                                if i < fixed_args {
+                                    continue;
+                                }
+                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                    .map(is_floating_scalar)
+                                    .unwrap_or(false);
+                                if arg_is_fp {
+                                    arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
+                                }
+                            }
+                            let fp_return = is_floating_scalar(*ty);
+                            let target_pc = self.live_fun_val(*sym, *val);
+                            let call = if target_pc == 0 {
+                                b.call_extern(*sym, arg_vals, fixed_args, fp_return, fp_arg_mask)
+                            } else {
+                                b.call(
+                                    target_pc as usize,
+                                    arg_vals,
+                                    fixed_args,
+                                    fp_return,
+                                    fp_arg_mask,
+                                )
+                            };
+                            if is_float_ty(*ty) {
+                                return Ok(b.mark_f32(call));
+                            }
+                            return Ok(call);
+                        }
                         // The callee keeps the all-integer c5 cdecl ABI
                         // when it is variadic (on every target other than
-                        // macOS arm64, handled above) or when its
-                        // register/stack placement would interleave (the
-                        // same predicate the callee applies to its
-                        // `param_fp_mask`). In that case widen every FP
-                        // argument to an 8-byte double in an integer slot,
-                        // matching what the callee reads back, and pass
-                        // `fp_arg_mask = 0`.
+                        // macOS arm64 and System V x86_64, handled above)
+                        // or when its register/stack placement would
+                        // interleave (the same predicate the callee applies
+                        // to its `param_fp_mask`). In that case widen every
+                        // FP argument to an 8-byte double in an integer
+                        // slot, matching what the callee reads back, and
+                        // pass `fp_arg_mask = 0`.
                         let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
                             args.len(),
                             fp_arg_mask,
@@ -1886,6 +1925,33 @@ impl<'a> Walker<'a> {
                     // FP-classed so the 8-byte stack store is a double;
                     // the named FP arguments keep their FP-bank
                     // placement through the real `fp_arg_mask`.
+                    for (i, a) in args.iter().enumerate() {
+                        if i < callee_fixed {
+                            continue;
+                        }
+                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                            .map(is_floating_scalar)
+                            .unwrap_or(false);
+                        if arg_is_fp {
+                            arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
+                        }
+                    }
+                    return Ok(b.call_indirect(
+                        target,
+                        arg_vals,
+                        true,
+                        callee_fixed,
+                        fp_return,
+                        fp_arg_mask,
+                    ));
+                }
+                // System V AMD64 host variadic ABI (Linux x86_64): a
+                // variadic callee through a function pointer receives its
+                // floating-point arguments in xmm0..xmm7, so pass the real
+                // `fp_arg_mask` and widen the variadic `float` arguments to
+                // `double` (C99 6.5.2.2p6) kept FP-classed. The emit sets
+                // `al` to the XMM-argument count at the call site.
+                if callee_variadic && abi.sysv_host_variadic() {
                     for (i, a) in args.iter().enumerate() {
                         if i < callee_fixed {
                             continue;

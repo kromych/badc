@@ -283,7 +283,62 @@ impl Compiler {
                     let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
-                    if intrinsic_id == longjmp_id
+                    if intrinsic_id == va_arg_id {
+                        // `__builtin_va_arg(self, T)` -- self is the
+                        // va_list-storage address expression, T is the
+                        // argument's type-name. The first operand is
+                        // pushed; the second is the packed descriptor
+                        // `(kind << 16) | size` (kind 0 = integer /
+                        // pointer, 1 = floating) the per-target codegen
+                        // reads from the accumulator. The System V x86_64
+                        // ABI (3.5.7) routes the read to the gp or fp
+                        // save area by `kind`; the cursor targets ignore
+                        // the descriptor.
+                        self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                        if self.lex.tk != ',' {
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (ap, type)"))
+                            );
+                        }
+                        self.next()?;
+                        if !self.lex_is_type_start() {
+                            return Err(self.compile_err(format!(
+                                "intrinsic `{fn_name}` second operand must be a type name"
+                            )));
+                        }
+                        // Parse the type-name with optional pointer
+                        // decoration (C99 6.7.6 abstract declarator), the
+                        // same machinery `sizeof(<type>)` uses. A pointer
+                        // type collapses to an 8-byte integer-class slot.
+                        let mut arg_ty = self.parse_decl_base_type()?;
+                        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+                        let mut is_pointer = false;
+                        while self.lex.tk == Token::MulOp {
+                            self.next()?;
+                            arg_ty += Ty::Ptr as i64;
+                            is_pointer = true;
+                            while self.lex.tk == Token::TypeQual {
+                                self.next()?;
+                            }
+                        }
+                        let size = self.size_of_type(arg_ty) as i64;
+                        // C99 6.5.2.2p6: a floating-point argument that
+                        // survives default argument promotions is `double`
+                        // and rides the fp save area; a pointer or integer
+                        // rides the gp save area. `kind` 1 = floating,
+                        // 0 = integer / pointer.
+                        let kind = if !is_pointer && is_floating_scalar(arg_ty) {
+                            1i64
+                        } else {
+                            0i64
+                        };
+                        let descriptor = (kind << 16) | (size & 0xffff);
+                        let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
+                        ast_intrinsic_args.push(desc_id);
+                    } else if intrinsic_id == longjmp_id
                         || intrinsic_id == va_start_id
                         || intrinsic_id == va_copy_id
                     {

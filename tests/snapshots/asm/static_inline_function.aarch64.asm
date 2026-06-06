@@ -17,32 +17,21 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	x0, [x29, #0x10]
-               	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
+               	mov	x2, x0
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	ldur	x0, [x29, #0x10]
-               	cbz	x0, <addr>
-               	sub	x0, x29, #0x8
-               	ldr	x1, [x0]
-               	ldur	x2, [x29, #0x10]
+               	cbz	x2, <addr>
                	mov	x17, #0x1               // =1
-               	and	x2, x2, x17
-               	add	x1, x1, x2
-               	str	x1, [x0]
-               	add	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	lsr	x1, x1, #1
-               	str	x1, [x0]
+               	and	x0, x2, x17
+               	add	x1, x1, x0
+               	lsr	x2, x2, #1
                	b	<addr>
-               	ldur	x0, [x29, #-0x8]
+               	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

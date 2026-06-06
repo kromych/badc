@@ -232,29 +232,24 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	add	x1, x1, #0x3
                	strb	w0, [x1]
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x10]
-               	stur	w0, [x29, #-0x18]
+               	mov	x1, #0x0                // =0
+               	mov	x0, x1
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
-               	cmp	x0, #0x4
+               	sxtw	x2, w1
+               	cmp	x2, #0x4
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x18
-               	ldrsw	x1, [x0]
+               	sxtw	x1, w1
                	add	x1, x1, #0x1
-               	str	w1, [x0]
                	b	<addr>
-               	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
+               	sxtw	x0, w0
                	sub	x2, x29, #0x8
-               	ldursw	x3, [x29, #-0x18]
+               	sxtw	x3, w1
                	add	x2, x2, x3
                	ldrb	w2, [x2]
-               	add	x1, x1, x2
-               	str	w1, [x0]
+               	add	x0, x0, x2
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

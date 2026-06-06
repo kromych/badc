@@ -9,42 +9,36 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	movq	%rdi, %rax
-               	movq	%rsi, %rcx
+               	movq	%rdx, %rcx
+               	movq	%rsi, %r8
+               	movslq	%r8d, %r8
                	movslq	%ecx, %rcx
-               	movslq	%edx, %rdx
-               	movq	%rdx, %rsi
-               	shlq	$0x2, %rsi
-               	addq	%rax, %rsi
-               	movslq	(%rsi), %rsi
-               	xorq	%r8, %r8
-               	movl	%ecx, -0x8(%rbp)
+               	movq	%rcx, %rdx
+               	shlq	$0x2, %rdx
+               	addq	%rax, %rdx
+               	movslq	(%rdx), %rdx
+               	xorq	%rdi, %rdi
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %rcx
-               	cmpq	%rdx, %rcx
+               	movslq	%r8d, %rsi
+               	cmpq	%rcx, %rsi
                	jg	<addr>
                	jmp	<addr>
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rdi
-               	addq	$0x1, %rdi
-               	movl	%edi, (%rcx)
+               	movslq	%r8d, %rsi
+               	movq	%rsi, %r8
+               	addq	$0x1, %r8
                	jmp	<addr>
-               	movslq	%r8d, %rcx
-               	movslq	-0x8(%rbp), %rdi
+               	movslq	%edi, %rsi
+               	movslq	%r8d, %rdi
                	shlq	$0x2, %rdi
                	addq	%rax, %rdi
                	movslq	(%rdi), %rdi
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %r8
+               	addq	%rdi, %rsi
+               	movslq	%esi, %rdi
                	jmp	<addr>
-               	movslq	%r8d, %rax
-               	addq	%rsi, %rax
+               	movslq	%edi, %rax
+               	addq	%rdx, %rax
                	movslq	%eax, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

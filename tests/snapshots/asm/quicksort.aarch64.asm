@@ -18,40 +18,38 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x30
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
+               	str	x23, [sp, #0x18]
+               	str	x24, [sp, #0x20]
                	mov	x20, x0
                	mov	x21, x2
-               	mov	x0, x1
-               	sxtw	x0, w0
+               	mov	x23, x1
+               	sxtw	x23, w23
                	sxtw	x21, w21
-               	lsl	x1, x21, #2
-               	add	x1, x20, x1
-               	ldrsw	x22, [x1]
-               	sub	x1, x0, #0x1
-               	sxtw	x1, w1
-               	stur	w1, [x29, #-0x10]
-               	stur	w0, [x29, #-0x18]
+               	lsl	x0, x21, #2
+               	add	x0, x20, x0
+               	ldrsw	x22, [x0]
+               	sub	x0, x23, #0x1
+               	sxtw	x24, w0
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
+               	sxtw	x0, w23
                	cmp	x0, x21
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x18
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	sxtw	x0, w23
+               	add	x23, x0, #0x1
                	b	<addr>
-               	ldursw	x0, [x29, #-0x18]
+               	sxtw	x0, w23
                	lsl	x0, x0, #2
                	add	x0, x20, x0
                	ldrsw	x0, [x0]
                	cmp	x0, x22
                	b.gt	<addr>
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w24
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	lsl	x0, x0, #2
@@ -59,26 +57,27 @@ Disassembly of section .text:
                	lsl	x1, x21, #2
                	add	x1, x20, x1
                	bl	<addr>
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w24
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]
-               	add	sp, sp, #0x50
+               	ldr	x23, [sp, #0x18]
+               	ldr	x24, [sp, #0x20]
+               	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w24
+               	add	x24, x0, #0x1
+               	sxtw	x0, w24
                	lsl	x0, x0, #2
                	add	x0, x20, x0
-               	ldursw	x1, [x29, #-0x18]
+               	sxtw	x1, w23
                	lsl	x1, x1, #2
                	add	x1, x20, x1
                	bl	<addr>
+               	b	<addr>
                	b	<addr>
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!

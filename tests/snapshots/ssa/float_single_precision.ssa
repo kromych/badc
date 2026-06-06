@@ -49,26 +49,26 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(0)                                           -> x0
+    v1   Imm(0)                                           -> x1
     v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
-    v3   LocalAddr(-1)                                    -> x1
+    v3   LocalAddr(-1)                                    -> x0
     v4   Store { addr=v3, value=v2, kind=F32 }            -> -
-    v5   StoreLocal { off=-2, value=v1, kind=I32 }        -> -
-    terminator Jmp(b1)   (exit_acc=v5)
+    v5   Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v1)
   block 1  start_pc=0
-    v6   LoadLocal { off=-2, kind=I32 }                   -> x0
-    v7   BinopI { op=lt, lhs=v6, rhs_imm=10 }             -> x0
-    terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
+    v6   Phi { incoming=[b0:v1, b2:v10], kind=I64 }       -> x1
+    v7   Extend { value=v6, kind=I32 }                    -> x0
+    v8   BinopI { op=lt, lhs=v7, rhs_imm=10 }             -> x0
+    terminator Bz { cond=v8, target=b4, fall=b3 }   (exit_acc=v8)
   block 2  start_pc=0
-    v8   LocalAddr(-2)                                    -> x0
-    v9   Load { addr=v8, kind=I32 }                       -> x1
+    v9   Extend { value=v6, kind=I32 }                    -> x0
     v10  BinopI { op=add, lhs=v9, rhs_imm=1 }             -> x1
-    v11  Store { addr=v8, value=v10, kind=I32 }           -> -
-    terminator Jmp(b1)   (exit_acc=v11)
+    v11  Imm(0)                                           -> x0
+    terminator Jmp(b1)   (exit_acc=v10)
   block 3  start_pc=0
     v12  LocalAddr(-1)                                    -> x0
     v13  Load { addr=v12, kind=F32 }                      -> d0 [f32]
-    v14  Imm(4591870180066957722)                         -> x1
+    v14  Imm(4591870180066957722)                         -> x2
     v15  FpCast { kind=F32ToF64, value=v13 }              -> d0
     v16  Binop { op=fadd, lhs=v15, rhs=v14 }              -> d0
     v17  FpCast { kind=F64ToF32, value=v16 }              -> d0 [f32]

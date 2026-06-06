@@ -92,20 +92,18 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
-               	movl	%ecx, -0x30(%rbp)
+               	movq	%rcx, %rax
                	jmp	<addr>
-               	movslq	-0x30(%rbp), %rax
-               	cmpq	$0xf4240, %rax          # imm = 0xF4240
+               	movslq	%ecx, %rdx
+               	cmpq	$0xf4240, %rdx          # imm = 0xF4240
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x30(%rbp), %rax
-               	movslq	(%rax), %rdx
-               	addq	$0x1, %rdx
-               	movl	%edx, (%rax)
+               	movslq	%ecx, %rcx
+               	addq	$0x1, %rcx
                	jmp	<addr>
-               	movslq	%ecx, %rax
+               	movslq	%eax, %rax
                	addq	$0x1, %rax
-               	movslq	%eax, %rcx
+               	movslq	%eax, %rax
                	jmp	<addr>
                	movl	$0x1, %edi
                	leaq	-0x20(%rbp), %rsi
@@ -172,3 +170,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -94,22 +94,20 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
-               	stur	w1, [x29, #-0x30]
+               	mov	x0, x1
                	b	<addr>
-               	ldursw	x0, [x29, #-0x30]
+               	sxtw	x2, w1
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x30
-               	ldrsw	x2, [x0]
-               	add	x2, x2, #0x1
-               	str	w2, [x0]
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
                	b	<addr>
-               	sxtw	x0, w1
+               	sxtw	x0, w0
                	add	x0, x0, #0x1
-               	sxtw	x1, w0
+               	sxtw	x0, w0
                	b	<addr>
                	mov	x0, #0x1                // =1
                	sub	x1, x29, #0x20

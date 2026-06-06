@@ -74,27 +74,24 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x38]
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	ldursw	x0, [x29, #-0x38]
+               	sxtw	x0, w1
                	cmp	x0, #0x18
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x38
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x30
-               	ldursw	x1, [x29, #-0x38]
-               	lsl	x2, x1, #1
-               	add	x0, x0, x2
+               	sxtw	x2, w1
+               	lsl	x3, x2, #1
+               	add	x0, x0, x3
                	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	sxtw	x1, w1
-               	sxth	x1, w1
-               	strh	w1, [x0]
+               	mul	x2, x2, x17
+               	sxtw	x2, w2
+               	sxth	x2, w2
+               	strh	w2, [x0]
                	b	<addr>
                	sub	x0, x29, #0x30
                	sub	x1, x29, #0x30

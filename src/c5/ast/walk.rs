@@ -2219,10 +2219,10 @@ impl<'a> Walker<'a> {
                 // load through it, apply the binop with rhs,
                 // store back. The expression's value is the new
                 // (post-op) value per the same clause.
-                let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let load_kind = load_kind_for(*ty, self.target);
-                let old = b.load(addr, load_kind);
                 let store_kind = store_kind_for(*ty, self.target);
+                let place = self.rmw_place(b, *lhs, store_kind)?;
+                let old = place.load(b, load_kind);
                 // Constant-rhs short-circuit (mirror of the
                 // `Expr::Binary` path): an integer-literal rhs
                 // routes through `binop_imm` so the per-arch
@@ -2284,7 +2284,7 @@ impl<'a> Walker<'a> {
                             b.binop(*op, old, rhs_val)
                         }
                     };
-                b.store(addr, new_val, store_kind);
+                place.store(b, new_val, store_kind);
                 // C99 6.5.16.2p3: the value of `E1 op= E2` is the
                 // post-update value of E1 in E1's type. For a
                 // sub-64-bit lvalue the 64-bit binop result is not
@@ -2294,16 +2294,16 @@ impl<'a> Walker<'a> {
                 Ok(if matches!(load_kind, LoadKind::I64) {
                     new_val
                 } else {
-                    b.load(addr, load_kind)
+                    place.load(b, load_kind)
                 })
             }
             Expr::PreInc { lvalue, by, ty } => {
-                let addr = self.walk_expr_lvalue(b, *lvalue)?;
                 let kind = load_kind_for(*ty, self.target);
-                let old = b.load(addr, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
                 let store_kind = store_kind_for(*ty, self.target);
-                b.store(addr, stepped, store_kind);
+                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let old = place.load(b, kind);
+                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                place.store(b, stepped, store_kind);
                 // C99 6.5.3.1p3 + 6.5.16.2: the value of `++E` is
                 // the post-update value of E in E's type. Reload
                 // through `kind` for sub-64-bit lvalues so a
@@ -2313,16 +2313,16 @@ impl<'a> Walker<'a> {
                 Ok(if matches!(kind, LoadKind::I64) {
                     stepped
                 } else {
-                    b.load(addr, kind)
+                    place.load(b, kind)
                 })
             }
             Expr::PostInc { lvalue, by, ty } => {
-                let addr = self.walk_expr_lvalue(b, *lvalue)?;
                 let kind = load_kind_for(*ty, self.target);
-                let old = b.load(addr, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
                 let store_kind = store_kind_for(*ty, self.target);
-                b.store(addr, stepped, store_kind);
+                let place = self.rmw_place(b, *lvalue, store_kind)?;
+                let old = place.load(b, kind);
+                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                place.store(b, stepped, store_kind);
                 // C99 6.5.2.4p3: the expression's value is the
                 // pre-update value (`old`).
                 Ok(old)
@@ -2394,6 +2394,34 @@ impl<'a> Walker<'a> {
     /// `ValueId` of the lvalue's *address*. The `Assign` rhs and
     /// `Unary{AddrOf}` cases drive into this path; the rvalue
     /// walker re-enters from this address with a matching load.
+    /// Resolve where a read-modify-write operator targets its lvalue. A
+    /// non-thread-local `Token::Loc` Ident of integer-class storage width
+    /// keeps its frame slot so mem2reg can promote it; the float-stored
+    /// case (`StoreKind::F32`, which the fused `StoreLocal` does not
+    /// lower) and every non-local lvalue materialize an address through
+    /// `walk_expr_lvalue`. Mirrors the `Expr::Assign` local-target
+    /// shortcut so `i++` / `i += k` keep the counter register-resident,
+    /// not just `i = i + k`.
+    fn rmw_place(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        lvalue: ExprId,
+        store_kind: StoreKind,
+    ) -> Result<RmwPlace, WalkError> {
+        if !matches!(store_kind, StoreKind::F32)
+            && let Expr::Ident {
+                class,
+                val,
+                is_thread_local: false,
+                ..
+            } = self.ast.expr(lvalue)
+            && *class == Token::Loc as i64
+        {
+            return Ok(RmwPlace::Slot(*val));
+        }
+        Ok(RmwPlace::Addr(self.walk_expr_lvalue(b, lvalue)?))
+    }
+
     fn walk_expr_lvalue(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -2663,6 +2691,48 @@ impl<'a> Walker<'a> {
             Ok(b.imm(val))
         } else {
             Err(WalkError::UnknownSymbolClass { sym: _sym, class })
+        }
+    }
+}
+
+/// Where a read-modify-write operator (`++` / `--` / `op=`) reads and
+/// writes its lvalue. A plain non-thread-local local of integer-class
+/// storage width uses its frame slot directly (`LoadLocal` /
+/// `StoreLocal`); every other lvalue -- a dereference, an array element,
+/// a struct field, or a float-stored local -- routes through a
+/// materialized address. The slot path takes no `LocalAddr`, so the slot
+/// stays promotable in `promotable_slots`; the address path marks it
+/// address-taken and pins it to memory.
+enum RmwPlace {
+    Slot(i64),
+    Addr(super::super::ir::ValueId),
+}
+
+impl RmwPlace {
+    fn load(
+        &self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        kind: LoadKind,
+    ) -> super::super::ir::ValueId {
+        match *self {
+            RmwPlace::Slot(off) => b.load_local(off, kind),
+            RmwPlace::Addr(addr) => b.load(addr, kind),
+        }
+    }
+
+    fn store(
+        &self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        value: super::super::ir::ValueId,
+        kind: StoreKind,
+    ) {
+        match *self {
+            RmwPlace::Slot(off) => {
+                b.store_local(off, value, kind);
+            }
+            RmwPlace::Addr(addr) => {
+                b.store(addr, value, kind);
+            }
         }
     }
 }

@@ -70,6 +70,12 @@ pub(super) struct Frame {
     /// so prologue and epilogue agree on one byte count regardless
     /// of which branch the prologue took.
     pub param_spill_bytes: u32,
+    /// Byte stride between adjacent parameter cells in the callee
+    /// frame. 16 today (the c5 cdecl cell width the prologue
+    /// allocates and `va_arg` walks). Carried on the frame so a
+    /// later phase can shrink non-variadic cells in one place;
+    /// `c5_slot_to_fp_offset` and the prologue both read it.
+    pub param_cell_stride: i64,
 }
 
 impl Frame {
@@ -101,6 +107,7 @@ impl Frame {
             frame_bytes,
             alloc_spill_base: locals_bytes,
             param_spill_bytes,
+            param_cell_stride: 16,
         }
     }
 }
@@ -2027,7 +2034,8 @@ fn emit_inst(
                 // prologue stored the cell from the pristine argument
                 // register before any body instruction ran.
                 if param_from_home.get(i).copied().unwrap_or(false) {
-                    let home_off = c5_slot_to_fp_offset(*idx as i64 + 2) as i32;
+                    let home_off =
+                        c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
                     let load = |code: &mut Vec<u8>, r: Reg| {
                         if matches!(kind, LoadKind::F32) {
                             emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
@@ -2068,7 +2076,7 @@ fn emit_inst(
                 return true;
             }
             let from_home = param_from_home.get(i).copied().unwrap_or(false);
-            let home_off = c5_slot_to_fp_offset(*idx as i64 + 2) as i32;
+            let home_off = c5_slot_to_fp_offset(*idx as i64 + 2, frame.param_cell_stride) as i32;
             // The incoming integer register comes from the plan, not the
             // absolute parameter index: a floating-point parameter
             // earlier in the list consumes an FP register and does not
@@ -2139,7 +2147,7 @@ fn emit_inst(
             // offset and emit `lea rd, [rbp + disp]`. The 32-bit
             // signed `disp` covers any frame our compiler emits;
             // larger frames bail.
-            let bytes = c5_slot_to_fp_offset(*off);
+            let bytes = c5_slot_to_fp_offset(*off, frame.param_cell_stride);
             let disp = match i32::try_from(bytes) {
                 Ok(d) => d,
                 Err(_) => {
@@ -2445,7 +2453,7 @@ fn emit_load_local(
     keep_f32: bool,
     frame: Frame,
 ) -> bool {
-    let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
+    let disp = match i32::try_from(c5_slot_to_fp_offset(off, frame.param_cell_stride)) {
         Ok(v) => v,
         Err(_) => {
             bail_msg("LoadLocal: offset doesn't fit in disp32");
@@ -2519,7 +2527,7 @@ fn emit_store_local(
         bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
         return false;
     }
-    let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
+    let disp = match i32::try_from(c5_slot_to_fp_offset(off, frame.param_cell_stride)) {
         Ok(v) => v,
         Err(_) => {
             bail_msg("StoreLocal: offset doesn't fit in disp32");

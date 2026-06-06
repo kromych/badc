@@ -85,6 +85,12 @@ pub(super) struct Frame {
     /// prologue took (variadic, host-stack overflow,
     /// ParamRef-elided, per-slot pending_sub flush).
     pub param_spill_bytes: u32,
+    /// Byte stride between adjacent parameter cells in the callee
+    /// frame. 16 today (the c5 cdecl cell width the prologue
+    /// allocates and `va_arg` walks). Carried on the frame so a
+    /// later phase can shrink non-variadic cells in one place;
+    /// `c5_slot_to_fp_offset` and the prologue both read it.
+    pub param_cell_stride: i64,
 }
 
 impl Frame {
@@ -138,6 +144,7 @@ impl Frame {
             alloc_spill_base: locals_bytes,
             uses_x19,
             param_spill_bytes,
+            param_cell_stride: 16,
         }
     }
 }
@@ -2614,7 +2621,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             return false;
         }
     };
-    let bytes = c5_slot_to_fp_offset(off);
+    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
     let abs = bytes.unsigned_abs();
     // Up to imm12 fits in a single add/sub-imm.
     if abs < 4096 {
@@ -2845,7 +2852,7 @@ fn emit_load_local(
                 return false;
             }
         };
-        let bytes = c5_slot_to_fp_offset(off);
+        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(4)
@@ -2879,7 +2886,7 @@ fn emit_load_local(
                 return false;
             }
         };
-        let bytes = c5_slot_to_fp_offset(off);
+        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
@@ -2905,7 +2912,7 @@ fn emit_load_local(
         Place::Spill(_) => scratch.secondary,
         Place::FpReg(_) | Place::None => return false,
     };
-    let bytes = c5_slot_to_fp_offset(off);
+    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
     if let Ok(disp) = i32::try_from(bytes)
         && (-256..256).contains(&disp)
     {
@@ -2979,7 +2986,7 @@ fn emit_store_local(
             bail_msg("StoreLocal F64: value not fp reg / spill / int reg");
             return false;
         };
-        let bytes = c5_slot_to_fp_offset(off);
+        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
@@ -3033,7 +3040,7 @@ fn emit_store_local(
             None => return false,
         }
     };
-    let bytes = c5_slot_to_fp_offset(off);
+    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
     if let Ok(disp) = i32::try_from(bytes) {
         if (-256..256).contains(&disp) {
             // Store the low `kind`-width bytes; the accumulator below

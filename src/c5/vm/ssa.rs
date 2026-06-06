@@ -800,6 +800,38 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
+        Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => {
+            // Single-rounding fused multiply-add (C99 6.5p8). Match the
+            // host fmadd / vfmadd: round once, at the result's width.
+            // `libm::fma` / `fmaf` give the same single rounding as the
+            // native instruction (and, unlike `f64::mul_add`, are
+            // available in the no_std build) so the VM reference agrees
+            // with native codegen on every target.
+            let is_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
+            let mut av = f64::from_bits(frame.regs[*a as usize] as u64);
+            let bv = f64::from_bits(frame.regs[*b as usize] as u64);
+            let mut cv = f64::from_bits(frame.regs[*c as usize] as u64);
+            if *neg_product {
+                av = -av;
+            }
+            if *neg_addend {
+                cv = -cv;
+            }
+            let res = if is_f32 {
+                libm::fmaf(av as f32, bv as f32, cv as f32) as f64
+            } else {
+                libm::fma(av, bv, cv)
+            };
+            frame.regs[v as usize] =
+                round_if_f32(res.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            return Ok(());
+        }
         Inst::Extend { value, kind } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = match kind {
@@ -1407,6 +1439,9 @@ fn run_intrinsic(
         }
         Intrinsic::SetjmpAArch64 | Intrinsic::LongjmpAArch64 => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} is AArch64-specific and not supported here",
+        ))),
+        Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
+            "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
     }
 }

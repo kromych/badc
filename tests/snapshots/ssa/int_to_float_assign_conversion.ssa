@@ -161,17 +161,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v78  Imm(4599057925072241033)                         -> x0
     v79  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v80  FpCast { kind=F32ToF64, value=v79 }              -> d0
-    v81  Binop { op=fmul, lhs=v78, rhs=v80 }              -> d0
-    v82  Imm(4603462445507809378)                         -> x0
+    v81  Binop { op=fmul, lhs=v78, rhs=v80 }              -> d1
+    v82  Imm(4603462445507809378)                         -> x1
     v83  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v84  FpCast { kind=F32ToF64, value=v83 }              -> d1
     v85  Binop { op=fmul, lhs=v82, rhs=v84 }              -> d1
-    v86  Binop { op=fadd, lhs=v81, rhs=v85 }              -> d0
+    v86  Fma { a=v78, b=v80, c=v85, neg_product=false, neg_addend=false } -> d0
     v87  Imm(4592878986383488713)                         -> x0
     v88  LoadLocal { off=-4, kind=F32 }                   -> d1 [f32]
     v89  FpCast { kind=F32ToF64, value=v88 }              -> d1
-    v90  Binop { op=fmul, lhs=v87, rhs=v89 }              -> d1
-    v91  Binop { op=fadd, lhs=v86, rhs=v90 }              -> d0
+    v90  Binop { op=fmul, lhs=v87, rhs=v89 }              -> d2
+    v91  Fma { a=v87, b=v89, c=v86, neg_product=false, neg_addend=false } -> d0
     v92  Imm(4638707616191610880)                         -> x0
     v93  Binop { op=fsub, lhs=v91, rhs=v92 }              -> d0
     v94  FpCast { kind=F64ToF32, value=v93 }              -> d0 [f32]

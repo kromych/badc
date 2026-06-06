@@ -904,6 +904,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
             | Inst::Fneg(_)
+            | Inst::Fma { .. }
             | Inst::FpCast { .. }
     )
 }
@@ -943,6 +944,11 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(*lhs),
         Inst::Fneg(v) => f(*v),
+        Inst::Fma { a, b, c, .. } => {
+            f(*a);
+            f(*b);
+            f(*c);
+        }
         Inst::Extend { value, .. } => f(*value),
         Inst::FpCast { value, .. } => f(*value),
         Inst::Intrinsic { kind, args } => {
@@ -1047,6 +1053,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         Fneg(_) => ResultKind::Fp,
+        Fma { .. } => ResultKind::Fp,
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt => ResultKind::Int,

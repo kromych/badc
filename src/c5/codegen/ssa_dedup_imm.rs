@@ -164,6 +164,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(lhs),
         Inst::Fneg(v) => f(v),
+        Inst::Fma { a, b, c, .. } => {
+            f(a);
+            f(b);
+            f(c);
+        }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {

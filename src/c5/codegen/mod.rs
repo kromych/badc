@@ -53,6 +53,7 @@ mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
+mod ssa_fma;
 mod ssa_inline;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;

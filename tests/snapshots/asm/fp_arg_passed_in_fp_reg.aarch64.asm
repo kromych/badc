@@ -10,16 +10,14 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	fmul	d1, d0, d1
-               	fadd	d0, d1, d0
+               	fmadd	d0, d0, d1, d0
                	ret
                	sxtw	x0, w0
                	sxtw	x1, w1
                	scvtf	d2, x0
-               	fmul	d0, d0, d2
-               	scvtf	d2, x1
-               	fmul	d1, d1, d2
-               	fadd	d0, d0, d1
+               	scvtf	d3, x1
+               	fmul	d1, d1, d3
+               	fmadd	d0, d0, d2, d1
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -28,9 +26,8 @@ Disassembly of section .text:
                	mov	x1, #0x4008000000000000 // =4613937818241073152
                	fmov	d16, x0
                	fmov	d17, x1
-               	fmul	d0, d16, d17
-               	fmov	d17, x0
-               	fadd	d0, d0, d17
+               	fmov	d18, x0
+               	fmadd	d0, d16, d17, d18
                	mov	x0, #0x4020000000000000 // =4620693217682128896
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -45,12 +42,11 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	mov	x3, #0x4004000000000000 // =4612811918334230528
                	scvtf	d0, x0
-               	fmov	d16, x1
-               	fmul	d0, d16, d0
                	scvtf	d1, x2
                	fmov	d16, x3
                	fmul	d1, d16, d1
-               	fadd	d0, d0, d1
+               	fmov	d16, x1
+               	fmadd	d0, d16, d0, d1
                	mov	x0, #0x402d000000000000 // =4624352392379367424
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -68,8 +64,7 @@ Disassembly of section .text:
                	ldr	d0, [x16]
                	mov	x0, #0x4010000000000000 // =4616189618054758400
                	fmov	d17, x0
-               	fmul	d1, d0, d17
-               	fadd	d0, d1, d0
+               	fmadd	d0, d0, d17, d0
                	mov	x0, #0x400000000000     // =70368744177664
                	movk	x0, #0x403f, lsl #48
                	fmov	d17, x0

@@ -655,6 +655,28 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::Fma` -- fused multiply-add `(neg_product ? -(a*b) : a*b)
+    /// + (neg_addend ? -c : c)`, rounded once. Emitted for an explicit
+    /// `fma` / `fmaf` intrinsic call; the optimizer's contraction pass
+    /// produces the same node directly from a multiply feeding an
+    /// add/sub. The caller marks the result f32 for `fmaf`.
+    pub(crate) fn fma(
+        &mut self,
+        a: ValueId,
+        b: ValueId,
+        c: ValueId,
+        neg_product: bool,
+        neg_addend: bool,
+    ) -> ValueId {
+        self.push(Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        })
+    }
+
     /// `Inst::Fneg`. Pure value; same input -> same output bit
     /// pattern. CSE-eligible.
     pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {

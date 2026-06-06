@@ -2373,6 +2373,18 @@ impl<'a> Walker<'a> {
                 for a in args.clone() {
                     arg_vals.push(self.walk_expr_rvalue(b, a)?);
                 }
+                // fma / fmaf (C99 7.12.13.1) lower to the fused node so
+                // the three operands round once. The parser has already
+                // coerced the arguments to the matching FP width.
+                let fma_kind = super::super::op::Intrinsic::Fma as i64;
+                let fmaf_kind = super::super::op::Intrinsic::Fmaf as i64;
+                if intr_kind == fma_kind || intr_kind == fmaf_kind {
+                    let v = b.fma(arg_vals[0], arg_vals[1], arg_vals[2], false, false);
+                    if intr_kind == fmaf_kind {
+                        return Ok(b.mark_f32(v));
+                    }
+                    return Ok(v);
+                }
                 Ok(b.intrinsic(intr_kind, arg_vals))
             }
         }

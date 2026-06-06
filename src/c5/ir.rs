@@ -122,6 +122,21 @@ pub(crate) enum Inst {
     },
     /// Unary floating-point negation.
     Fneg(ValueId),
+    /// Fused multiply-add computed with a single rounding (C99 6.5p8,
+    /// FP_CONTRACT). The value is
+    /// `(neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`. Produced
+    /// by `ssa_fma` from an `fadd` / `fsub` whose single-use operand is
+    /// an `fmul` of the same floating-point width; the result's width
+    /// follows the contracted `fadd` / `fsub` (tracked in `f32_values`).
+    /// The four sign combinations map to the host fmadd / fmsub /
+    /// fnmadd / fnmsub family.
+    Fma {
+        a: ValueId,
+        b: ValueId,
+        c: ValueId,
+        neg_product: bool,
+        neg_addend: bool,
+    },
     /// Sign-extend the low bytes of `value` to 64 bits, as a load of
     /// `kind` would after reading them from memory (C99 6.3.1.3). The
     /// width comes from `kind`, which is one of the signed narrow load

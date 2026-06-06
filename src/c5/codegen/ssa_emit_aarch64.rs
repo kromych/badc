@@ -1176,6 +1176,9 @@ struct ScratchPool {
 /// lowering, so they need no prologue save.
 const SCRATCH_FP0: u8 = 16;
 const SCRATCH_FP1: u8 = 17;
+/// Third FP scratch for the three-input fused multiply-add. d18 sits
+/// outside the allocator's d0..d15 pool, like d16 / d17.
+const SCRATCH_FP2: u8 = 18;
 
 impl ScratchPool {
     fn new() -> Self {
@@ -1807,6 +1810,67 @@ fn emit_inst(
             } else {
                 emit(code, enc_fneg_d(dd, dn));
             }
+            if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_d_auto(code, dd, sp_off);
+            }
+            true
+        }
+        Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => {
+            // C99 6.5p8 / FP_CONTRACT: the fused form rounds once. The
+            // result width follows the operands; the marker mirrors `a`.
+            let is_f32 = alloc.is_f32(v);
+            let a_place = alloc
+                .places
+                .get(*a as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let b_place = alloc
+                .places
+                .get(*b as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let c_place = alloc
+                .places
+                .get(*c as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            // Each operand resolves to its own d-reg or, when spilled, a
+            // dedicated scratch outside the d0..d15 pool (d16 / d17 / d18).
+            let da = match materialize_fp_for(code, *a, a_place, SCRATCH_FP0, frame, alloc) {
+                Some(r) => r,
+                None => return false,
+            };
+            let dm = match materialize_fp_for(code, *b, b_place, SCRATCH_FP1, frame, alloc) {
+                Some(r) => r,
+                None => return false,
+            };
+            let dc = match materialize_fp_for(code, *c, c_place, SCRATCH_FP2, frame, alloc) {
+                Some(r) => r,
+                None => return false,
+            };
+            // A spilled result writes into SCRATCH_FP2 and stores after.
+            // d18 is free unless `c` was itself spilled into it, in which
+            // case the FMADD reads Da before writing Dd so the alias is
+            // harmless. It must NOT reuse `dc` directly: when `c` lives
+            // in an allocated register that register may hold a value
+            // still needed by a later instruction (e.g. a loop-carried
+            // operand reused as the addend across several fused ops).
+            let dd = match dst {
+                Place::FpReg(r) => r,
+                Place::Spill(_) => SCRATCH_FP2,
+                _ => return false,
+            };
+            emit(
+                code,
+                super::aarch64::enc_fma(dd, da, dm, dc, is_f32, *neg_product, *neg_addend),
+            );
             if let Place::Spill(slot) = dst {
                 let sp_off = spill_off(frame, slot);
                 emit_sp_str_d_auto(code, dd, sp_off);
@@ -2638,6 +2702,9 @@ fn emit_intrinsic(
             emit(code, enc_br(Reg(10)));
             true
         }
+        // fma / fmaf lower to Inst::Fma at the call site, so they never
+        // reach the Inst::Intrinsic dispatch.
+        I::Fma | I::Fmaf => false,
     }
 }
 

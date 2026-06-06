@@ -185,18 +185,17 @@ Disassembly of section .text:
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	fcvt	d0, s0
-               	fmov	d16, x0
-               	fmul	d0, d16, d0
-               	mov	x0, #0x1062             // =4194
-               	movk	x0, #0x3958, lsl #16
-               	movk	x0, #0xc8b4, lsl #32
-               	movk	x0, #0x3fe2, lsl #48
+               	mov	x1, #0x1062             // =4194
+               	movk	x1, #0x3958, lsl #16
+               	movk	x1, #0xc8b4, lsl #32
+               	movk	x1, #0x3fe2, lsl #48
                	sub	x16, x29, #0x18
                	ldr	s1, [x16]
                	fcvt	d1, s1
-               	fmov	d16, x0
+               	fmov	d16, x1
                	fmul	d1, d16, d1
-               	fadd	d0, d0, d1
+               	fmov	d16, x0
+               	fmadd	d0, d16, d0, d1
                	mov	x0, #0x76c9             // =30409
                	movk	x0, #0x9fbe, lsl #16
                	movk	x0, #0x2f1a, lsl #32
@@ -205,8 +204,7 @@ Disassembly of section .text:
                	ldr	s1, [x16]
                	fcvt	d1, s1
                	fmov	d16, x0
-               	fmul	d1, d16, d1
-               	fadd	d0, d0, d1
+               	fmadd	d0, d16, d1, d0
                	mov	x0, #0x4060000000000000 // =4638707616191610880
                	fmov	d17, x0
                	fsub	d0, d0, d17

@@ -1866,6 +1866,8 @@ impl Preprocessor {
             "__builtin_va_arg" => super::op::Intrinsic::VaArg as i64,
             "__builtin_va_end" => super::op::Intrinsic::VaEnd as i64,
             "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
+            "fma" => super::op::Intrinsic::Fma as i64,
+            "fmaf" => super::op::Intrinsic::Fmaf as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
@@ -1876,7 +1878,7 @@ impl Preprocessor {
                          __builtin_alloca, __c5_aarch64_setjmp, \
                          __c5_aarch64_longjmp, __builtin_va_start, \
                          __builtin_va_arg, __builtin_va_end, \
-                         __builtin_va_copy"
+                         __builtin_va_copy, fma, fmaf"
                     ),
                 )));
             }

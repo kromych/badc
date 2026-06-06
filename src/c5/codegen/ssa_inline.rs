@@ -127,6 +127,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             }
             Inst::BinopI { lhs, .. } => mark(*lhs, &mut used),
             Inst::Fneg(v) => mark(*v, &mut used),
+            Inst::Fma { a, b, c, .. } => {
+                mark(*a, &mut used);
+                mark(*b, &mut used);
+                mark(*c, &mut used);
+            }
             Inst::Extend { value, .. } => mark(*value, &mut used),
             Inst::FpCast { value, .. } => mark(*value, &mut used),
             Inst::Mcpy { dst, src, .. } => {
@@ -180,6 +185,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             | Inst::BinopI { .. }
             | Inst::Extend { .. }
             | Inst::Fneg(_)
+            | Inst::Fma { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
@@ -255,6 +261,11 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         }
         Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, remap),
         Inst::Fneg(v) => *v = map_v(*v, remap),
+        Inst::Fma { a, b, c, .. } => {
+            *a = map_v(*a, remap);
+            *b = map_v(*b, remap);
+            *c = map_v(*c, remap);
+        }
         Inst::Extend { value, .. } => *value = map_v(*value, remap),
         Inst::FpCast { value, .. } => *value = map_v(*value, remap),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
@@ -331,6 +342,11 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                 }
                 Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, callee_remap),
                 Inst::Fneg(v) => *v = map_v(*v, callee_remap),
+                Inst::Fma { a, b, c, .. } => {
+                    *a = map_v(*a, callee_remap);
+                    *b = map_v(*b, callee_remap);
+                    *c = map_v(*c, callee_remap);
+                }
                 Inst::Extend { value, .. } => *value = map_v(*value, callee_remap),
                 Inst::FpCast { value, .. } => *value = map_v(*value, callee_remap),
                 _ => {}

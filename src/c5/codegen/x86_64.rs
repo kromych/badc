@@ -817,6 +817,67 @@ pub(super) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
     emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
 }
 
+/// Emit a VEX-encoded FMA3 scalar instruction in the `231` operand
+/// order: `dst = (a * b) <op> dst`. `a` is the VEX.vvvv multiplicand,
+/// `b` the ModR/M.r/m multiplicand, `dst` the ModR/M.reg destination
+/// that also supplies the accumulator. `opcode` picks the variant
+/// (B9 / BB / BD / BF); `w64` selects the double-precision (W1) form,
+/// otherwise single-precision (W0). FMA3 is Haswell-and-later baseline.
+fn emit_vex_fma231(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, b: Reg) {
+    // 3-byte VEX (C4): the 0F38 opcode map forces the long form.
+    //   byte1: R X B mmmmm   (R/B inverted high bits; mmmmm = 00010)
+    //   byte2: W vvvv L pp    (vvvv inverted; L = 0 scalar; pp = 01 -> 66)
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if b.high() { 0u8 } else { 1u8 };
+    let a_num = ((a.high() as u8) << 3) | a.lo();
+    let vvvv = (!a_num) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | 0b01);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
+}
+
+/// `VFMADD231SD dst, a, b` -- `dst = a*b + dst` (double, single round).
+pub(super) fn emit_vfmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xB9, true, dst, a, b);
+}
+
+/// `VFMSUB231SD dst, a, b` -- `dst = a*b - dst`.
+pub(super) fn emit_vfmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBB, true, dst, a, b);
+}
+
+/// `VFNMADD231SD dst, a, b` -- `dst = -(a*b) + dst`.
+pub(super) fn emit_vfnmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBD, true, dst, a, b);
+}
+
+/// `VFNMSUB231SD dst, a, b` -- `dst = -(a*b) - dst`.
+pub(super) fn emit_vfnmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBF, true, dst, a, b);
+}
+
+/// `VFMADD231SS dst, a, b` -- `dst = a*b + dst` (single, single round).
+pub(super) fn emit_vfmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xB9, false, dst, a, b);
+}
+
+/// `VFMSUB231SS dst, a, b` -- `dst = a*b - dst`.
+pub(super) fn emit_vfmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBB, false, dst, a, b);
+}
+
+/// `VFNMADD231SS dst, a, b` -- `dst = -(a*b) + dst`.
+pub(super) fn emit_vfnmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBD, false, dst, a, b);
+}
+
+/// `VFNMSUB231SS dst, a, b` -- `dst = -(a*b) - dst`.
+pub(super) fn emit_vfnmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBF, false, dst, a, b);
+}
+
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
 /// Encoding: `F2 REX.W 0F 2A /r`.
 pub(super) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
@@ -1620,6 +1681,12 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);
         });
+        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
+        // -O). Runs after the inliner so products exposed by parameter
+        // substitution into an add/sub become contractible.
+        super::ssa_emit_common::time_pass("ssa_fma::run (x86_64)", || {
+            super::ssa_fma::run(&mut ssa_funcs);
+        });
         super::ssa_emit_common::time_pass("ssa_constfold_branch::run (x86_64)", || {
             super::ssa_constfold_branch::run(&mut ssa_funcs);
         });
@@ -2076,6 +2143,42 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
+        );
+    }
+
+    #[test]
+    fn vfma231_encodings() {
+        // vfmadd231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xB9, 0xC2]
+        );
+        // vfmsub231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 BB C2
+        assert_eq!(
+            assemble(|c| emit_vfmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBB, 0xC2]
+        );
+        // vfnmadd231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BD C2
+        assert_eq!(
+            assemble(|c| emit_vfnmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBD, 0xC2]
+        );
+        // vfnmsub231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BF C2
+        assert_eq!(
+            assemble(|c| emit_vfnmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBF, 0xC2]
+        );
+        // Single-precision clears VEX.W: vfmadd231ss xmm0, xmm1, xmm2
+        //   ->  C4 E2 71 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231ss(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0x71, 0xB9, 0xC2]
+        );
+        // Extended registers clear VEX.R / VEX.B: vfmadd231sd xmm8,
+        // xmm9, xmm10  ->  C4 42 B1 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231sd(c, Reg(8), Reg(9), Reg(10))),
+            vec![0xC4, 0x42, 0xB1, 0xB9, 0xC2]
         );
     }
 

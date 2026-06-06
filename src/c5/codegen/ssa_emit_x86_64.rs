@@ -55,7 +55,9 @@ use super::x86_64::{
     emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_or_r_mem, emit_or_rr,
     emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
     emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd,
-    emit_ucomiss, emit_xor_r_mem, emit_xor_rr, emit_xorpd,
+    emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss,
+    emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem,
+    emit_xor_rr, emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -663,6 +665,10 @@ const SCRATCH_R13: Reg = Reg(13);
 /// stay free as primary / secondary scratches.
 const SCRATCH_XMM14: Reg = Reg(14);
 const SCRATCH_XMM15: Reg = Reg(15);
+/// Third FP scratch for the three-input fused multiply-add, holding a
+/// spilled accumulator. xmm13 is outside the allocator's xmm0..xmm7
+/// pool, like xmm14 / xmm15.
+const SCRATCH_XMM13: Reg = Reg(13);
 
 /// Extract the FP reg from a `Place`, or `None` if it's not an
 /// xmm register.
@@ -2455,6 +2461,24 @@ fn emit_inst(
             *current_alloca_top,
         ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
+        Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => emit_fma(
+            code,
+            dst,
+            v,
+            *a,
+            *b,
+            *c,
+            *neg_product,
+            *neg_addend,
+            alloc,
+            frame,
+        ),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(
@@ -2503,6 +2527,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::Binop { .. } => "Binop",
         Inst::BinopI { .. } => "BinopI",
         Inst::Fneg(_) => "Fneg",
+        Inst::Fma { .. } => "Fma",
         Inst::Extend { .. } => "Extend",
         Inst::FpCast { .. } => "FpCast",
         Inst::Call { .. } => "Call",
@@ -3269,6 +3294,84 @@ fn emit_extend(
         }
     }
     spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::Fma { a, b, c, neg_product, neg_addend }` -- fused multiply
+/// add `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
+/// with a single rounding (C99 6.5p8 / FP_CONTRACT). FMA3 (Haswell+)
+/// is the assumed x86_64 baseline. The `231` form computes
+/// `dst = a*b OP dst`, so the addend `c` is staged into `dst` first;
+/// the two multiplicands are forced into the scratch xmms outside the
+/// allocator pool so that staging `c` cannot clobber them.
+fn emit_fma(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    a: u32,
+    b: u32,
+    c: u32,
+    neg_product: bool,
+    neg_addend: bool,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let is_f32 = alloc.is_f32(v);
+    let a_place = alloc.places.get(a as usize).copied().unwrap_or(Place::None);
+    let b_place = alloc.places.get(b as usize).copied().unwrap_or(Place::None);
+    let c_place = alloc.places.get(c as usize).copied().unwrap_or(Place::None);
+    let ra = match materialize_fp(code, a_place, SCRATCH_XMM14, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Fma: a not fp reg / spill / int reg");
+            return false;
+        }
+    };
+    if ra.0 != SCRATCH_XMM14.0 {
+        emit_movapd_xmm_xmm(code, SCRATCH_XMM14, ra);
+    }
+    let rb = match materialize_fp(code, b_place, SCRATCH_XMM15, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Fma: b not fp reg / spill / int reg");
+            return false;
+        }
+    };
+    if rb.0 != SCRATCH_XMM15.0 {
+        emit_movapd_xmm_xmm(code, SCRATCH_XMM15, rb);
+    }
+    // The destination also supplies the accumulator. A spilled result
+    // routes through a third scratch outside the pool.
+    let dd = match dst {
+        Place::FpReg(r) => Reg(r),
+        Place::Spill(_) => SCRATCH_XMM13,
+        _ => {
+            bail_msg("Fma: dst not fp reg / spill");
+            return false;
+        }
+    };
+    let rc = match materialize_fp(code, c_place, dd, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Fma: c not fp reg / spill / int reg");
+            return false;
+        }
+    };
+    if rc.0 != dd.0 {
+        emit_movapd_xmm_xmm(code, dd, rc);
+    }
+    let (a14, b15) = (SCRATCH_XMM14, SCRATCH_XMM15);
+    match (neg_product, neg_addend, is_f32) {
+        (false, false, false) => emit_vfmadd231sd(code, dd, a14, b15),
+        (false, true, false) => emit_vfmsub231sd(code, dd, a14, b15),
+        (true, false, false) => emit_vfnmadd231sd(code, dd, a14, b15),
+        (true, true, false) => emit_vfnmsub231sd(code, dd, a14, b15),
+        (false, false, true) => emit_vfmadd231ss(code, dd, a14, b15),
+        (false, true, true) => emit_vfmsub231ss(code, dd, a14, b15),
+        (true, false, true) => emit_vfnmadd231ss(code, dd, a14, b15),
+        (true, true, true) => emit_vfnmsub231ss(code, dd, a14, b15),
+    }
+    fp_spill_dst_to_slot(code, dst, dd, frame);
     true
 }
 
@@ -5416,6 +5519,12 @@ fn emit_intrinsic(
         }
         I::SetjmpAArch64 | I::LongjmpAArch64 => {
             bail_msg("intrinsic: AArch64 setjmp / longjmp on non-AArch64 target");
+            false
+        }
+        // fma / fmaf lower to Inst::Fma at the call site, so they never
+        // reach the Inst::Intrinsic dispatch.
+        I::Fma | I::Fmaf => {
+            bail_msg("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic");
             false
         }
     }

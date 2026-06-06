@@ -126,6 +126,15 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_binop(*op),
         ),
         Fneg(v) => format!("Fneg(v{v})"),
+        Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => format!(
+            "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
+        ),
         Extend { value, kind } => {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }

@@ -281,9 +281,48 @@ impl Compiler {
                     let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
                     let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
                     let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
+                    let fma_id = crate::c5::op::Intrinsic::Fma as i64;
+                    let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
-                    if intrinsic_id == va_arg_id {
+                    if intrinsic_id == fma_id || intrinsic_id == fmaf_id {
+                        // fma(x, y, z) / fmaf(x, y, z) -- C99 7.12.13.1.
+                        // Three FP arguments, each cast to the result
+                        // precision so the fused node sees uniform-width
+                        // operands (6.3.1.4 / 6.3.1.5). The walker lowers
+                        // the call to a single `Inst::Fma`.
+                        let elem_ty = if intrinsic_id == fmaf_id {
+                            Ty::Float as i64
+                        } else {
+                            Ty::Double as i64
+                        };
+                        let mut count = 0;
+                        loop {
+                            self.expr(Token::Assign as i64)?;
+                            if let Some(child) = self.ast_acc {
+                                let pos = self.ast_src_pos();
+                                let cast_id = self.ast.push_expr(
+                                    super::super::ast::Expr::Cast {
+                                        child,
+                                        to_ty: elem_ty,
+                                    },
+                                    pos,
+                                );
+                                ast_intrinsic_args.push(cast_id);
+                            }
+                            count += 1;
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                                continue;
+                            }
+                            break;
+                        }
+                        if count != 3 {
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)"))
+                            );
+                        }
+                    } else if intrinsic_id == va_arg_id {
                         // `__builtin_va_arg(self, T)` -- self is the
                         // va_list-storage address expression, T is the
                         // argument's type-name. The first operand is
@@ -420,6 +459,10 @@ impl Compiler {
                         // slot. The <stdarg.h> macro dereferences
                         // as the requested type.
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    } else if intrinsic_id == fma_id {
+                        self.ty = Ty::Double as i64;
+                    } else if intrinsic_id == fmaf_id {
+                        self.ty = Ty::Float as i64;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }

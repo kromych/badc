@@ -85,18 +85,17 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	mov	x0, #0x4000000000000000 // =4611686018427387904
-               	fmov	d17, x0
-               	fmul	d0, d0, d17
-               	mov	x0, #0x6                // =6
-               	scvtf	d1, x0
+               	mov	x1, #0x6                // =6
+               	scvtf	d1, x1
                	fcvt	s1, d1
-               	mov	x0, #0x4010000000000000 // =4616189618054758400
+               	mov	x1, #0x4010000000000000 // =4616189618054758400
                	fcvt	d1, s1
-               	fmov	d17, x0
+               	fmov	d17, x1
                	fdiv	d1, d1, d17
                	fcvt	s1, d1
                	fcvt	d1, s1
-               	fadd	d0, d0, d1
+               	fmov	d17, x0
+               	fmadd	d0, d0, d17, d1
                	mov	x0, #0x4012000000000000 // =4616752568008179712
                	fmov	d17, x0
                	fcmp	d0, d17

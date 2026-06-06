@@ -117,6 +117,42 @@ pub(crate) fn walk_function(
     // base, so this index matches the `val` the parser stored
     // for each declared param.
     let arg_slot_base: i64 = if returns_struct { 3 } else { 2 };
+    // C99 6.2.5p10 + the host ABI (System V AMD64 3.2.3 / AAPCS64
+    // 6.4.1): a floating-point scalar parameter passed in an FP
+    // argument register. Record the per-parameter FP mask so the
+    // callee emit resolves each parameter's incoming register
+    // through `plan_call_args`, the same ABI planner the caller
+    // uses. Independent int / FP register banks mean an int
+    // parameter after an FP parameter does not lose an int arg
+    // register to the FP one. Variadic and struct-returning callees
+    // keep the c5 cdecl shape (their args ride the c5 stack / a
+    // hidden out-pointer shifts every cell), so they are excluded
+    // here exactly as they are from the seed loop below.
+    if !is_variadic && !returns_struct {
+        for (i, &pty) in param_tys.iter().enumerate() {
+            let stripped = pty & !(1i64 << 30);
+            let is_pointer = pty & (1i64 << 30) != 0;
+            if !is_pointer
+                && (stripped == crate::c5::token::Ty::Float as i64
+                    || stripped == crate::c5::token::Ty::Double as i64)
+            {
+                b.mark_param_fp(i);
+            }
+        }
+    }
+    // Per-parameter incoming-register plan, resolved once for both the
+    // integer/double seed loop and the float-narrow loop below. A
+    // floating-point parameter is seeded with an FP `ParamRef` only
+    // when the plan placed it in an FP register; one that overflowed to
+    // the host stack reads its c5 cdecl cell instead.
+    let param_plan =
+        super::super::codegen::plan_param_regs(param_tys.len(), b.param_fp_mask(), target.abi());
+    let param_in_fp_reg = |i: usize| -> bool {
+        matches!(
+            param_plan.placements.get(i),
+            Some(super::super::codegen::ArgPlacement::FpReg(_))
+        )
+    };
     // Parameter-slot promotion seed: for each non-relocated,
     // non-struct, non-float-narrowed parameter, emit a `ParamRef`
     // + `StoreLocal` to the c5 cdecl arg slot. The store gives
@@ -150,17 +186,29 @@ pub(crate) fn walk_function(
             if is_struct_value {
                 continue;
             }
-            // Floating-point params are read back through the FP
-            // register class (`LoadLocal { F32 / F64 }`); seeding the
-            // slot with an integer `ParamRef` + `StoreLocal { I64 }`
-            // would cross register files. The prologue already spills
-            // the incoming argument register into the cdecl slot, and
-            // the body reads it as FP. `float` additionally needs the
-            // entry-copy below to narrow the widened slot bits; `double`
-            // shares the 8-byte storage width and needs no entry copy.
+            // Floating-point params arrive in an FP argument register
+            // (C99 6.2.5p10). A `double` keeps its original positive
+            // cell (`param_local_slots[i] == 0`); seed it with an FP
+            // `ParamRef { F64 }` + `StoreLocal { F64 }` so mem2reg has
+            // a reaching def in the FP register file and the body's
+            // `LoadLocal { F64 }` reads can fold onto it -- exactly the
+            // promotion the integer path below performs. A `float`
+            // param was repointed by the parser to a negative narrow-
+            // storage local (`param_local_slots[i] < 0`, skipped at the
+            // top of the loop); its entry narrow stays on the parser's
+            // dance, fed by the prologue's widen-to-f64 spill of the
+            // incoming s-register.
             let is_float = stripped == crate::c5::token::Ty::Float as i64;
             let is_double = stripped == crate::c5::token::Ty::Double as i64;
-            if is_float || is_double {
+            if is_double {
+                if param_in_fp_reg(i) {
+                    let arg_slot = (i as i64) + arg_slot_base;
+                    let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F64);
+                    b.store_local(arg_slot, pr, super::super::ir::StoreKind::F64);
+                }
+                continue;
+            }
+            if is_float {
                 continue;
             }
             // Pointer-typed parameters carry the pointer marker
@@ -222,25 +270,41 @@ pub(crate) fn walk_function(
             b.mcpy(dst, src, size);
             continue;
         }
-        // FP-by-value param. The parser allocated a local slot
-        // for `x` so the body can read it back through the
-        // standard `LoadLocal { kind: F32 }` path; without
-        // re-narrowing the host-arg-register value at function
-        // entry the local stays uninitialised and every `x`
-        // reference reads stack garbage. C99 6.5.2.2 says the
-        // call passed a 4-byte float; the c5 cdecl widens to
-        // 8 bytes in the host arg slot. Read the slot as I64
-        // (preserves the bit pattern) and narrow back via a
-        // `Store { kind: F32 }` into the local. F64 / `double`
-        // shares the I64 storage width (8 bytes both inbound and
-        // on the local), so this widen-then-narrow step does not
-        // apply.
+        // `float`-by-value param. The parser repointed the symbol to a
+        // 4-byte narrow-storage local (`local_slot < 0`).
         let is_float = stripped == crate::c5::token::Ty::Float as i64;
         if is_float {
-            let arg_slot = (i as i64) + arg_slot_base;
-            let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
             let dst = b.local_addr(local_slot);
-            b.store(dst, val, super::super::ir::StoreKind::F32);
+            if !is_variadic && !returns_struct && param_in_fp_reg(i) {
+                // The argument arrives at single precision in an FP
+                // argument register (C99 6.2.5p10). Seed an FP
+                // `ParamRef { F32 }` (the s-register view) and store it
+                // into the local with `StoreKind::F32`. The value never
+                // round-trips through the positive c5 cdecl cell, so
+                // that cell stays unobserved and the prologue's spill of
+                // it is elided.
+                let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F32);
+                b.mark_f32(pr);
+                b.store(dst, pr, super::super::ir::StoreKind::F32);
+            } else if !is_variadic && !returns_struct {
+                // Host-stack-overflow `float` parameter (more than eight
+                // preceding FP parameters): the caller pushed it at
+                // single precision into the c5 cdecl cell. Read the cell
+                // as `F32` (widening to f64) and narrow back into the
+                // local.
+                let arg_slot = (i as i64) + arg_slot_base;
+                let val = b.load_local(arg_slot, super::super::ir::LoadKind::F32);
+                b.store(dst, val, super::super::ir::StoreKind::F32);
+            } else {
+                // Variadic / struct-returning callees keep the c5 cdecl
+                // shape: the caller widened the `float` to an 8-byte
+                // double in the integer-passed cell. Read the cell as
+                // I64 (preserving the bit pattern) and narrow back via a
+                // `StoreKind::F32` into the local.
+                let arg_slot = (i as i64) + arg_slot_base;
+                let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+                b.store(dst, val, super::super::ir::StoreKind::F32);
+            }
         }
     }
     let mut ctx = Walker {
@@ -331,6 +395,17 @@ impl<'a> Walker<'a> {
         } else {
             fallback_val
         }
+    }
+
+    /// True when the `Token::Fun` symbol is a variadic function. A
+    /// variadic c5 callee keeps the c5 cdecl stack-push argument
+    /// shape, so its floating-point arguments ride the integer
+    /// register class as widened doubles rather than the FP bank.
+    fn fun_is_variadic(&self, sym: u32) -> bool {
+        let idx = sym as usize;
+        idx < self.symbols.len()
+            && self.symbols[idx].class == Token::Fun as i64
+            && self.symbols[idx].is_variadic
     }
 
     /// Resolve a `Token::Glo` address producer to either an
@@ -1508,11 +1583,15 @@ impl<'a> Walker<'a> {
                     let target_pc = self.live_fun_val(*sym, *val);
                     // Struct-returning callee: the result is an
                     // address (the c5 address-as-value rule), never
-                    // an FP scalar, so `fp_return` is false.
+                    // an FP scalar, so `fp_return` is false. The callee
+                    // keeps the c5 cdecl shape (excluded from
+                    // `param_fp_mask` because the hidden out-pointer
+                    // shifts every parameter cell), so its arguments
+                    // ride the integer bank: `fp_arg_mask` is 0.
                     if target_pc == 0 {
-                        let _ = b.call_extern(*sym, all_args, false);
+                        let _ = b.call_extern(*sym, all_args, false, 0);
                     } else {
-                        let _ = b.call(target_pc as usize, all_args, false);
+                        let _ = b.call(target_pc as usize, all_args, false, 0);
                     }
                     return Ok(b.local_addr(result_slot));
                 }
@@ -1576,35 +1655,43 @@ impl<'a> Walker<'a> {
                 } = self.ast.expr(*callee)
                 {
                     if *class == Token::Fun as i64 {
-                        // c5-internal calls pass every arg in
-                        // an integer register slot (the callee
-                        // reads them out of positive frame
-                        // slots as i64 regardless of their
-                        // C-level type). For FP args, the bit
-                        // pattern has to round-trip through the
-                        // int register class -- StoreLocal /
-                        // LoadLocal -- so the codegen places
-                        // the value in x0..x7 instead of
-                        // d0..d7.
-                        for (i, a) in args.iter().enumerate() {
-                            let arg_is_fp = expr_ty(self.ast.expr(*a))
-                                .map(is_floating_scalar)
-                                .unwrap_or(false);
-                            if arg_is_fp {
-                                // The c5 cdecl passes every FP arg as a
-                                // widened 8-byte double through an integer
-                                // register slot; the callee's entry copy
-                                // re-narrows a `float` parameter. Widen an
-                                // f32 arg to f64 first so the wire format
-                                // stays 8-byte (the call ABI itself is a
-                                // follow-on; this preserves it). C99
-                                // 6.5.2.2p6.
-                                let widened = b.fp_widen_to_f64(arg_vals[i]);
-                                let slot = b.alloc_synthetic_local();
-                                b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                                arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        // C99 6.5.2.2p7 + the host ABI: a floating-point
+                        // scalar argument rides an FP argument register
+                        // (xmm0..xmm7 / d0..d7). The value left in
+                        // `arg_vals[i]` is already FP-classed; the
+                        // per-arch `marshal_args` places it in the FP
+                        // bank per `plan_call_args` using `fp_arg_mask`.
+                        // A `float` argument stays at single precision
+                        // (no widen-to-double); the callee narrows back
+                        // from the s-register view.
+                        //
+                        // A variadic c5 callee is the exception: it keeps
+                        // the c5 cdecl stack shape (its prologue skips the
+                        // host-arg-reg spill and reads args off the
+                        // 16-byte-stride stack as raw 8-byte patterns).
+                        // C99 6.5.2.2p6 default argument promotions widen
+                        // a `float` argument to `double`; route every FP
+                        // argument through the integer register class as a
+                        // widened 8-byte double, matching what the callee
+                        // reads back, and pass `fp_arg_mask = 0`.
+                        let callee_variadic = self.fun_is_variadic(*sym);
+                        let call_fp_arg_mask = if callee_variadic {
+                            for (i, a) in args.iter().enumerate() {
+                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                    .map(is_floating_scalar)
+                                    .unwrap_or(false);
+                                if arg_is_fp {
+                                    let widened = b.fp_widen_to_f64(arg_vals[i]);
+                                    let slot = b.alloc_synthetic_local();
+                                    b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                                    arg_vals[i] =
+                                        b.load_local(slot, super::super::ir::LoadKind::I64);
+                                }
                             }
-                        }
+                            0
+                        } else {
+                            fp_arg_mask
+                        };
                         // C99 6.2.5p10: a call to a function whose
                         // return type is a floating-point scalar
                         // yields its value in the FP return register.
@@ -1613,9 +1700,9 @@ impl<'a> Walker<'a> {
                         let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
                         let call = if target_pc == 0 {
-                            b.call_extern(*sym, arg_vals, fp_return)
+                            b.call_extern(*sym, arg_vals, fp_return, call_fp_arg_mask)
                         } else {
-                            b.call(target_pc as usize, arg_vals, fp_return)
+                            b.call(target_pc as usize, arg_vals, fp_return, call_fp_arg_mask)
                         };
                         // A `float`-returning callee yields a single-
                         // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
@@ -1639,7 +1726,7 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
-                Ok(b.call_indirect(target, arg_vals, fp_return))
+                Ok(b.call_indirect(target, arg_vals, fp_return, fp_arg_mask))
             }
             Expr::Member {
                 obj,

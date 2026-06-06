@@ -122,7 +122,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=14
     v7   ImmData(104)                                     -> x6
     v8   Imm(42)                                          -> x2
     v9   Imm(8)                                           -> x1
-    v10  CallIndirect { target=v5, args=[v6, v7, v8, v9], fp_return=false } -> x0
+    v10  CallIndirect { target=v5, args=[v6, v7, v8, v9], fp_return=false, fp_arg_mask=0x0 } -> x0
     v11  LocalAddr(-2)                                    -> x0
     v12  Load { addr=v11, kind=I64 }                      -> x0
     v13  BinopI { op=add, lhs=v12, rhs_imm=8 }            -> x0
@@ -130,7 +130,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=14
     v15  LocalAddr(-2)                                    -> x7
     v16  LocalAddr(-8)                                    -> x6
     v17  Imm(1)                                           -> x2
-    v18  CallIndirect { target=v14, args=[v15, v16, v17], fp_return=false } -> x0
+    v18  CallIndirect { target=v14, args=[v15, v16, v17], fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  ImmData(136)                                     -> x7
     v20  LoadLocal { off=-8, kind=I32 }                   -> x6
     v21  CallExt { binding_idx=0, args=[v19, v20], fp_arg_mask=0x0 } -> x0

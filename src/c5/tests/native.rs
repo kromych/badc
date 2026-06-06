@@ -496,6 +496,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("fp_arg_passed_in_fp_reg.c", 0),
+    ("float_arg_single_precision.c", 0),
+    ("fp_return_value.c", 0),
+    ("many_fp_args.c", 0),
     ("float_double_mix.c", 0),
     // Variadic FP packer on macOS arm64. The Apple AAPCS64
     // quirk: variadic args spill to the stack regardless of

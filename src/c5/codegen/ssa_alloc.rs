@@ -1962,7 +1962,7 @@ int main(void) { return 0; }
         // across that call (defined in mid, used in exit), but the call
         // pc is below v's definition pc.
         b.switch_to(body);
-        let _ = b.call(0, alloc::vec::Vec::new(), false);
+        let _ = b.call(0, alloc::vec::Vec::new(), false, 0);
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
         // above the call pc.
@@ -2181,6 +2181,7 @@ int main(void) { return 0; }
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            param_fp_mask: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

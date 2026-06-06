@@ -81,7 +81,6 @@ Disassembly of section .text:
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	fdiv	d0, d0, d0
-               	fmov	x0, d0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -90,7 +89,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	str	x19, [sp]
                	bl	<addr>
-               	fmov	d0, x0
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
                	fmov	d17, x0

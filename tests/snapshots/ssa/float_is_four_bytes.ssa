@@ -66,9 +66,9 @@ fn ent_pc=14 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x0
-    v2   LocalAddr(-1)                                    -> x1
-    v3   Store { addr=v2, value=v1, kind=F32 }            -> -
+    v1   LocalAddr(-1)                                    -> x0
+    v2   ParamRef(0, kind=F32)                            -> d0 [f32]
+    v3   Store { addr=v1, value=v2, kind=F32 }            -> -
     v4   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=15 ---
@@ -77,15 +77,15 @@ fn ent_pc=15 n_params=3 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x0
-    v2   LocalAddr(-1)                                    -> x1
-    v3   Store { addr=v2, value=v1, kind=F32 }            -> -
-    v4   LoadLocal { off=3, kind=I64 }                    -> x0
-    v5   LocalAddr(-2)                                    -> x1
-    v6   Store { addr=v5, value=v4, kind=F32 }            -> -
-    v7   LoadLocal { off=4, kind=I64 }                    -> x0
-    v8   LocalAddr(-3)                                    -> x1
-    v9   Store { addr=v8, value=v7, kind=F32 }            -> -
+    v1   LocalAddr(-1)                                    -> x0
+    v2   ParamRef(0, kind=F32)                            -> d0 [f32]
+    v3   Store { addr=v1, value=v2, kind=F32 }            -> -
+    v4   LocalAddr(-2)                                    -> x0
+    v5   ParamRef(1, kind=F32)                            -> d0 [f32]
+    v6   Store { addr=v4, value=v5, kind=F32 }            -> -
+    v7   LocalAddr(-3)                                    -> x0
+    v8   ParamRef(2, kind=F32)                            -> d0 [f32]
+    v9   Store { addr=v7, value=v8, kind=F32 }            -> -
     v10  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v11  LoadLocal { off=-2, kind=F32 }                   -> d1 [f32]
     v12  Binop { op=fadd, lhs=v10, rhs=v11 }              -> d0 [f32]
@@ -94,7 +94,7 @@ fn ent_pc=15 n_params=3 variadic=false locals=3
     terminator Return(v14)   (exit_acc=v14)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=main
-fn ent_pc=16 n_params=0 variadic=false locals=23
+fn ent_pc=16 n_params=0 variadic=false locals=13
   spill_count=1 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -281,161 +281,131 @@ fn ent_pc=16 n_params=0 variadic=false locals=23
     v141 Phi { incoming=[b39:v124, b19:v139], kind=I64 }  -> x3
     v142 Imm(4609434218613702656)                         -> x12
     v143 FpCast { kind=F64ToF32, value=v142 }             -> d0 [f32]
-    v144 FpCast { kind=F32ToF64, value=v143 }             -> d0
-    v145 StoreLocal { off=-14, value=v144, kind=I64 }     -> -
-    v146 LoadLocal { off=-14, kind=I64 }                  -> x7
-    v147 Call { target_pc=14, args=[v146], fp_return=true } -> d0 [f32]
-    v148 FpCast { kind=F32ToF64, value=v147 }             -> d0
-    v149 Binop { op=fne, lhs=v148, rhs=v142 }             -> x0
-    terminator Bz { cond=v149, target=b40, fall=b21 }   (exit_acc=v149)
+    v144 Call { target_pc=14, args=[v143], fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v145 FpCast { kind=F32ToF64, value=v144 }             -> d0
+    v146 Binop { op=fne, lhs=v145, rhs=v142 }             -> x0
+    terminator Bz { cond=v146, target=b40, fall=b21 }   (exit_acc=v146)
   block 21  start_pc=0
-    v150 ImmData(340)                                     -> x7
-    v151 CallExt { binding_idx=0, args=[v150], fp_arg_mask=0x0 } -> x0
-    v152 Imm(11)                                          -> x3
-    v153 Imm(0)                                           -> x0
-    terminator Jmp(b22)   (exit_acc=v152)
+    v147 ImmData(340)                                     -> x7
+    v148 CallExt { binding_idx=0, args=[v147], fp_arg_mask=0x0 } -> x0
+    v149 Imm(11)                                          -> x3
+    v150 Imm(0)                                           -> x0
+    terminator Jmp(b22)   (exit_acc=v149)
   block 22  start_pc=0
-    v154 Phi { incoming=[b40:v141, b21:v152], kind=I64 }  -> x3
-    v155 Imm(4612811918334230528)                         -> x12
-    v156 FpCast { kind=F64ToF32, value=v155 }             -> d0 [f32]
-    v157 FpCast { kind=F32ToF64, value=v156 }             -> d0
-    v158 StoreLocal { off=-15, value=v157, kind=I64 }     -> -
-    v159 LoadLocal { off=-15, kind=I64 }                  -> x7
-    v160 Call { target_pc=14, args=[v159], fp_return=true } -> d0 [f32]
-    v161 FpCast { kind=F32ToF64, value=v160 }             -> d0
-    v162 Binop { op=fne, lhs=v161, rhs=v155 }             -> x0
-    terminator Bz { cond=v162, target=b41, fall=b23 }   (exit_acc=v162)
+    v151 Phi { incoming=[b40:v141, b21:v149], kind=I64 }  -> x3
+    v152 Imm(4612811918334230528)                         -> x12
+    v153 FpCast { kind=F64ToF32, value=v152 }             -> d0 [f32]
+    v154 Call { target_pc=14, args=[v153], fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v155 FpCast { kind=F32ToF64, value=v154 }             -> d0
+    v156 Binop { op=fne, lhs=v155, rhs=v152 }             -> x0
+    terminator Bz { cond=v156, target=b41, fall=b23 }   (exit_acc=v156)
   block 23  start_pc=0
-    v163 ImmData(363)                                     -> x7
-    v164 CallExt { binding_idx=0, args=[v163], fp_arg_mask=0x0 } -> x0
-    v165 Imm(12)                                          -> x3
-    v166 Imm(0)                                           -> x0
-    terminator Jmp(b24)   (exit_acc=v165)
+    v157 ImmData(363)                                     -> x7
+    v158 CallExt { binding_idx=0, args=[v157], fp_arg_mask=0x0 } -> x0
+    v159 Imm(12)                                          -> x3
+    v160 Imm(0)                                           -> x0
+    terminator Jmp(b24)   (exit_acc=v159)
   block 24  start_pc=0
-    v167 Phi { incoming=[b41:v154, b23:v165], kind=I64 }  -> x3
-    v168 Imm(4609434218613702656)                         -> x0
-    v169 FpCast { kind=F64ToF32, value=v168 }             -> d0 [f32]
-    v170 FpCast { kind=F32ToF64, value=v169 }             -> d0
-    v171 StoreLocal { off=-16, value=v170, kind=I64 }     -> -
-    v172 LoadLocal { off=-16, kind=I64 }                  -> x7
-    v173 Call { target_pc=14, args=[v172], fp_return=true } -> [spill 0] [f32]
-    v174 Imm(4612811918334230528)                         -> x0
-    v175 FpCast { kind=F64ToF32, value=v174 }             -> d0 [f32]
-    v176 FpCast { kind=F32ToF64, value=v175 }             -> d0
-    v177 StoreLocal { off=-17, value=v176, kind=I64 }     -> -
-    v178 LoadLocal { off=-17, kind=I64 }                  -> x7
-    v179 Call { target_pc=14, args=[v178], fp_return=true } -> d0 [f32]
-    v180 Binop { op=feq, lhs=v173, rhs=v179 }             -> x0
-    terminator Bz { cond=v180, target=b42, fall=b25 }   (exit_acc=v180)
+    v161 Phi { incoming=[b41:v151, b23:v159], kind=I64 }  -> x3
+    v162 Imm(4609434218613702656)                         -> x0
+    v163 FpCast { kind=F64ToF32, value=v162 }             -> d0 [f32]
+    v164 Call { target_pc=14, args=[v163], fp_return=true, fp_arg_mask=0x1 } -> [spill 0] [f32]
+    v165 Imm(4612811918334230528)                         -> x0
+    v166 FpCast { kind=F64ToF32, value=v165 }             -> d0 [f32]
+    v167 Call { target_pc=14, args=[v166], fp_return=true, fp_arg_mask=0x1 } -> d0 [f32]
+    v168 Binop { op=feq, lhs=v164, rhs=v167 }             -> x0
+    terminator Bz { cond=v168, target=b42, fall=b25 }   (exit_acc=v168)
   block 25  start_pc=0
-    v181 ImmData(386)                                     -> x7
-    v182 CallExt { binding_idx=0, args=[v181], fp_arg_mask=0x0 } -> x0
-    v183 Imm(13)                                          -> x3
-    v184 Imm(0)                                           -> x0
-    terminator Jmp(b26)   (exit_acc=v183)
+    v169 ImmData(386)                                     -> x7
+    v170 CallExt { binding_idx=0, args=[v169], fp_arg_mask=0x0 } -> x0
+    v171 Imm(13)                                          -> x3
+    v172 Imm(0)                                           -> x0
+    terminator Jmp(b26)   (exit_acc=v171)
   block 26  start_pc=0
-    v185 Phi { incoming=[b42:v167, b25:v183], kind=I64 }  -> x3
-    v186 Imm(4607182418800017408)                         -> x0
-    v187 FpCast { kind=F64ToF32, value=v186 }             -> d0 [f32]
-    v188 Imm(4611686018427387904)                         -> x0
-    v189 FpCast { kind=F64ToF32, value=v188 }             -> d1 [f32]
-    v190 Imm(4615063718147915776)                         -> x0
-    v191 FpCast { kind=F64ToF32, value=v190 }             -> d2 [f32]
-    v192 FpCast { kind=F32ToF64, value=v187 }             -> d0
-    v193 StoreLocal { off=-18, value=v192, kind=I64 }     -> -
-    v194 LoadLocal { off=-18, kind=I64 }                  -> x7
-    v195 FpCast { kind=F32ToF64, value=v189 }             -> d0
-    v196 StoreLocal { off=-19, value=v195, kind=I64 }     -> -
-    v197 LoadLocal { off=-19, kind=I64 }                  -> x6
-    v198 FpCast { kind=F32ToF64, value=v191 }             -> d0
-    v199 StoreLocal { off=-20, value=v198, kind=I64 }     -> -
-    v200 LoadLocal { off=-20, kind=I64 }                  -> x2
-    v201 Call { target_pc=15, args=[v194, v197, v200], fp_return=true } -> d0 [f32]
-    v202 Imm(4619004367821864960)                         -> x0
-    v203 FpCast { kind=F32ToF64, value=v201 }             -> d0
-    v204 Binop { op=fne, lhs=v203, rhs=v202 }             -> x0
-    terminator Bz { cond=v204, target=b43, fall=b27 }   (exit_acc=v204)
+    v173 Phi { incoming=[b42:v161, b25:v171], kind=I64 }  -> x3
+    v174 Imm(4607182418800017408)                         -> x0
+    v175 FpCast { kind=F64ToF32, value=v174 }             -> d0 [f32]
+    v176 Imm(4611686018427387904)                         -> x0
+    v177 FpCast { kind=F64ToF32, value=v176 }             -> d1 [f32]
+    v178 Imm(4615063718147915776)                         -> x0
+    v179 FpCast { kind=F64ToF32, value=v178 }             -> d2 [f32]
+    v180 Call { target_pc=15, args=[v175, v177, v179], fp_return=true, fp_arg_mask=0x7 } -> d0 [f32]
+    v181 Imm(4619004367821864960)                         -> x0
+    v182 FpCast { kind=F32ToF64, value=v180 }             -> d0
+    v183 Binop { op=fne, lhs=v182, rhs=v181 }             -> x0
+    terminator Bz { cond=v183, target=b43, fall=b27 }   (exit_acc=v183)
   block 27  start_pc=0
-    v205 ImmData(428)                                     -> x3
-    v206 Imm(4607182418800017408)                         -> x0
-    v207 FpCast { kind=F64ToF32, value=v206 }             -> d0 [f32]
-    v208 Imm(4611686018427387904)                         -> x0
-    v209 FpCast { kind=F64ToF32, value=v208 }             -> d1 [f32]
-    v210 Imm(4615063718147915776)                         -> x0
-    v211 FpCast { kind=F64ToF32, value=v210 }             -> d2 [f32]
-    v212 FpCast { kind=F32ToF64, value=v207 }             -> d0
-    v213 StoreLocal { off=-21, value=v212, kind=I64 }     -> -
-    v214 LoadLocal { off=-21, kind=I64 }                  -> x7
-    v215 FpCast { kind=F32ToF64, value=v209 }             -> d0
-    v216 StoreLocal { off=-22, value=v215, kind=I64 }     -> -
-    v217 LoadLocal { off=-22, kind=I64 }                  -> x6
-    v218 FpCast { kind=F32ToF64, value=v211 }             -> d0
-    v219 StoreLocal { off=-23, value=v218, kind=I64 }     -> -
-    v220 LoadLocal { off=-23, kind=I64 }                  -> x2
-    v221 Call { target_pc=15, args=[v214, v217, v220], fp_return=true } -> d0 [f32]
-    v222 FpCast { kind=F32ToF64, value=v221 }             -> d0
-    v223 CallExt { binding_idx=0, args=[v205, v222], fp_arg_mask=0x2 } -> x0
-    v224 Imm(14)                                          -> x3
-    v225 Imm(0)                                           -> x0
-    terminator Jmp(b28)   (exit_acc=v224)
+    v184 ImmData(428)                                     -> x3
+    v185 Imm(4607182418800017408)                         -> x0
+    v186 FpCast { kind=F64ToF32, value=v185 }             -> d0 [f32]
+    v187 Imm(4611686018427387904)                         -> x0
+    v188 FpCast { kind=F64ToF32, value=v187 }             -> d1 [f32]
+    v189 Imm(4615063718147915776)                         -> x0
+    v190 FpCast { kind=F64ToF32, value=v189 }             -> d2 [f32]
+    v191 Call { target_pc=15, args=[v186, v188, v190], fp_return=true, fp_arg_mask=0x7 } -> d0 [f32]
+    v192 FpCast { kind=F32ToF64, value=v191 }             -> d0
+    v193 CallExt { binding_idx=0, args=[v184, v192], fp_arg_mask=0x2 } -> x0
+    v194 Imm(14)                                          -> x3
+    v195 Imm(0)                                           -> x0
+    terminator Jmp(b28)   (exit_acc=v194)
   block 28  start_pc=0
-    v226 Phi { incoming=[b43:v185, b27:v224], kind=I64 }  -> x3
-    v227 Imm(4609434218613702656)                         -> x0
-    v228 FpCast { kind=F64ToF32, value=v227 }             -> d0 [f32]
-    v229 LocalAddr(-6)                                    -> x0
-    v230 Store { addr=v229, value=v228, kind=F32 }        -> -
-    v231 Imm(4611686018427387904)                         -> x0
-    v232 FpCast { kind=F64ToF32, value=v231 }             -> d0 [f32]
-    v233 LocalAddr(-7)                                    -> x0
-    v234 Store { addr=v233, value=v232, kind=F32 }        -> -
-    v235 LoadLocal { off=-6, kind=F32 }                   -> d0 [f32]
-    v236 LoadLocal { off=-7, kind=F32 }                   -> d1 [f32]
-    v237 Binop { op=fmul, lhs=v235, rhs=v236 }            -> d0 [f32]
-    v238 Imm(4598175219545276416)                         -> x0
-    v239 FpCast { kind=F32ToF64, value=v237 }             -> d0
-    v240 Binop { op=fadd, lhs=v239, rhs=v238 }            -> d0
-    v241 FpCast { kind=F64ToF32, value=v240 }             -> d0 [f32]
-    v242 LocalAddr(-8)                                    -> x0
-    v243 Store { addr=v242, value=v241, kind=F32 }        -> -
-    v244 LoadLocal { off=-8, kind=F32 }                   -> d0 [f32]
-    v245 Imm(4614500768194494464)                         -> x0
-    v246 FpCast { kind=F32ToF64, value=v244 }             -> d0
-    v247 Binop { op=fne, lhs=v246, rhs=v245 }             -> x0
-    terminator Bz { cond=v247, target=b44, fall=b29 }   (exit_acc=v247)
+    v196 Phi { incoming=[b43:v173, b27:v194], kind=I64 }  -> x3
+    v197 Imm(4609434218613702656)                         -> x0
+    v198 FpCast { kind=F64ToF32, value=v197 }             -> d0 [f32]
+    v199 LocalAddr(-6)                                    -> x0
+    v200 Store { addr=v199, value=v198, kind=F32 }        -> -
+    v201 Imm(4611686018427387904)                         -> x0
+    v202 FpCast { kind=F64ToF32, value=v201 }             -> d0 [f32]
+    v203 LocalAddr(-7)                                    -> x0
+    v204 Store { addr=v203, value=v202, kind=F32 }        -> -
+    v205 LoadLocal { off=-6, kind=F32 }                   -> d0 [f32]
+    v206 LoadLocal { off=-7, kind=F32 }                   -> d1 [f32]
+    v207 Binop { op=fmul, lhs=v205, rhs=v206 }            -> d0 [f32]
+    v208 Imm(4598175219545276416)                         -> x0
+    v209 FpCast { kind=F32ToF64, value=v207 }             -> d0
+    v210 Binop { op=fadd, lhs=v209, rhs=v208 }            -> d0
+    v211 FpCast { kind=F64ToF32, value=v210 }             -> d0 [f32]
+    v212 LocalAddr(-8)                                    -> x0
+    v213 Store { addr=v212, value=v211, kind=F32 }        -> -
+    v214 LoadLocal { off=-8, kind=F32 }                   -> d0 [f32]
+    v215 Imm(4614500768194494464)                         -> x0
+    v216 FpCast { kind=F32ToF64, value=v214 }             -> d0
+    v217 Binop { op=fne, lhs=v216, rhs=v215 }             -> x0
+    terminator Bz { cond=v217, target=b44, fall=b29 }   (exit_acc=v217)
   block 29  start_pc=0
-    v248 ImmData(444)                                     -> x7
-    v249 LoadLocal { off=-8, kind=F32 }                   -> d0 [f32]
-    v250 FpCast { kind=F32ToF64, value=v249 }             -> d0
-    v251 CallExt { binding_idx=0, args=[v248, v250], fp_arg_mask=0x2 } -> x0
-    v252 Imm(15)                                          -> x3
-    v253 Imm(0)                                           -> x0
-    terminator Jmp(b30)   (exit_acc=v252)
+    v218 ImmData(444)                                     -> x7
+    v219 LoadLocal { off=-8, kind=F32 }                   -> d0 [f32]
+    v220 FpCast { kind=F32ToF64, value=v219 }             -> d0
+    v221 CallExt { binding_idx=0, args=[v218, v220], fp_arg_mask=0x2 } -> x0
+    v222 Imm(15)                                          -> x3
+    v223 Imm(0)                                           -> x0
+    terminator Jmp(b30)   (exit_acc=v222)
   block 30  start_pc=0
-    v254 Phi { incoming=[b44:v226, b29:v252], kind=I64 }  -> x3
-    v255 Imm(4607182418800017408)                         -> x0
-    v256 FpCast { kind=F64ToF32, value=v255 }             -> d0 [f32]
-    v257 LocalAddr(-9)                                    -> x0
-    v258 Store { addr=v257, value=v256, kind=F32 }        -> -
-    v259 LocalAddr(-10)                                   -> x7
-    v260 LocalAddr(-9)                                    -> x6
-    v261 Imm(4)                                           -> x2
-    v262 CallExt { binding_idx=141, args=[v259, v260, v261], fp_arg_mask=0x0 } -> x0
-    v263 LoadLocal { off=-10, kind=U32 }                  -> x0
-    v264 BinopI { op=xor, lhs=v263, rhs_imm=1065353216 }  -> x0
-    v265 BinopI { op=and, lhs=v264, rhs_imm=4294967295 }  -> x0
-    v266 BinopI { op=ne, lhs=v265, rhs_imm=0 }            -> x0
-    terminator Bz { cond=v266, target=b45, fall=b31 }   (exit_acc=v266)
+    v224 Phi { incoming=[b44:v196, b29:v222], kind=I64 }  -> x3
+    v225 Imm(4607182418800017408)                         -> x0
+    v226 FpCast { kind=F64ToF32, value=v225 }             -> d0 [f32]
+    v227 LocalAddr(-9)                                    -> x0
+    v228 Store { addr=v227, value=v226, kind=F32 }        -> -
+    v229 LocalAddr(-10)                                   -> x7
+    v230 LocalAddr(-9)                                    -> x6
+    v231 Imm(4)                                           -> x2
+    v232 CallExt { binding_idx=141, args=[v229, v230, v231], fp_arg_mask=0x0 } -> x0
+    v233 LoadLocal { off=-10, kind=U32 }                  -> x0
+    v234 BinopI { op=xor, lhs=v233, rhs_imm=1065353216 }  -> x0
+    v235 BinopI { op=and, lhs=v234, rhs_imm=4294967295 }  -> x0
+    v236 BinopI { op=ne, lhs=v235, rhs_imm=0 }            -> x0
+    terminator Bz { cond=v236, target=b45, fall=b31 }   (exit_acc=v236)
   block 31  start_pc=0
-    v267 ImmData(465)                                     -> x7
-    v268 LoadLocal { off=-10, kind=U32 }                  -> x6
-    v269 CallExt { binding_idx=0, args=[v267, v268], fp_arg_mask=0x0 } -> x0
-    v270 Imm(16)                                          -> x3
-    v271 Imm(0)                                           -> x0
-    terminator Jmp(b32)   (exit_acc=v270)
+    v237 ImmData(465)                                     -> x7
+    v238 LoadLocal { off=-10, kind=U32 }                  -> x6
+    v239 CallExt { binding_idx=0, args=[v237, v238], fp_arg_mask=0x0 } -> x0
+    v240 Imm(16)                                          -> x3
+    v241 Imm(0)                                           -> x0
+    terminator Jmp(b32)   (exit_acc=v240)
   block 32  start_pc=0
-    v272 Phi { incoming=[b45:v254, b31:v270], kind=I64 }  -> x3
-    v273 Extend { value=v272, kind=I32 }                  -> x0
-    terminator Return(v273)   (exit_acc=v273)
+    v242 Phi { incoming=[b45:v224, b31:v240], kind=I64 }  -> x3
+    v243 Extend { value=v242, kind=I32 }                  -> x0
+    terminator Return(v243)   (exit_acc=v243)
   block 33  start_pc=0
     terminator Jmp(b8)
   block 34  start_pc=0

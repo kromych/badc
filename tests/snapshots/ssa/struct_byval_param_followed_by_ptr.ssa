@@ -119,7 +119,7 @@ fn ent_pc=15 n_params=0 variadic=false locals=8
     v10  LocalAddr(-3)                                    -> x7
     v11  LocalAddr(-2)                                    -> x6
     v12  ImmData(88)                                      -> x3
-    v13  Call { target_pc=14, args=[v10, v11, v12], fp_return=false } -> x12
+    v13  Call { target_pc=14, args=[v10, v11, v12], fp_return=false, fp_arg_mask=0x0 } -> x12
     v14  Imm(0)                                           -> x0
     v15  Extend { value=v13, kind=I32 }                   -> x0
     v16  BinopI { op=ne, lhs=v15, rhs_imm=0 }             -> x0

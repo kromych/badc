@@ -248,7 +248,7 @@ pub(super) fn pc_extent_for_lowering(
 /// per-arch emitter turns each variant into the right load /
 /// store instruction pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ArgPlacement {
+pub(crate) enum ArgPlacement {
     /// Goes into an integer arg register. Index is into
     /// `Abi::int_arg_regs`.
     IntReg(u8),
@@ -265,7 +265,7 @@ pub(super) enum ArgPlacement {
 /// Per-call argument plan + the host outgoing-args reservation
 /// the call site has to pre-allocate before staging the args.
 #[derive(Debug, Clone)]
-pub(super) struct CallPlan {
+pub(crate) struct CallPlan {
     /// One entry per c5-stack arg, in source order. Length
     /// matches `arg_count`.
     pub placements: alloc::vec::Vec<ArgPlacement>,
@@ -335,6 +335,16 @@ pub(super) fn plan_call_args(
             let r = fp_idx as u8;
             fp_idx += 1;
             ArgPlacement::FpReg(r)
+        } else if is_fp && allow_fp_reg {
+            // A fixed floating-point argument that exhausted the eight
+            // FP argument registers overflows to the host stack, not the
+            // integer bank (System V AMD64 3.2.3 / AAPCS64 6.4.1). The
+            // integer-bank fall-through below is reserved for variadic
+            // FP arguments under `variadic_int_only` (Win64), where
+            // `allow_fp_reg` is already false.
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
         } else if int_idx < int_max {
             // Routes both real int args and variadic FP args
             // (under `variadic_int_only`) through the integer
@@ -374,6 +384,23 @@ pub(super) fn plan_call_args(
         placements,
         scratch_bytes,
     }
+}
+
+/// Per-parameter incoming-register plan for a callee. Runs the same
+/// [`plan_call_args`] the caller uses, so an interleaved int / FP
+/// parameter list resolves each parameter's incoming register from
+/// the independent int and FP argument-register banks (System V AMD64
+/// 3.2.3 / AAPCS64 6.4.1) rather than by absolute parameter index.
+/// `n_params` declared parameters are all treated as fixed (the
+/// caller's fixed-argument count for a prototype-having callee).
+/// `fp_mask` is [`crate::c5::ir::FunctionSsa::param_fp_mask`].
+///
+/// The returned placements are consumed by the per-arch callee
+/// prologue (which spills each incoming register into the parameter's
+/// 16-byte c5 cdecl home cell) and by `Inst::ParamRef` (which reads
+/// the parameter from its incoming register or home cell).
+pub(crate) fn plan_param_regs(n_params: usize, fp_mask: u32, abi: Abi) -> CallPlan {
+    plan_call_args(n_params, n_params, fp_mask, abi)
 }
 
 /// Decide how to extend a libc return value into the c5

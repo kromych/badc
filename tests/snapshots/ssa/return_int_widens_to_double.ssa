@@ -83,7 +83,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=7
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Call { target_pc=14, args=[], fp_return=true }   -> d0
+    v1   Call { target_pc=14, args=[], fp_return=true, fp_arg_mask=0x0 } -> d0
     v2   StoreLocal { off=-1, value=v1, kind=F64 }        -> -
     v3   LoadLocal { off=-1, kind=F64 }                   -> d0
     v4   Imm(4647591670144040960)                         -> x0
@@ -112,7 +112,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=7
     v17  Imm(2)                                           -> x0
     terminator Return(v17)   (exit_acc=v17)
   block 6  start_pc=0
-    v18  Call { target_pc=15, args=[], fp_return=true }   -> d0
+    v18  Call { target_pc=15, args=[], fp_return=true, fp_arg_mask=0x0 } -> d0
     v19  Imm(0)                                           -> x0
     v20  LoadLocal { off=-2, kind=F64 }                   -> d1
     v21  Imm(4607182418800017408)                         -> x0

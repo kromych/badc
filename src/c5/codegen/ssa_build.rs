@@ -154,6 +154,7 @@ impl SsaBuilder {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
+            param_fp_mask: 0,
         };
         let mut b = Self {
             func,
@@ -259,6 +260,25 @@ impl SsaBuilder {
             *slot = true;
         }
         v
+    }
+
+    /// Record that declared parameter `i` is a floating-point scalar
+    /// passed in an FP argument register. See
+    /// [`FunctionSsa::param_fp_mask`]. The callee emit consumes the
+    /// mask to resolve each parameter's incoming register through the
+    /// same `plan_call_args` the caller runs. Only the low 32
+    /// parameters are tracked; a higher index is ignored (those ride
+    /// the stack where the class no longer selects a register).
+    pub(crate) fn mark_param_fp(&mut self, i: usize) {
+        if i < 32 {
+            self.func.param_fp_mask |= 1u32 << i;
+        }
+    }
+
+    /// The accumulated per-parameter FP mask. See
+    /// [`FunctionSsa::param_fp_mask`].
+    pub(crate) fn param_fp_mask(&self) -> u32 {
+        self.func.param_fp_mask
     }
 
     /// True when value `v` was previously marked single-precision.
@@ -684,12 +704,14 @@ impl SsaBuilder {
         target_pc: usize,
         args: Vec<ValueId>,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Call {
             target_pc,
             args,
             fp_return,
+            fp_arg_mask,
         })
     }
 
@@ -702,12 +724,14 @@ impl SsaBuilder {
         sym_idx: u32,
         args: Vec<ValueId>,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         let v = self.push(Inst::Call {
             target_pc: 0,
             args,
             fp_return,
+            fp_arg_mask,
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -719,12 +743,14 @@ impl SsaBuilder {
         target: ValueId,
         args: Vec<ValueId>,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::CallIndirect {
             target,
             args,
             fp_return,
+            fp_arg_mask,
         })
     }
 
@@ -983,10 +1009,10 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], false);
+        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], false, 0);
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], false);
+        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], false, 0);
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1224,7 +1250,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], false);
+        let _ = b.call(0, alloc::vec![], false, 0);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

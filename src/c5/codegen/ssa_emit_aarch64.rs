@@ -142,6 +142,45 @@ impl Frame {
     }
 }
 
+/// Per-parameter incoming-register placement from `plan_call_args`.
+/// Indexed by declared parameter position. Variadic and zero-param
+/// callees yield an empty plan. Independent int / FP argument-register
+/// banks (AAPCS64 6.4.1) mean an FP parameter is placed in d0..d7
+/// without shifting the integer bank.
+fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<super::ArgPlacement> {
+    if func.is_variadic || func.n_params == 0 {
+        return alloc::vec::Vec::new();
+    }
+    super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+}
+
+/// `(n_reg, n_stack)` split of the declared parameters: how many land
+/// in argument registers (integer or FP) and how many overflow to the
+/// host stack. The c5 cdecl cell layout requires the register-passed
+/// parameters to form a contiguous prefix; that holds whenever neither
+/// argument-register bank is exhausted before a later parameter of the
+/// other bank. TODO: a list that exhausts the integer bank before a
+/// trailing floating-point parameter would interleave register and
+/// stack placements; such lists are not yet lowered (the debug
+/// assertion fires).
+fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
+    let placements = param_placements(func, abi);
+    let n_reg = placements
+        .iter()
+        .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
+        .count();
+    debug_assert!(
+        placements[..n_reg]
+            .iter()
+            .all(|p| !matches!(p, super::ArgPlacement::Stack(_)))
+            && placements[n_reg..]
+                .iter()
+                .all(|p| matches!(p, super::ArgPlacement::Stack(_))),
+        "ICE: interleaved register / stack parameter placement not supported"
+    );
+    (n_reg, placements.len() - n_reg)
+}
+
 /// Total bytes the prologue allocates above the saved fp/lr for
 /// c5 cdecl parameter slots plus the host-stack overflow stripe.
 /// Mirrors the prologue's branch structure exactly:
@@ -169,8 +208,7 @@ fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super
     if entry_spill == 0 {
         return 0;
     }
-    let n_reg = entry_spill.min(abi.int_arg_regs.len());
-    let n_stack = entry_spill - n_reg;
+    let (n_reg, n_stack) = param_reg_stack_split(func, abi);
 
     let mut seeded: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
     let mut addr_taken: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
@@ -478,6 +516,11 @@ pub(super) fn emit_function(
     emit_prologue(code, func, alloc, frame, abi);
     super::ssa_emit_common::record_post_prologue_pc(func, prologue_native, code.len());
 
+    // Per-parameter incoming-register plan; consumed by the per-inst
+    // `Inst::ParamRef` lowering to source each parameter from its
+    // integer / FP argument register.
+    let emit_param_plan = param_placements(func, abi);
+
     // Place the entry `Inst::ParamRef` values from their AAPCS64
     // argument registers into the allocator's chosen locations. The
     // per-inst `mov dst, arg_reg` is unsound when one parameter's
@@ -493,6 +536,12 @@ pub(super) fn emit_function(
     // batch is skipped.
     let mut param_prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
     {
+        // Each integer parameter's incoming register comes from the
+        // plan, not `int_arg_regs[i]`: an FP parameter earlier in the
+        // list consumes a d-register and does not shift the integer
+        // bank, so the i-th declared parameter is not the i-th integer
+        // register.
+        let param_plan = param_placements(func, abi);
         let mut moves: Vec<(Place, Place)> = Vec::new();
         let mut exts: Vec<(Place, LoadKind)> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
@@ -502,9 +551,6 @@ pub(super) fn emit_function(
                 continue;
             };
             let i = *idx as usize;
-            if i >= abi.int_arg_regs.len() {
-                continue;
-            }
             // A ParamRef with no consumers is dropped by the per-inst
             // dead-code skip; placing it here would only risk bailing
             // the batch on an unused FP parameter. Only integer / spill
@@ -518,7 +564,14 @@ pub(super) fn emit_function(
             if !matches!(dst, Place::IntReg(_) | Place::Spill(_)) {
                 continue;
             }
-            moves.push((Place::IntReg(abi.int_arg_regs[i]), dst));
+            // An integer-dst ParamRef is always an integer parameter;
+            // read its source integer register from the plan. A
+            // stack-passed integer parameter has no register source and
+            // stays on the per-inst home-cell path.
+            let Some(super::ArgPlacement::IntReg(src)) = param_plan.get(i).copied() else {
+                continue;
+            };
+            moves.push((Place::IntReg(src), dst));
             vids.push(vid);
             homes.push(dst);
             if matches!(kind, LoadKind::I8 | LoadKind::I16 | LoadKind::I32) {
@@ -608,6 +661,7 @@ pub(super) fn emit_function(
                 macho_tlv_fixups,
                 macho_tlv_descriptors,
                 &mut current_alloca_top,
+                &emit_param_plan,
             ) {
                 #[cfg(feature = "codegen_test")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -994,8 +1048,8 @@ fn emit_prologue(
     // already reflects 0) and no instructions are emitted here.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
-        let n_reg = entry_spill.min(abi.int_arg_regs.len());
-        let n_stack = entry_spill - n_reg;
+        let (n_reg, n_stack) = param_reg_stack_split(func, abi);
+        let placements = param_placements(func, abi);
         if n_stack > 0 {
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_sp_imm(code, overflow_bytes);
@@ -1045,7 +1099,29 @@ fn emit_prologue(
                     emit_sub_sp_imm(code, pending_sub);
                     pending_sub = 0;
                 }
-                emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg(31), -16));
+                // Source the incoming value from the parameter's
+                // argument register per the plan. An integer parameter's
+                // register is `plan.IntReg`, not `int_arg_regs[i]`: a
+                // floating-point parameter earlier in the list consumes
+                // a d-register and does not shift the integer bank. A
+                // floating-point parameter (always a `double` here -- a
+                // `float` parameter's positive cell is unobserved and
+                // elided) arrives in a d-register; move its bits into
+                // x16 and store them through the same 16-byte pre-
+                // decrement cell push the integer path uses.
+                match placements.get(i).copied() {
+                    Some(super::ArgPlacement::FpReg(d)) => {
+                        emit(code, enc_fmov_d_to_x(Reg(16), d));
+                        emit(code, enc_str_pre(Reg(16), Reg(31), -16));
+                    }
+                    Some(super::ArgPlacement::IntReg(r)) => {
+                        emit(code, enc_str_pre(Reg(r), Reg(31), -16))
+                    }
+                    // No register source (stack-passed or out of range):
+                    // the overflow restripe above already filled the
+                    // cell; reserve its 16 bytes without a store.
+                    _ => emit_sub_sp_imm(code, 16),
+                }
             }
         }
         if pending_sub > 0 {
@@ -1183,6 +1259,7 @@ fn emit_inst(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     current_alloca_top: &mut u32,
+    param_plan: &[super::ArgPlacement],
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -1219,13 +1296,41 @@ fn emit_inst(
             // the allocator's chosen `Place`, sign-extending the
             // low `kind` bytes per C99 6.3.1.3 so the value held
             // in the register is canonically 64-bit-sign-extended.
-            // The prologue does not modify x0..x7, so the arg
-            // value is still in its incoming register at this IR
-            // position. Narrow-load promotion downstream can then
-            // collapse `Inst::Extend(ParamRef, kind)` to a plain
-            // copy when the kinds match.
-            let Some(&arg_reg) = abi.int_arg_regs.get(*idx as usize) else {
-                bail_msg("ParamRef: idx out of range for int_arg_regs");
+            // The prologue does not modify x0..x7 / d0..d7, so the
+            // argument value is still in its incoming register at this
+            // IR position. Narrow-load promotion downstream can then
+            // collapse `Inst::Extend(ParamRef, kind)` to a plain copy
+            // when the kinds match.
+            let i = *idx as usize;
+            // Floating-point parameter (C99 6.2.5p10): its value arrives
+            // in a d-register named by the plan. Read that register into
+            // the allocator's FP dst. A `float` (`LoadKind::F32`)
+            // occupies the s-register view; the body re-narrows it
+            // through the f32 store the walker seeded.
+            if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                let Some(super::ArgPlacement::FpReg(d)) = param_plan.get(i).copied() else {
+                    bail_msg("ParamRef: FP param not in an FP argument register");
+                    return false;
+                };
+                match dst {
+                    Place::FpReg(r) => {
+                        if r != d {
+                            emit(code, super::aarch64::enc_fmov_d_d(r, d));
+                        }
+                    }
+                    Place::Spill(slot) => {
+                        let sp_off = spill_off(frame, slot);
+                        emit_sp_str_d_auto(code, d, sp_off);
+                    }
+                    _ => {
+                        bail_msg("ParamRef: FP param dst not fp reg / spill");
+                        return false;
+                    }
+                }
+                return true;
+            }
+            let Some(super::ArgPlacement::IntReg(arg_reg)) = param_plan.get(i).copied() else {
+                bail_msg("ParamRef: int param not in an integer argument register");
                 return false;
             };
             // The encoding to write `dst <- sign-extend(arg_reg)`.
@@ -1349,6 +1454,7 @@ fn emit_inst(
             target_pc,
             args,
             fp_return,
+            fp_arg_mask,
         } => emit_call(
             code,
             dst,
@@ -1361,6 +1467,7 @@ fn emit_inst(
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,
+            *fp_arg_mask,
         ),
         Inst::CallExt {
             binding_idx,
@@ -1384,8 +1491,18 @@ fn emit_inst(
             target,
             args,
             fp_return,
+            fp_arg_mask,
         } => emit_call_indirect(
-            code, dst, *target, args, alloc, frame, scratch, abi, *fp_return,
+            code,
+            dst,
+            *target,
+            args,
+            alloc,
+            frame,
+            scratch,
+            abi,
+            *fp_return,
+            *fp_arg_mask,
         ),
         Inst::Mcpy {
             dst: d,
@@ -2116,6 +2233,7 @@ fn emit_call(
     fixups: &mut Vec<Fixup>,
     callee_is_variadic: bool,
     fp_return: bool,
+    fp_arg_mask: u32,
 ) -> bool {
     if callee_is_variadic {
         // The variadic c5 ABI keeps the c5 stack: every arg is
@@ -2168,19 +2286,11 @@ fn emit_call(
         move_call_result(code, dst, frame, fp_return);
         return true;
     }
-    // Non-variadic: marshal through the host ABI. Compute the
-    // FP-arg mask from each value's Place -- the SSA model has
-    // no separate type channel, but an FpReg-placed value is
-    // necessarily f64. Feeding the mask to the planner routes
-    // those args to d0..d7 instead of x0..x7.
-    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
-        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-        if matches!(p, Place::FpReg(_)) {
-            m | (1u32 << i)
-        } else {
-            m
-        }
-    });
+    // Non-variadic: marshal through the host ABI. `fp_arg_mask`
+    // comes from the argument types (set by the walker) rather than
+    // register placement, since a floating-point constant rides an
+    // integer register as its `Imm` bit pattern. Feeding the mask to
+    // the planner routes the FP args to d0..d7 instead of x0..x7.
     let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
@@ -2217,6 +2327,25 @@ fn emit_call(
 /// FP-classed, so the x0 bit pattern is reinterpreted into the FP
 /// register file via `fmov d, x0`.
 fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
+    if fp_return {
+        // A floating-point scalar result arrives in d0 (C99 6.2.5p10 /
+        // AAPCS64 6.4.2). A `float` result occupies s0, the low 32
+        // bits of d0; a d-register copy preserves it.
+        match dst {
+            Place::FpReg(r) => {
+                if r != 0 {
+                    emit(code, super::aarch64::enc_fmov_d_d(r, 0));
+                }
+            }
+            Place::IntReg(r) => emit(code, enc_fmov_d_to_x(Reg(r), 0)),
+            Place::Spill(slot) => {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_d_auto(code, 0, sp_off);
+            }
+            Place::None => {}
+        }
+        return;
+    }
     match dst {
         Place::IntReg(r) => {
             if r != 0 {
@@ -2224,9 +2353,8 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
             }
         }
         Place::FpReg(r) => {
-            // The result is in x0 (c5 convention). Reinterpret the
-            // 8-byte pattern as an f64 in the allocator's d-register.
-            debug_assert!(fp_return, "FP-classed call result requires fp_return");
+            // A non-FP call whose result the allocator FP-classed
+            // (rare): reinterpret the integer x0 pattern into d.
             emit(code, enc_fmov_x_to_d(r, Reg(0)));
         }
         Place::Spill(slot) => {
@@ -2258,6 +2386,7 @@ fn emit_call_indirect(
     scratch: &ScratchPool,
     abi: super::Abi,
     fp_return: bool,
+    fp_arg_mask: u32,
 ) -> bool {
     let target_place = alloc
         .places
@@ -2308,14 +2437,9 @@ fn emit_call_indirect(
     // shape -- push every arg first, then load the prefix into
     // host arg regs, then blr -- handles both at the indirect
     // call site without needing the callee's variadic flag.
-    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
-        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-        if matches!(p, Place::FpReg(_)) {
-            m | (1u32 << i)
-        } else {
-            m
-        }
-    });
+    // `fp_arg_mask` is supplied by the caller from the argument types;
+    // the reload loop below routes each masked argument into its
+    // d-register per the plan.
     for (i, &arg_id) in args.iter().rev().enumerate() {
         let arg_place = alloc
             .places
@@ -4366,8 +4490,22 @@ fn emit_return(
             .get(value as usize)
             .copied()
             .unwrap_or(Place::None);
+        // A floating-point scalar result is returned in d0 (C99
+        // 6.2.5p10 / AAPCS64 6.4.2). A `float` result occupies s0, the
+        // low 32 bits of d0, which a d-register copy / 8-byte FP load
+        // preserves. The value's producing instruction determines the
+        // register file even when the allocator spilled it.
+        let returns_fp = (value as usize) < func.insts.len()
+            && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]);
         if let Place::FpReg(r) = place {
-            emit(code, enc_fmov_d_to_x(Reg(0), r));
+            if r != 0 {
+                emit(code, super::aarch64::enc_fmov_d_d(0, r));
+            }
+        } else if returns_fp {
+            if let Place::Spill(slot) = place {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_ldr_d_auto(code, 0, sp_off);
+            }
         } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
             && src.0 != 0
         {

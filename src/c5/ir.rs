@@ -143,6 +143,14 @@ pub(crate) enum Inst {
         /// return register (xmm0 / d0), so the call's result is
         /// FP-classed and read from there.
         fp_return: bool,
+        /// Per-argument FP-ness mask: bit `i` set when argument `i`
+        /// is a floating-point scalar passed in an FP argument
+        /// register (System V AMD64 3.2.3 / AAPCS64 6.4.1). Derived
+        /// from the argument's C type, not its register placement: a
+        /// floating-point constant rides an integer register as its
+        /// `Imm` bit pattern, so the placement alone cannot classify
+        /// it. The per-arch emit feeds this to `plan_call_args`.
+        fp_arg_mask: u32,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -152,6 +160,8 @@ pub(crate) enum Inst {
         args: Vec<ValueId>,
         /// See [`Self::Call::fp_return`].
         fp_return: bool,
+        /// See [`Self::Call::fp_arg_mask`].
+        fp_arg_mask: u32,
     },
     /// External library call.
     CallExt {
@@ -462,4 +472,15 @@ pub(crate) struct FunctionSsa {
     /// f32-typed `Imm` constant through a 32-bit `fmov` / `movd`.
     /// Empty (treated as all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
+    /// Per-parameter floating-point mask: bit `i` set when declared
+    /// parameter `i` is a floating-point scalar passed in an FP
+    /// argument register (C99 6.2.5p10). The callee resolves each
+    /// parameter's incoming register by running the same
+    /// `plan_call_args` the caller uses, so an interleaved int / FP
+    /// parameter list assigns int and FP registers from independent
+    /// banks rather than by absolute parameter index. Only the low 32
+    /// parameters are tracked; parameters past the argument registers
+    /// ride the stack where the class no longer selects a register.
+    /// Zero for SSA built outside the walker.
+    pub param_fp_mask: u32,
 }

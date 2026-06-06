@@ -100,9 +100,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=35
   block 4  start_pc=0
     v15  LocalAddr(-32)                                   -> x7
     v16  LocalAddr(-16)                                   -> x6
-    v17  Call { target_pc=0, args=[v15, v16], fp_return=false } -> x0
+    v17  Call { target_pc=0, args=[v15, v16], fp_return=false, fp_arg_mask=0x0 } -> x0
     v18  LocalAddr(-32)                                   -> x7
-    v19  Call { target_pc=1, args=[v18], fp_return=false } -> x0
+    v19  Call { target_pc=1, args=[v18], fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Imm(272)                                         -> x1
     v21  Imm(1168231104512)                               -> x2
     v22  Imm(2)                                           -> x2

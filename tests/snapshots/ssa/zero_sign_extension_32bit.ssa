@@ -85,7 +85,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v9   Imm(1)                                           -> x12
     v10  Store { addr=v8, value=v9, kind=I32 }            -> -
     v11  Imm(2)                                           -> x7
-    v12  Call { target_pc=0, args=[v11], fp_return=false } -> x7
+    v12  Call { target_pc=0, args=[v11], fp_return=false, fp_arg_mask=0x0 } -> x7
     v13  ImmData(96)                                      -> x6
     v14  Imm(27)                                          -> x2
     v15  CallExt { binding_idx=1, args=[v12, v13, v14, v9], fp_arg_mask=0x0 } -> x0
@@ -110,7 +110,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v20  ImmData(88)                                      -> x0
     v21  Imm(2)                                           -> x3
     v22  Store { addr=v20, value=v21, kind=I32 }          -> -
-    v23  Call { target_pc=0, args=[v21], fp_return=false } -> x7
+    v23  Call { target_pc=0, args=[v21], fp_return=false, fp_arg_mask=0x0 } -> x7
     v24  ImmData(118)                                     -> x6
     v25  Imm(28)                                          -> x2
     v26  CallExt { binding_idx=1, args=[v23, v24, v25, v21], fp_arg_mask=0x0 } -> x0
@@ -132,7 +132,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v36  Imm(3)                                           -> x12
     v37  Store { addr=v35, value=v36, kind=I32 }          -> -
     v38  Imm(2)                                           -> x7
-    v39  Call { target_pc=0, args=[v38], fp_return=false } -> x7
+    v39  Call { target_pc=0, args=[v38], fp_return=false, fp_arg_mask=0x0 } -> x7
     v40  ImmData(140)                                     -> x6
     v41  Imm(32)                                          -> x2
     v42  CallExt { binding_idx=1, args=[v39, v40, v41, v36], fp_arg_mask=0x0 } -> x0
@@ -159,7 +159,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v48  Imm(4)                                           -> x3
     v49  Store { addr=v47, value=v48, kind=I32 }          -> -
     v50  Imm(2)                                           -> x7
-    v51  Call { target_pc=0, args=[v50], fp_return=false } -> x7
+    v51  Call { target_pc=0, args=[v50], fp_return=false, fp_arg_mask=0x0 } -> x7
     v52  ImmData(162)                                     -> x6
     v53  Imm(33)                                          -> x2
     v54  CallExt { binding_idx=1, args=[v51, v52, v53, v48], fp_arg_mask=0x0 } -> x0
@@ -185,7 +185,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v65  Imm(10)                                          -> x14
     v66  Store { addr=v64, value=v65, kind=I32 }          -> -
     v67  Imm(2)                                           -> x7
-    v68  Call { target_pc=0, args=[v67], fp_return=false } -> x7
+    v68  Call { target_pc=0, args=[v67], fp_return=false, fp_arg_mask=0x0 } -> x7
     v69  ImmData(184)                                     -> x6
     v70  Imm(40)                                          -> x2
     v71  CallExt { binding_idx=1, args=[v68, v69, v70, v65], fp_arg_mask=0x0 } -> x0
@@ -210,7 +210,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v81  Imm(11)                                          -> x12
     v82  Store { addr=v80, value=v81, kind=I32 }          -> -
     v83  Imm(2)                                           -> x7
-    v84  Call { target_pc=0, args=[v83], fp_return=false } -> x7
+    v84  Call { target_pc=0, args=[v83], fp_return=false, fp_arg_mask=0x0 } -> x7
     v85  ImmData(206)                                     -> x6
     v86  Imm(42)                                          -> x2
     v87  CallExt { binding_idx=1, args=[v84, v85, v86, v81], fp_arg_mask=0x0 } -> x0
@@ -242,7 +242,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v96  Imm(12)                                          -> x3
     v97  Store { addr=v95, value=v96, kind=I32 }          -> -
     v98  Imm(2)                                           -> x7
-    v99  Call { target_pc=0, args=[v98], fp_return=false } -> x7
+    v99  Call { target_pc=0, args=[v98], fp_return=false, fp_arg_mask=0x0 } -> x7
     v100 ImmData(228)                                     -> x6
     v101 Imm(48)                                          -> x2
     v102 CallExt { binding_idx=1, args=[v99, v100, v101, v96], fp_arg_mask=0x0 } -> x0
@@ -264,7 +264,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v118 Imm(20)                                          -> x12
     v119 Store { addr=v117, value=v118, kind=I32 }        -> -
     v120 Imm(2)                                           -> x7
-    v121 Call { target_pc=0, args=[v120], fp_return=false } -> x7
+    v121 Call { target_pc=0, args=[v120], fp_return=false, fp_arg_mask=0x0 } -> x7
     v122 ImmData(250)                                     -> x6
     v123 Imm(58)                                          -> x2
     v124 CallExt { binding_idx=1, args=[v121, v122, v123, v118], fp_arg_mask=0x0 } -> x0
@@ -294,7 +294,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v130 Imm(21)                                          -> x3
     v131 Store { addr=v129, value=v130, kind=I32 }        -> -
     v132 Imm(2)                                           -> x7
-    v133 Call { target_pc=0, args=[v132], fp_return=false } -> x7
+    v133 Call { target_pc=0, args=[v132], fp_return=false, fp_arg_mask=0x0 } -> x7
     v134 ImmData(272)                                     -> x6
     v135 Imm(59)                                          -> x2
     v136 CallExt { binding_idx=1, args=[v133, v134, v135, v130], fp_arg_mask=0x0 } -> x0
@@ -316,7 +316,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v150 Imm(22)                                          -> x12
     v151 Store { addr=v149, value=v150, kind=I32 }        -> -
     v152 Imm(2)                                           -> x7
-    v153 Call { target_pc=0, args=[v152], fp_return=false } -> x7
+    v153 Call { target_pc=0, args=[v152], fp_return=false, fp_arg_mask=0x0 } -> x7
     v154 ImmData(294)                                     -> x6
     v155 Imm(64)                                          -> x2
     v156 CallExt { binding_idx=1, args=[v153, v154, v155, v150], fp_arg_mask=0x0 } -> x0
@@ -343,7 +343,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v162 Imm(23)                                          -> x3
     v163 Store { addr=v161, value=v162, kind=I32 }        -> -
     v164 Imm(2)                                           -> x7
-    v165 Call { target_pc=0, args=[v164], fp_return=false } -> x7
+    v165 Call { target_pc=0, args=[v164], fp_return=false, fp_arg_mask=0x0 } -> x7
     v166 ImmData(316)                                     -> x6
     v167 Imm(65)                                          -> x2
     v168 CallExt { binding_idx=1, args=[v165, v166, v167, v162], fp_arg_mask=0x0 } -> x0
@@ -371,7 +371,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v179 Imm(30)                                          -> x3
     v180 Store { addr=v178, value=v179, kind=I32 }        -> -
     v181 Imm(2)                                           -> x7
-    v182 Call { target_pc=0, args=[v181], fp_return=false } -> x7
+    v182 Call { target_pc=0, args=[v181], fp_return=false, fp_arg_mask=0x0 } -> x7
     v183 ImmData(338)                                     -> x6
     v184 Imm(74)                                          -> x2
     v185 CallExt { binding_idx=1, args=[v182, v183, v184, v179], fp_arg_mask=0x0 } -> x0
@@ -399,7 +399,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v197 Imm(31)                                          -> x3
     v198 Store { addr=v196, value=v197, kind=I32 }        -> -
     v199 Imm(2)                                           -> x7
-    v200 Call { target_pc=0, args=[v199], fp_return=false } -> x7
+    v200 Call { target_pc=0, args=[v199], fp_return=false, fp_arg_mask=0x0 } -> x7
     v201 ImmData(360)                                     -> x6
     v202 Imm(79)                                          -> x2
     v203 CallExt { binding_idx=1, args=[v200, v201, v202, v197], fp_arg_mask=0x0 } -> x0
@@ -424,7 +424,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v215 Imm(32)                                          -> x3
     v216 Store { addr=v214, value=v215, kind=I32 }        -> -
     v217 Imm(2)                                           -> x7
-    v218 Call { target_pc=0, args=[v217], fp_return=false } -> x7
+    v218 Call { target_pc=0, args=[v217], fp_return=false, fp_arg_mask=0x0 } -> x7
     v219 ImmData(382)                                     -> x6
     v220 Imm(84)                                          -> x2
     v221 CallExt { binding_idx=1, args=[v218, v219, v220, v215], fp_arg_mask=0x0 } -> x0
@@ -446,7 +446,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v230 Imm(40)                                          -> x12
     v231 Store { addr=v229, value=v230, kind=I32 }        -> -
     v232 Imm(2)                                           -> x7
-    v233 Call { target_pc=0, args=[v232], fp_return=false } -> x7
+    v233 Call { target_pc=0, args=[v232], fp_return=false, fp_arg_mask=0x0 } -> x7
     v234 ImmData(416)                                     -> x6
     v235 Imm(93)                                          -> x2
     v236 CallExt { binding_idx=1, args=[v233, v234, v235, v230], fp_arg_mask=0x0 } -> x0
@@ -477,7 +477,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v242 Imm(41)                                          -> x3
     v243 Store { addr=v241, value=v242, kind=I32 }        -> -
     v244 Imm(2)                                           -> x7
-    v245 Call { target_pc=0, args=[v244], fp_return=false } -> x7
+    v245 Call { target_pc=0, args=[v244], fp_return=false, fp_arg_mask=0x0 } -> x7
     v246 ImmData(438)                                     -> x6
     v247 Imm(94)                                          -> x2
     v248 CallExt { binding_idx=1, args=[v245, v246, v247, v242], fp_arg_mask=0x0 } -> x0
@@ -504,7 +504,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v263 Imm(50)                                          -> x14
     v264 Store { addr=v262, value=v263, kind=I32 }        -> -
     v265 Imm(2)                                           -> x7
-    v266 Call { target_pc=0, args=[v265], fp_return=false } -> x7
+    v266 Call { target_pc=0, args=[v265], fp_return=false, fp_arg_mask=0x0 } -> x7
     v267 ImmData(460)                                     -> x6
     v268 Imm(104)                                         -> x2
     v269 CallExt { binding_idx=1, args=[v266, v267, v268, v263], fp_arg_mask=0x0 } -> x0
@@ -528,7 +528,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v280 Imm(51)                                          -> x3
     v281 Store { addr=v279, value=v280, kind=I32 }        -> -
     v282 Imm(2)                                           -> x7
-    v283 Call { target_pc=0, args=[v282], fp_return=false } -> x7
+    v283 Call { target_pc=0, args=[v282], fp_return=false, fp_arg_mask=0x0 } -> x7
     v284 ImmData(482)                                     -> x6
     v285 Imm(108)                                         -> x2
     v286 CallExt { binding_idx=1, args=[v283, v284, v285, v280], fp_arg_mask=0x0 } -> x0
@@ -552,7 +552,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v294 Imm(60)                                          -> x12
     v295 Store { addr=v293, value=v294, kind=I32 }        -> -
     v296 Imm(2)                                           -> x7
-    v297 Call { target_pc=0, args=[v296], fp_return=false } -> x7
+    v297 Call { target_pc=0, args=[v296], fp_return=false, fp_arg_mask=0x0 } -> x7
     v298 ImmData(504)                                     -> x6
     v299 Imm(115)                                         -> x2
     v300 CallExt { binding_idx=1, args=[v297, v298, v299, v294], fp_arg_mask=0x0 } -> x0
@@ -578,7 +578,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v308 Imm(61)                                          -> x3
     v309 Store { addr=v307, value=v308, kind=I32 }        -> -
     v310 Imm(2)                                           -> x7
-    v311 Call { target_pc=0, args=[v310], fp_return=false } -> x7
+    v311 Call { target_pc=0, args=[v310], fp_return=false, fp_arg_mask=0x0 } -> x7
     v312 ImmData(526)                                     -> x6
     v313 Imm(117)                                         -> x2
     v314 CallExt { binding_idx=1, args=[v311, v312, v313, v308], fp_arg_mask=0x0 } -> x0
@@ -600,7 +600,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v324 Imm(62)                                          -> x12
     v325 Store { addr=v323, value=v324, kind=I32 }        -> -
     v326 Imm(2)                                           -> x7
-    v327 Call { target_pc=0, args=[v326], fp_return=false } -> x7
+    v327 Call { target_pc=0, args=[v326], fp_return=false, fp_arg_mask=0x0 } -> x7
     v328 ImmData(548)                                     -> x6
     v329 Imm(122)                                         -> x2
     v330 CallExt { binding_idx=1, args=[v327, v328, v329, v324], fp_arg_mask=0x0 } -> x0
@@ -625,7 +625,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=31
     v336 Imm(63)                                          -> x3
     v337 Store { addr=v335, value=v336, kind=I32 }        -> -
     v338 Imm(2)                                           -> x7
-    v339 Call { target_pc=0, args=[v338], fp_return=false } -> x7
+    v339 Call { target_pc=0, args=[v338], fp_return=false, fp_arg_mask=0x0 } -> x7
     v340 ImmData(570)                                     -> x6
     v341 Imm(123)                                         -> x2
     v342 CallExt { binding_idx=1, args=[v339, v340, v341, v336], fp_arg_mask=0x0 } -> x0

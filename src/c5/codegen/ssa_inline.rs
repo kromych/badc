@@ -659,6 +659,7 @@ fn splice_multi_block(
         extern_imm_data_refs: Vec::new(),
         extern_tls_refs: Vec::new(),
         f32_values: new_f32,
+        param_fp_mask: original.param_fp_mask,
     };
 }
 

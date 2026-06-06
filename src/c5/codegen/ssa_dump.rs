@@ -136,16 +136,18 @@ fn fmt_inst(inst: &Inst) -> String {
             target_pc,
             args,
             fp_return,
+            fp_arg_mask,
         } => format!(
-            "Call {{ target_pc={target_pc}, args=[{}], fp_return={fp_return} }}",
+            "Call {{ target_pc={target_pc}, args=[{}], fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallIndirect {
             target,
             args,
             fp_return,
+            fp_arg_mask,
         } => format!(
-            "CallIndirect {{ target=v{target}, args=[{}], fp_return={fp_return} }}",
+            "CallIndirect {{ target=v{target}, args=[{}], fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallExt {

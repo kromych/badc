@@ -62,7 +62,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v2   Imm(1)                                           -> x6
     v3   Imm(2)                                           -> x2
     v4   Imm(3)                                           -> x1
-    v5   Call { target_pc=0, args=[v1, v2, v3, v4], fp_return=false } -> x0
+    v5   Call { target_pc=0, args=[v1, v2, v3, v4], fp_return=false, fp_arg_mask=0x0 } -> x0
     v6   BinopI { op=ne, lhs=v5, rhs_imm=9123 }           -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
@@ -76,7 +76,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v12  Imm(2)                                           -> x2
     v13  Imm(3)                                           -> x1
     v14  LoadLocal { off=-1, kind=I64 }                   -> x8
-    v15  CallIndirect { target=v8, args=[v10, v11, v12, v13], fp_return=false } -> x0
+    v15  CallIndirect { target=v8, args=[v10, v11, v12, v13], fp_return=false, fp_arg_mask=0x0 } -> x0
     v16  BinopI { op=ne, lhs=v15, rhs_imm=9123 }          -> x0
     terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
@@ -89,7 +89,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v21  Imm(1)                                           -> x6
     v22  Imm(2)                                           -> x2
     v23  Imm(3)                                           -> x1
-    v24  CallIndirect { target=v19, args=[v20, v21, v22, v23], fp_return=false } -> x0
+    v24  CallIndirect { target=v19, args=[v20, v21, v22, v23], fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  BinopI { op=ne, lhs=v24, rhs_imm=9123 }          -> x0
     terminator Bz { cond=v25, target=b6, fall=b5 }   (exit_acc=v25)
   block 5  start_pc=0

@@ -508,6 +508,10 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // ABI, which this fixture doesn't exercise (no FP libc calls).
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("fp_arg_passed_in_fp_reg.c", 0),
+    ("float_arg_single_precision.c", 0),
+    ("fp_return_value.c", 0),
+    ("many_fp_args.c", 0),
     ("float_double_mix.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),

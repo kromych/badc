@@ -350,7 +350,6 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // variadic_zero_xmm_count flag drives that.
     ("variadic_sprintf.c", 0),
     // c5-side vprintf walking the c5 va_list (no libc va_list).
-    ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
     // Full FP arithmetic + comparisons + casts on Linux x86_64

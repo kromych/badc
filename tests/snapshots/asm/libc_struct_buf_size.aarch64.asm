@@ -76,7 +76,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0xf0
                	str	x19, [sp]
                	adrp	x0, <page>
-               	add	x0, x0, #0x154
+               	add	x0, x0, #0x13c
                	sub	x1, x29, #0xc0
                	bl	<addr>
                	sxtw	x0, w0
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.eq	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0x159
+               	add	x1, x1, #0x141
                	sxtw	x0, w0
                	mov	x16, x1
                	mov	x1, x0

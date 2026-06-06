@@ -8,7 +8,7 @@ Disassembly of section .text:
                	add	x1, sp, #0x8
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe8]
+               	ldr	x16, [x16, #0xd8]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0xf8
+               	add	x21, x21, #0xe8
                	lsl	x0, x20, #3
                	add	x0, x21, x0
                	ldr	x0, [x0]
@@ -36,17 +36,17 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x110
+               	add	x2, x2, #0x100
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x8
                	adrp	x2, <page>
-               	add	x2, x2, #0x116
+               	add	x2, x2, #0x106
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x10
                	adrp	x2, <page>
-               	add	x2, x2, #0x11d
+               	add	x2, x2, #0x10d
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	lsl	x2, x20, #3
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	adrp	x0, <page>
-               	add	x0, x0, #0x148
+               	add	x0, x0, #0x118
                	sub	x1, x29, #0x20
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
@@ -148,10 +148,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, #0x158
+               	add	x1, x1, #0x128
                	bl	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0x148
+               	add	x0, x0, #0x118
                	ldrsw	x1, [x0]
                	cmp	x1, #0xb
                	b.eq	<addr>

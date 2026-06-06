@@ -216,7 +216,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	adrp	x0, <page>
-               	add	x0, x0, #0x160
+               	add	x0, x0, #0x13c
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0

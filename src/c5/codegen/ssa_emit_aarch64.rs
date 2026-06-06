@@ -2333,8 +2333,8 @@ fn emit_intrinsic(
             // current variadic slot) and advances *ap to the next. The
             // stride is a property of the va_list layout the target
             // builds, not of the current function, so a non-variadic
-            // forwarder (e.g. `c5_vsnprintf` taking a `va_list`) walks the
-            // same stride the variadic caller produced; this does not
+            // forwarder (e.g. libc's `vsnprintf` taking a `va_list`) walks
+            // the same stride the variadic caller produced; this does not
             // depend on `func.is_variadic`. Linux aarch64 routes its
             // variadic intrinsics through the register-save-area arm above
             // (gated on `aarch64_host_variadic`), so the cursor arm is

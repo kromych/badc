@@ -1305,8 +1305,8 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // destination. The threshold per target is the count of
     // integer arg registers it can pull from before that happens;
     // below that count, firing the hint can perturb a downstream
-    // call's ParamRef placement through a libc bridge
-    // (c5_vsnprintf et al).
+    // call's ParamRef placement through a libc v* bridge
+    // (vsnprintf et al).
     let (int_args, threshold): (&[u8], usize) = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             (&[0, 1, 2, 3, 4, 5, 6, 7], 5)

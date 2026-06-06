@@ -600,7 +600,6 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // so the call into msvcrt is just `_write`. No libc va_list
     // bridge involved, which is why this fixture is in even when
     // the libc-shape `variadic_sprintf` is not.
-    ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
     // Full FP arithmetic on Win64 -- same SSE2 lowering as the

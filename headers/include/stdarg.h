@@ -1,45 +1,19 @@
 // stdarg.h -- variadic-argument access for c5.
 //
-// `va_list` is a pointer that walks the c5 stack starting just past
-// the last named argument. c5's cdecl push order parks the first
-// declared parameter at val=2 (`bp + 16`) and successive parameters
-// at val=3, val=4, ...; the variadic tail begins at val=N+2 where N
-// is the fixed-arg count.
+// `va_list` is the host platform's own representation, so a c5
+// `va_list` forwarded to libc's `vfprintf` / `vsnprintf` / etc. is
+// walked the same way libc walks its own. Variadic c5 functions are
+// reached through the host-ABI call shape (host argument registers +
+// host stack overflow), the prologue of a variadic callee spills the
+// host variadic register save area, and the four intrinsics below own
+// the per-target layout:
 //
-// Each c5 stack slot is 16 bytes (8 bytes of value + 8 bytes of
-// pad). Pointer arithmetic on `long long *` strides 8 bytes per
-// `+1` on every supported target -- LP64 (Linux/macOS) and LLP64
-// (Windows) both -- so "skip one 16-byte slot" is `+2`. We use
-// `long long *` rather than `long *` because `long` is only 4
-// bytes on Windows LLP64 and `long *` would stride 4 there,
-// landing mid-slot. `int *` has the same 4-byte-stride problem
-// on every target.
-//
-// TODO: replace this c5-specific cursor with the host's native
-// `va_list` representation. That requires:
-//
-//   * Variadic c5 functions reached via the host-ABI call shape
-//     (host arg regs + host stack overflow) instead of the
-//     bare-bl + c5-stack-args path. The compiler's
-//     `Symbol::is_variadic` flag plus `Program::variadic_functions`
-//     already plumbs the declarator info to the codegen; today
-//     the codegen still routes variadic targets through the
-//     legacy c5-stack path to keep this header's macros valid.
-//   * A per-host-ABI variadic register save area emitted in the
-//     prologue of every variadic c5 function. AAPCS64: x0..x7
-//     contiguous in the gr-save area + d0..d7 contiguous in the
-//     vr-save area. SysV x86_64: rdi..r9 + xmm0..xmm7. Windows
-//     (both ISAs): variadic_int_only -- save only the int arg
-//     bank; FP args ride int regs as bit patterns.
-//   * `va_list` becomes the platform's documented struct (or
-//     `char *` on Windows). `va_start` initialises the offsets
-//     and pointers to the prologue-spilled save area; `va_arg`
-//     walks per the host's variadic protocol.
-//
-// Net effect: libc's `vfprintf` / `vsnprintf` / etc. would take
-// c5's `va_list` directly, retiring the c5_v* shims in
-// `<c5io.h>` and the `#define vsnprintf c5_vsnprintf` redirects
-// in `<stdio.h>`.
+//   * System V AMD64 (Linux x86_64) and AAPCS64 (Linux aarch64) use the
+//     documented register-save-area struct: `va_start` records the
+//     general / floating-point save areas plus the overflow pointer, and
+//     `va_arg` walks per the type class.
+//   * macOS arm64 and Windows (both ISAs) use a single-pointer cursor
+//     over the incoming stack / home area at 8-byte stride.
 //
 // Usage:
 //

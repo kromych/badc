@@ -1912,19 +1912,22 @@ impl<'a> Walker<'a> {
                 // predicate to its `param_fp_mask`); widen its FP
                 // arguments through the integer slots and pass mask 0.
                 //
-                // A Win64 variadic callee through a function pointer
-                // (`position_indexed_args`) reads its named parameters
-                // from the integer home cells the prologue spills (its
-                // `param_fp_mask` is 0), and the variadic tail rides the
-                // integer side (`variadic_int_only`). Route every
+                // A variadic callee through a function pointer compiled
+                // for a `variadic_int_only` host (Win64 x86_64 or Windows
+                // aarch64) reads its named parameters from the integer
+                // home / gr-save cells the prologue spills (its
+                // `param_fp_mask` is 0) and the variadic tail rides the
+                // integer register bank then the stack. Route every
                 // floating-point argument through the integer registers
                 // as a widened double so the call site and the callee
-                // agree; SysV leaves `position_indexed_args` clear, so
-                // its variadic indirect lowering is unchanged.
+                // agree; SysV / Linux / macOS leave `variadic_int_only`
+                // clear, so their variadic indirect lowering is
+                // unchanged (macOS took the `variadic_on_stack` branch
+                // above).
                 let eff_fp_arg_mask =
                     super::super::codegen::effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
                 let force_int_indirect =
-                    callee_variadic && abi.position_indexed_args && fp_arg_mask != 0;
+                    callee_variadic && abi.variadic_int_only && fp_arg_mask != 0;
                 let call_fp_arg_mask =
                     if force_int_indirect || (fp_arg_mask != 0 && eff_fp_arg_mask == 0) {
                         for (i, a) in args.iter().enumerate() {

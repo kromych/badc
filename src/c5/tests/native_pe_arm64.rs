@@ -262,6 +262,60 @@ fn recursion_factorial() {
 }
 
 #[test]
+fn c5_internal_variadic_sum_runs() {
+    // End-to-end correctness of the Windows-on-ARM64 host variadic ABI
+    // (Microsoft ARM64 calling convention): a c5-internal variadic sum
+    // over one named and three variadic integer arguments returns their
+    // total. The caller places the arguments in x0..x7 by position, the
+    // callee spills x0..x7 into its gr-save area, and va_arg walks the
+    // 8-byte-stride region. Skips without a PE host (no wine); the
+    // parent drives the Windows-on-ARM64 run.
+    let src = r#"
+        #include <stdarg.h>
+        int vsum(int count, ...) {
+            va_list ap;
+            int total;
+            int i;
+            total = 0;
+            va_start(ap, count);
+            for (i = 0; i < count; i = i + 1)
+                total = total + va_arg(ap, int);
+            va_end(ap);
+            return total;
+        }
+        int main(void) { return vsum(3, 10, 20, 30); }
+    "#;
+    assert_exit(src, "c5varsum", &[], 60);
+}
+
+#[test]
+fn c5_internal_variadic_sum_crosses_stack_overflow_runs() {
+    // The variadic tail spans the gr-save area and the incoming stack
+    // overflow: with one named argument and ten variadic ones the first
+    // seven variadic arguments ride x1..x7 (the gr-save area) and the
+    // last three ride the incoming stack. A correct va_arg cursor walks
+    // the gr-save area then crosses into the stack arguments with no gap
+    // (the save-area top edge meets the incoming arguments). Sum of
+    // 1..10 is 55.
+    let src = r#"
+        #include <stdarg.h>
+        int vsum(int count, ...) {
+            va_list ap;
+            int total;
+            int i;
+            total = 0;
+            va_start(ap, count);
+            for (i = 0; i < count; i = i + 1)
+                total = total + va_arg(ap, int);
+            va_end(ap);
+            return total;
+        }
+        int main(void) { return vsum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10); }
+    "#;
+    assert_exit(src, "c5varsum_overflow", &[], 55);
+}
+
+#[test]
 fn printf_through_iat() {
     // Exits with the byte count printf returned for "42\n" -- 3 on
     // Windows since msvcrt's printf returns the printed-char count.

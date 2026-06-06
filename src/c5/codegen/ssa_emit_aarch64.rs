@@ -138,25 +138,77 @@ impl Frame {
         let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
         let frame_bytes =
             locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
-        let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
+        // A Windows-on-ARM64 variadic callee (Microsoft ARM64 calling
+        // convention) receives every argument (named and variadic) in a
+        // contiguous 8-byte-per-argument region: the first eight in
+        // x0..x7 (spilled by the prologue into a 64-byte gr-save area
+        // above the saved fp/lr), the rest on the incoming stack just
+        // above it. The body reads its named parameters and `va_arg`
+        // walks the variadic tail with a single 8-byte stride across
+        // that region, so the cell stride is 8 rather than the 16-byte
+        // c5 cdecl cell width, and the prologue allocates a fixed
+        // 64-byte gr-save area. Every other aarch64 callee keeps the
+        // 16-byte stride and its `prologue_param_spill_bytes` count.
+        let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
+            (WIN_ARM64_GR_SAVE_BYTES, 8)
+        } else {
+            (prologue_param_spill_bytes(func, alloc, abi), 16)
+        };
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
             uses_x19,
             param_spill_bytes,
-            param_cell_stride: 16,
+            param_cell_stride,
         }
     }
 }
 
-/// True when the callee receives its named parameters in argument
-/// registers and must spill them to their c5 cdecl cells on entry.
-/// Non-variadic callees always do. A variadic callee does so only
-/// under the host variadic ABI that passes named arguments in
-/// registers and the variadic tail on the stack (macOS arm64,
-/// `variadic_on_stack`); on every other target a variadic callee
-/// keeps the c5 cdecl stack-push shape and reads its named arguments
-/// off the 16-byte-stride stack the caller laid down.
+/// Bytes the Windows-on-ARM64 variadic prologue reserves above the
+/// saved fp/lr for the integer register-save area. The Microsoft ARM64
+/// calling convention passes the first eight arguments in x0..x7; the
+/// callee spills all eight into one contiguous 8-byte-stride region so
+/// the named parameters (x0..x{fixed-1}) and the register-resident
+/// variadic arguments (x{fixed}..x7) are addressable as cells and
+/// `va_arg` walks them, then crosses into the incoming stack overflow
+/// that sits immediately above. 8 registers * 8 bytes = 64, already
+/// 16-aligned (AAPCS64 5.2.2.1 sp-at-public-interface alignment).
+const WIN_ARM64_GR_SAVE_BYTES: u32 = 64;
+
+/// True when the function is a variadic c5 callee compiled for the
+/// Windows-on-ARM64 host variadic ABI (Microsoft ARM64 calling
+/// convention). Among the aarch64 targets, Windows is the only one
+/// whose `Abi` sets `variadic_int_only` (macOS sets `variadic_on_stack`,
+/// Linux sets neither), so this gate selects Windows aarch64 alone and
+/// leaves the macOS host-stack variadic path and the Linux c5-internal
+/// 16-byte-stride path byte for byte. Under this ABI the named and
+/// variadic arguments share the integer register bank x0..x7 (a
+/// variadic floating-point argument rides an integer register as its
+/// raw bit pattern) then the incoming stack; the prologue spills x0..x7
+/// into the gr-save area, `va_start` points at the first variadic slot,
+/// and `va_arg` advances 8.
+fn win_arm64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
+    debug_assert!(
+        !abi.variadic_int_only || matches!(abi.arch, super::Arch::Aarch64 | super::Arch::X86_64),
+        "variadic_int_only is a Windows (aarch64 or x86_64) property"
+    );
+    // The x86_64 `variadic_int_only` target (Win64) is lowered by the
+    // x86_64 emit; this aarch64 emit only ever runs on an aarch64 abi,
+    // so the arch check is a guard against a future cross-wired call.
+    func.is_variadic && abi.variadic_int_only && matches!(abi.arch, super::Arch::Aarch64)
+}
+
+/// True when the callee spills its named parameters into the c5 cdecl
+/// cells through the generic per-parameter prologue path
+/// (`plan_param_regs` placements, 16-byte cells, FP bank). Non-variadic
+/// callees always do. The macOS arm64 variadic ABI (`variadic_on_stack`)
+/// does too: its named arguments arrive in the int / FP register banks
+/// and only the variadic tail rides the stack. The Windows-on-ARM64
+/// variadic callee (`variadic_int_only`) is excluded here -- it spills
+/// the whole x0..x7 register bank into a dedicated 8-byte-stride gr-save
+/// area in `emit_prologue`, not through this path. A Linux aarch64
+/// variadic callee keeps the c5 cdecl 16-byte stack-push shape and reads
+/// its named arguments off the stack the caller laid down.
 fn spills_named_params_on_entry(func: &FunctionSsa, abi: super::Abi) -> bool {
     !func.is_variadic || abi.variadic_on_stack
 }
@@ -385,8 +437,9 @@ fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
 
 /// Materialise `fp + off` into `dst` using the same shift-12 +
 /// remainder split as `emit_sp_plus_off`, but based on fp (x29).
-/// Used by the macOS arm64 variadic `va_start` to compute the
-/// frame-relative address of the first incoming stack argument.
+/// Used by the host-ABI variadic `va_start` to compute the
+/// frame-relative address of the first variadic argument: the macOS
+/// arm64 incoming-stack slot, or the Windows arm64 gr-save slot.
 fn emit_sp_plus_off_from_fp(code: &mut Vec<u8>, dst: Reg, off: u32) {
     let hi = off & !0xfff;
     let lo = off & 0xfff;
@@ -1081,6 +1134,48 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
 ) {
+    // Windows-on-ARM64 variadic gr-save area (Microsoft ARM64 calling
+    // convention). The caller passes the first eight arguments (named
+    // and variadic) in x0..x7 by position and the rest on the incoming
+    // stack just above the call-site sp, with no shadow / home area
+    // reserved. The callee allocates its own 64-byte gr-save area
+    // directly above the saved fp/lr and spills all eight argument
+    // registers into it, so the named parameters and the
+    // register-resident variadic arguments form one contiguous
+    // 8-byte-stride region whose top edge meets the incoming stack
+    // overflow: `va_arg` walks the gr-save slots then crosses into the
+    // stack arguments with no gap. The body reads its named parameters
+    // through the same cells (`Frame::param_cell_stride` == 8).
+    //
+    // Spill ALL eight argument registers, not just the named ones: a
+    // variadic argument that landed in a register (x{fixed}..x7) must
+    // reach the gr-save area for `va_arg` to read it. The caller passes
+    // every argument through the integer registers as a raw 8-byte
+    // value (the walker widens variadic floating-point arguments to
+    // double and passes `fp_arg_mask = 0` under `variadic_int_only`),
+    // so the spill is uniformly integer; the body reads only the named
+    // slots and the surplus stores feed `va_arg`.
+    if win_arm64_variadic_callee(func, abi) {
+        debug_assert_eq!(
+            frame.param_spill_bytes, WIN_ARM64_GR_SAVE_BYTES,
+            "win-arm64 variadic prologue must reserve the full gr-save area"
+        );
+        emit_sub_sp_imm(code, WIN_ARM64_GR_SAVE_BYTES);
+        for (i, &r) in abi.int_arg_regs.iter().enumerate() {
+            let off = (i as u32) * 8;
+            emit(code, enc_str_imm(Reg(r), Reg(31), off));
+        }
+        // Standard frame below the gr-save area. A variadic callee is
+        // never a full leaf (`param_spill_bytes != 0`), so the
+        // stp / mov-fp pair always follows.
+        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
+        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+        if frame.frame_bytes > 0 {
+            emit_sub_sp_imm(code, frame.frame_bytes);
+        }
+        emit_prologue_saved_regs(code, alloc, frame);
+        return;
+    }
     // Host-arg-reg spill for non-variadic functions: spill each
     // declared int param into a 16-byte c5 cdecl slot above fp,
     // restripe any host-stack overflow into 16-byte slots.
@@ -1195,14 +1290,20 @@ fn emit_prologue(
     if frame.frame_bytes > 0 {
         emit_sub_sp_imm(code, frame.frame_bytes);
     }
-    // Save the allocator-reported callee-saved GPRs + FP regs at
-    // the bottom of the frame. The saved-reg region sits just above
-    // sp; its offsets are one slot per saved register, so the 12-bit
-    // scaled immediate (range 0..32760 in multiples of 8) always
-    // covers them. The allocator spill region, by contrast, can
-    // exceed that reach and is addressed through the range-checked
-    // SP helpers. Using `stur` off fp would silently truncate the
-    // 9-bit immediate for frames larger than ~256 bytes.
+    emit_prologue_saved_regs(code, alloc, frame);
+}
+
+/// Save the allocator-reported callee-saved GPRs + FP regs at the
+/// bottom of the frame. The saved-reg region sits just above sp; its
+/// offsets are one slot per saved register, so the 12-bit scaled
+/// immediate (range 0..32760 in multiples of 8) always covers them. The
+/// allocator spill region, by contrast, can exceed that reach and is
+/// addressed through the range-checked SP helpers. Using `stur` off fp
+/// would silently truncate the 9-bit immediate for frames larger than
+/// ~256 bytes. x19 is saved just past the allocator-saved gprs, but only
+/// when the function clobbers it; the slot is reserved either way so the
+/// surrounding offsets stay fixed.
+fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame) {
     for (i, &r) in alloc.fp_used.iter().enumerate() {
         let off = (i as u32) * 8;
         emit(code, enc_str_d_imm(r, Reg(31), off));
@@ -1212,9 +1313,6 @@ fn emit_prologue(
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_str_imm(Reg(r), Reg(31), off));
     }
-    // Save x19 just past the allocator-saved gprs, but only when the
-    // function clobbers it. The slot is reserved either way so the
-    // surrounding offsets stay fixed.
     if frame.uses_x19 {
         let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let x19_save_off = saved_fpr_bytes + saved_gpr_bytes;
@@ -1857,6 +1955,28 @@ fn emit_intrinsic(
                 Some(r) => r,
                 None => return false,
             };
+            if win_arm64_variadic_callee(func, abi) {
+                // Windows-on-ARM64 variadic ABI (Microsoft ARM64 calling
+                // convention): the prologue spilled x0..x7 into the
+                // 64-byte gr-save area at `[fp + 16 .. fp + 80)`, one
+                // 8-byte slot per argument position. The named arguments
+                // occupy the first `n_params` slots; the first variadic
+                // argument is slot `n_params` at `fp + 16 + n_params*8`.
+                // The gr-save area's top edge (`fp + 80`) meets the
+                // incoming stack overflow, so the single cursor `va_arg`
+                // advances by 8 walks the register-saved variadic
+                // arguments then crosses into the stack arguments with no
+                // gap (the same fixed-count / base / stride the prologue
+                // and `c5_slot_to_fp_offset` use).
+                debug_assert!(
+                    func.n_params <= abi.int_arg_regs.len(),
+                    "win-arm64 variadic callee assumes named params fit the int arg bank"
+                );
+                let off = 16 + (func.n_params as u32) * 8;
+                emit_sp_plus_off_from_fp(code, scratch.secondary, off);
+                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+                return true;
+            }
             if func.is_variadic && abi.variadic_on_stack {
                 // macOS arm64 variadic ABI: the named arguments arrive
                 // in argument registers (spilled to c5 cdecl cells by
@@ -1918,8 +2038,18 @@ fn emit_intrinsic(
             // non-variadic forwarder (e.g. `c5_vsnprintf` taking a
             // `va_list` argument) must walk the same stride the
             // variadic caller produced, so this does not depend on
-            // `func.is_variadic`. args[0] = &ap.
-            let va_stride: u32 = if abi.variadic_on_stack { 8 } else { 16 };
+            // `func.is_variadic`. The macOS arm64 variadic ABI
+            // (`variadic_on_stack`) and the Windows-on-ARM64 variadic
+            // ABI (`variadic_int_only`, Microsoft ARM64 calling
+            // convention) both lay variadic arguments at 8-byte stride
+            // (the stack region, respectively the gr-save area + stack
+            // overflow); the Linux aarch64 c5-internal ABI uses the
+            // 16-byte cdecl cell. args[0] = &ap.
+            let va_stride: u32 = if abi.variadic_on_stack || abi.variadic_int_only {
+                8
+            } else {
+                16
+            };
             if args.len() != 1 {
                 bail_msg("VaArg: expected 1 arg");
                 return false;
@@ -2348,17 +2478,26 @@ fn emit_call(
     fp_return: bool,
     fp_arg_mask: u32,
 ) -> bool {
-    if callee_is_variadic && abi.variadic_on_stack {
-        // macOS arm64 variadic ABI (Apple "Writing ARM64 Code for
-        // Apple Platforms"): the named (fixed) arguments follow
-        // AAPCS64 6.4.1 (int bank x0..x7 / FP bank d0..d7, overflow
-        // to the stack); every variadic argument is passed on the
-        // stack at 8-byte stride. `plan_call_args` with
-        // `fixed_args` produces exactly this placement, identical to
-        // a libc variadic call. The callee's prologue spills the
-        // named register arguments to its c5 cdecl cells and reads
-        // the variadic tail off the incoming stack; `va_start`
-        // points at the first incoming stack slot.
+    if callee_is_variadic && (abi.variadic_on_stack || abi.variadic_int_only) {
+        // Host variadic ABI: marshal the named (fixed) and variadic
+        // arguments through `plan_call_args`, identical to a libc
+        // variadic call (`emit_call_ext`).
+        //
+        //  * macOS arm64 (`variadic_on_stack`, Apple "Writing ARM64
+        //    Code for Apple Platforms"): named arguments follow AAPCS64
+        //    6.4.1 (int bank x0..x7 / FP bank d0..d7, overflow to the
+        //    stack); every variadic argument rides the stack at 8-byte
+        //    stride. The callee spills its named register arguments to
+        //    its c5 cdecl cells and reads the variadic tail off the
+        //    incoming stack; `va_start` points at the first stack slot.
+        //  * Windows arm64 (`variadic_int_only`, Microsoft ARM64
+        //    calling convention): named arguments follow AAPCS64; every
+        //    variadic argument rides the integer register bank x0..x7
+        //    (a floating-point variadic argument as its raw bit pattern,
+        //    the walker already widened it to double and passed
+        //    `fp_arg_mask` 0) then the incoming stack. The callee spills
+        //    x0..x7 into its gr-save area; `va_start` points at the
+        //    first variadic slot there.
         let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
@@ -2573,10 +2712,12 @@ fn emit_call_indirect(
     if target_r.0 != target_reg.0 {
         emit_mov_reg(code, target_reg, target_r);
     }
-    if callee_variadic && abi.variadic_on_stack {
-        // macOS arm64 variadic ABI through a function pointer: the
-        // named arguments follow AAPCS64 (int / FP bank) and the
-        // variadic tail rides the stack at 8-byte stride -- the same
+    if callee_variadic && (abi.variadic_on_stack || abi.variadic_int_only) {
+        // Host variadic ABI through a function pointer: the named
+        // arguments follow AAPCS64 (int / FP bank) and the variadic tail
+        // rides the host stack at 8-byte stride (macOS,
+        // `variadic_on_stack`) or the integer register bank then the
+        // stack (Windows arm64, `variadic_int_only`) -- the same
         // placement `emit_call` uses for a direct variadic call. The
         // target pointer is already captured in `target_reg` (a
         // non-arg-passing scratch), so `marshal_args` will not clobber

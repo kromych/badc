@@ -644,6 +644,92 @@ fn verify_allocation(
             }
         }
     }
+
+    // Parameter shuffle clobber: the entry placement moves each
+    // parameter from its distinct incoming argument register to its home.
+    // When all homes are distinct the emit runs it as a parallel copy
+    // that reads every source before any write, so a home equal to
+    // another parameter's incoming register is harmless. When two
+    // parameters share a home the emit falls back to placing each
+    // ParamRef in program order, and then an earlier parameter whose
+    // home is a later parameter's incoming register overwrites that
+    // register before the later ParamRef reads it. This models that
+    // exact condition (the witness is the four-parameter
+    // `param_incoming_reg_clobber.c` shape).
+    if !func.is_variadic {
+        let mut used = alloc::vec![false; func.insts.len()];
+        for inst in &func.insts {
+            for_each_operand(inst, |op| {
+                if (op as usize) < used.len() {
+                    used[op as usize] = true;
+                }
+            });
+        }
+        for block in &func.blocks {
+            match &block.terminator {
+                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
+                    if (*cond as usize) < used.len() {
+                        used[*cond as usize] = true;
+                    }
+                }
+                Terminator::Return(v) => {
+                    if (*v as usize) < used.len() {
+                        used[*v as usize] = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let int_args: &[u8] = match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                &[0, 1, 2, 3, 4, 5, 6, 7]
+            }
+            Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
+            Target::WindowsX64 => &[1, 2, 8, 9],
+        };
+        // (value index, home, incoming register) for each used integer
+        // ParamRef placed in a register or spill slot.
+        let mut params: Vec<(usize, Place, u8)> = Vec::new();
+        for (vid, inst) in func.insts.iter().enumerate() {
+            let Inst::ParamRef { idx, .. } = inst else {
+                continue;
+            };
+            let pi = *idx as usize;
+            if (func.param_fp_mask & (1u32 << pi)) != 0 || !used[vid] {
+                continue;
+            }
+            let int_rank = (0..pi)
+                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                .count();
+            let Some(&incoming) = int_args.get(int_rank) else {
+                continue;
+            };
+            let home = places.get(vid).copied().unwrap_or(Place::None);
+            if matches!(home, Place::IntReg(_) | Place::Spill(_)) {
+                params.push((vid, home, incoming));
+            }
+        }
+        let homes_distinct = (0..params.len()).all(|a| {
+            ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1))
+        });
+        if !homes_distinct {
+            for a in 0..params.len() {
+                for b in 0..params.len() {
+                    if params[a].0 < params[b].0
+                        && matches!(params[a].1, Place::IntReg(r) if r == params[b].2)
+                    {
+                        report(alloc::format!(
+                            "param-shuffle-clobber: ParamRef v{} home {:?} is the incoming \
+                             register of later ParamRef v{}; per-inst placement clobbers it",
+                            params[a].0,
+                            params[a].1,
+                            params[b].0
+                        ));
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Coloring constraints for one allocation node (a phi-congruence

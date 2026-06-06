@@ -692,9 +692,14 @@ pub(super) fn emit_function(
     // distinct -- then `schedule_place_moves` sequentializes it and
     // breaks any cycle through a scratch register. When two ParamRef
     // values share a home (sequentially-live parameters the allocator
-    // packed into one register), the placement is not a parallel copy
-    // and the in-order per-inst emit is the correct lowering, so the
-    // batch is skipped.
+    // packed into one register) the move set is not a permutation, so
+    // the batch is skipped and each ParamRef is placed in program order.
+    // That per-inst path is safe only while no parameter's home is a
+    // later parameter's incoming register; the allocator's ParamRef
+    // self-home hint keeps it so (each integer parameter prefers its own
+    // incoming register, and those are distinct). The
+    // `param-shuffle-clobber` check in `verify_allocation` guards the
+    // invariant under the `codegen_test` feature.
     let mut param_prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
     {
         // Each integer parameter's incoming register comes from the

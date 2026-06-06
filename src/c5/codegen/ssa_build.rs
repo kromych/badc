@@ -281,6 +281,14 @@ impl SsaBuilder {
         self.func.param_fp_mask
     }
 
+    /// Overwrite the per-parameter FP mask. Used to clear it when the
+    /// resulting register/stack placement would interleave and the
+    /// function falls back to the all-integer c5 cdecl ABI. See
+    /// [`FunctionSsa::param_fp_mask`].
+    pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
+        self.func.param_fp_mask = mask;
+    }
+
     /// True when value `v` was previously marked single-precision.
     pub(crate) fn is_f32(&self, v: ValueId) -> bool {
         self.func

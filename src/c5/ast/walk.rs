@@ -139,6 +139,17 @@ pub(crate) fn walk_function(
                 b.mark_param_fp(i);
             }
         }
+        // Clear the mask when the placement would interleave register
+        // and host-stack parameters: the c5 cdecl cell layout requires a
+        // contiguous register prefix, so such a function falls back to
+        // the all-integer ABI. The caller applies the same predicate to
+        // its `fp_arg_mask`, so the two ends stay in agreement.
+        let eff = super::super::codegen::effective_fp_arg_mask(
+            param_tys.len(),
+            b.param_fp_mask(),
+            target.abi(),
+        );
+        b.set_param_fp_mask(eff);
     }
     // Per-parameter incoming-register plan, resolved once for both the
     // integer/double seed loop and the float-narrow loop below. A
@@ -286,12 +297,12 @@ pub(crate) fn walk_function(
                 let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F32);
                 b.mark_f32(pr);
                 b.store(dst, pr, super::super::ir::StoreKind::F32);
-            } else if !is_variadic && !returns_struct {
+            } else if b.param_fp_mask() != 0 {
                 // Host-stack-overflow `float` parameter (more than eight
-                // preceding FP parameters): the caller pushed it at
-                // single precision into the c5 cdecl cell. Read the cell
-                // as `F32` (widening to f64) and narrow back into the
-                // local.
+                // preceding FP parameters) under the FP-register ABI: the
+                // caller pushed it at single precision into the c5 cdecl
+                // cell. Read the cell as `F32` (widening to f64) and
+                // narrow back into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
                 let val = b.load_local(arg_slot, super::super::ir::LoadKind::F32);
                 b.store(dst, val, super::super::ir::StoreKind::F32);
@@ -1675,7 +1686,21 @@ impl<'a> Walker<'a> {
                         // widened 8-byte double, matching what the callee
                         // reads back, and pass `fp_arg_mask = 0`.
                         let callee_variadic = self.fun_is_variadic(*sym);
-                        let call_fp_arg_mask = if callee_variadic {
+                        // The callee keeps the all-integer c5 cdecl ABI
+                        // when it is variadic or when its register/stack
+                        // placement would interleave (the same predicate
+                        // the callee applies to its `param_fp_mask`). In
+                        // that case widen every FP argument to an 8-byte
+                        // double in an integer slot, matching what the
+                        // callee reads back, and pass `fp_arg_mask = 0`.
+                        let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
+                            args.len(),
+                            fp_arg_mask,
+                            self.target.abi(),
+                        );
+                        let force_int =
+                            callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
+                        let call_fp_arg_mask = if force_int {
                             for (i, a) in args.iter().enumerate() {
                                 let arg_is_fp = expr_ty(self.ast.expr(*a))
                                     .map(is_floating_scalar)
@@ -1690,7 +1715,7 @@ impl<'a> Walker<'a> {
                             }
                             0
                         } else {
-                            fp_arg_mask
+                            eff_fp_arg_mask
                         };
                         // C99 6.2.5p10: a call to a function whose
                         // return type is a floating-point scalar
@@ -1726,7 +1751,33 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
-                Ok(b.call_indirect(target, arg_vals, fp_return, fp_arg_mask))
+                // A function-pointer callee whose register/stack
+                // placement would interleave keeps the all-integer c5
+                // cdecl ABI (the pointed-to function applied the same
+                // predicate to its `param_fp_mask`); widen its FP
+                // arguments through the integer slots and pass mask 0.
+                let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
+                    args.len(),
+                    fp_arg_mask,
+                    self.target.abi(),
+                );
+                let call_fp_arg_mask = if fp_arg_mask != 0 && eff_fp_arg_mask == 0 {
+                    for (i, a) in args.iter().enumerate() {
+                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                            .map(is_floating_scalar)
+                            .unwrap_or(false);
+                        if arg_is_fp {
+                            let widened = b.fp_widen_to_f64(arg_vals[i]);
+                            let slot = b.alloc_synthetic_local();
+                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                            arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                        }
+                    }
+                    0
+                } else {
+                    eff_fp_arg_mask
+                };
+                Ok(b.call_indirect(target, arg_vals, fp_return, call_fp_arg_mask))
             }
             Expr::Member {
                 obj,

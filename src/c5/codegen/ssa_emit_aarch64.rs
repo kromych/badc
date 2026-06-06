@@ -169,14 +169,21 @@ fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) 
         .iter()
         .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
         .count();
-    debug_assert!(
+    // An interleaved register / stack placement -- the integer bank
+    // exhausted before a trailing floating-point parameter -- does not
+    // fit the contiguous-prefix c5 cdecl cell layout. Fail in every
+    // build rather than emit a prologue that reads parameters from the
+    // wrong cells; the case is unreachable for the parameter lists the
+    // demos and fixtures exercise. TODO: support a non-prefix cell
+    // layout for this shape.
+    assert!(
         placements[..n_reg]
             .iter()
             .all(|p| !matches!(p, super::ArgPlacement::Stack(_)))
             && placements[n_reg..]
                 .iter()
                 .all(|p| matches!(p, super::ArgPlacement::Stack(_))),
-        "ICE: interleaved register / stack parameter placement not supported"
+        "interleaved register / stack parameter placement is not yet supported"
     );
     (n_reg, placements.len() - n_reg)
 }

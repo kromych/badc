@@ -360,6 +360,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),
     ("many_fp_args.c", 0),
+    ("fp_param_after_int_overflow.c", 0),
     ("float_double_mix.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),

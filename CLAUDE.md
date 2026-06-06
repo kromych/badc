@@ -1,4 +1,6 @@
-# General notes
+# How to work on `badc`
+
+## General notes
 
 You are a systems engineer whose goal is to build a cross-platform compiler that is quick and 
 slim still providing a rich and cohesive feature set. There are no oddities: every oddity or
@@ -8,6 +10,8 @@ based on evidence whether this is a narrow bug or a design gap and fix according
 Fix any crashes and hangs before doing feature work.
 
 ## Pre-push validation
+
+Configure Git hooks using `./scripts/install_hooks.py`.
 
 Before any `git push`, the following must pass on the host AND on a Linux x86_64 box
 (xps-8930.local via rsync) AND a Linux aarch64 box (krom2.local via rsync) AND a Windows x64 box
@@ -19,15 +23,18 @@ and SIGSEGV's, and costs money. Be financially responsible.
   * `python3 demos/lua/smoke.py`
   * `python3 demos/miniz/smoke.py`
   * `python3 demos/tweetnacl/smoke.py`
+  * `python3 demos/stb/smoke.py`
 
 A green run on macOS aarch64 is not sufficient -- the test binaries diverge enough between targets.
 `reference_xps8930_x64_debug.md`, `reference_krom2_arm64_debug.md`, `reference_kromyrzen_win64_debug.md` for sync recipes.
 
 ## Debugging
 
-* Instead of tweaking and guessing, collect evidence that would you let catch the issue and analyze it for bad patterns.
-* Binaries have debug info -- run under lldb / gdb / rr / cdb / msys2 (R:\msys64\usr\bin\gdb.exe, R:\msys64\usr\bin\objdump.exe, ...) / time travel debugging.
-* Instrument source code, repro code, or the emitted code.
+* Instead of tweaking and guessing, collect evidence that would you let 
+  catch the issue and analyze it for bad patterns.
+* Binaries have debug info -- run under lldb / gdb / rr / valgrind / cdb /
+  msys2 (msys64\usr\bin\gdb.exe, msys64\usr\bin\objdump.exe, ...) / time travel debugging.
+* Instrument the source code, the repro code, or the emitted code.
 * Contrast with the compilers producing known good results.
 * Contrast badc vs badc -O in the miscompiled function under the debugger.
 * Use hardware breakpoints to discover who/where the memory gets corrupted.

@@ -62,6 +62,25 @@ static int icopy(int n, ...) {
     return t;
 }
 
+// A variadic callee whose named parameters overflow the integer argument
+// registers: ten named ints fill the six System V (rdi..r9) / eight AAPCS64
+// (x0..x7) integer argument registers and spill the rest onto the incoming
+// stack. The callee reads both the register-passed and the stack-overflow
+// named parameters, and `va_start` must point the overflow area past the
+// named stack parameters so `va_arg` reads the first variadic argument
+// rather than re-reading a named one.
+static int named_overflow(int a, int b, int c, int d, int e,
+                          int f, int g, int h, int i, int j, ...) {
+    va_list ap;
+    int s = a + b + c + d + e + f + g + h + i + j;
+    va_start(ap, j);
+    s += va_arg(ap, int);
+    s += va_arg(ap, int);
+    s += va_arg(ap, int);
+    va_end(ap);
+    return s;
+}
+
 int main(void) {
     int rc = 0;
     if (isum(5, 1, 2, 3, 4, 5) != 15) rc |= 1;
@@ -70,5 +89,7 @@ int main(void) {
     if (dsum(10, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0) != 55.0) rc |= 8;
     if (mixed(4, 10, 1.5, 20, 2.5) != 34.0) rc |= 16;
     if (icopy(5, 2, 4, 6, 8, 10) != 60) rc |= 32;
+    // named sum 1..10 = 55, variadic 100+200+300 = 600.
+    if (named_overflow(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 200, 300) != 655) rc |= 64;
     return rc;
 }

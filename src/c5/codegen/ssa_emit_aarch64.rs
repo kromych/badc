@@ -103,6 +103,13 @@ pub(super) struct Frame {
     /// reads from the vector save area. Meaningful only when
     /// `va_named_redirect` is set.
     pub va_param_fp_mask: u32,
+    /// Named-parameter count and ABI carried for the redirect's
+    /// `plan_param_regs` call, so `local_slot_off` and `va_start` can map a
+    /// named parameter to its argument-register-bank slot or its
+    /// incoming-stack overflow slot without `func` / `abi` in scope.
+    /// Meaningful only when `va_named_redirect` is set.
+    pub va_n_params: usize,
+    pub va_abi: super::Abi,
 }
 
 impl Frame {
@@ -180,6 +187,8 @@ impl Frame {
             param_cell_stride,
             va_named_redirect: aarch64_host_variadic_callee(func, abi),
             va_param_fp_mask: func.param_fp_mask,
+            va_n_params: func.n_params,
+            va_abi: abi,
         }
     }
 }
@@ -2195,9 +2204,22 @@ fn emit_intrinsic(
             } else {
                 ap_r
             };
-            // __stack (+0) = fp + 16 + 192 (incoming stack overflow, just
-            // above the register save area).
-            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
+            // __stack (+0) = fp + 16 + 192 + named-stack-overflow. Incoming
+            // stack arguments begin just above the register save area at
+            // [fp + 208]; the named parameters that overflowed the argument
+            // registers occupy the low slots there, so the variadic tail
+            // begins past them.
+            let named_stack_bytes: u32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+                .placements
+                .iter()
+                .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
+                .count() as u32
+                * 8;
+            emit_sp_plus_off_from_fp(
+                code,
+                scratch.secondary,
+                16 + AARCH64_VA_SAVE_BYTES + named_stack_bytes,
+            );
             emit(code, enc_str_imm(scratch.secondary, ap, 0));
             // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
             emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
@@ -3270,38 +3292,35 @@ use super::ssa_emit_common::c5_slot_to_fp_offset;
 fn local_slot_off(off: i64, frame: Frame) -> i64 {
     if off >= 2 && frame.va_named_redirect {
         let p = (off - 2) as usize;
-        let is_fp = |i: usize| (frame.va_param_fp_mask & (1u32 << i)) != 0;
-        let mut int_rank = 0i64;
-        let mut fp_rank = 0i64;
-        for i in 0..p {
-            if is_fp(i) {
-                fp_rank += 1;
-            } else {
-                int_rank += 1;
+        // Named parameters arrive per AAPCS64 6.4.1: the first eight integer
+        // and eight floating-point parameters in the argument-register banks
+        // (the prologue spills them into the general / vector save area), the
+        // rest on the incoming stack. Use the shared planner so the redirect
+        // lands on the same placement the caller produced. The save area sits
+        // at `[fp + 16 .. fp + 208)`: general area (x0..x7) at
+        // `[fp + 16 .. fp + 80)`, vector area (q0..q7) at `[fp + 80 ..
+        // fp + 208)`; the incoming stack overflow begins at `[fp + 208 ..)`.
+        let plan = super::plan_param_regs(frame.va_n_params, frame.va_param_fp_mask, frame.va_abi);
+        match plan.placements.get(p) {
+            Some(super::ArgPlacement::Stack(soff)) => {
+                // Overflow named parameter: read from the incoming stack at
+                // [fp + 208 + soff], past the register save area.
+                16 + AARCH64_VA_SAVE_BYTES as i64 + *soff as i64
             }
-        }
-        // The save area sits at `[fp + 16 .. fp + 208)`: general area
-        // (x0..x7) at `[fp + 16 .. fp + 80)`, vector area (q0..q7) at
-        // `[fp + 80 .. fp + 208)`.
-        if is_fp(p) {
-            // A named floating-point parameter past the eight FP argument
-            // registers (AAPCS64 6.4.1) overflows to the incoming stack,
-            // which the register save area does not cover. The walker
-            // classifies such parameters the same on both ends; this
-            // redirect assumes every named parameter is register-passed.
-            // TODO: read a stack-overflow named parameter from the
-            // incoming stack rather than the save area.
-            debug_assert!(
-                fp_rank < 8,
-                "named FP parameter {p} overflowed the AAPCS64 vector save area"
-            );
-            16 + AARCH64_GR_SAVE_BYTES as i64 + fp_rank * 16
-        } else {
-            debug_assert!(
-                int_rank < 8,
-                "named integer parameter {p} overflowed the AAPCS64 general save area"
-            );
-            16 + int_rank * 8
+            Some(super::ArgPlacement::FpReg(_)) => {
+                let fp_rank = plan.placements[..p]
+                    .iter()
+                    .filter(|q| matches!(q, super::ArgPlacement::FpReg(_)))
+                    .count() as i64;
+                16 + AARCH64_GR_SAVE_BYTES as i64 + fp_rank * 16
+            }
+            _ => {
+                let int_rank = plan.placements[..p]
+                    .iter()
+                    .filter(|q| matches!(q, super::ArgPlacement::IntReg(_)))
+                    .count() as i64;
+                16 + int_rank * 8
+            }
         }
     } else {
         c5_slot_to_fp_offset(off, frame.param_cell_stride)

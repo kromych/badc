@@ -2665,39 +2665,36 @@ fn local_slot_off(off: i64, func: &FunctionSsa, frame: Frame, abi: super::Abi) -
     if off >= 2 && sysv_variadic_callee(func, abi) {
         let reg_save = frame.va_reg_save_off as i64;
         let p = (off - 2) as usize;
-        // Rank within the int / FP argument-register bank: a named
-        // floating-point parameter consumes an FP register and does not
-        // advance the integer bank, and vice versa, so each parameter's
-        // bank rank is the count of same-bank parameters before it.
-        let is_fp = |i: usize| (func.param_fp_mask & (1u32 << i)) != 0;
-        let mut int_rank = 0i64;
-        let mut fp_rank = 0i64;
-        for i in 0..p {
-            if is_fp(i) {
-                fp_rank += 1;
-            } else {
-                int_rank += 1;
+        // Named parameters arrive per the host ABI: the first six integer
+        // and eight floating-point parameters in argument registers (the
+        // prologue spills them into the register save area), the rest on
+        // the incoming stack just above the return address. Use the shared
+        // planner so the redirect lands on the same placement the caller
+        // produced; the parameter's bank rank is the count of same-bank
+        // register placements before it (an overflow parameter consumes no
+        // register slot).
+        let plan = super::plan_param_regs(func.n_params, func.param_fp_mask, abi);
+        match plan.placements.get(p) {
+            Some(super::ArgPlacement::Stack(soff)) => {
+                // Overflow named parameter: the register save area does not
+                // cover it. Read from the incoming stack at [rbp + 16 + soff],
+                // matching the caller's stack-argument placement.
+                16 + *soff as i64
             }
-        }
-        if is_fp(p) {
-            // A named floating-point parameter past the eight FP argument
-            // registers (System V AMD64 3.2.3) overflows to the incoming
-            // stack, which the register save area does not cover. The
-            // walker classifies such parameters the same on both ends;
-            // this redirect assumes every named parameter is
-            // register-passed. TODO: read a stack-overflow named parameter
-            // from the incoming stack rather than the save area.
-            debug_assert!(
-                fp_rank < 8,
-                "named FP parameter {p} overflowed the System V fp save area"
-            );
-            reg_save + SYSV_GP_SAVE_BYTES as i64 + fp_rank * 16
-        } else {
-            debug_assert!(
-                int_rank < 6,
-                "named integer parameter {p} overflowed the System V gp save area"
-            );
-            reg_save + int_rank * 8
+            Some(super::ArgPlacement::FpReg(_)) => {
+                let fp_rank = plan.placements[..p]
+                    .iter()
+                    .filter(|q| matches!(q, super::ArgPlacement::FpReg(_)))
+                    .count() as i64;
+                reg_save + SYSV_GP_SAVE_BYTES as i64 + fp_rank * 16
+            }
+            _ => {
+                let int_rank = plan.placements[..p]
+                    .iter()
+                    .filter(|q| matches!(q, super::ArgPlacement::IntReg(_)))
+                    .count() as i64;
+                reg_save + int_rank * 8
+            }
         }
     } else {
         c5_slot_to_fp_offset(off, frame.param_cell_stride)
@@ -5114,8 +5111,12 @@ fn emit_intrinsic(
                     named_int += 1;
                 }
             }
-            let gp_offset = named_int * 8;
-            let fp_offset = SYSV_GP_SAVE_BYTES + named_fp * 16;
+            // gp_offset / fp_offset index the next argument register the
+            // save area holds; they saturate at the bank size (six GP, eight
+            // FP) so a callee whose named parameters fill or overflow a bank
+            // sends `va_arg` straight to the overflow area.
+            let gp_offset = named_int.min(6) * 8;
+            let fp_offset = SYSV_GP_SAVE_BYTES + named_fp.min(8) * 16;
             let ap_place = match alloc.places.get(args[0] as usize).copied() {
                 Some(p) => p,
                 None => {
@@ -5130,11 +5131,18 @@ fn emit_intrinsic(
             // gp_offset (u32) at [ap + 0], fp_offset (u32) at [ap + 4].
             super::x86_64::emit_mov_mem32_imm32(code, ap, 0, gp_offset as i32);
             super::x86_64::emit_mov_mem32_imm32(code, ap, 4, fp_offset as i32);
-            // overflow_arg_area (ptr) at [ap + 8] = first incoming stack
-            // argument. With every named argument register-passed, the
-            // first variadic stack argument sits just above the return
-            // address at [rbp + 16].
-            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16);
+            // overflow_arg_area (ptr) at [ap + 8] = first variadic stack
+            // argument. Incoming stack arguments sit just above the return
+            // address at [rbp + 16]; the named parameters that overflowed
+            // the argument registers occupy the low slots there, so the
+            // variadic tail begins past them.
+            let named_stack_bytes: i32 = super::plan_param_regs(n, func.param_fp_mask, abi)
+                .placements
+                .iter()
+                .filter(|q| matches!(q, super::ArgPlacement::Stack(_)))
+                .count() as i32
+                * 8;
+            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, 16 + named_stack_bytes);
             emit_mov_mem_r(code, ap, 8, SCRATCH_R10);
             // reg_save_area (ptr) at [ap + 16] = base of the spilled gp
             // area.

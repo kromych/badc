@@ -154,3 +154,9 @@ run_demos.sh
 quicksort-elf-x64
 
 tests/perf/build/
+
+# Compiled fixture binaries: the native fixture-parity harness and ad-hoc
+# builds drop executables named after the .c stem here. Only the sources
+# belong under version control.
+/tests/fixtures/c/*
+!/tests/fixtures/c/*.c

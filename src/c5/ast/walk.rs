@@ -1785,16 +1785,19 @@ impl<'a> Walker<'a> {
                             }
                             return Ok(call);
                         }
-                        // System V AMD64 host variadic ABI (Linux x86_64):
-                        // a variadic callee receives its floating-point
+                        // Register-save host variadic ABI (System V AMD64
+                        // on Linux x86_64, AAPCS64 on Linux aarch64): a
+                        // variadic callee receives its floating-point
                         // arguments in the FP argument-register bank
-                        // (xmm0..xmm7), so the call passes the real
-                        // `fp_arg_mask` rather than force-routing FP
+                        // (xmm0..xmm7 / d0..d7), so the call passes the
+                        // real `fp_arg_mask` rather than force-routing FP
                         // arguments through the integer bank. Variadic
                         // `float` arguments are still widened to `double`
                         // (C99 6.5.2.2p6 default argument promotions) but
-                        // kept FP-classed so they ride an xmm register.
-                        if callee_variadic && abi.sysv_host_variadic() {
+                        // kept FP-classed so they ride an FP register.
+                        if callee_variadic
+                            && (abi.sysv_host_variadic() || abi.aarch64_host_variadic())
+                        {
                             for (i, a) in args.iter().enumerate() {
                                 if i < fixed_args {
                                     continue;
@@ -1945,13 +1948,14 @@ impl<'a> Walker<'a> {
                         fp_arg_mask,
                     ));
                 }
-                // System V AMD64 host variadic ABI (Linux x86_64): a
-                // variadic callee through a function pointer receives its
-                // floating-point arguments in xmm0..xmm7, so pass the real
+                // Register-save host variadic ABI (System V AMD64 on Linux
+                // x86_64, AAPCS64 on Linux aarch64): a variadic callee
+                // through a function pointer receives its floating-point
+                // arguments in xmm0..xmm7 / d0..d7, so pass the real
                 // `fp_arg_mask` and widen the variadic `float` arguments to
-                // `double` (C99 6.5.2.2p6) kept FP-classed. The emit sets
-                // `al` to the XMM-argument count at the call site.
-                if callee_variadic && abi.sysv_host_variadic() {
+                // `double` (C99 6.5.2.2p6) kept FP-classed. On x86_64 the
+                // emit sets `al` to the XMM-argument count at the call site.
+                if callee_variadic && (abi.sysv_host_variadic() || abi.aarch64_host_variadic()) {
                     for (i, a) in args.iter().enumerate() {
                         if i < callee_fixed {
                             continue;

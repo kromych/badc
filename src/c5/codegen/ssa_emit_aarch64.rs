@@ -91,6 +91,18 @@ pub(super) struct Frame {
     /// later phase can shrink non-variadic cells in one place;
     /// `c5_slot_to_fp_offset` and the prologue both read it.
     pub param_cell_stride: i64,
+    /// True for an AAPCS64 host variadic callee (Linux aarch64): the
+    /// named parameters live in the prologue-spilled general / vector
+    /// register save area rather than 16-byte cdecl cells, so
+    /// `local_slot_off` redirects a positive c5 slot to that area
+    /// instead of using `param_cell_stride`. Carried on the frame so the
+    /// slot-addressing helpers stay independent of `func` / `abi`.
+    pub va_named_redirect: bool,
+    /// Copy of `FunctionSsa::param_fp_mask` for the named-parameter
+    /// redirect: bit i set means named parameter i is floating-point and
+    /// reads from the vector save area. Meaningful only when
+    /// `va_named_redirect` is set.
+    pub va_param_fp_mask: u32,
 }
 
 impl Frame {
@@ -151,6 +163,12 @@ impl Frame {
         // 16-byte stride and its `prologue_param_spill_bytes` count.
         let (param_spill_bytes, param_cell_stride) = if win_arm64_variadic_callee(func, abi) {
             (WIN_ARM64_GR_SAVE_BYTES, 8)
+        } else if aarch64_host_variadic_callee(func, abi) {
+            // The AAPCS64 variadic callee reserves the 192-byte general +
+            // vector register save area above the saved fp/lr. Named
+            // parameters read from it through `local_slot_off`, not the
+            // 16-byte cdecl cell, so the cell stride is unused here.
+            (AARCH64_VA_SAVE_BYTES, 16)
         } else {
             (prologue_param_spill_bytes(func, alloc, abi), 16)
         };
@@ -160,6 +178,8 @@ impl Frame {
             uses_x19,
             param_spill_bytes,
             param_cell_stride,
+            va_named_redirect: aarch64_host_variadic_callee(func, abi),
+            va_param_fp_mask: func.param_fp_mask,
         }
     }
 }
@@ -196,6 +216,37 @@ fn win_arm64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
     // x86_64 emit; this aarch64 emit only ever runs on an aarch64 abi,
     // so the arch check is a guard against a future cross-wired call.
     func.is_variadic && abi.variadic_int_only && matches!(abi.arch, super::Arch::Aarch64)
+}
+
+/// Bytes the AAPCS64 variadic register save area occupies (AAPCS64
+/// Appendix B). The general register save area holds x0..x7 at
+/// `[gr_save + 0 .. 64]` (8 registers * 8 bytes); the vector register
+/// save area holds q0..q7 at `[vr_save + 0 .. 128]` (8 registers * 16
+/// bytes), of which `va_arg` reads the low eightbyte of each slot for a
+/// `double`. Both totals are 16-aligned (AAPCS64 5.2.2.1 sp-at-public-
+/// interface alignment); the combined 192-byte area sits above the saved
+/// fp/lr.
+const AARCH64_GR_SAVE_BYTES: u32 = 8 * 8;
+const AARCH64_VR_SAVE_BYTES: u32 = 8 * 16;
+const AARCH64_VA_SAVE_BYTES: u32 = AARCH64_GR_SAVE_BYTES + AARCH64_VR_SAVE_BYTES;
+
+/// True when the function is a variadic c5 callee compiled for the
+/// AAPCS64 host variadic ABI (Linux aarch64). Among the aarch64 targets
+/// macOS sets `variadic_on_stack` and Windows sets `variadic_int_only`;
+/// the plain AAPCS64 target sets neither, so this gate selects Linux
+/// aarch64 alone and leaves the macOS host-stack variadic path and the
+/// Windows gr-save path byte for byte. Under this ABI the named and
+/// variadic arguments arrive in the standard argument-register banks
+/// (x0..x7 + d0..d7) then the incoming stack; the prologue spills both
+/// banks into a register save area (AAPCS64 Appendix B), the named
+/// parameters read from that area (`local_slot_off` redirect), `va_start`
+/// initialises the `__va_list` offsets and pointers, and `va_arg` walks
+/// the general area, vector area, then the overflow stack per `kind`.
+fn aarch64_host_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
+    func.is_variadic
+        && matches!(abi.arch, super::Arch::Aarch64)
+        && !abi.variadic_on_stack
+        && !abi.variadic_int_only
 }
 
 /// True when the callee spills its named parameters into the c5 cdecl
@@ -1176,6 +1227,47 @@ fn emit_prologue(
         emit_prologue_saved_regs(code, alloc, frame);
         return;
     }
+    // AAPCS64 variadic register save area (AAPCS64 Appendix B). Reserve
+    // 192 bytes above the saved fp/lr: the general register save area
+    // (x0..x7) at `[fp + 16 .. fp + 80)` and the vector register save
+    // area (q0..q7, low eightbyte used) at `[fp + 80 .. fp + 208)`. The
+    // named parameters read their values from this area (`local_slot_off`
+    // redirects positive c5 cdecl slots here) and `va_start` / `va_arg`
+    // walk it for the variadic tail. The incoming stack overflow begins
+    // immediately above the area at `[fp + 208 .. )` -- the value
+    // `va_start` records as `__stack`.
+    //
+    // Spill ALL eight integer and eight vector argument registers, not
+    // just the named ones: a variadic argument that landed in a register
+    // (x{named_int}..x7 / d{named_fp}..d7) must reach the save area for
+    // `va_arg` to read it. AAPCS64 has no caller-passed vector-count
+    // (unlike System V's `al`), so the vector spill is unconditional.
+    if aarch64_host_variadic_callee(func, abi) {
+        debug_assert_eq!(
+            frame.param_spill_bytes, AARCH64_VA_SAVE_BYTES,
+            "aapcs64 variadic prologue must reserve the full register save area"
+        );
+        emit_sub_sp_imm(code, AARCH64_VA_SAVE_BYTES);
+        for (i, &r) in abi.int_arg_regs.iter().enumerate() {
+            emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
+        }
+        for i in 0..8u32 {
+            // `str dN, [sp, #gr_save + i*16]` -- the d-register view
+            // stores the low eightbyte of vN into the slot start; a
+            // `va_arg(double)` reads it back from the same offset.
+            emit(
+                code,
+                enc_str_d_imm(i as u8, Reg(31), AARCH64_GR_SAVE_BYTES + i * 16),
+            );
+        }
+        emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
+        emit(code, enc_add_imm(Reg(29), Reg(31), 0));
+        if frame.frame_bytes > 0 {
+            emit_sub_sp_imm(code, frame.frame_bytes);
+        }
+        emit_prologue_saved_regs(code, alloc, frame);
+        return;
+    }
     // Host-arg-reg spill for non-variadic functions: spill each
     // declared int param into a 16-byte c5 cdecl slot above fp,
     // restripe any host-stack overflow into 16-byte slots.
@@ -1913,6 +2005,129 @@ fn emit_tls_addr(
     }
 }
 
+/// AAPCS64 `va_arg` (Appendix B). Reads the packed `(kind << 16) | size`
+/// descriptor the parser folded for the type operand and walks the
+/// `__va_list` struct: a general (integer / pointer) argument from the
+/// general register save area while `__gr_offs < 0`, a floating-point
+/// argument from the vector area while `__vr_offs < 0`, and the overflow
+/// stack once the bank is exhausted. Returns the address of the slot
+/// holding the argument; the `<stdarg.h>` macro dereferences it as the
+/// requested type.
+///
+/// The struct pointer is held in `scratch.secondary` (x17) across the
+/// whole sequence; the working register / argument address is staged in
+/// `scratch.primary` (x16). A third register (x9 or x10, whichever the
+/// destination does not own) carries the save-area top / new cursor; it
+/// is saved and restored around the sequence so a live value it may hold
+/// is preserved. AArch64 has no store-to-memory-add, so the writeback of
+/// the consumed offset requires the branch (a conditional store is not
+/// available).
+fn emit_va_arg_aapcs64(
+    code: &mut Vec<u8>,
+    args: &[u32],
+    dst: Place,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if args.len() != 2 {
+        bail_msg("VaArg: expected 2 args (ap, descriptor)");
+        return false;
+    }
+    let descriptor = match func.insts.get(args[1] as usize) {
+        Some(Inst::Imm(d)) => *d,
+        _ => {
+            bail_msg("VaArg: descriptor operand is not a constant");
+            return false;
+        }
+    };
+    let kind = (descriptor >> 16) & 0xffff;
+    let is_fp = kind == 1;
+    let ap_place = alloc
+        .places
+        .get(args[0] as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let ap_r = match materialize_int(code, ap_place, scratch.secondary, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("VaArg: &ap not in int reg / spill");
+            return false;
+        }
+    };
+    let ap = if ap_r.0 != scratch.secondary.0 {
+        emit_mov_reg(code, scratch.secondary, ap_r);
+        scratch.secondary
+    } else {
+        ap_r
+    };
+    // Bank-specific fields: integer -> __gr_offs (+24), __gr_top (+8),
+    // 8-byte register stride; floating-point -> __vr_offs (+28),
+    // __vr_top (+16), 16-byte register stride. The overflow stack uses an
+    // 8-byte stride for both classes (AAPCS64 rounds each variadic
+    // argument to an eightbyte; a double overflow argument occupies one).
+    let (off_field, top_field, reg_step): (u32, u32, u32) =
+        if is_fp { (28, 16, 16) } else { (24, 8, 8) };
+    let dst_reg = if let Place::IntReg(r) = dst {
+        Some(r)
+    } else {
+        None
+    };
+    let borrow = if dst_reg == Some(9) { Reg(10) } else { Reg(9) };
+    emit(code, enc_str_pre(borrow, Reg(31), -16));
+    // x16 = offs (the signed 32-bit field, sign-extended into x16).
+    emit(code, enc_ldrsw_imm(scratch.primary, ap, off_field));
+    // cmp x16, #0 ; b.ge on_stack -- offs >= 0 means the register bank is
+    // exhausted and the argument sits on the overflow stack.
+    emit(code, enc_subs_imm(Reg(31), scratch.primary, 0));
+    emit(code, enc_b_cond(Cond::Ge, 0));
+    let to_stack = code.len() - 4;
+    // --- register path ---
+    // borrow = top ; borrow = top + offs (the argument address).
+    emit(code, enc_ldr_imm(borrow, ap, top_field));
+    emit(code, enc_add_reg(borrow, borrow, scratch.primary));
+    // x16 = offs + reg_step (the next offset) ; write it back (32-bit).
+    emit(
+        code,
+        enc_add_imm(scratch.primary, scratch.primary, reg_step),
+    );
+    emit(code, enc_str32_imm(scratch.primary, ap, off_field));
+    // Land the address uniformly in x16.
+    emit_mov_reg(code, scratch.primary, borrow);
+    emit(code, enc_b(0));
+    let to_done = code.len() - 4;
+    // --- overflow-stack path ---
+    let stack_lbl = code.len();
+    let delta = ((stack_lbl - to_stack) / 4) as i32;
+    code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
+    // x16 = __stack ; borrow = __stack + 8 (next cursor) ; write back.
+    emit(code, enc_ldr_imm(scratch.primary, ap, 0));
+    emit(code, enc_add_imm(borrow, scratch.primary, 8));
+    emit(code, enc_str_imm(borrow, ap, 0));
+    // --- done: x16 holds the argument address. ---
+    let done_lbl = code.len();
+    let delta = ((done_lbl - to_done) / 4) as i32;
+    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    // Restore the borrowed register (sp returns to its frame position)
+    // before delivering a spilled result through the sp-relative store.
+    emit(code, enc_ldr_post(borrow, Reg(31), 16));
+    match dst {
+        Place::IntReg(r) if r != scratch.primary.0 => emit_mov_reg(code, Reg(r), scratch.primary),
+        Place::IntReg(_) => {}
+        Place::Spill(slot) => {
+            let sp_off = spill_off(frame, slot);
+            emit_sp_str_x_auto(code, scratch.primary, sp_off);
+        }
+        Place::None => {}
+        Place::FpReg(_) => {
+            bail_msg("VaArg: dst is an FP register (the result is a pointer)");
+            return false;
+        }
+    }
+    true
+}
+
 /// `Inst::Intrinsic` lowering. Each variant matches the pool
 /// path's shape in [`super::aarch64::lower_op`] but pulls its
 /// operands from the allocator's `Place`s rather than off the c5
@@ -1938,6 +2153,71 @@ fn emit_intrinsic(
         }
     };
     match intrinsic {
+        I::VaStart if aarch64_host_variadic_callee(func, abi) => {
+            // AAPCS64 `va_start` (Appendix B). args[0] = the `__va_list`
+            // pointer (the array-form `va_list` decayed to `&ap[0]`);
+            // args[1] = &last (unused -- the named-argument counts come
+            // from the prototype, not the last named argument's address).
+            // Initialise the 32-byte struct:
+            //   __stack  (+0)  = first incoming stack argument
+            //   __gr_top (+8)  = high edge of the general save area
+            //   __vr_top (+16) = high edge of the vector save area
+            //   __gr_offs (+24) = -(8 - named_int) * 8   (counts up to 0)
+            //   __vr_offs (+28) = -(8 - named_fp) * 16
+            if args.len() != 2 {
+                bail_msg("VaStart: expected 2 args");
+                return false;
+            }
+            let n = func.n_params;
+            let mut named_int = 0u32;
+            let mut named_fp = 0u32;
+            for i in 0..n {
+                if (func.param_fp_mask & (1u32 << i)) != 0 {
+                    named_fp += 1;
+                } else {
+                    named_int += 1;
+                }
+            }
+            let ap_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            // The struct pointer must survive the field writes; keep it in
+            // scratch.primary so the secondary is free to stage each value.
+            let ap = if ap_r.0 != scratch.primary.0 {
+                emit_mov_reg(code, scratch.primary, ap_r);
+                scratch.primary
+            } else {
+                ap_r
+            };
+            // __stack (+0) = fp + 16 + 192 (incoming stack overflow, just
+            // above the register save area).
+            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
+            emit(code, enc_str_imm(scratch.secondary, ap, 0));
+            // __gr_top (+8) = fp + 16 + 64 (high edge of the general area).
+            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_GR_SAVE_BYTES);
+            emit(code, enc_str_imm(scratch.secondary, ap, 8));
+            // __vr_top (+16) = fp + 16 + 192 (high edge of the vector area).
+            emit_sp_plus_off_from_fp(code, scratch.secondary, 16 + AARCH64_VA_SAVE_BYTES);
+            emit(code, enc_str_imm(scratch.secondary, ap, 16));
+            // __gr_offs (+24) = -(8 - named_int) * 8. A named integer
+            // parameter past the eight argument registers overflows to the
+            // stack, which this offset does not cover (the same assumption
+            // `local_slot_off` makes for the named-parameter redirect).
+            let gr_offs = -((8u32.saturating_sub(named_int) * 8) as i64);
+            load_imm64(code, scratch.secondary, gr_offs as u64);
+            emit(code, enc_str32_imm(scratch.secondary, ap, 24));
+            // __vr_offs (+28) = -(8 - named_fp) * 16.
+            let vr_offs = -((8u32.saturating_sub(named_fp) * 16) as i64);
+            load_imm64(code, scratch.secondary, vr_offs as u64);
+            emit(code, enc_str32_imm(scratch.secondary, ap, 28));
+            true
+        }
         I::VaStart => {
             // __builtin_va_start(&ap, &last). args[0] = &ap,
             // args[1] = &last. Set *ap = address of the first
@@ -2027,6 +2307,15 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
             true
         }
+        I::VaArg if abi.aarch64_host_variadic() => {
+            // The AAPCS64 `va_list` is a `__va_list` struct on this
+            // target, so `va_arg` walks the general / vector save areas
+            // regardless of whether the current function is itself
+            // variadic: a non-variadic forwarder (the `c5_v*printf`
+            // shims) receives a forwarded `va_list` and must read it the
+            // same way. Gate on the target ABI, not `func.is_variadic`.
+            emit_va_arg_aapcs64(code, args, dst, func, alloc, frame, scratch)
+        }
         I::VaArg => {
             // __builtin_va_arg(&ap) returns *ap (the address of the
             // current variadic slot) and advances *ap to the next.
@@ -2107,6 +2396,51 @@ fn emit_intrinsic(
         }
         I::VaEnd => {
             // No teardown for the cursor model. args[0] is unused.
+            true
+        }
+        I::VaCopy if abi.aarch64_host_variadic() => {
+            // AAPCS64 `va_copy` is a 32-byte `__va_list` struct copy
+            // (Appendix B): three pointers plus two offsets. args[0] =
+            // &dst struct, args[1] = &src struct. Like `va_arg`, gate on
+            // the target ABI so a non-variadic forwarder copies the
+            // struct it received rather than a single cursor word.
+            if args.len() != 2 {
+                bail_msg("VaCopy: expected 2 args");
+                return false;
+            }
+            let dst_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src_place = alloc
+                .places
+                .get(args[1] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let dst_r = match materialize_int(code, dst_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let src_r = match materialize_int(code, src_place, scratch.secondary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            // Transfer register distinct from both pointer registers. x9
+            // / x10 / x11 are AAPCS64 caller-saved temporaries outside the
+            // allocator's reach here; save and restore the chosen one so a
+            // live value it may hold is preserved across the copy.
+            let borrow = [9u8, 10, 11]
+                .into_iter()
+                .map(Reg)
+                .find(|r| r.0 != dst_r.0 && r.0 != src_r.0)
+                .expect("a caller-saved transfer register is always free");
+            emit(code, enc_str_pre(borrow, Reg(31), -16));
+            for off in [0u32, 8, 16, 24] {
+                emit(code, enc_ldr_imm(borrow, src_r, off));
+                emit(code, enc_str_imm(borrow, dst_r, off));
+            }
+            emit(code, enc_ldr_post(borrow, Reg(31), 16));
             true
         }
         I::VaCopy => {
@@ -2484,7 +2818,9 @@ fn emit_call(
     fp_return: bool,
     fp_arg_mask: u32,
 ) -> bool {
-    if callee_is_variadic && (abi.variadic_on_stack || abi.variadic_int_only) {
+    if callee_is_variadic
+        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    {
         // Host variadic ABI: marshal the named (fixed) and variadic
         // arguments through `plan_call_args`, identical to a libc
         // variadic call (`emit_call_ext`).
@@ -2504,6 +2840,12 @@ fn emit_call(
         //    `fp_arg_mask` 0) then the incoming stack. The callee spills
         //    x0..x7 into its gr-save area; `va_start` points at the
         //    first variadic slot there.
+        //  * Linux aarch64 (`aarch64_host_variadic`, AAPCS64 Appendix B):
+        //    named and variadic arguments follow AAPCS64 6.4.1 alike --
+        //    the int bank x0..x7, the FP bank d0..d7, then the stack. The
+        //    callee spills both banks into its general / vector register
+        //    save area; `va_start` records the offsets and `va_arg` walks
+        //    the areas then the overflow stack.
         let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
@@ -2718,12 +3060,15 @@ fn emit_call_indirect(
     if target_r.0 != target_reg.0 {
         emit_mov_reg(code, target_reg, target_r);
     }
-    if callee_variadic && (abi.variadic_on_stack || abi.variadic_int_only) {
+    if callee_variadic
+        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    {
         // Host variadic ABI through a function pointer: the named
         // arguments follow AAPCS64 (int / FP bank) and the variadic tail
         // rides the host stack at 8-byte stride (macOS,
-        // `variadic_on_stack`) or the integer register bank then the
-        // stack (Windows arm64, `variadic_int_only`) -- the same
+        // `variadic_on_stack`), the integer register bank then the
+        // stack (Windows arm64, `variadic_int_only`), or both banks then
+        // the stack (Linux aarch64, `aarch64_host_variadic`) -- the same
         // placement `emit_call` uses for a direct variadic call. The
         // target pointer is already captured in `target_reg` (a
         // non-arg-passing scratch), so `marshal_args` will not clobber
@@ -2908,6 +3253,61 @@ fn emit_mcpy(
 /// Mirror of the pool path's
 use super::ssa_emit_common::c5_slot_to_fp_offset;
 
+/// fp-relative byte offset of a c5 slot. Locals (`off < 0`) and the
+/// ordinary parameter cells go through `c5_slot_to_fp_offset` at the
+/// frame's cell stride. For an AAPCS64 host variadic callee (Linux
+/// aarch64) the named parameters are not pushed as cdecl cells -- they
+/// arrive in the argument registers and the prologue spills them into
+/// the register save area above the saved fp/lr. A named-parameter
+/// access (`off >= 2`, parameter index `off - 2`) is therefore
+/// redirected to that parameter's slot in the save area: an integer /
+/// pointer parameter to `[fp + 16 + int_rank*8]` within the 64-byte
+/// general area, a floating-point parameter to
+/// `[fp + 16 + 64 + fp_rank*16]` within the 128-byte vector area, where
+/// the rank is the parameter's position within its argument-register
+/// bank (the independent int / FP banks of AAPCS64 6.4.1). Locals are
+/// unaffected.
+fn local_slot_off(off: i64, frame: Frame) -> i64 {
+    if off >= 2 && frame.va_named_redirect {
+        let p = (off - 2) as usize;
+        let is_fp = |i: usize| (frame.va_param_fp_mask & (1u32 << i)) != 0;
+        let mut int_rank = 0i64;
+        let mut fp_rank = 0i64;
+        for i in 0..p {
+            if is_fp(i) {
+                fp_rank += 1;
+            } else {
+                int_rank += 1;
+            }
+        }
+        // The save area sits at `[fp + 16 .. fp + 208)`: general area
+        // (x0..x7) at `[fp + 16 .. fp + 80)`, vector area (q0..q7) at
+        // `[fp + 80 .. fp + 208)`.
+        if is_fp(p) {
+            // A named floating-point parameter past the eight FP argument
+            // registers (AAPCS64 6.4.1) overflows to the incoming stack,
+            // which the register save area does not cover. The walker
+            // classifies such parameters the same on both ends; this
+            // redirect assumes every named parameter is register-passed.
+            // TODO: read a stack-overflow named parameter from the
+            // incoming stack rather than the save area.
+            debug_assert!(
+                fp_rank < 8,
+                "named FP parameter {p} overflowed the AAPCS64 vector save area"
+            );
+            16 + AARCH64_GR_SAVE_BYTES as i64 + fp_rank * 16
+        } else {
+            debug_assert!(
+                int_rank < 8,
+                "named integer parameter {p} overflowed the AAPCS64 general save area"
+            );
+            16 + int_rank * 8
+        }
+    } else {
+        c5_slot_to_fp_offset(off, frame.param_cell_stride)
+    }
+}
+
 fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
     // Materialise the address through scratch.primary when the
     // allocator chose a spill slot for this LocalAddr, then store
@@ -2921,7 +3321,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bo
             return false;
         }
     };
-    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+    let bytes = local_slot_off(off, frame);
     let abs = bytes.unsigned_abs();
     // Up to imm12 fits in a single add/sub-imm.
     if abs < 4096 {
@@ -3152,7 +3552,7 @@ fn emit_load_local(
                 return false;
             }
         };
-        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+        let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(4)
@@ -3186,7 +3586,7 @@ fn emit_load_local(
                 return false;
             }
         };
-        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+        let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
@@ -3212,7 +3612,7 @@ fn emit_load_local(
         Place::Spill(_) => scratch.secondary,
         Place::FpReg(_) | Place::None => return false,
     };
-    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+    let bytes = local_slot_off(off, frame);
     if let Ok(disp) = i32::try_from(bytes)
         && (-256..256).contains(&disp)
     {
@@ -3286,7 +3686,7 @@ fn emit_store_local(
             bail_msg("StoreLocal F64: value not fp reg / spill / int reg");
             return false;
         };
-        let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+        let bytes = local_slot_off(off, frame);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
             && (disp as u32).is_multiple_of(8)
@@ -3340,7 +3740,7 @@ fn emit_store_local(
             None => return false,
         }
     };
-    let bytes = c5_slot_to_fp_offset(off, frame.param_cell_stride);
+    let bytes = local_slot_off(off, frame);
     if let Ok(disp) = i32::try_from(bytes) {
         if (-256..256).contains(&disp) {
             // Store the low `kind`-width bytes; the accumulator below

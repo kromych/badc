@@ -1712,6 +1712,20 @@ impl Abi {
             && !self.position_indexed_args
             && self.variadic_zero_xmm_count
     }
+
+    /// True when variadic c5 callees use the AAPCS64 host variadic ABI
+    /// (Linux aarch64): the named and variadic arguments ride the
+    /// standard integer + FP argument-register banks (AAPCS64 6.4.1)
+    /// and the callee spills a general / vector register save area
+    /// (AAPCS64 Appendix B). Among the aarch64 targets macOS sets
+    /// `variadic_on_stack` (named in registers, variadic tail on the
+    /// stack) and Windows sets `variadic_int_only` (one integer bank);
+    /// the plain AAPCS64 target sets neither, so this gate selects
+    /// Linux aarch64 alone. The caller passes the real `fp_arg_mask`
+    /// for such a callee so floating-point varargs land in d0..d7.
+    pub(crate) fn aarch64_host_variadic(self) -> bool {
+        matches!(self.arch, Arch::Aarch64) && !self.variadic_on_stack && !self.variadic_int_only
+    }
 }
 
 impl Default for Abi {

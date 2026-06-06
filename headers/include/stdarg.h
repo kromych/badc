@@ -75,6 +75,14 @@
 //     `__va_list_tag *` on use, so passing a `va_list` argument
 //     passes a pointer to the struct -- byte-identical to libc, so
 //     `vsnprintf` / `vfprintf` take c5's `va_list` directly.
+//   * AAPCS64 (Linux aarch64): `va_list` is the documented
+//     `__va_list` (AAPCS64 Appendix B) as an array of one element:
+//     `__stack`, `__gr_top`, `__vr_top` pointers plus the `__gr_offs`
+//     / `__vr_offs` negative offsets into the general / vector
+//     register save areas. The array form decays to the struct
+//     pointer the intrinsics consume; the layout is byte-identical to
+//     glibc's, so libc `vsnprintf` / `vfprintf` take c5's `va_list`
+//     directly.
 //   * Every other target keeps the single-pointer cursor model:
 //     `va_list` is `void *` and the intrinsics walk one region at
 //     a fixed stride (Win64 / Win-arm64 8-byte home + stack,
@@ -91,6 +99,18 @@ typedef struct {
     unsigned int fp_offset;
     void *overflow_arg_area;
     void *reg_save_area;
+} __va_list_tag;
+typedef __va_list_tag va_list[1];
+// `ap` is an array of one `__va_list_tag`; it decays to
+// `&ap[0]`, the struct pointer the intrinsics consume.
+#define __va_list_self(ap) (ap)
+#elif defined(__aarch64__) && defined(__linux__)
+typedef struct {
+    void *__stack;
+    void *__gr_top;
+    void *__vr_top;
+    int __gr_offs;
+    int __vr_offs;
 } __va_list_tag;
 typedef __va_list_tag va_list[1];
 // `ap` is an array of one `__va_list_tag`; it decays to

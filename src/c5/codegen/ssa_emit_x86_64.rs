@@ -2069,10 +2069,18 @@ fn emit_inst(
             }
             let from_home = param_from_home.get(i).copied().unwrap_or(false);
             let home_off = c5_slot_to_fp_offset(*idx as i64 + 2) as i32;
-            let arg_reg = match abi.int_arg_regs.get(i) {
-                Some(&r) => Reg(r),
-                None => {
-                    bail_msg("ParamRef: idx out of range for int_arg_regs");
+            // The incoming integer register comes from the plan, not the
+            // absolute parameter index: a floating-point parameter
+            // earlier in the list consumes an FP register and does not
+            // shift the integer bank, so the i-th declared parameter is
+            // not the i-th integer register. A stack-passed integer
+            // parameter has no incoming register and is always read from
+            // its prologue-filled home cell.
+            let arg_reg = match param_plan.get(i).copied() {
+                Some(super::ArgPlacement::IntReg(r)) => Reg(r),
+                _ if from_home => Reg(0),
+                _ => {
+                    bail_msg("ParamRef: int param has no incoming integer register");
                     return false;
                 }
             };

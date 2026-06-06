@@ -76,7 +76,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	adrp	x0, <page>
-               	add	x0, x0, #0x150
+               	add	x0, x0, #0x12c
                	mov	x1, #0x3ff8000000000000 // =4609434218613702656
                	fmov	d0, x1
                	bl	<addr>

@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ret
                	sxtw	x0, w0
                	adrp	x1, <page>
-               	add	x1, x1, #0x148
+               	add	x1, x1, #0x128
                	ldrsw	x2, [x1]
                	add	x2, x2, #0x1
                	str	w2, [x1]
@@ -146,7 +146,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0x148
+               	add	x0, x0, #0x128
                	ldrsw	x0, [x0]
                	cmp	x0, #0x7
                	b.eq	<addr>

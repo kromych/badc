@@ -155,6 +155,15 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    // A function-pointer typedef records the pointed-to
+                    // function's prototype (`params` + `is_variadic`).
+                    // Carry it to the bound declarator so an indirect
+                    // call through the variable can split fixed vs
+                    // variadic arguments per the host variadic ABI.
+                    self.pending.typedef_fn_proto = Some((
+                        self.symbols[self.lex.curr_id_idx].params.len(),
+                        self.symbols[self.lex.curr_id_idx].is_variadic,
+                    ));
                 }
                 // C99 6.7.7 paragraph 3: a typedef whose alias is
                 // an array contributes its dimension to the
@@ -240,6 +249,18 @@ impl Compiler {
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }
+                // Inherit a variadic function-pointer prototype onto the
+                // bound declarator so an indirect call through it knows
+                // the callee's named-parameter count and routes the
+                // variadic tail per the host variadic ABI. Only variadic
+                // prototypes are recorded: a non-variadic indirect call
+                // places every argument as fixed regardless, and
+                // synthesising placeholder parameter types would feed the
+                // call-site argument type-check a spurious mismatch.
+                if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+                    self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                    self.symbols[id_idx].is_variadic = true;
+                }
                 // Carry the bare-`void` side channel onto the
                 // declarator. `pending_base_was_void` was set if
                 // the base type spelled `void`; it stays valid
@@ -298,6 +319,18 @@ impl Compiler {
                             }
                             let fty = ty + Ty::Ptr as i64;
                             (fty, 1i64, Some(pp))
+                        } else if let Some(pp) = preconsumed_params {
+                            // `typedef RET (*NAME)(args);`: the `(*NAME)`
+                            // nested declarator already consumed the
+                            // pointee's parameter list into
+                            // `pending.fn_params`. Record the prototype on
+                            // the typedef so a fn-pointer variable declared
+                            // through it inherits the callee's variadic-ness
+                            // and named-parameter count.
+                            for &p in &pp.indices {
+                                Self::restore_shadowed_symbol(&mut self.symbols[p]);
+                            }
+                            (ty, fn_ptr_indirection, Some(pp))
                         } else {
                             (ty, fn_ptr_indirection, None)
                         };
@@ -325,6 +358,18 @@ impl Compiler {
                     if let Some(pp) = typedef_params {
                         self.symbols[id_idx].params = pp.types;
                         self.symbols[id_idx].is_variadic = pp.is_variadic;
+                    } else if let Some((proto_fixed, proto_variadic)) =
+                        self.pending.typedef_fn_proto.take()
+                    {
+                        // `typedef RET (*NAME)(args)`: the declarator
+                        // captured the pointee signature's prototype
+                        // (c5 otherwise skips it). Record the
+                        // named-parameter count and variadic-ness so a
+                        // fn-pointer variable declared through the
+                        // typedef can split fixed vs variadic arguments
+                        // per the host variadic ABI.
+                        self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                        self.symbols[id_idx].is_variadic = proto_variadic;
                     }
                     if self.lex.tk == ',' {
                         self.next()?;

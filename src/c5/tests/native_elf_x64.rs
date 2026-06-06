@@ -264,6 +264,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
+    ("sysv_variadic_host_abi.c", 0),
+    ("aapcs64_variadic_host_abi.c", 0),
+    ("param_fp_before_int_pressure.c", 0),
     ("ssa_fp_compare_nan.c", 0),
     ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
@@ -347,7 +350,6 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // variadic_zero_xmm_count flag drives that.
     ("variadic_sprintf.c", 0),
     // c5-side vprintf walking the c5 va_list (no libc va_list).
-    ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
     // Full FP arithmetic + comparisons + casts on Linux x86_64
@@ -355,6 +357,15 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (movq xmm/gpr; addsd/subsd/mulsd/divsd; ucomisd; cvtsi2sd;
     // cvttsd2si).
     ("float_arithmetic.c", 0),
+    ("float_single_precision.c", 0),
+    ("fp_arg_passed_in_fp_reg.c", 0),
+    ("float_arg_single_precision.c", 0),
+    ("fp_return_value.c", 0),
+    ("many_fp_args.c", 0),
+    ("fp_param_after_int_overflow.c", 0),
+    ("float_double_mix.c", 0),
+    ("fma_contraction.c", 0),
+    ("fma_numeric_kernels.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy. The x86_64 codegen

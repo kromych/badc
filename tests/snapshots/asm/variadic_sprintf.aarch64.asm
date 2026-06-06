@@ -80,7 +80,7 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x168
+               	add	x1, x1, #0x144
                	mov	x2, #0xb                // =11
                	mov	x3, #0x16               // =22
                	mov	x4, #0x21               // =33
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, #0x174
+               	add	x1, x1, #0x150
                	mov	x2, #0xb                // =11
                	mov	x0, x20
                	bl	<addr>

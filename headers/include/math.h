@@ -187,3 +187,15 @@ double frexp(double x, int *exp);
 double modf(double x, double *iptr);
 // C99 7.12.9.8: trunc rounds toward zero.
 double trunc(double x);
+
+// C99 7.12.13.1: fma(x, y, z) = x*y + z computed with a single
+// rounding of the infinitely precise result. Tagged as an intrinsic so
+// the call lowers to the target's fused multiply-add instruction
+// (AArch64 FMADD, x86-64 FMA3 vfmadd231) rather than a libm call;
+// `fmaf` is the single-precision form. The prototypes give the
+// call-site type-checker the operand precision so non-matching
+// arguments take the usual conversion path.
+#pragma intrinsic("fma")
+#pragma intrinsic("fmaf")
+double fma(double x, double y, double z);
+float fmaf(float x, float y, float z);

@@ -86,6 +86,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fprintf,   "_fprintf")
 #pragma binding(libc::sprintf,   "_sprintf")
 #pragma binding(libc::snprintf,  "_snprintf")
+#pragma binding(libc::vprintf,   "_vprintf")
 #pragma binding(libc::vfprintf,  "_vfprintf")
 #pragma binding(libc::vsprintf,  "_vsprintf")
 #pragma binding(libc::vsnprintf, "_vsnprintf")
@@ -146,6 +147,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fprintf,   "fprintf")
 #pragma binding(libc::sprintf,   "sprintf")
 #pragma binding(libc::snprintf,  "snprintf")
+#pragma binding(libc::vprintf,   "vprintf")
 #pragma binding(libc::vfprintf,  "vfprintf")
 #pragma binding(libc::vsprintf,  "vsprintf")
 #pragma binding(libc::vsnprintf, "vsnprintf")
@@ -221,6 +223,7 @@ typedef struct __c5_FILE FILE;
 // support for the UCRT proxy DLLs.
 #pragma binding(msvcrt::snprintf,  "_snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
+#pragma binding(msvcrt::vprintf,   "vprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
@@ -698,82 +701,21 @@ static char *__c5_lazy_stream(int idx) {
 #define stdout  ((FILE *)__c5_lazy_stream(1))
 #define stderr  ((FILE *)__c5_lazy_stream(2))
 
-// libc's vfprintf / vprintf / vsprintf / vsnprintf take a
-// platform-native va_list -- a register-save struct on aarch64 /
-// x86_64, not the flat `long long *` cursor c5's <stdarg.h>
-// produces. Calling libc directly with c5's va_list returns
-// garbage; we route every v* call through a c5-side formatter
-// (`c5_vsnprintf` in <c5io.h>) that walks the cursor the way c5
-// emits it.
+// vfprintf / vprintf / vsprintf / vsnprintf bind directly to the
+// platform C library. c5's <stdarg.h> va_list is the host's own
+// representation -- the System V AMD64 / AAPCS64 register-save struct on
+// Linux, the stack / home-area cursor on macOS and Windows -- so libc's
+// formatters consume a forwarded c5 va_list the same way they consume
+// their own. The plain printf / fprintf / sprintf / snprintf family binds
+// to libc the same way: a `func(a, b, c)` call already uses the host
+// variadic call shape the c5 codegen emits.
 //
-// Plain printf / fprintf / sprintf / snprintf still bind to libc
-// because their `...` varargs go through the host ABI's register
-// packing -- the platform's variadic call shape is exactly what
-// the c5 codegen emits for `func(a, b, c)`, so no bridge is
-// needed there. Only the v* variants need the c5 detour.
-//
-// User-side syntax doesn't change: source still calls
-// `vfprintf(stream, fmt, ap)` etc.; the macros below redirect
-// the call to the c5-side implementation. A downstream
-// `#define foo_vfprintf vfprintf` style alias transitively
-// follows the redirect because the v* macros are object-like
-// (see the note below).
-#include <c5io.h>
-
-static int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
-    char buf[8192];
-    int n;
-    n = c5_vsnprintf(buf, 8192, fmt, ap);
-    fputs(buf, out);
-    return n;
-}
-
-static int c5_vprintf_stdout(char *fmt, va_list ap) {
-    return c5_vfprintf_FILE(stdout, fmt, ap);
-}
-
-// Unbounded buffer formatter -- mirrors libc's vsprintf, where
-// the caller is responsible for sizing the buffer. Implemented
-// as a thin wrapper around c5_vsnprintf with INT_MAX as the
-// cap.
-static int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
-    return c5_vsnprintf(buf, 0x7FFFFFFF, fmt, ap);
-}
-
-// Object-like aliases (rather than function-like) so the
-// substitution chain works even through an intermediate
-// object-like alias like `#define foo_vfprintf vfprintf`. c5's
-// preprocessor rescans only the expansion text for further
-// macro names, not the surrounding tokens (C99 6.10.3.4
-// strictly requires both), so a function-like
-// `#define vfprintf(s,f,a) ...` would only expand at direct
-// `vfprintf(...)` call sites and leave the alias-derived
-// `vfprintf` tokens unresolved. Object-like aliases sidestep
-// the rescan-window issue: the substitution doesn't depend on
-// a `(` check.
-//
-// vsprintf passes 0x7FFFFFFF as the size cap (= effectively
-// unlimited) so the unbounded shape matches libc semantics; in
-// practice the c5 caller has to supply a buffer large enough
-// for the output -- vsnprintf (the bounded form) is the safer
-// choice and where most code lands.
-#define vfprintf  c5_vfprintf_FILE
-#define vprintf   c5_vprintf_stdout
-#define vsnprintf c5_vsnprintf
-#define vsprintf  c5_vsprintf_unbounded
-
-// Windows-flavoured sources pre-rewrite the v* names with leading
-// underscores (`#define vsnprintf _vsnprintf` is a common idiom in
-// MSVC-compatibility blocks). The macro substitution lands on
-// `_vsnprintf` *before* the redirection above gets a chance to
-// fire, so the call resolves against the msvcrt `#pragma binding`
-// for `_vsnprintf` -- a real CRT entry point whose va_list ABI is
-// the platform-native register-save struct, not the long-long
-// cursor c5's <stdarg.h> produces. Alias the underscored spellings
-// to the same c5-side shims so the cursor-format va_list reaches a
-// walker that understands it. Without this, callers see the wrong
-// slot stride and every argument past the first reads garbage.
-#define _vfprintf  c5_vfprintf_FILE
-#define _vprintf   c5_vprintf_stdout
-#define _vsnprintf c5_vsnprintf
-#define _vsprintf  c5_vsprintf_unbounded
+// Windows-flavoured sources spell the v* names with a leading underscore
+// (`#define vsnprintf _vsnprintf` is a common MSVC idiom). Alias the
+// underscored spellings to the canonical names so they resolve through the
+// same per-target bindings -- on Windows the canonical names already bind
+// to the underscored CRT entry points.
+#define _vfprintf  vfprintf
+#define _vprintf   vprintf
+#define _vsprintf  vsprintf
+#define _vsnprintf vsnprintf

@@ -153,6 +153,8 @@ impl SsaBuilder {
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
+            f32_values: Vec::new(),
+            param_fp_mask: 0,
         };
         let mut b = Self {
             func,
@@ -243,8 +245,57 @@ impl SsaBuilder {
         let id = self.func.insts.len() as ValueId;
         self.func.insts.push(inst);
         self.func.inst_src.push(self.cur_src);
+        self.func.f32_values.push(false);
         self.last_def = id;
         id
+    }
+
+    /// Mark value `v` as single-precision (`f32`). See
+    /// [`FunctionSsa::f32_values`]. The walker calls this whenever a
+    /// value's C type is `float` (C99 6.3.1.8) so the per-arch emit
+    /// keeps it in the low 32 bits of an FP register and selects the
+    /// single-precision encoder. Idempotent.
+    pub(crate) fn mark_f32(&mut self, v: ValueId) -> ValueId {
+        if let Some(slot) = self.func.f32_values.get_mut(v as usize) {
+            *slot = true;
+        }
+        v
+    }
+
+    /// Record that declared parameter `i` is a floating-point scalar
+    /// passed in an FP argument register. See
+    /// [`FunctionSsa::param_fp_mask`]. The callee emit consumes the
+    /// mask to resolve each parameter's incoming register through the
+    /// same `plan_call_args` the caller runs. Only the low 32
+    /// parameters are tracked; a higher index is ignored (those ride
+    /// the stack where the class no longer selects a register).
+    pub(crate) fn mark_param_fp(&mut self, i: usize) {
+        if i < 32 {
+            self.func.param_fp_mask |= 1u32 << i;
+        }
+    }
+
+    /// The accumulated per-parameter FP mask. See
+    /// [`FunctionSsa::param_fp_mask`].
+    pub(crate) fn param_fp_mask(&self) -> u32 {
+        self.func.param_fp_mask
+    }
+
+    /// Overwrite the per-parameter FP mask. Used to clear it when the
+    /// resulting register/stack placement would interleave and the
+    /// function falls back to the all-integer c5 cdecl ABI. See
+    /// [`FunctionSsa::param_fp_mask`].
+    pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
+        self.func.param_fp_mask = mask;
+    }
+
+    /// True when value `v` was previously marked single-precision.
+    pub(crate) fn is_f32(&self, v: ValueId) -> bool {
+        self.func
+            .f32_values
+            .get(v as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Set the `(line, file_idx)` source position stamped on every
@@ -366,9 +417,16 @@ impl SsaBuilder {
         v
     }
 
-    /// `Inst::Load` through a precomputed address.
+    /// `Inst::Load` through a precomputed address. A `float`-typed
+    /// load (`LoadKind::F32`) yields a single-precision value (C99
+    /// 6.3.1.8); tag it f32 so the codegen keeps it in the s-view of an
+    /// FP register without a widening conversion.
     pub(crate) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
-        self.push(Inst::Load { addr, kind })
+        let v = self.push(Inst::Load { addr, kind });
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
+        v
     }
 
     /// `Inst::Store` through a precomputed address. Returns the
@@ -396,6 +454,12 @@ impl SsaBuilder {
             }
         }
         let v = self.push(Inst::LoadLocal { off, kind });
+        // A `float`-typed local load is single precision (C99 6.3.1.8);
+        // tag it f32 so the codegen keeps it in the s-view of an FP
+        // register without a widening conversion.
+        if matches!(kind, LoadKind::F32) {
+            self.mark_f32(v);
+        }
         self.local_cache.push(LocalCacheEntry {
             off,
             kind,
@@ -591,6 +655,28 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::Fma` -- fused multiply-add `(neg_product ? -(a*b) : a*b)
+    /// + (neg_addend ? -c : c)`, rounded once. Emitted for an explicit
+    /// `fma` / `fmaf` intrinsic call; the optimizer's contraction pass
+    /// produces the same node directly from a multiply feeding an
+    /// add/sub. The caller marks the result f32 for `fmaf`.
+    pub(crate) fn fma(
+        &mut self,
+        a: ValueId,
+        b: ValueId,
+        c: ValueId,
+        neg_product: bool,
+        neg_addend: bool,
+    ) -> ValueId {
+        self.push(Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        })
+    }
+
     /// `Inst::Fneg`. Pure value; same input -> same output bit
     /// pattern. CSE-eligible.
     pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {
@@ -604,7 +690,10 @@ impl SsaBuilder {
     }
 
     /// `Inst::FpCast`. Pure value; same input + same kind ->
-    /// same output. CSE-eligible.
+    /// same output. CSE-eligible. The f32-ness of the result is set
+    /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via
+    /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
+    /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
         let key = PureKey::FpCast { kind, value };
         if let Some(cached) = self.lookup_pure(key) {
@@ -615,6 +704,27 @@ impl SsaBuilder {
         id
     }
 
+    /// Widen a single-precision value to double (C99 6.3.1.5). If
+    /// `value` is not actually f32 (already double), returns it
+    /// unchanged. The result is double (not f32-marked).
+    pub(crate) fn fp_widen_to_f64(&mut self, value: ValueId) -> ValueId {
+        if !self.is_f32(value) {
+            return value;
+        }
+        self.fp_cast(FpCastKind::F32ToF64, value)
+    }
+
+    /// Narrow a double-precision value to single (C99 6.3.1.5). If
+    /// `value` is already f32, returns it unchanged. The result is
+    /// f32-marked.
+    pub(crate) fn fp_narrow_to_f32(&mut self, value: ValueId) -> ValueId {
+        if self.is_f32(value) {
+            return value;
+        }
+        let id = self.fp_cast(FpCastKind::F64ToF32, value);
+        self.mark_f32(id)
+    }
+
     /// `Inst::Call` -- direct user-function call. Callees may
     /// write through any pointer they receive (including ones
     /// derived from local addresses that escaped earlier in the
@@ -623,13 +733,17 @@ impl SsaBuilder {
         &mut self,
         target_pc: usize,
         args: Vec<ValueId>,
+        fixed_args: usize,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
+            fp_arg_mask,
         })
     }
 
@@ -641,13 +755,17 @@ impl SsaBuilder {
         &mut self,
         sym_idx: u32,
         args: Vec<ValueId>,
+        fixed_args: usize,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         let v = self.push(Inst::Call {
             target_pc: 0,
             args,
+            fixed_args,
             fp_return,
+            fp_arg_mask,
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -658,13 +776,19 @@ impl SsaBuilder {
         &mut self,
         target: ValueId,
         args: Vec<ValueId>,
+        callee_variadic: bool,
+        fixed_args: usize,
         fp_return: bool,
+        fp_arg_mask: u32,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
+            fp_arg_mask,
         })
     }
 
@@ -923,10 +1047,10 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], false);
+        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], 1, false, 0);
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], false);
+        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], 1, false, 0);
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1164,7 +1288,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], false);
+        let _ = b.call(0, alloc::vec![], 0, false, 0);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

@@ -73,6 +73,14 @@ pub enum Intrinsic {
     /// Codegen picks the right size from the target's `va_list`
     /// layout.
     VaCopy = 7,
+    /// `fma(x, y, z)` -- C99 7.12.13.1, `x*y + z` rounded once. The
+    /// call-site lowering produces `Inst::Fma` directly rather than an
+    /// `Inst::Intrinsic`, so the three operands reach codegen as a
+    /// single fused node. Double precision.
+    Fma = 8,
+    /// `fmaf(x, y, z)` -- the single-precision partner of [`Fma`]; the
+    /// operands and result are `float`.
+    Fmaf = 9,
 }
 
 impl Intrinsic {
@@ -85,6 +93,8 @@ impl Intrinsic {
             5 => Some(Intrinsic::VaArg),
             6 => Some(Intrinsic::VaEnd),
             7 => Some(Intrinsic::VaCopy),
+            8 => Some(Intrinsic::Fma),
+            9 => Some(Intrinsic::Fmaf),
             _ => None,
         }
     }

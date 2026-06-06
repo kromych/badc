@@ -79,10 +79,10 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0x150
+               	add	x1, x1, #0x12c
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0x157
+               	add	x1, x1, #0x133
                	mov	x9, x0
                	str	x1, [sp, #-0x10]!
                	ldr	x0, [sp]

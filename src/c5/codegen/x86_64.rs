@@ -337,6 +337,40 @@ pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
     emit_modrm_mem(code, src, base, disp);
 }
 
+/// `MOV DWORD PTR [base + disp], imm32` -- 32-bit immediate store.
+/// Encoding: `C7 /0 id` (with REX only when `base` needs the high
+/// bank). Used to initialise the System V `__va_list_tag`
+/// `gp_offset` / `fp_offset` (4-byte each) in `va_start`.
+pub(super) fn emit_mov_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, base.high()));
+    }
+    emit_byte(code, 0xC7);
+    // Reg field is the /0 opcode extension.
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
+/// `ADD dword [base + disp], imm32` -- add an immediate to a 32-bit
+/// memory operand in place. Encoding: `81 /0 id`.
+pub(super) fn emit_add_mem32_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    if base.high() {
+        emit_byte(code, rex(false, false, false, base.high()));
+    }
+    emit_byte(code, 0x81);
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
+/// `ADD qword [base + disp], imm32` -- add a sign-extended immediate to
+/// a 64-bit memory operand in place. Encoding: `REX.W 81 /0 id`.
+pub(super) fn emit_add_mem64_imm32(code: &mut Vec<u8>, base: Reg, disp: i32, imm: i32) {
+    emit_byte(code, rex(true, false, false, base.high()));
+    emit_byte(code, 0x81);
+    emit_modrm_mem(code, Reg(0), base, disp);
+    emit_i32(code, imm);
+}
+
 /// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
 /// sign-extended into a 64-bit register. Used by [`LoadKind::I16`] for
 /// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
@@ -673,6 +707,16 @@ pub(super) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
     emit_byte(code, imm);
 }
 
+/// `TEST AL, AL` -- set ZF from the low byte of rax. The System V
+/// variadic-ABI XMM-register count rides AL (3.2.3); a variadic
+/// callee's prologue tests it to skip the XMM save when the caller
+/// passed no floating-point arguments (`al == 0`).
+pub(super) fn emit_test_al_al(code: &mut Vec<u8>) {
+    // 84 /r -- TEST r/m8, r8 with both operands AL.
+    emit_byte(code, 0x84);
+    emit_byte(code, modrm(0b11, Reg::RAX.lo(), Reg::RAX.lo()));
+}
+
 /// Internal: emit a `F2 0F <op> /r` SSE2 SD instruction with two
 /// XMM operands, encoded as `dst <op>= src`.
 fn emit_sse2_sd(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
@@ -683,6 +727,49 @@ fn emit_sse2_sd(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
     emit_byte(code, 0x0F);
     emit_byte(code, opcode);
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// Internal: emit a `F3 0F <op> /r` SSE single-precision scalar
+/// instruction with two XMM operands, encoded as `dst <op>= src`.
+fn emit_sse_ss(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `ADDSS xmm, xmm` -- single-precision add (C99 6.3.1.8).
+pub(super) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x58, dst, src);
+}
+
+/// `SUBSS xmm, xmm` -- `dst = dst - src`.
+pub(super) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x5C, dst, src);
+}
+
+/// `MULSS xmm, xmm`.
+pub(super) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x59, dst, src);
+}
+
+/// `DIVSS xmm, xmm` -- `dst = dst / src`.
+pub(super) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x5E, dst, src);
+}
+
+/// `UCOMISS xmm, xmm` -- ordered scalar single-precision compare,
+/// sets EFLAGS. Encoding: `0F 2E /r` (no mandatory prefix).
+pub(super) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+    if lhs.high() || rhs.high() {
+        emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2E);
+    emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
 }
 
 /// `ADDSD xmm, xmm`.
@@ -728,6 +815,67 @@ pub(super) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
     emit_byte(code, 0x0F);
     emit_byte(code, 0x2E);
     emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
+}
+
+/// Emit a VEX-encoded FMA3 scalar instruction in the `231` operand
+/// order: `dst = (a * b) <op> dst`. `a` is the VEX.vvvv multiplicand,
+/// `b` the ModR/M.r/m multiplicand, `dst` the ModR/M.reg destination
+/// that also supplies the accumulator. `opcode` picks the variant
+/// (B9 / BB / BD / BF); `w64` selects the double-precision (W1) form,
+/// otherwise single-precision (W0). FMA3 is Haswell-and-later baseline.
+fn emit_vex_fma231(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, b: Reg) {
+    // 3-byte VEX (C4): the 0F38 opcode map forces the long form.
+    //   byte1: R X B mmmmm   (R/B inverted high bits; mmmmm = 00010)
+    //   byte2: W vvvv L pp    (vvvv inverted; L = 0 scalar; pp = 01 -> 66)
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if b.high() { 0u8 } else { 1u8 };
+    let a_num = ((a.high() as u8) << 3) | a.lo();
+    let vvvv = (!a_num) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | 0b01);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
+}
+
+/// `VFMADD231SD dst, a, b` -- `dst = a*b + dst` (double, single round).
+pub(super) fn emit_vfmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xB9, true, dst, a, b);
+}
+
+/// `VFMSUB231SD dst, a, b` -- `dst = a*b - dst`.
+pub(super) fn emit_vfmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBB, true, dst, a, b);
+}
+
+/// `VFNMADD231SD dst, a, b` -- `dst = -(a*b) + dst`.
+pub(super) fn emit_vfnmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBD, true, dst, a, b);
+}
+
+/// `VFNMSUB231SD dst, a, b` -- `dst = -(a*b) - dst`.
+pub(super) fn emit_vfnmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBF, true, dst, a, b);
+}
+
+/// `VFMADD231SS dst, a, b` -- `dst = a*b + dst` (single, single round).
+pub(super) fn emit_vfmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xB9, false, dst, a, b);
+}
+
+/// `VFMSUB231SS dst, a, b` -- `dst = a*b - dst`.
+pub(super) fn emit_vfmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBB, false, dst, a, b);
+}
+
+/// `VFNMADD231SS dst, a, b` -- `dst = -(a*b) + dst`.
+pub(super) fn emit_vfnmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBD, false, dst, a, b);
+}
+
+/// `VFNMSUB231SS dst, a, b` -- `dst = -(a*b) - dst`.
+pub(super) fn emit_vfnmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
+    emit_vex_fma231(code, 0xBF, false, dst, a, b);
 }
 
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
@@ -1533,6 +1681,12 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_rotate::run (x86_64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);
         });
+        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
+        // -O). Runs after the inliner so products exposed by parameter
+        // substitution into an add/sub become contractible.
+        super::ssa_emit_common::time_pass("ssa_fma::run (x86_64)", || {
+            super::ssa_fma::run(&mut ssa_funcs);
+        });
         super::ssa_emit_common::time_pass("ssa_constfold_branch::run (x86_64)", || {
             super::ssa_constfold_branch::run(&mut ssa_funcs);
         });
@@ -1989,6 +2143,42 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
+        );
+    }
+
+    #[test]
+    fn vfma231_encodings() {
+        // vfmadd231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xB9, 0xC2]
+        );
+        // vfmsub231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 BB C2
+        assert_eq!(
+            assemble(|c| emit_vfmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBB, 0xC2]
+        );
+        // vfnmadd231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BD C2
+        assert_eq!(
+            assemble(|c| emit_vfnmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBD, 0xC2]
+        );
+        // vfnmsub231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BF C2
+        assert_eq!(
+            assemble(|c| emit_vfnmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xBF, 0xC2]
+        );
+        // Single-precision clears VEX.W: vfmadd231ss xmm0, xmm1, xmm2
+        //   ->  C4 E2 71 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231ss(c, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0x71, 0xB9, 0xC2]
+        );
+        // Extended registers clear VEX.R / VEX.B: vfmadd231sd xmm8,
+        // xmm9, xmm10  ->  C4 42 B1 B9 C2
+        assert_eq!(
+            assemble(|c| emit_vfmadd231sd(c, Reg(8), Reg(9), Reg(10))),
+            vec![0xC4, 0x42, 0xB1, 0xB9, 0xC2]
         );
     }
 

@@ -8,7 +8,7 @@ Disassembly of section .text:
                	add	x1, sp, #0x8
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe8]
+               	ldr	x16, [x16, #0xd8]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0xf8
+               	add	x21, x21, #0xe8
                	lsl	x0, x20, #3
                	add	x0, x21, x0
                	ldr	x0, [x0]
@@ -36,17 +36,17 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x110
+               	add	x2, x2, #0x100
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x8
                	adrp	x2, <page>
-               	add	x2, x2, #0x116
+               	add	x2, x2, #0x106
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x10
                	adrp	x2, <page>
-               	add	x2, x2, #0x11d
+               	add	x2, x2, #0x10d
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	lsl	x2, x20, #3
@@ -112,17 +112,19 @@ Disassembly of section .text:
                	lsl	x2, x1, #2
                	add	x0, x0, x2
                	scvtf	d0, x1
+               	fcvt	s0, d0
                	mov	x1, #0x3fd0000000000000 // =4598175219545276416
+               	fcvt	d0, s0
                	fmov	d17, x1
                	fmul	d0, d0, d17
-               	fcvt	s17, d0
-               	str	s17, [x0]
+               	fcvt	s0, d0
+               	str	s0, [x0]
                	b	<addr>
                	sub	x0, x29, #0x508
                	add	x0, x0, #0x20
                	ldr	s0, [x0]
-               	fcvt	d0, s0
                	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x0, ne
@@ -135,8 +137,8 @@ Disassembly of section .text:
                	mov	x1, #0xc00000000000     // =211106232532992
                	movk	x1, #0x4058, lsl #48
                	fmov	d16, x1
-               	fcvt	s17, d16
-               	str	s17, [x0]
+               	fcvt	s0, d16
+               	str	s0, [x0]
                	sub	x0, x29, #0x508
                	ldr	s0, [x0]
                	fcvt	d0, s0

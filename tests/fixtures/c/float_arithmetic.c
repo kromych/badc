@@ -1,9 +1,7 @@
-// Float / double arithmetic end-to-end. The c5 IR carries every FP
-// scalar as a 64-bit `f64::to_bits()` payload, so `float` and
-// `double` flow through the same Fadd/Fsub/Fmul/Fdiv ops; the
-// 32-bit narrowing the C standard prescribes for `float` only
-// matters at FP-register ABI boundaries (libc taking `float`, etc.),
-// which this fixture deliberately avoids.
+// Double arithmetic end-to-end (C99 6.5 / 6.3.1.x). Exercises the
+// Fadd/Fsub/Fmul/Fdiv/FCMP/FpCast pipeline at f64 precision. The
+// single-precision `float` path is covered by float_single_precision.c
+// and float_double_mix.c.
 
 int main() {
     double a;

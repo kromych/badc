@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x0
     v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x7
     v17  LoadLocal { off=3, kind=I32 }                    -> x0
-    v18  Call { target_pc=0, args=[v16, v3], fp_return=false } -> x0
+    v18  Call { target_pc=0, args=[v16, v3], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Jmp(b2)   (exit_acc=v18)
   block 2  start_pc=0
     v22  Imm(0)                                           -> x0
@@ -52,7 +52,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v9   Store { addr=v7, value=v8, kind=I32 }            -> -
     v10  Imm(5)                                           -> x7
     v11  Imm(42)                                          -> x6
-    v12  Call { target_pc=0, args=[v10, v11], fp_return=false } -> x0
+    v12  Call { target_pc=0, args=[v10, v11], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  Imm(11)                                          -> x0
     terminator Return(v13)   (exit_acc=v13)
   block 2  start_pc=0

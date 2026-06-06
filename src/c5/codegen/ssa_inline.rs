@@ -127,6 +127,11 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             }
             Inst::BinopI { lhs, .. } => mark(*lhs, &mut used),
             Inst::Fneg(v) => mark(*v, &mut used),
+            Inst::Fma { a, b, c, .. } => {
+                mark(*a, &mut used);
+                mark(*b, &mut used);
+                mark(*c, &mut used);
+            }
             Inst::Extend { value, .. } => mark(*value, &mut used),
             Inst::FpCast { value, .. } => mark(*value, &mut used),
             Inst::Mcpy { dst, src, .. } => {
@@ -180,6 +185,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             | Inst::BinopI { .. }
             | Inst::Extend { .. }
             | Inst::Fneg(_)
+            | Inst::Fma { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
             | Inst::LoadIndexed { .. } => {}
@@ -255,6 +261,11 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         }
         Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, remap),
         Inst::Fneg(v) => *v = map_v(*v, remap),
+        Inst::Fma { a, b, c, .. } => {
+            *a = map_v(*a, remap);
+            *b = map_v(*b, remap);
+            *c = map_v(*c, remap);
+        }
         Inst::Extend { value, .. } => *value = map_v(*value, remap),
         Inst::FpCast { value, .. } => *value = map_v(*value, remap),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
@@ -331,6 +342,11 @@ fn rewrite_callee_inst(inst: &Inst, args: &[ValueId], callee_remap: &[ValueId]) 
                 }
                 Inst::BinopI { lhs, .. } => *lhs = map_v(*lhs, callee_remap),
                 Inst::Fneg(v) => *v = map_v(*v, callee_remap),
+                Inst::Fma { a, b, c, .. } => {
+                    *a = map_v(*a, callee_remap);
+                    *b = map_v(*b, callee_remap);
+                    *c = map_v(*c, callee_remap);
+                }
                 Inst::Extend { value, .. } => *value = map_v(*value, callee_remap),
                 Inst::FpCast { value, .. } => *value = map_v(*value, callee_remap),
                 _ => {}
@@ -425,6 +441,7 @@ fn splice_multi_block(
 
     let mut new_insts: Vec<Inst> = Vec::with_capacity(original.insts.len() + callee.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(new_insts.capacity());
+    let mut new_f32: Vec<bool> = Vec::with_capacity(new_insts.capacity());
     let mut new_blocks: Vec<Block> = Vec::with_capacity(n_caller + n_callee + 1);
     let mut remap: Vec<ValueId> = vec![NO_VALUE; original.insts.len()];
     let mut callee_remap: Vec<ValueId> = vec![NO_VALUE; callee.insts.len()];
@@ -432,6 +449,7 @@ fn splice_multi_block(
     let emit_caller_inst = |pc: u32,
                             new_insts: &mut Vec<Inst>,
                             new_inst_src: &mut Vec<(u32, u32)>,
+                            new_f32: &mut Vec<bool>,
                             remap: &mut [ValueId],
                             original: &FunctionSsa| {
         let src = original
@@ -439,19 +457,32 @@ fn splice_multi_block(
             .get(pc as usize)
             .copied()
             .unwrap_or((0, 0));
+        let f32 = original
+            .f32_values
+            .get(pc as usize)
+            .copied()
+            .unwrap_or(false);
         let mut mapped = original.insts[pc as usize].clone();
         remap_caller_inst(&mut mapped, remap);
         let new_id = new_insts.len() as u32;
         remap[pc as usize] = new_id;
         new_insts.push(mapped);
         new_inst_src.push(src);
+        new_f32.push(f32);
     };
 
     // Step 1: caller blocks 0..splice_block_idx (unchanged).
     for (b_idx, block) in original.blocks.iter().enumerate().take(splice_block_idx) {
         let block_start = new_insts.len() as u32;
         for pc in block.inst_range.start..block.inst_range.end {
-            emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+            emit_caller_inst(
+                pc,
+                &mut new_insts,
+                &mut new_inst_src,
+                &mut new_f32,
+                &mut remap,
+                &original,
+            );
         }
         let term = map_terminator_caller(block.terminator, &remap);
         let exit_acc = map_v(block.exit_acc, &remap);
@@ -467,7 +498,14 @@ fn splice_multi_block(
     // Step 2: prefix (caller's splice block, insts up to call).
     let prefix_start = new_insts.len() as u32;
     for pc in splice_block.inst_range.start..call_pc {
-        emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+        emit_caller_inst(
+            pc,
+            &mut new_insts,
+            &mut new_inst_src,
+            &mut new_f32,
+            &mut remap,
+            &original,
+        );
     }
     let callee_entry_new_id = callee_block_base;
     new_blocks.push(Block {
@@ -499,7 +537,14 @@ fn splice_multi_block(
     {
         let block_start = new_insts.len() as u32;
         for pc in block.inst_range.start..block.inst_range.end {
-            emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+            emit_caller_inst(
+                pc,
+                &mut new_insts,
+                &mut new_inst_src,
+                &mut new_f32,
+                &mut remap,
+                &original,
+            );
         }
         let term = map_terminator_caller(block.terminator, &remap);
         let exit_acc = map_v(block.exit_acc, &remap);
@@ -541,6 +586,13 @@ fn splice_multi_block(
                 callee_remap[ce_pc as usize] = new_id;
                 new_insts.push(translated);
                 new_inst_src.push((0, 0));
+                new_f32.push(
+                    callee
+                        .f32_values
+                        .get(ce_pc as usize)
+                        .copied()
+                        .unwrap_or(false),
+                );
             }
         }
         let new_term = match cblock.terminator {
@@ -586,7 +638,14 @@ fn splice_multi_block(
     // Step 7: fill the postfix slot now that the call's remap is set.
     let postfix_start = new_insts.len() as u32;
     for pc in (call_pc + 1)..splice_block.inst_range.end {
-        emit_caller_inst(pc, &mut new_insts, &mut new_inst_src, &mut remap, &original);
+        emit_caller_inst(
+            pc,
+            &mut new_insts,
+            &mut new_inst_src,
+            &mut new_f32,
+            &mut remap,
+            &original,
+        );
     }
     let postfix_term = match splice_block.terminator {
         Terminator::FallThrough(b) => Terminator::Jmp(shift_caller_bid(b)),
@@ -615,6 +674,8 @@ fn splice_multi_block(
         extern_imm_code_refs: Vec::new(),
         extern_imm_data_refs: Vec::new(),
         extern_tls_refs: Vec::new(),
+        f32_values: new_f32,
+        param_fp_mask: original.param_fp_mask,
     };
 }
 
@@ -623,6 +684,7 @@ fn splice_multi_block(
 fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSsa>) {
     let mut new_insts: Vec<Inst> = Vec::with_capacity(caller.insts.len());
     let mut new_inst_src: Vec<(u32, u32)> = Vec::with_capacity(caller.inst_src.len());
+    let mut new_f32: Vec<bool> = Vec::with_capacity(caller.insts.len());
     // `remap[old_id]` is the new ValueId in the spliced caller. An
     // inlined Call's slot maps to the callee's translated Return value.
     let mut remap: Vec<ValueId> = vec![NO_VALUE; caller.insts.len()];
@@ -694,6 +756,13 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                         callee_remap[ce_pc as usize] = new_id;
                         new_insts.push(translated);
                         new_inst_src.push(src_pos);
+                        new_f32.push(
+                            callee
+                                .f32_values
+                                .get(ce_pc as usize)
+                                .copied()
+                                .unwrap_or(false),
+                        );
                     }
                 }
                 let Terminator::Return(ret_v) = callee_block.terminator else {
@@ -706,6 +775,13 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 remap_caller_inst(&mut mapped, &remap);
                 new_insts.push(mapped);
                 new_inst_src.push(src_pos);
+                new_f32.push(
+                    caller
+                        .f32_values
+                        .get(old_pc as usize)
+                        .copied()
+                        .unwrap_or(false),
+                );
                 remap[old_pc as usize] = new_id;
             }
         }
@@ -758,6 +834,7 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
 
     caller.insts = new_insts;
     caller.inst_src = new_inst_src;
+    caller.f32_values = new_f32;
     caller.blocks = new_blocks;
     caller.extern_call_refs = extern_call_remap.iter().map(|(_, n, s)| (*n, *s)).collect();
     caller.extern_imm_code_refs = extern_imm_code_remap

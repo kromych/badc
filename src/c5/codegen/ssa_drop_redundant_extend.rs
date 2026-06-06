@@ -144,6 +144,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(lhs),
         Inst::Fneg(v) => f(v),
+        Inst::Fma { a, b, c, .. } => {
+            f(a);
+            f(b);
+            f(c);
+        }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
@@ -185,6 +190,8 @@ mod tests {
             is_variadic: false,
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            param_fp_mask: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

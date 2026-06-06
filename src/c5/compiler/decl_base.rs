@@ -187,6 +187,7 @@ impl Compiler {
         // consumer, so clear here to keep the channel scoped to
         // this one base-type parse.
         self.pending.typedef_base_array_size = 0;
+        self.pending.typedef_fn_proto = None;
         // Leading modifier soup -- the order doesn't matter; we
         // collect everything we see, then look at the next token
         // for the type keyword.
@@ -276,6 +277,15 @@ impl Compiler {
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                // A function-pointer typedef records the pointed-to
+                // function's prototype; carry it to the bound
+                // declarator so an indirect call through the variable
+                // can split fixed vs variadic arguments per the host
+                // variadic ABI.
+                self.pending.typedef_fn_proto = Some((
+                    self.symbols[self.lex.curr_id_idx].params.len(),
+                    self.symbols[self.lex.curr_id_idx].is_variadic,
+                ));
             }
             // Propagate the bare-void flag through the typedef so
             // `(VOID)` in parameter position is recognised as the

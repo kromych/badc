@@ -188,6 +188,18 @@ impl Compiler {
             // `shadow_symbol` saved the prior value into
             // `h_fn_ptr_indirection`, so block-exit will restore it).
             self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
+            // Inherit a variadic function-pointer prototype onto the
+            // local so an indirect call through it knows the callee's
+            // named-parameter count and routes the variadic tail per
+            // the host variadic ABI. Only variadic prototypes are
+            // recorded: a non-variadic indirect call places every
+            // argument as fixed regardless, and synthesising
+            // placeholder parameter types would feed the call-site
+            // argument type-check a spurious mismatch.
+            if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+                self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
+                self.symbols[loc_idx].is_variadic = true;
+            }
 
             if self.lex.tk == ',' {
                 self.next()?;

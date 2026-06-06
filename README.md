@@ -17,9 +17,9 @@ you can override) give a fun one-executable experience. Its codebase
 of moderate size can be a good pedagogical material. It lowers through
 an SSA intermediate representation and a graph-coloring register
 allocator, but stops short of the exquisite optimization passes a
-production toolchain runs. All told, to stay slim, it'll never surpass
+production toolchain runs. All told, to stay slim, it's unlikely to surpass
 the ability of multi-gigabyte compiler suites to squeeze the last drop
-of perf from the machine, and that's fine.
+of perf from the machine, and that's fine
 
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
@@ -464,6 +464,25 @@ including an `-O` rerun that asserts the exit code is unchanged.
 `jit` covers the in-process path the same way. `linker` exercises
 the multi-TU object / archive path, `dwarf` the debug-info emit,
 and `deferred` the lazy-symbol resolution.
+
+A few fixtures under `tests/fixtures/c/` are worth reading on their
+own, each pinning a distinct hard feature:
+
+* `c4.c` -- the original c4 compiler; self-hosts (see above).
+* `fma_numeric_kernels.c` -- Horner polynomial evaluation, a dense
+  matrix-product inner loop, and a fourth-order Runge-Kutta step, all
+  multiply-add heavy; checks that the `-O` fused multiply-add
+  contraction keeps single-rounding parity with the VM.
+* `fma_contraction.c` -- the `a*b+c` / `a*b-c` / `c-a*b` contraction
+  shapes plus explicit C99 `fma` / `fmaf`.
+* `aapcs64_variadic_host_abi.c`, `sysv_variadic_host_abi.c` -- the
+  per-target variadic calling conventions on the host ABI.
+* `setjmp_longjmp_roundtrip.c` -- non-local control flow, including the
+  CRT-free AArch64 `setjmp` / `longjmp` intrinsic on Windows.
+* `struct_by_value_param.c`, `struct_by_value_return.c` -- aggregate
+  pass / return through the hidden out-pointer ABI.
+* `bitfield_storage_unit.c` -- C99 6.7.2.1 bitfield packing across
+  storage units.
 
 Release builds add the JIT and native fixture-parity paths that
 debug builds skip:

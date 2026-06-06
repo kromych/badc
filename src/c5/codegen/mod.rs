@@ -53,6 +53,7 @@ mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
+mod ssa_fma;
 mod ssa_inline;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;
@@ -248,7 +249,7 @@ pub(super) fn pc_extent_for_lowering(
 /// per-arch emitter turns each variant into the right load /
 /// store instruction pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ArgPlacement {
+pub(crate) enum ArgPlacement {
     /// Goes into an integer arg register. Index is into
     /// `Abi::int_arg_regs`.
     IntReg(u8),
@@ -265,7 +266,7 @@ pub(super) enum ArgPlacement {
 /// Per-call argument plan + the host outgoing-args reservation
 /// the call site has to pre-allocate before staging the args.
 #[derive(Debug, Clone)]
-pub(super) struct CallPlan {
+pub(crate) struct CallPlan {
     /// One entry per c5-stack arg, in source order. Length
     /// matches `arg_count`.
     pub placements: alloc::vec::Vec<ArgPlacement>,
@@ -335,6 +336,16 @@ pub(super) fn plan_call_args(
             let r = fp_idx as u8;
             fp_idx += 1;
             ArgPlacement::FpReg(r)
+        } else if is_fp && allow_fp_reg {
+            // A fixed floating-point argument that exhausted the eight
+            // FP argument registers overflows to the host stack, not the
+            // integer bank (System V AMD64 3.2.3 / AAPCS64 6.4.1). The
+            // integer-bank fall-through below is reserved for variadic
+            // FP arguments under `variadic_int_only` (Win64), where
+            // `allow_fp_reg` is already false.
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
         } else if int_idx < int_max {
             // Routes both real int args and variadic FP args
             // (under `variadic_int_only`) through the integer
@@ -374,6 +385,52 @@ pub(super) fn plan_call_args(
         placements,
         scratch_bytes,
     }
+}
+
+/// Per-parameter incoming-register plan for a callee. Runs the same
+/// [`plan_call_args`] the caller uses, so an interleaved int / FP
+/// parameter list resolves each parameter's incoming register from
+/// the independent int and FP argument-register banks (System V AMD64
+/// 3.2.3 / AAPCS64 6.4.1) rather than by absolute parameter index.
+/// `n_params` declared parameters are all treated as fixed (the
+/// caller's fixed-argument count for a prototype-having callee).
+/// `fp_mask` is [`crate::c5::ir::FunctionSsa::param_fp_mask`].
+///
+/// The returned placements are consumed by the per-arch callee
+/// prologue (which spills each incoming register into the parameter's
+/// 16-byte c5 cdecl home cell) and by `Inst::ParamRef` (which reads
+/// the parameter from its incoming register or home cell).
+pub(crate) fn plan_param_regs(n_params: usize, fp_mask: u32, abi: Abi) -> CallPlan {
+    plan_call_args(n_params, n_params, fp_mask, abi)
+}
+
+/// The floating-point argument mask, with every FP bit cleared when the
+/// resulting placement would interleave register and host-stack
+/// arguments. The c5 cdecl parameter-cell layout requires the
+/// register-passed arguments to form a contiguous prefix; a parameter
+/// list that exhausts the integer bank before a trailing floating-point
+/// parameter (the FP bank still has a free register while a preceding
+/// integer parameter already overflowed to the stack) breaks that
+/// invariant. Clearing the mask routes such a function's arguments
+/// entirely through the integer bank, the pre-FP-register lowering,
+/// which is always contiguous. Both the caller's per-call `fp_arg_mask`
+/// and the callee's `param_fp_mask` pass the same declared
+/// argument-class sequence through this, so the two ends agree on the
+/// ABI without consulting each other.
+pub(crate) fn effective_fp_arg_mask(count: usize, fp_mask: u32, abi: Abi) -> u32 {
+    if fp_mask == 0 {
+        return 0;
+    }
+    let plan = plan_call_args(count, count, fp_mask, abi);
+    let mut seen_stack = false;
+    for p in &plan.placements {
+        match p {
+            ArgPlacement::Stack(_) => seen_stack = true,
+            _ if seen_stack => return 0,
+            _ => {}
+        }
+    }
+    fp_mask
 }
 
 /// Decide how to extend a libc return value into the c5
@@ -1637,6 +1694,39 @@ pub(crate) struct Abi {
     /// `xor eax, eax` before each variadic call. Win64 has no
     /// such requirement.
     pub variadic_zero_xmm_count: bool,
+}
+
+impl Abi {
+    /// True when variadic c5 callees use the System V AMD64 host
+    /// variadic ABI (Linux x86_64): the named and variadic arguments
+    /// ride the standard integer + FP argument-register banks
+    /// (System V AMD64 3.2.3) and the callee spills a register save
+    /// area (3.5.7). System V is the x86_64 target with no shadow
+    /// space, no by-position argument placement, and the `al`
+    /// XMM-count convention; this distinguishes it from Win64
+    /// (`position_indexed_args`, shadow space, no `al`) and from
+    /// the aarch64 targets. The caller passes the real `fp_arg_mask`
+    /// for such a callee so floating-point varargs land in xmm0..xmm7.
+    pub(crate) fn sysv_host_variadic(self) -> bool {
+        matches!(self.arch, Arch::X86_64)
+            && self.shadow_space == 0
+            && !self.position_indexed_args
+            && self.variadic_zero_xmm_count
+    }
+
+    /// True when variadic c5 callees use the AAPCS64 host variadic ABI
+    /// (Linux aarch64): the named and variadic arguments ride the
+    /// standard integer + FP argument-register banks (AAPCS64 6.4.1)
+    /// and the callee spills a general / vector register save area
+    /// (AAPCS64 Appendix B). Among the aarch64 targets macOS sets
+    /// `variadic_on_stack` (named in registers, variadic tail on the
+    /// stack) and Windows sets `variadic_int_only` (one integer bank);
+    /// the plain AAPCS64 target sets neither, so this gate selects
+    /// Linux aarch64 alone. The caller passes the real `fp_arg_mask`
+    /// for such a callee so floating-point varargs land in d0..d7.
+    pub(crate) fn aarch64_host_variadic(self) -> bool {
+        matches!(self.arch, Arch::Aarch64) && !self.variadic_on_stack && !self.variadic_int_only
+    }
 }
 
 impl Default for Abi {

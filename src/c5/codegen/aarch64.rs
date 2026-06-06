@@ -447,6 +447,97 @@ pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
     0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)
 }
 
+/// `FMOV <Sd>, <Wn>` -- copy the low 32 bits of `Wn` into the
+/// single-precision view `Sd`. Used to stage an f32 constant (the
+/// allocator parks it in a GPR as the int-encoded f32 bit pattern)
+/// into an FP register before single-precision arithmetic.
+pub(super) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
+    debug_assert!(sd < 32);
+    0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
+}
+
+/// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
+/// move an `float` value into the allocator's chosen register when
+/// the producer wrote a different one.
+pub(super) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32);
+    0x1E20_4000 | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
+/// (C99 6.3.1.8: `float op float` has type `float`).
+pub(super) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32 && sm < 32);
+    0x1E20_2800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FSUB <Sd>, <Sn>, <Sm>`. `Sd = Sn - Sm`.
+pub(super) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32 && sm < 32);
+    0x1E20_3800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FMUL <Sd>, <Sn>, <Sm>`. `Sd = Sn * Sm`.
+pub(super) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32 && sm < 32);
+    0x1E20_0800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FDIV <Sd>, <Sn>, <Sm>`. `Sd = Sn / Sm`.
+pub(super) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32 && sm < 32);
+    0x1E20_1800 | ((sm as u32) << 16) | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
+pub(super) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32);
+    0x1E21_4000 | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// Floating-point fused multiply-add (3 source). `Dd = (neg_product ?
+/// -(Dn*Dm) : Dn*Dm) + (neg_addend ? -Da : Da)`, computed with a single
+/// rounding. `is_f32` selects the single-precision form (Sd/Sn/Sm/Sa).
+/// The four sign combinations select FMADD / FNMSUB / FMSUB / FNMADD:
+/// the o0 bit (15) and the negate-product bit (21) encode the variant
+/// per the ARM "Floating-point data-processing (3 source)" group.
+pub(super) fn enc_fma(
+    dd: u8,
+    dn: u8,
+    dm: u8,
+    da: u8,
+    is_f32: bool,
+    neg_product: bool,
+    neg_addend: bool,
+) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32 && da < 32);
+    let base: u32 = if is_f32 { 0x1F00_0000 } else { 0x1F40_0000 };
+    // (neg_product, neg_addend) -> (o0 bit15, neg bit21):
+    //   (F,F) FMADD : Da + Dn*Dm
+    //   (F,T) FNMSUB: -Da + Dn*Dm = Dn*Dm - Da
+    //   (T,F) FMSUB : Da - Dn*Dm
+    //   (T,T) FNMADD: -Da - Dn*Dm
+    let (o0, neg): (u32, u32) = match (neg_product, neg_addend) {
+        (false, false) => (0, 0),
+        (false, true) => (1, 1),
+        (true, false) => (1, 0),
+        (true, true) => (0, 1),
+    };
+    base | (neg << 21)
+        | ((dm as u32) << 16)
+        | (o0 << 15)
+        | ((da as u32) << 10)
+        | ((dn as u32) << 5)
+        | (dd as u32)
+}
+
+/// `FCMP <Sn>, <Sm>` -- single-precision compare, setting NZCV.
+/// Same NaN caveat as [`enc_fcmp_d`].
+pub(super) fn enc_fcmp_s(sn: u8, sm: u8) -> u32 {
+    debug_assert!(sn < 32 && sm < 32);
+    0x1E20_2000 | ((sm as u32) << 16) | ((sn as u32) << 5)
+}
+
 /// `FCVTZS <Xd>, <Dn>` -- truncating signed FP-to-int. Matches the
 /// C `(int)f` semantics: discard the fractional part; out-of-range
 /// values saturate.
@@ -1255,6 +1346,12 @@ pub(super) fn lower(
         });
         super::ssa_emit_common::time_pass("ssa_rotate::run (aarch64)", || {
             super::ssa_rotate::run(&mut ssa_funcs);
+        });
+        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
+        // -O). Runs after the inliner so products exposed by parameter
+        // substitution into an add/sub become contractible.
+        super::ssa_emit_common::time_pass("ssa_fma::run (aarch64)", || {
+            super::ssa_fma::run(&mut ssa_funcs);
         });
         super::ssa_emit_common::time_pass("ssa_constfold_branch::run (aarch64)", || {
             super::ssa_constfold_branch::run(&mut ssa_funcs);
@@ -2085,6 +2182,20 @@ mod tests {
             let off = i * 4;
             assert_eq!(&code[off..off + 4], &one(*w));
         }
+    }
+
+    #[test]
+    fn fma_three_source_encodings() {
+        // fmadd d0, d0, d1, d2  (a*b + c)
+        assert_eq!(enc_fma(0, 0, 1, 2, false, false, false), 0x1F41_0800);
+        // fnmsub d0, d0, d1, d2  (a*b - c)
+        assert_eq!(enc_fma(0, 0, 1, 2, false, false, true), 0x1F61_8800);
+        // fmsub d0, d0, d1, d2  (c - a*b)
+        assert_eq!(enc_fma(0, 0, 1, 2, false, true, false), 0x1F41_8800);
+        // fnmadd d0, d0, d1, d2  (-a*b - c)
+        assert_eq!(enc_fma(0, 0, 1, 2, false, true, true), 0x1F61_0800);
+        // Single-precision clears the type bit: fmadd s0, s0, s1, s2
+        assert_eq!(enc_fma(0, 0, 1, 2, true, false, false), 0x1F01_0800);
     }
 
     #[test]

@@ -329,7 +329,7 @@ fn ent_pc=2 n_params=5 variadic=false locals=16
     v45  LocalAddr(-2)                                    -> x6
     v46  LoadLocal { off=6, kind=I64 }                    -> x0
     v47  ImmData(8)                                       -> x1
-    v48  Call { target_pc=1, args=[v44, v45, v9, v47], fp_return=false } -> x0
+    v48  Call { target_pc=1, args=[v44, v45, v9, v47], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v49  Imm(0)                                           -> x0
     v50  StoreLocal { off=-11, value=v49, kind=I32 }      -> -
     terminator Jmp(b14)   (exit_acc=v50)
@@ -427,7 +427,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=20
     v19  Imm(64)                                          -> x2
     v20  LocalAddr(-9)                                    -> x1
     v21  LocalAddr(-13)                                   -> x8
-    v22  Call { target_pc=2, args=[v17, v18, v19, v20, v21], fp_return=false } -> x0
+    v22  Call { target_pc=2, args=[v17, v18, v19, v20, v21], fixed_args=5, fp_return=false, fp_arg_mask=0x0 } -> x0
     v23  LocalAddr(-8)                                    -> x0
     v24  Load { addr=v23, kind=U8 }                       -> x0
     v25  BinopI { op=xor, lhs=v24, rhs_imm=77 }           -> x0

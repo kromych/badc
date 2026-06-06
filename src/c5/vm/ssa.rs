@@ -784,18 +784,52 @@ fn run_inst<H: Host>(
         Inst::Binop { op, lhs, rhs } => {
             let lv = frame.regs[*lhs as usize];
             let rv = frame.regs[*rhs as usize];
-            frame.regs[v as usize] = apply_binop(*op, lv, rv)?;
+            let res = apply_binop(*op, lv, rv)?;
+            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
             let lv = frame.regs[*lhs as usize];
-            frame.regs[v as usize] = apply_binop(*op, lv, *rhs_imm)?;
+            let res = apply_binop(*op, lv, *rhs_imm)?;
+            frame.regs[v as usize] = round_if_f32(res, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
             let neg = (-f64::from_bits(raw as u64)).to_bits() as i64;
-            frame.regs[v as usize] = neg;
+            frame.regs[v as usize] = round_if_f32(neg, frame.func.f32_values.get(v as usize));
+            return Ok(());
+        }
+        Inst::Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => {
+            // Single-rounding fused multiply-add (C99 6.5p8). Match the
+            // host fmadd / vfmadd: round once, at the result's width.
+            // `libm::fma` / `fmaf` give the same single rounding as the
+            // native instruction (and, unlike `f64::mul_add`, are
+            // available in the no_std build) so the VM reference agrees
+            // with native codegen on every target.
+            let is_f32 = matches!(frame.func.f32_values.get(v as usize), Some(true));
+            let mut av = f64::from_bits(frame.regs[*a as usize] as u64);
+            let bv = f64::from_bits(frame.regs[*b as usize] as u64);
+            let mut cv = f64::from_bits(frame.regs[*c as usize] as u64);
+            if *neg_product {
+                av = -av;
+            }
+            if *neg_addend {
+                cv = -cv;
+            }
+            let res = if is_f32 {
+                libm::fmaf(av as f32, bv as f32, cv as f32) as f64
+            } else {
+                libm::fma(av, bv, cv)
+            };
+            frame.regs[v as usize] =
+                round_if_f32(res.to_bits() as i64, frame.func.f32_values.get(v as usize));
             return Ok(());
         }
         Inst::Extend { value, kind } => {
@@ -813,6 +847,13 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = match kind {
                 FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
                 FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
+                // A register carrying a single-precision value already
+                // holds the f64 bit pattern of that f32 (the F32 load
+                // widens on read). Widening to double is therefore a
+                // no-op; narrowing rounds the f64 to f32 then re-stores
+                // the f32-as-f64 bit pattern (C99 6.3.1.5).
+                FpCastKind::F32ToF64 => raw,
+                FpCastKind::F64ToF32 => (f64::from_bits(raw as u64) as f32 as f64).to_bits() as i64,
             };
             return Ok(());
         }
@@ -1373,11 +1414,16 @@ fn run_intrinsic(
             store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
         }
         Intrinsic::VaArg => {
-            // `__builtin_va_arg(&ap)` returns the cursor's current
-            // value (the address of the next variadic slot) and
-            // advances `*ap` by 8 -- the c5 stack-slot width. The
-            // caller emits the matching `Inst::Load` to materialise
-            // the value.
+            // `__builtin_va_arg(self, descriptor)` returns the cursor's
+            // current value (the address of the next variadic slot) and
+            // advances `*self` by 8 -- the c5 stack-slot width. The
+            // caller emits the matching `Inst::Load` to materialise the
+            // value. `args[1]` is the packed `(kind << 16) | size` type
+            // descriptor; the flat single-region VM model walks one
+            // cursor regardless of kind, so it is ignored here. The VM
+            // interprets programs compiled for the host target, whose
+            // `<stdarg.h>` selects the cursor `va_list` for every host
+            // that runs this interpreter.
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;
@@ -1393,6 +1439,9 @@ fn run_intrinsic(
         }
         Intrinsic::SetjmpAArch64 | Intrinsic::LongjmpAArch64 => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} is AArch64-specific and not supported here",
+        ))),
+        Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
+            "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
     }
 }
@@ -1481,6 +1530,21 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
         StoreKind::I16 => (value as i16) as i64,
         StoreKind::I8 => (value as i8) as i64,
         StoreKind::F32 | StoreKind::F64 => value,
+    }
+}
+
+/// Round a result to single precision when `f32_flag` marks the
+/// defining value f32 (C99 6.3.1.8). The register convention keeps an
+/// f32 value as the f64 bit pattern of its single-precision value, so
+/// the round-trip through `f32` reproduces hardware single-precision
+/// arithmetic. A non-f32 (double) value passes through unchanged. The
+/// flag is `None` for SSA built outside the walker (no f32 tracking),
+/// which also passes through as double.
+fn round_if_f32(bits: i64, f32_flag: Option<&bool>) -> i64 {
+    if matches!(f32_flag, Some(true)) {
+        (f64::from_bits(bits as u64) as f32 as f64).to_bits() as i64
+    } else {
+        bits
     }
 }
 

@@ -79,11 +79,31 @@ pub(super) fn bail_msg(backend: &str, reason: &str) {
 
 /// Translate a c5-stack slot index (the operand of an
 /// address-of-local emit) into a byte offset relative to fp /
-/// rbp. Locals (`off < 0`) sit at
-/// `off * 8`; parameters (`off >= 2`) sit at `(off - 1) * 16` to
-/// reflect the 16-byte caller-push slots c5's cdecl uses.
-pub(super) fn c5_slot_to_fp_offset(off: i64) -> i64 {
-    if off >= 2 { (off - 1) * 16 } else { off * 8 }
+/// rbp. Locals (`off < 0`) sit at `off * 8`; parameters
+/// (`off >= 2`) sit at `16 + (off - 2) * param_stride`.
+///
+/// The first parameter cell starts at a fixed 16-byte offset above
+/// fp / rbp: on x86_64 the saved rbp and the return address occupy
+/// `[rbp + 0]` and `[rbp + 8]`; on aarch64 the saved fp/lr pair
+/// occupies `[fp + 0]` and `[fp + 8]`. The prologue places the
+/// parameter cells just above that pair, so parameter slot `off`
+/// (the first parameter is `off == 2`) lands `(off - 2)` strides
+/// past the base.
+///
+/// `param_stride` is the per-function parameter-cell stride the
+/// prologue allocated -- 16, the c5 cdecl cell width that `va_arg`
+/// also walks. Splitting it out of the offset separates the fixed
+/// saved-register base from the cell width, so a later phase can
+/// shrink non-variadic cells without re-deriving the base. The
+/// prologue's cell allocation and this offset must use the same
+/// stride; passing `Frame::param_cell_stride` keeps them in
+/// agreement. At stride 16 the result equals `(off - 1) * 16`.
+pub(super) fn c5_slot_to_fp_offset(off: i64, param_stride: i64) -> i64 {
+    if off >= 2 {
+        16 + (off - 2) * param_stride
+    } else {
+        off * 8
+    }
 }
 
 /// SP-relative byte offset of an allocator spill slot. The

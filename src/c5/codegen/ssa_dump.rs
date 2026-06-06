@@ -55,10 +55,16 @@ pub(super) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            let f32_mark = if func.f32_values.get(v as usize).copied().unwrap_or(false) {
+                " [f32]"
+            } else {
+                ""
+            };
             out.push_str(&format!(
-                "    v{v:<3} {:<48} -> {}\n",
+                "    v{v:<3} {:<48} -> {}{}\n",
                 fmt_inst(inst),
                 fmt_place(place),
+                f32_mark,
             ));
         }
         out.push_str(&format!(
@@ -120,6 +126,15 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_binop(*op),
         ),
         Fneg(v) => format!("Fneg(v{v})"),
+        Fma {
+            a,
+            b,
+            c,
+            neg_product,
+            neg_addend,
+        } => format!(
+            "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
+        ),
         Extend { value, kind } => {
             format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
         }
@@ -129,17 +144,22 @@ fn fmt_inst(inst: &Inst) -> String {
         Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
+            fp_arg_mask,
         } => format!(
-            "Call {{ target_pc={target_pc}, args=[{}], fp_return={fp_return} }}",
+            "Call {{ target_pc={target_pc}, args=[{}], fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
+            fp_arg_mask,
         } => format!(
-            "CallIndirect {{ target=v{target}, args=[{}], fp_return={fp_return} }}",
+            "CallIndirect {{ target=v{target}, args=[{}], callee_variadic={callee_variadic}, fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallExt {
@@ -285,6 +305,8 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
     match k {
         FpCastKind::FpToInt => "FpToInt",
         FpCastKind::IntToFp => "IntToFp",
+        FpCastKind::F32ToF64 => "F32ToF64",
+        FpCastKind::F64ToF32 => "F64ToF32",
     }
 }
 

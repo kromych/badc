@@ -600,6 +600,17 @@ def build_stage1_tcc(
         *target_macro_flags(profile["target_macros"]),
         "-D_GNU_SOURCE",
         *tcc_build_defines(multiarch, host, sdk),
+        # tcc.h sources `ssize_t` from <unistd.h> (skipped under
+        # `_WIN32`) or `#define ssize_t intptr_t` (only under
+        # `_MSC_VER`). badc's Windows targets define `_WIN32` but not
+        # `_MSC_VER`, so neither fires when badc compiles the stage1
+        # tcc. Supply the type as a badc-only define rather than in
+        # config.h: config.h is shared with the gen2 build (stage1 tcc
+        # recompiling tinycc), where tinycc's own <stddef.h> provides
+        # `typedef ... ssize_t` -- a `#define ssize_t` there would
+        # clobber that typedef. `long long` is pointer-width on Win64
+        # and Windows arm64 (LLP64).
+        *(["-Dssize_t=long long"] if "TCC_TARGET_PE" in profile["target_macros"] else []),
         "-o",
         str(out),
         *sources,

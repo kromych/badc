@@ -348,6 +348,7 @@ pub(crate) fn insert_phis(
     let n_old = func.insts.len();
     let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + n_phis);
     let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + n_phis);
+    let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + n_phis);
     let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; n_old];
     let mut phi_id_at: BTreeMap<(BlockId, i64), ValueId> = BTreeMap::new();
 
@@ -363,6 +364,9 @@ pub(crate) fn insert_phis(
                 kind,
             });
             new_src.push((0, 0));
+            // A phi merging a `float` slot carries the F32 LoadKind; its
+            // result is single-precision (C99 6.3.1.8).
+            new_f32.push(matches!(kind, LoadKind::F32));
             phi_id_at.insert((b_idx as BlockId, slot), new_id);
         }
         for old_id in range.start..range.end {
@@ -373,6 +377,12 @@ pub(crate) fn insert_phis(
                     .get(old_id as usize)
                     .copied()
                     .unwrap_or((0, 0)),
+            );
+            new_f32.push(
+                func.f32_values
+                    .get(old_id as usize)
+                    .copied()
+                    .unwrap_or(false),
             );
             value_remap[old_id as usize] = new_id;
         }
@@ -419,6 +429,7 @@ pub(crate) fn insert_phis(
 
     func.insts = new_insts;
     func.inst_src = new_src;
+    func.f32_values = new_f32;
     phi_id_at
 }
 
@@ -459,6 +470,11 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(lhs),
         Inst::Fneg(v) => f(v),
+        Inst::Fma { a, b, c, .. } => {
+            f(a);
+            f(b);
+            f(c);
+        }
         Inst::Extend { value, .. } => f(value),
         Inst::FpCast { value, .. } => f(value),
         Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
@@ -1190,6 +1206,8 @@ mod tests {
             is_variadic: false,
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            param_fp_mask: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

@@ -1,0 +1,259 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=float_plus_double_is_double
+fn ent_pc=0 n_params=0 variadic=false locals=4
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(4591870180066957722)                         -> x0
+    v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
+    v3   LocalAddr(-1)                                    -> x0
+    v4   Store { addr=v3, value=v2, kind=F32 }            -> -
+    v5   Imm(4596373779694328218)                         -> x0
+    v6   StoreLocal { off=-2, value=v5, kind=F64 }        -> -
+    v7   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v8   LoadLocal { off=-2, kind=F64 }                   -> d1
+    v9   FpCast { kind=F32ToF64, value=v7 }               -> d0
+    v10  Binop { op=fadd, lhs=v9, rhs=v8 }                -> d0
+    v11  Imm(0)                                           -> x0
+    v12  LoadLocal { off=-3, kind=F64 }                   -> d1
+    v13  Imm(4599075939497594061)                         -> x0
+    v14  Binop { op=fsub, lhs=v10, rhs=v13 }              -> d1
+    v15  Imm(0)                                           -> x0
+    v16  LoadLocal { off=-4, kind=F64 }                   -> d0
+    v17  Imm(0)                                           -> x0
+    v18  FpCast { kind=IntToFp, value=v17 }               -> d0
+    v19  Binop { op=flt, lhs=v14, rhs=v18 }               -> x0
+    terminator Bz { cond=v19, target=b5, fall=b1 }   (exit_acc=v19)
+  block 1  start_pc=0
+    v20  LoadLocal { off=-4, kind=F64 }                   -> d0
+    v21  Fneg(v14)                                        -> d1
+    v22  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v21)
+  block 2  start_pc=0
+    v23  Phi { incoming=[b5:v14, b1:v21], kind=F64 }      -> d1
+    v24  LoadLocal { off=-4, kind=F64 }                   -> d0
+    v25  Imm(4382569440205035030)                         -> x0
+    v26  Binop { op=fgt, lhs=v23, rhs=v25 }               -> x0
+    terminator Bz { cond=v26, target=b4, fall=b3 }   (exit_acc=v26)
+  block 3  start_pc=0
+    v27  Imm(1)                                           -> x0
+    terminator Return(v27)   (exit_acc=v27)
+  block 4  start_pc=0
+    v28  Imm(0)                                           -> x0
+    terminator Return(v28)   (exit_acc=v28)
+  block 5  start_pc=0
+    terminator Jmp(b2)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=widen_preserves_float_value
+fn ent_pc=1 n_params=0 variadic=false locals=3
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(4591870180066957722)                         -> x0
+    v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
+    v3   LocalAddr(-1)                                    -> x0
+    v4   Store { addr=v3, value=v2, kind=F32 }            -> -
+    v5   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
+    v6   FpCast { kind=F32ToF64, value=v5 }               -> d0
+    v7   Imm(0)                                           -> x0
+    v8   LoadLocal { off=-2, kind=F64 }                   -> d1
+    v9   Imm(4591870180174331904)                         -> x0
+    v10  Binop { op=fsub, lhs=v6, rhs=v9 }                -> d1
+    v11  Imm(0)                                           -> x0
+    v12  LoadLocal { off=-3, kind=F64 }                   -> d0
+    v13  Imm(0)                                           -> x0
+    v14  FpCast { kind=IntToFp, value=v13 }               -> d0
+    v15  Binop { op=flt, lhs=v10, rhs=v14 }               -> x0
+    terminator Bz { cond=v15, target=b5, fall=b1 }   (exit_acc=v15)
+  block 1  start_pc=0
+    v16  LoadLocal { off=-3, kind=F64 }                   -> d0
+    v17  Fneg(v10)                                        -> d1
+    v18  Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v17)
+  block 2  start_pc=0
+    v19  Phi { incoming=[b5:v10, b1:v17], kind=F64 }      -> d1
+    v20  LoadLocal { off=-3, kind=F64 }                   -> d0
+    v21  Imm(4352464011485697175)                         -> x0
+    v22  Binop { op=fgt, lhs=v19, rhs=v21 }               -> x0
+    terminator Bz { cond=v22, target=b4, fall=b3 }   (exit_acc=v22)
+  block 3  start_pc=0
+    v23  Imm(2)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
+  block 4  start_pc=0
+    v24  Imm(0)                                           -> x0
+    terminator Return(v24)   (exit_acc=v24)
+  block 5  start_pc=0
+    terminator Jmp(b2)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=narrow_drops_precision
+fn ent_pc=2 n_params=0 variadic=false locals=6
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(4593560419847042606)                         -> x0
+    v2   StoreLocal { off=-1, value=v1, kind=F64 }        -> -
+    v3   LoadLocal { off=-1, kind=F64 }                   -> d0
+    v4   FpCast { kind=F64ToF32, value=v3 }               -> d0 [f32]
+    v5   LocalAddr(-2)                                    -> x0
+    v6   Store { addr=v5, value=v4, kind=F32 }            -> -
+    v7   Imm(4593560419918210649)                         -> x0
+    v8   FpCast { kind=F64ToF32, value=v7 }               -> d0 [f32]
+    v9   LocalAddr(-3)                                    -> x0
+    v10  Store { addr=v9, value=v8, kind=F32 }            -> -
+    v11  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v12  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v13  Binop { op=fsub, lhs=v11, rhs=v12 }              -> d0 [f32]
+    v14  LocalAddr(-4)                                    -> x0
+    v15  Store { addr=v14, value=v13, kind=F32 }          -> -
+    v16  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v17  Imm(0)                                           -> x0
+    v18  FpCast { kind=IntToFp, value=v17 }               -> d1
+    v19  FpCast { kind=F64ToF32, value=v18 }              -> d1 [f32]
+    v20  Binop { op=flt, lhs=v16, rhs=v19 }               -> x0
+    terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
+  block 1  start_pc=0
+    v21  LocalAddr(-4)                                    -> x0
+    v22  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v23  Fneg(v22)                                        -> d0 [f32]
+    v24  Store { addr=v21, value=v23, kind=F32 }          -> -
+    terminator Jmp(b2)   (exit_acc=v24)
+  block 2  start_pc=0
+    v25  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v26  Imm(4487126258331716666)                         -> x0
+    v27  FpCast { kind=F32ToF64, value=v25 }              -> d0
+    v28  Binop { op=fgt, lhs=v27, rhs=v26 }               -> x0
+    terminator Bz { cond=v28, target=b4, fall=b3 }   (exit_acc=v28)
+  block 3  start_pc=0
+    v29  Imm(3)                                           -> x0
+    terminator Return(v29)   (exit_acc=v29)
+  block 4  start_pc=0
+    v30  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v31  FpCast { kind=F32ToF64, value=v30 }              -> d0
+    v32  Imm(0)                                           -> x0
+    v33  LoadLocal { off=-5, kind=F64 }                   -> d1
+    v34  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v35  Binop { op=fsub, lhs=v31, rhs=v34 }              -> d1
+    v36  Imm(0)                                           -> x0
+    v37  LoadLocal { off=-6, kind=F64 }                   -> d0
+    v38  Imm(0)                                           -> x0
+    v39  FpCast { kind=IntToFp, value=v38 }               -> d0
+    v40  Binop { op=flt, lhs=v35, rhs=v39 }               -> x0
+    terminator Bz { cond=v40, target=b9, fall=b5 }   (exit_acc=v40)
+  block 5  start_pc=0
+    v41  LoadLocal { off=-6, kind=F64 }                   -> d0
+    v42  Fneg(v35)                                        -> d1
+    v43  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v42)
+  block 6  start_pc=0
+    v44  Phi { incoming=[b9:v35, b5:v42], kind=F64 }      -> d1
+    v45  LoadLocal { off=-6, kind=F64 }                   -> d0
+    v46  Imm(4472406533629990549)                         -> x0
+    v47  Binop { op=flt, lhs=v44, rhs=v46 }               -> x0
+    terminator Bz { cond=v47, target=b8, fall=b7 }   (exit_acc=v47)
+  block 7  start_pc=0
+    v48  Imm(4)                                           -> x0
+    terminator Return(v48)   (exit_acc=v48)
+  block 8  start_pc=0
+    v49  Imm(0)                                           -> x0
+    terminator Return(v49)   (exit_acc=v49)
+  block 9  start_pc=0
+    terminator Jmp(b6)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=assign_double_to_float_narrows
+fn ent_pc=3 n_params=0 variadic=false locals=4
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(4607182418800017408)                         -> x0
+    v2   Imm(4613937818241073152)                         -> x1
+    v3   Binop { op=fdiv, lhs=v1, rhs=v2 }                -> d0
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=-1, kind=F64 }                   -> d1
+    v6   FpCast { kind=F64ToF32, value=v3 }               -> d0 [f32]
+    v7   LocalAddr(-2)                                    -> x0
+    v8   Store { addr=v7, value=v6, kind=F32 }            -> -
+    v9   Imm(4599676419595205767)                         -> x0
+    v10  FpCast { kind=F64ToF32, value=v9 }               -> d0 [f32]
+    v11  LocalAddr(-3)                                    -> x0
+    v12  Store { addr=v11, value=v10, kind=F32 }          -> -
+    v13  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v14  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
+    v15  Binop { op=fsub, lhs=v13, rhs=v14 }              -> d0 [f32]
+    v16  LocalAddr(-4)                                    -> x0
+    v17  Store { addr=v16, value=v15, kind=F32 }          -> -
+    v18  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v19  Imm(0)                                           -> x0
+    v20  FpCast { kind=IntToFp, value=v19 }               -> d1
+    v21  FpCast { kind=F64ToF32, value=v20 }              -> d1 [f32]
+    v22  Binop { op=flt, lhs=v18, rhs=v21 }               -> x0
+    terminator Bz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)
+  block 1  start_pc=0
+    v23  LocalAddr(-4)                                    -> x0
+    v24  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v25  Fneg(v24)                                        -> d0 [f32]
+    v26  Store { addr=v23, value=v25, kind=F32 }          -> -
+    terminator Jmp(b2)   (exit_acc=v26)
+  block 2  start_pc=0
+    v27  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
+    v28  Imm(4502148214488346440)                         -> x0
+    v29  FpCast { kind=F32ToF64, value=v27 }              -> d0
+    v30  Binop { op=fgt, lhs=v29, rhs=v28 }               -> x0
+    terminator Bz { cond=v30, target=b4, fall=b3 }   (exit_acc=v30)
+  block 3  start_pc=0
+    v31  Imm(5)                                           -> x0
+    terminator Return(v31)   (exit_acc=v31)
+  block 4  start_pc=0
+    v32  Imm(0)                                           -> x0
+    terminator Return(v32)   (exit_acc=v32)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=main
+fn ent_pc=4 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Call { target_pc=0, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v2   Imm(0)                                           -> x1
+    v3   BinopI { op=ne, lhs=v1, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+  block 1  start_pc=0
+    v4   Extend { value=v1, kind=I32 }                    -> x0
+    terminator Return(v4)   (exit_acc=v4)
+  block 2  start_pc=0
+    v5   Call { target_pc=1, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v6   Imm(0)                                           -> x1
+    v7   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v7, target=b4, fall=b3 }   (exit_acc=v7)
+  block 3  start_pc=0
+    v8   Extend { value=v5, kind=I32 }                    -> x0
+    terminator Return(v8)   (exit_acc=v8)
+  block 4  start_pc=0
+    v9   Call { target_pc=2, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v10  Imm(0)                                           -> x1
+    v11  BinopI { op=ne, lhs=v9, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v11, target=b6, fall=b5 }   (exit_acc=v11)
+  block 5  start_pc=0
+    v12  Extend { value=v9, kind=I32 }                    -> x0
+    terminator Return(v12)   (exit_acc=v12)
+  block 6  start_pc=0
+    v13  Call { target_pc=3, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v14  Imm(0)                                           -> x1
+    v15  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v15, target=b8, fall=b7 }   (exit_acc=v15)
+  block 7  start_pc=0
+    v16  Extend { value=v13, kind=I32 }                   -> x0
+    terminator Return(v16)   (exit_acc=v16)
+  block 8  start_pc=0
+    v17  Imm(0)                                           -> x0
+    terminator Return(v17)   (exit_acc=v17)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)

@@ -144,6 +144,21 @@ pub(super) struct Allocation {
     /// coalescing pre-passes (copy / phi congruence / call-arg /
     /// return) layered on in subsequent iterations.
     pub hints: Vec<Option<u8>>,
+    /// Per-value single-precision marker copied from
+    /// [`FunctionSsa::f32_values`]. `true` when the value's FP register
+    /// holds an `f32` pattern (C99 6.3.1.8). The per-arch emit consults
+    /// this to pick the single- vs double-precision FP encoder and to
+    /// reinterpret an f32-typed `Imm` through a 32-bit `fmov` / `movd`.
+    /// Empty (all-false) for SSA built outside the walker.
+    pub f32_values: Vec<bool>,
+}
+
+impl Allocation {
+    /// True when value `v` holds a single-precision `f32` pattern.
+    /// Out-of-range / unmarked values are double-precision.
+    pub(super) fn is_f32(&self, v: ValueId) -> bool {
+        self.f32_values.get(v as usize).copied().unwrap_or(false)
+    }
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -259,6 +274,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
             hints,
+            f32_values: Vec::new(),
         };
     }
 
@@ -489,6 +505,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         sxtw_k,
         branch_fused,
         hints,
+        f32_values: func.f32_values.clone(),
     }
 }
 
@@ -887,6 +904,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
             | Inst::Fneg(_)
+            | Inst::Fma { .. }
             | Inst::FpCast { .. }
     )
 }
@@ -926,9 +944,32 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         }
         Inst::BinopI { lhs, .. } => f(*lhs),
         Inst::Fneg(v) => f(*v),
+        Inst::Fma { a, b, c, .. } => {
+            f(*a);
+            f(*b);
+            f(*c);
+        }
         Inst::Extend { value, .. } => f(*value),
         Inst::FpCast { value, .. } => f(*value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Intrinsic { kind, args } => {
+            // The VaArg intrinsic's second operand is a compile-time
+            // packed type descriptor (`(kind << 16) | size`); the
+            // per-target emit reads it from the constant `Inst::Imm`
+            // directly (System V routes the gp / fp save area by it; the
+            // cursor / stack targets ignore it). It is never a runtime
+            // value, so it must not contribute a use that would force the
+            // descriptor `Inst::Imm` to be materialised into a register.
+            // Skipping it keeps the descriptor dead (DCE'd at emit time)
+            // and the stack-based targets byte-identical.
+            let is_va_arg = *kind == crate::c5::op::Intrinsic::VaArg as i64;
+            for (i, &a) in args.iter().enumerate() {
+                if is_va_arg && i == 1 {
+                    continue;
+                }
+                f(a);
+            }
+        }
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
             for &a in args {
                 f(a);
             }
@@ -1012,10 +1053,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         Fneg(_) => ResultKind::Fp,
+        Fma { .. } => ResultKind::Fp,
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt => ResultKind::Int,
-            FpCastKind::IntToFp => ResultKind::Fp,
+            FpCastKind::IntToFp | FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),
@@ -1270,8 +1312,8 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // destination. The threshold per target is the count of
     // integer arg registers it can pull from before that happens;
     // below that count, firing the hint can perturb a downstream
-    // call's ParamRef placement through a libc bridge
-    // (c5_vsnprintf et al).
+    // call's ParamRef placement through a libc v* bridge
+    // (vsnprintf et al).
     let (int_args, threshold): (&[u8], usize) = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             (&[0, 1, 2, 3, 4, 5, 6, 7], 5)
@@ -1279,16 +1321,36 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
         Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
         Target::WindowsX64 => (&[1, 2, 8, 9], 4),
     };
-    if func.n_params < threshold {
+    // The hint must target each integer parameter's own incoming
+    // register, which is its rank within the integer argument bank, not
+    // its declared position: a floating-point parameter consumes an FP
+    // argument register and does not advance the integer bank (System V
+    // AMD64 3.2.3 / AAPCS64 6.4.1). Hinting by declared position would
+    // point a later integer ParamRef at the wrong arg register -- one an
+    // earlier integer parameter actually arrives in -- reintroducing the
+    // very cross-clobber this pass exists to remove. The threshold counts
+    // integer parameters for the same reason.
+    let int_param_count = (0..func.n_params)
+        .filter(|&i| (func.param_fp_mask & (1u32 << i)) == 0)
+        .count();
+    if int_param_count < threshold {
         return;
     }
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&r) = int_args.get(*i as usize)
-            && idx < hints.len()
-            && hints[idx].is_none()
-        {
-            hints[idx] = Some(r);
+        if let Inst::ParamRef { idx: i, .. } = inst {
+            let pi = *i as usize;
+            if (func.param_fp_mask & (1u32 << pi)) != 0 {
+                continue;
+            }
+            let int_rank = (0..pi)
+                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                .count();
+            if let Some(&r) = int_args.get(int_rank)
+                && idx < hints.len()
+                && hints[idx].is_none()
+            {
+                hints[idx] = Some(r);
+            }
         }
     }
 }
@@ -1945,7 +2007,7 @@ int main(void) { return 0; }
         // across that call (defined in mid, used in exit), but the call
         // pc is below v's definition pc.
         b.switch_to(body);
-        let _ = b.call(0, alloc::vec::Vec::new(), false);
+        let _ = b.call(0, alloc::vec::Vec::new(), 0, false, 0);
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
         // above the call pc.
@@ -2163,6 +2225,8 @@ int main(void) { return 0; }
             is_variadic: false,
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
+            f32_values: alloc::vec![false; insts.len()],
+            param_fp_mask: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

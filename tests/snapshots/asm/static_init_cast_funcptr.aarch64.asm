@@ -88,7 +88,7 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	adrp	x20, <page>
-               	add	x20, x20, #0x158
+               	add	x20, x20, #0x138
                	add	x0, x20, #0x8
                	ldr	x0, [x0]
                	mov	x1, #0x15               // =21
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	add	x0, x20, #0x10
                	ldr	x0, [x0]
                	adrp	x1, <page>
-               	add	x1, x1, #0x198
+               	add	x1, x1, #0x178
                	mov	x9, x0
                	str	x1, [sp, #-0x10]!
                	ldr	x0, [sp]
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	add	x0, x20, #0x28
                	ldr	x0, [x0]
                	adrp	x1, <page>
-               	add	x1, x1, #0x19c
+               	add	x1, x1, #0x17c
                	mov	x9, x0
                	str	x1, [sp, #-0x10]!
                	ldr	x0, [sp]
@@ -195,7 +195,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x1a0
+               	add	x0, x0, #0x180
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0

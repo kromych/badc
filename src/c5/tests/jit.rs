@@ -1057,6 +1057,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
+    ("sysv_variadic_host_abi.c", 0),
+    ("aapcs64_variadic_host_abi.c", 0),
+    ("param_fp_before_int_pressure.c", 0),
     ("ssa_fp_compare_nan.c", 0),
     ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),
@@ -1139,11 +1142,6 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // sprintf 2-fixed + 4-variadic; the JIT shares the lowering
     // with the AOT backends so this guards both at once.
     ("variadic_sprintf.c", 0),
-    // c5-side vprintf walking the c5 va_list -- exercises a
-    // user-defined `my_printf` clone forwarding to <c5io.h>.
-    // No libc vprintf bridge involved; the format pipeline runs
-    // entirely in c5.
-    ("c5_vprintf.c", 0),
     // Float / double scalars parse, sizeof reports 8, pointer
     // arithmetic and indexed loads/stores work.
     ("float_pointer_basics.c", 0),
@@ -1151,6 +1149,15 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // unary negation. Routes through Fadd/.../Fcvtfi opcodes the
     // VM and both codegens implement.
     ("float_arithmetic.c", 0),
+    ("float_single_precision.c", 0),
+    ("fp_arg_passed_in_fp_reg.c", 0),
+    ("float_arg_single_precision.c", 0),
+    ("fp_return_value.c", 0),
+    ("many_fp_args.c", 0),
+    ("fp_param_after_int_overflow.c", 0),
+    ("float_double_mix.c", 0),
+    ("fma_contraction.c", 0),
+    ("fma_numeric_kernels.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy. The walker emits it

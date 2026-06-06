@@ -281,9 +281,103 @@ impl Compiler {
                     let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
                     let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
                     let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
+                    let fma_id = crate::c5::op::Intrinsic::Fma as i64;
+                    let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
-                    if intrinsic_id == longjmp_id
+                    if intrinsic_id == fma_id || intrinsic_id == fmaf_id {
+                        // fma(x, y, z) / fmaf(x, y, z) -- C99 7.12.13.1.
+                        // Three FP arguments, each cast to the result
+                        // precision so the fused node sees uniform-width
+                        // operands (6.3.1.4 / 6.3.1.5). The walker lowers
+                        // the call to a single `Inst::Fma`.
+                        let elem_ty = if intrinsic_id == fmaf_id {
+                            Ty::Float as i64
+                        } else {
+                            Ty::Double as i64
+                        };
+                        let mut count = 0;
+                        loop {
+                            self.expr(Token::Assign as i64)?;
+                            if let Some(child) = self.ast_acc {
+                                let pos = self.ast_src_pos();
+                                let cast_id = self.ast.push_expr(
+                                    super::super::ast::Expr::Cast {
+                                        child,
+                                        to_ty: elem_ty,
+                                    },
+                                    pos,
+                                );
+                                ast_intrinsic_args.push(cast_id);
+                            }
+                            count += 1;
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                                continue;
+                            }
+                            break;
+                        }
+                        if count != 3 {
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)"))
+                            );
+                        }
+                    } else if intrinsic_id == va_arg_id {
+                        // `__builtin_va_arg(self, T)` -- self is the
+                        // va_list-storage address expression, T is the
+                        // argument's type-name. The first operand is
+                        // pushed; the second is the packed descriptor
+                        // `(kind << 16) | size` (kind 0 = integer /
+                        // pointer, 1 = floating) the per-target codegen
+                        // reads from the accumulator. The System V x86_64
+                        // ABI (3.5.7) routes the read to the gp or fp
+                        // save area by `kind`; the cursor targets ignore
+                        // the descriptor.
+                        self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
+                        if self.lex.tk != ',' {
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (ap, type)"))
+                            );
+                        }
+                        self.next()?;
+                        if !self.lex_is_type_start() {
+                            return Err(self.compile_err(format!(
+                                "intrinsic `{fn_name}` second operand must be a type name"
+                            )));
+                        }
+                        // Parse the type-name with optional pointer
+                        // decoration (C99 6.7.6 abstract declarator), the
+                        // same machinery `sizeof(<type>)` uses. A pointer
+                        // type collapses to an 8-byte integer-class slot.
+                        let mut arg_ty = self.parse_decl_base_type()?;
+                        let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+                        let mut is_pointer = false;
+                        while self.lex.tk == Token::MulOp {
+                            self.next()?;
+                            arg_ty += Ty::Ptr as i64;
+                            is_pointer = true;
+                            while self.lex.tk == Token::TypeQual {
+                                self.next()?;
+                            }
+                        }
+                        let size = self.size_of_type(arg_ty) as i64;
+                        // C99 6.5.2.2p6: a floating-point argument that
+                        // survives default argument promotions is `double`
+                        // and rides the fp save area; a pointer or integer
+                        // rides the gp save area. `kind` 1 = floating,
+                        // 0 = integer / pointer.
+                        let kind = if !is_pointer && is_floating_scalar(arg_ty) {
+                            1i64
+                        } else {
+                            0i64
+                        };
+                        let descriptor = (kind << 16) | (size & 0xffff);
+                        let desc_id = self.ast_emit_int_lit(descriptor, Ty::Int as i64);
+                        ast_intrinsic_args.push(desc_id);
+                    } else if intrinsic_id == longjmp_id
                         || intrinsic_id == va_start_id
                         || intrinsic_id == va_copy_id
                     {
@@ -365,6 +459,10 @@ impl Compiler {
                         // slot. The <stdarg.h> macro dereferences
                         // as the requested type.
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    } else if intrinsic_id == fma_id {
+                        self.ty = Ty::Double as i64;
+                    } else if intrinsic_id == fmaf_id {
+                        self.ty = Ty::Float as i64;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }

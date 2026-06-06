@@ -55,6 +55,12 @@ hashbrown = { version = "0.17", default-features = false, features = ["default-h
 # and whose iteration order is never relied on. Default-features off
 # matches the rest of the dep set.
 rustc-hash = { version = "2", default-features = false }
+# `libm` supplies the software `fma` / `fmaf` the SSA VM uses to
+# evaluate `Inst::Fma` with a single rounding, matching the native
+# fused multiply-add instruction on every target. `f64::mul_add` would
+# round identically but is `std`-only; routing through `libm` keeps the
+# `--no-default-features` (no_std) build working unchanged.
+libm = { version = "0.2", default-features = false }
 
 [lints.rust]
 # Promote the default-warn unused lints to deny so dead state can't

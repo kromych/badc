@@ -928,6 +928,14 @@ def main() -> int:
     ]
     for m in profile["target_macros"]:
         config_lines.append(f"#define {m} 1")
+    # tcc.h sources `ssize_t` from <unistd.h> (skipped under `_WIN32`)
+    # or `#define ssize_t intptr_t` (only under `_MSC_VER`). badc's
+    # Windows targets define `_WIN32` but not `_MSC_VER`, so neither
+    # path fires; provide the type here for the PE targets, mirroring
+    # tcc's own MSVC fallback. `long long` is pointer-width on Win64
+    # and Windows arm64 (LLP64).
+    if "TCC_TARGET_PE" in profile["target_macros"]:
+        config_lines.append("#define ssize_t long long")
     config_lines.append("#define CONFIG_TCC_PREDEFS 0")
     config_lines.append("#define CONFIG_TCC_SEMLOCK 0")
     config_lines.append("#define CONFIG_TCC_BACKTRACE 0")

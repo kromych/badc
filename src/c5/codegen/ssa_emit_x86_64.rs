@@ -358,6 +358,39 @@ fn param_home_clobber_set(
     if n_reg == 0 {
         return mask;
     }
+    // Floating-point parameters are never placed by the integer entry
+    // batch, so the per-inst `ParamRef` path always lowers them and the
+    // same clobber hazard applies within the FP bank: an FP parameter
+    // whose incoming xmm an earlier-emitted FP `ParamRef`'s destination
+    // overwrites must read its prologue-spilled home cell. This pass is
+    // independent of the integer `homes_distinct` gate below.
+    {
+        let mut written_fp: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
+        for (vid, inst) in func.insts.iter().enumerate() {
+            let Inst::ParamRef { idx, kind } = inst else {
+                continue;
+            };
+            if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            let i = *idx as usize;
+            if i >= n_reg {
+                continue;
+            }
+            if super::ssa_emit_common::is_dead_pure(inst, vid as super::super::ir::ValueId, alloc) {
+                continue;
+            }
+            let Some(super::ArgPlacement::FpReg(arg_reg)) = param_plan.get(i).copied() else {
+                continue;
+            };
+            if written_fp.contains(&arg_reg) {
+                mask[i] = true;
+            }
+            if let Some(Place::FpReg(r)) = alloc.places.get(vid).copied() {
+                written_fp.insert(r);
+            }
+        }
+    }
     // Mirror the prebatch eligibility and the `homes_distinct` gate in
     // `emit_function`: the entry parallel copy batches every register
     // parameter whose home is an integer register or a spill slot, and
@@ -1980,6 +2013,34 @@ fn emit_inst(
             // the walker seeded. A scalar copy preserves the relevant
             // bits for either width.
             if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                // An at-risk FP parameter (its incoming xmm overwritten by
+                // an earlier FP `ParamRef`'s destination, per
+                // `param_home_clobber_set`) reads its prologue-spilled c5
+                // cdecl home cell instead of the clobbered register. The
+                // prologue stored the cell from the pristine argument
+                // register before any body instruction ran.
+                if param_from_home.get(i).copied().unwrap_or(false) {
+                    let home_off = c5_slot_to_fp_offset(*idx as i64 + 2) as i32;
+                    let load = |code: &mut Vec<u8>, r: Reg| {
+                        if matches!(kind, LoadKind::F32) {
+                            emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
+                        } else {
+                            emit_movsd_xmm_mem(code, r, Reg::RBP, home_off);
+                        }
+                    };
+                    match dst {
+                        Place::FpReg(r) => load(code, Reg(r)),
+                        Place::Spill(_) => {
+                            load(code, SCRATCH_XMM14);
+                            fp_spill_dst_to_slot(code, dst, SCRATCH_XMM14, frame);
+                        }
+                        _ => {
+                            bail_msg("ParamRef: FP param dst not fp reg / spill");
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 let Some(super::ArgPlacement::FpReg(x)) = param_plan.get(i).copied() else {
                     bail_msg("ParamRef: FP param not in an FP argument register");
                     return false;

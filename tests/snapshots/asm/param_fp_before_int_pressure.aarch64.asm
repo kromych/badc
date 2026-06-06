@@ -1,0 +1,83 @@
+
+param_fp_before_int_pressure.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	sxtw	x0, w0
+               	sxtw	x1, w1
+               	sxtw	x2, w2
+               	sxtw	x4, w4
+               	sxtw	x5, w5
+               	sub	x6, x29, #0x8
+               	str	s0, [x6]
+               	sub	x6, x29, #0x10
+               	fmov	d0, d1
+               	str	s0, [x6]
+               	mov	x17, #0x86a0            // =34464
+               	movk	x17, #0x1, lsl #16
+               	mul	x0, x0, x17
+               	sxtw	x0, w0
+               	mov	x17, #0x2710            // =10000
+               	mul	x1, x1, x17
+               	sxtw	x1, w1
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	mov	x17, #0x3e8             // =1000
+               	mul	x1, x2, x17
+               	sxtw	x1, w1
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	ldrsw	x1, [x3]
+               	mov	x17, #0x64              // =100
+               	mul	x1, x1, x17
+               	sxtw	x1, w1
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	mov	x17, #0xa               // =10
+               	mul	x1, x4, x17
+               	sxtw	x1, w1
+               	add	x0, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x0, x5
+               	sxtw	x0, w0
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
+               	mov	x0, #0x7                // =7
+               	stur	w0, [x29, #-0x8]
+               	mov	x0, #0x0                // =0
+               	fmov	d16, x0
+               	fcvt	s0, d16
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	sub	x3, x29, #0x8
+               	mov	x4, #0x4                // =4
+               	mov	x5, #0x5                // =5
+               	fmov	d1, d0
+               	bl	<addr>
+               	mov	x17, #0xe361            // =58209
+               	movk	x17, #0x1, lsl #16
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret

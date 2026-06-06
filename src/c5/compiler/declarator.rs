@@ -156,7 +156,17 @@ impl Compiler {
             loop {
                 if self.lex.tk == '(' {
                     self.next()?;
-                    self.skip_balanced_parens_after_open()?;
+                    // Capture the pointee signature's prototype on the
+                    // first function-signature paren so a fn-pointer
+                    // declarator records its callee's variadic-ness and
+                    // named-parameter count. Subsequent signatures
+                    // (function-returning-fp shapes) keep skipping.
+                    if !saw_fn_signature {
+                        let (fixed, variadic) = self.skip_balanced_parens_capturing_proto()?;
+                        self.pending.typedef_fn_proto = Some((fixed, variadic));
+                    } else {
+                        self.skip_balanced_parens_after_open()?;
+                    }
                     saw_fn_signature = true;
                 } else if self.lex.tk == Token::Brak {
                     self.next()?;

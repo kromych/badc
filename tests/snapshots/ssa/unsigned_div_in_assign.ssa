@@ -34,7 +34,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v2   ImmData(8)                                       -> x1
     v3   Mcpy { dst=v1, src=v2, size=8 }                  -> x0
     v4   LocalAddr(-1)                                    -> x7
-    v5   Call { target_pc=0, args=[v4], fp_return=false } -> x0
+    v5   Call { target_pc=0, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v6   BinopI { op=eq, lhs=v5, rhs_imm=1002 }           -> x0
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0

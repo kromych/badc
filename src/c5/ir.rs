@@ -138,11 +138,29 @@ pub(crate) enum Inst {
     Call {
         target_pc: usize,
         args: Vec<ValueId>,
+        /// Count of named (fixed) parameters the callee declares.
+        /// For a variadic callee this is the prototype's
+        /// pre-ellipsis parameter count; `args[fixed_args..]` are
+        /// the variadic arguments. For a non-variadic callee it
+        /// equals `args.len()`. The per-arch emit feeds it to
+        /// `plan_call_args` so a host variadic ABI (macOS arm64:
+        /// AAPCS64 6.4.1 for the named args, all-stack at 8-byte
+        /// stride for the variadic tail) places the variadic
+        /// arguments correctly.
+        fixed_args: usize,
         /// True when the callee's return type is a floating-point
         /// scalar (C99 6.2.5p10). The return value lives in the FP
         /// return register (xmm0 / d0), so the call's result is
         /// FP-classed and read from there.
         fp_return: bool,
+        /// Per-argument FP-ness mask: bit `i` set when argument `i`
+        /// is a floating-point scalar passed in an FP argument
+        /// register (System V AMD64 3.2.3 / AAPCS64 6.4.1). Derived
+        /// from the argument's C type, not its register placement: a
+        /// floating-point constant rides an integer register as its
+        /// `Imm` bit pattern, so the placement alone cannot classify
+        /// it. The per-arch emit feeds this to `plan_call_args`.
+        fp_arg_mask: u32,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -150,8 +168,20 @@ pub(crate) enum Inst {
     CallIndirect {
         target: ValueId,
         args: Vec<ValueId>,
+        /// True when the pointed-to function's prototype is variadic.
+        /// The walker reads it off the callee fn-pointer's declared
+        /// type; an unprototyped or non-statically-typed callee
+        /// defaults to false. Drives the per-arch emit's choice of
+        /// the host variadic ABI vs the c5 cdecl stack-push shape.
+        callee_variadic: bool,
+        /// Named (fixed) parameter count of the pointed-to function;
+        /// see [`Self::Call::fixed_args`]. Equals `args.len()` unless
+        /// `callee_variadic`.
+        fixed_args: usize,
         /// See [`Self::Call::fp_return`].
         fp_return: bool,
+        /// See [`Self::Call::fp_arg_mask`].
+        fp_arg_mask: u32,
     },
     /// External library call.
     CallExt {
@@ -462,4 +492,15 @@ pub(crate) struct FunctionSsa {
     /// f32-typed `Imm` constant through a 32-bit `fmov` / `movd`.
     /// Empty (treated as all-false) for SSA built outside the walker.
     pub f32_values: Vec<bool>,
+    /// Per-parameter floating-point mask: bit `i` set when declared
+    /// parameter `i` is a floating-point scalar passed in an FP
+    /// argument register (C99 6.2.5p10). The callee resolves each
+    /// parameter's incoming register by running the same
+    /// `plan_call_args` the caller uses, so an interleaved int / FP
+    /// parameter list assigns int and FP registers from independent
+    /// banks rather than by absolute parameter index. Only the low 32
+    /// parameters are tracked; parameters past the argument registers
+    /// ride the stack where the class no longer selects a register.
+    /// Zero for SSA built outside the walker.
+    pub param_fp_mask: u32,
 }

@@ -1,12 +1,9 @@
 // C99 7.15.1: `vsnprintf` reads variadic arguments through a
-// `va_list`. c5's `va_list` is a `long *` walking 16-byte c5
-// stack slots; the platform's libc va_list has a different
-// shape, so passing c5's `va_list` to libc's `vsnprintf` would
-// have the formatter walk the wrong memory. <stdio.h> redirects
-// `vsnprintf` (and the rest of the `v*printf` family) to
-// `c5_vsnprintf` in <c5io.h>, which walks the c5-shaped cursor
-// directly. The fixture forwards a captured `va_list` through
-// `vsnprintf` and asserts the formatted bytes match the input.
+// `va_list`. c5's `va_list` is the host platform's own
+// representation, so a c5 `va_list` forwarded to libc's `vsnprintf`
+// is walked correctly by libc's formatter. The fixture captures a
+// `va_list` in a variadic c5 function, forwards it through libc
+// `vsnprintf`, and asserts the formatted bytes match the input.
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>

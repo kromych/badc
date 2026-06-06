@@ -12,8 +12,7 @@ Each lane:
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release --lib`.
-  4. Run all four gating demos
-     (sqlite3 / lua / miniz / tweetnacl smoke).
+  4. Run demos sqlite3 / lua / miniz / stb / tweetnacl smoke).
 
 Usage (one `--box` flag per remote lane):
 

@@ -190,14 +190,11 @@ fn libc_address_in_static_init() {
 }
 
 // C99 7.15.1 requires `vfprintf` / `vsnprintf` to format with
-// arguments drawn from a `va_list`. c5's `va_list` is `long *`
-// walking 16-byte c5 stack slots; the platform's libc va_list
-// has a different shape, so forwarding c5's `va_list` to libc's
-// `vfprintf` would have the formatter walk the wrong memory.
-// The stdio.h prelude redirects `vfprintf` / `vprintf` /
-// `vsnprintf` to the c5-side `c5_vsnprintf` family in <c5io.h>,
-// which walks the c5-shaped cursor directly. This fixture
-// exercises that redirect end-to-end.
+// arguments drawn from a `va_list`. c5's `va_list` is now the host
+// platform's own representation, so a c5 `va_list` forwarded to libc's
+// `vsnprintf` is walked correctly by libc's formatter. This fixture
+// exercises that forward end-to-end: a variadic c5 function runs
+// `va_start` and hands the list to libc `vsnprintf`.
 #[test]
 fn libc_vfprintf_with_c5_va_list() {
     let exit = jit_fixture_exit("deferred_libc_vfprintf_va_list.c");

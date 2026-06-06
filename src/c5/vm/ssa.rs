@@ -1382,11 +1382,16 @@ fn run_intrinsic(
             store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
         }
         Intrinsic::VaArg => {
-            // `__builtin_va_arg(&ap)` returns the cursor's current
-            // value (the address of the next variadic slot) and
-            // advances `*ap` by 8 -- the c5 stack-slot width. The
-            // caller emits the matching `Inst::Load` to materialise
-            // the value.
+            // `__builtin_va_arg(self, descriptor)` returns the cursor's
+            // current value (the address of the next variadic slot) and
+            // advances `*self` by 8 -- the c5 stack-slot width. The
+            // caller emits the matching `Inst::Load` to materialise the
+            // value. `args[1]` is the packed `(kind << 16) | size` type
+            // descriptor; the flat single-region VM model walks one
+            // cursor regardless of kind, so it is ignored here. The VM
+            // interprets programs compiled for the host target, whose
+            // `<stdarg.h>` selects the cursor `va_list` for every host
+            // that runs this interpreter.
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;

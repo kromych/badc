@@ -945,7 +945,25 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         Inst::Fneg(v) => f(*v),
         Inst::Extend { value, .. } => f(*value),
         Inst::FpCast { value, .. } => f(*value),
-        Inst::Call { args, .. } | Inst::CallExt { args, .. } | Inst::Intrinsic { args, .. } => {
+        Inst::Intrinsic { kind, args } => {
+            // The VaArg intrinsic's second operand is a compile-time
+            // packed type descriptor (`(kind << 16) | size`); the
+            // per-target emit reads it from the constant `Inst::Imm`
+            // directly (System V routes the gp / fp save area by it; the
+            // cursor / stack targets ignore it). It is never a runtime
+            // value, so it must not contribute a use that would force the
+            // descriptor `Inst::Imm` to be materialised into a register.
+            // Skipping it keeps the descriptor dead (DCE'd at emit time)
+            // and the stack-based targets byte-identical.
+            let is_va_arg = *kind == crate::c5::op::Intrinsic::VaArg as i64;
+            for (i, &a) in args.iter().enumerate() {
+                if is_va_arg && i == 1 {
+                    continue;
+                }
+                f(a);
+            }
+        }
+        Inst::Call { args, .. } | Inst::CallExt { args, .. } => {
             for &a in args {
                 f(a);
             }
@@ -1287,8 +1305,8 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // destination. The threshold per target is the count of
     // integer arg registers it can pull from before that happens;
     // below that count, firing the hint can perturb a downstream
-    // call's ParamRef placement through a libc bridge
-    // (c5_vsnprintf et al).
+    // call's ParamRef placement through a libc v* bridge
+    // (vsnprintf et al).
     let (int_args, threshold): (&[u8], usize) = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             (&[0, 1, 2, 3, 4, 5, 6, 7], 5)
@@ -1296,16 +1314,36 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
         Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
         Target::WindowsX64 => (&[1, 2, 8, 9], 4),
     };
-    if func.n_params < threshold {
+    // The hint must target each integer parameter's own incoming
+    // register, which is its rank within the integer argument bank, not
+    // its declared position: a floating-point parameter consumes an FP
+    // argument register and does not advance the integer bank (System V
+    // AMD64 3.2.3 / AAPCS64 6.4.1). Hinting by declared position would
+    // point a later integer ParamRef at the wrong arg register -- one an
+    // earlier integer parameter actually arrives in -- reintroducing the
+    // very cross-clobber this pass exists to remove. The threshold counts
+    // integer parameters for the same reason.
+    let int_param_count = (0..func.n_params)
+        .filter(|&i| (func.param_fp_mask & (1u32 << i)) == 0)
+        .count();
+    if int_param_count < threshold {
         return;
     }
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&r) = int_args.get(*i as usize)
-            && idx < hints.len()
-            && hints[idx].is_none()
-        {
-            hints[idx] = Some(r);
+        if let Inst::ParamRef { idx: i, .. } = inst {
+            let pi = *i as usize;
+            if (func.param_fp_mask & (1u32 << pi)) != 0 {
+                continue;
+            }
+            let int_rank = (0..pi)
+                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                .count();
+            if let Some(&r) = int_args.get(int_rank)
+                && idx < hints.len()
+                && hints[idx].is_none()
+            {
+                hints[idx] = Some(r);
+            }
         }
     }
 }
@@ -1962,7 +2000,7 @@ int main(void) { return 0; }
         // across that call (defined in mid, used in exit), but the call
         // pc is below v's definition pc.
         b.switch_to(body);
-        let _ = b.call(0, alloc::vec::Vec::new(), false);
+        let _ = b.call(0, alloc::vec::Vec::new(), 0, false, 0);
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
         // above the call pc.
@@ -2181,6 +2219,7 @@ int main(void) { return 0; }
             is_inline: false,
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
+            param_fp_mask: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

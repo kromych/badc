@@ -15,8 +15,7 @@
 //! reaps the process, so any buffered output is committed
 //! before the program leaves. Future entries: a C-side
 //! `_start` (pending `__builtin_argc` / `__builtin_argv`
-//! intrinsics), the c5io / variadic plumbing inlined into
-//! every TU through `c5io.h`.
+//! intrinsics).
 
 /// All bundled runtime sources, as a `(name, body)` slice.
 pub fn embedded_runtime() -> &'static [(&'static str, &'static str)] {

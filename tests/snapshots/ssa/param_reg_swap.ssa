@@ -304,7 +304,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v28  LocalAddr(-3)                                    -> x6
     v29  LocalAddr(-7)                                    -> x2
     v30  ImmData(8)                                       -> x1
-    v31  Call { target_pc=1, args=[v27, v28, v29, v30], fp_return=false } -> x0
+    v31  Call { target_pc=1, args=[v27, v28, v29, v30], fixed_args=4, fp_return=false, fp_arg_mask=0x0 } -> x0
     v32  LocalAddr(-1)                                    -> x0
     v33  Imm(0)                                           -> x1
     v34  Load { addr=v32, kind=U8 }                       -> x0

@@ -8,7 +8,7 @@ Disassembly of section .text:
                	add	x1, sp, #0x8
                	bl	<addr>
                	adrp	x16, <page>
-               	ldr	x16, [x16, #0x100]
+               	ldr	x16, [x16, #0xf0]
                	blr	x16
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0x110
+               	add	x21, x21, #0x100
                	lsl	x0, x20, #3
                	add	x0, x21, x0
                	ldr	x0, [x0]
@@ -36,17 +36,17 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x128
+               	add	x2, x2, #0x118
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x8
                	adrp	x2, <page>
-               	add	x2, x2, #0x12e
+               	add	x2, x2, #0x11e
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	add	x0, x0, #0x10
                	adrp	x2, <page>
-               	add	x2, x2, #0x135
+               	add	x2, x2, #0x125
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	lsl	x2, x20, #3
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x160
+               	add	x0, x0, #0x12c
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x20, <page>
-               	add	x20, x20, #0x164
+               	add	x20, x20, #0x130
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x1, x0
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0x16e
+               	add	x1, x1, #0x13a
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0

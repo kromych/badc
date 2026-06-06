@@ -194,6 +194,14 @@ def synthesize_config_h(target_macros: tuple[str, ...]) -> str:
     ]
     for m in target_macros:
         lines.append(f"#define {m} 1")
+    # tcc.h sources `ssize_t` from <unistd.h> (skipped under `_WIN32`)
+    # or `#define ssize_t intptr_t` (only under `_MSC_VER`). badc's
+    # Windows targets define `_WIN32` but not `_MSC_VER`, so neither
+    # path fires; provide the type here for the PE targets, mirroring
+    # tcc's own MSVC fallback. `long long` is pointer-width on Win64
+    # and Windows arm64 (LLP64).
+    if "TCC_TARGET_PE" in target_macros:
+        lines.append("#define ssize_t long long")
     # CONFIG_TCC_PREDEFS controls whether the predefs header is
     # baked into the binary as a generated string (`tccdefs_.h`,
     # emitted by an upstream support script the demo does not

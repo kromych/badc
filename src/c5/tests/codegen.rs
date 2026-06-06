@@ -396,3 +396,76 @@ fn dead_local_only_function_skips_frame_sub_sp() {
          exactly two instructions under -O on AAPCS64"
     );
 }
+
+/// True when `needle` appears as a contiguous subslice of `hay`.
+fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// Microsoft ARM64 calling convention: a c5-internal variadic call on
+/// Windows-on-ARM64 follows the host variadic ABI rather than the c5
+/// cdecl 16-byte stack push. The callee spills all eight integer
+/// argument registers x0..x7 into a 64-byte gr-save area above the
+/// saved fp/lr, the named parameters and the variadic tail share an
+/// 8-byte cell stride, and `va_arg` walks that stride. This locks the
+/// byte-level signatures on the macOS host (which emits but cannot run
+/// the PE) so a regression that reverts the call site to the 16-byte
+/// push, drops the x7 spill, or restores the 16-byte `va_arg` stride is
+/// caught without a Windows box.
+#[test]
+fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let src = r#"
+        #include <stdarg.h>
+        int vsum(int count, ...) {
+            va_list ap;
+            int total;
+            int i;
+            total = 0;
+            va_start(ap, count);
+            for (i = 0; i < count; i = i + 1)
+                total = total + va_arg(ap, int);
+            va_end(ap);
+            return total;
+        }
+        int main(void) { return vsum(3, 10, 20, 30); }
+    "#;
+    let program = Compiler::with_target(super::with_prelude(src), Target::WindowsAarch64)
+        .compile()
+        .expect("compile");
+    // Byte-exact assertions hold only with the full register file; pin
+    // the allocator to the full pool so the codegen_test pressure knobs
+    // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
+    let bytes =
+        crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+            emit_native_with_options(&program, Target::WindowsAarch64, NativeOptions::default())
+                .expect("emit_native windows-arm64")
+        });
+
+    // Callee gr-save spill of x7: `str x7, [sp, #0x38]` (the eighth and
+    // last 8-byte slot of the 64-byte gr-save area). A non-variadic
+    // callee spills only its named parameters, so x7 is spilled here
+    // only because the variadic callee homes the whole x0..x7 bank.
+    // Encoding f9001fe7 (little-endian e7 1f 00 f9).
+    let str_x7_sp_0x38 = 0xf9001fe7u32.to_le_bytes();
+    assert!(
+        contains_bytes(&bytes, &str_x7_sp_0x38),
+        "win-arm64 variadic callee must spill x7 into the gr-save slot [sp+0x38]"
+    );
+
+    // va_start / va_arg advance the cursor by 8 (the Microsoft ARM64
+    // va_list stride), not 16. The advance is `add x16, x17, #0x8`
+    // (91002230); the Linux aarch64 c5 cdecl path would emit
+    // `add x16, x17, #0x10` (91004230). Assert the 8-byte-stride form is
+    // present and the 16-byte-stride form is absent for this shape.
+    let add_stride8 = 0x91002230u32.to_le_bytes();
+    let add_stride16 = 0x91004230u32.to_le_bytes();
+    assert!(
+        contains_bytes(&bytes, &add_stride8),
+        "win-arm64 va_arg / va_start must advance the cursor by 8"
+    );
+    assert!(
+        !contains_bytes(&bytes, &add_stride16),
+        "win-arm64 must not emit the 16-byte c5 cdecl va_list stride for this function"
+    );
+}

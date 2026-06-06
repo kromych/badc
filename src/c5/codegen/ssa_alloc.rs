@@ -1314,16 +1314,36 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
         Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
         Target::WindowsX64 => (&[1, 2, 8, 9], 4),
     };
-    if func.n_params < threshold {
+    // The hint must target each integer parameter's own incoming
+    // register, which is its rank within the integer argument bank, not
+    // its declared position: a floating-point parameter consumes an FP
+    // argument register and does not advance the integer bank (System V
+    // AMD64 3.2.3 / AAPCS64 6.4.1). Hinting by declared position would
+    // point a later integer ParamRef at the wrong arg register -- one an
+    // earlier integer parameter actually arrives in -- reintroducing the
+    // very cross-clobber this pass exists to remove. The threshold counts
+    // integer parameters for the same reason.
+    let int_param_count = (0..func.n_params)
+        .filter(|&i| (func.param_fp_mask & (1u32 << i)) == 0)
+        .count();
+    if int_param_count < threshold {
         return;
     }
     for (idx, inst) in func.insts.iter().enumerate() {
-        if let Inst::ParamRef { idx: i, .. } = inst
-            && let Some(&r) = int_args.get(*i as usize)
-            && idx < hints.len()
-            && hints[idx].is_none()
-        {
-            hints[idx] = Some(r);
+        if let Inst::ParamRef { idx: i, .. } = inst {
+            let pi = *i as usize;
+            if (func.param_fp_mask & (1u32 << pi)) != 0 {
+                continue;
+            }
+            let int_rank = (0..pi)
+                .filter(|&j| (func.param_fp_mask & (1u32 << j)) == 0)
+                .count();
+            if let Some(&r) = int_args.get(int_rank)
+                && idx < hints.len()
+                && hints[idx].is_none()
+            {
+                hints[idx] = Some(r);
+            }
         }
     }
 }

@@ -365,6 +365,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("ssa_variadic_fp_arg.c", 0),
     ("sysv_variadic_host_abi.c", 0),
     ("aapcs64_variadic_host_abi.c", 0),
+    ("param_fp_before_int_pressure.c", 0),
     ("ssa_fp_compare_nan.c", 0),
     ("ssa_c5_internal_fp_arg.c", 0),
     ("struct_initializers.c", 0),

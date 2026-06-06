@@ -28,23 +28,11 @@ Disassembly of section .text:
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movapd	%xmm0, %xmm7
-               	movapd	%xmm1, %xmm6
-               	movapd	%xmm3, %xmm1
-               	movapd	%xmm4, %xmm0
-               	movapd	%xmm5, %xmm3
-               	movapd	%xmm7, %xmm4
-               	addsd	%xmm6, %xmm4
-               	movapd	%xmm2, %xmm15
-               	movapd	%xmm4, %xmm2
-               	addsd	%xmm15, %xmm2
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm1
-               	addsd	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	addsd	%xmm1, %xmm0
+               	addsd	%xmm2, %xmm0
                	addsd	%xmm3, %xmm0
+               	addsd	%xmm4, %xmm0
+               	addsd	%xmm5, %xmm0
                	movsd	0x70(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
                	movsd	0x80(%rbp,%riz), %xmm1
@@ -146,4 +134,3 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

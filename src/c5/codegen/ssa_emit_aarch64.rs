@@ -209,8 +209,8 @@ const WIN_ARM64_GR_SAVE_BYTES: u32 = 64;
 /// convention). Among the aarch64 targets, Windows is the only one
 /// whose `Abi` sets `variadic_int_only` (macOS sets `variadic_on_stack`,
 /// Linux sets neither), so this gate selects Windows aarch64 alone and
-/// leaves the macOS host-stack variadic path and the Linux c5-internal
-/// 16-byte-stride path byte for byte. Under this ABI the named and
+/// leaves the macOS host-stack variadic path and the Linux aarch64
+/// register-save-area path untouched. Under this ABI the named and
 /// variadic arguments share the integer register bank x0..x7 (a
 /// variadic floating-point argument rides an integer register as its
 /// raw bit pattern) then the incoming stack; the prologue spills x0..x7
@@ -263,23 +263,23 @@ fn aarch64_host_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
 /// (`plan_param_regs` placements, 16-byte cells, FP bank). Non-variadic
 /// callees always do. The macOS arm64 variadic ABI (`variadic_on_stack`)
 /// does too: its named arguments arrive in the int / FP register banks
-/// and only the variadic tail rides the stack. The Windows-on-ARM64
-/// variadic callee (`variadic_int_only`) is excluded here -- it spills
-/// the whole x0..x7 register bank into a dedicated 8-byte-stride gr-save
-/// area in `emit_prologue`, not through this path. A Linux aarch64
-/// variadic callee keeps the c5 cdecl 16-byte stack-push shape and reads
-/// its named arguments off the stack the caller laid down.
+/// and only the variadic tail rides the stack. The other two variadic
+/// hosts read their named parameters elsewhere and are excluded here: the
+/// Windows-on-ARM64 callee (`variadic_int_only`) spills the whole x0..x7
+/// bank into a dedicated 8-byte-stride gr-save area, and the Linux
+/// aarch64 callee (`aarch64_host_variadic`) spills the general / vector
+/// register save area and reads its named parameters from it through the
+/// `local_slot_off` redirect -- both in `emit_prologue`, not this path.
 fn spills_named_params_on_entry(func: &FunctionSsa, abi: super::Abi) -> bool {
     !func.is_variadic || abi.variadic_on_stack
 }
 
 /// Per-parameter incoming-register placement from `plan_call_args`.
-/// Indexed by declared parameter position. Callees that read their
-/// named arguments off the c5 cdecl stack (every variadic callee
-/// except the macOS arm64 variadic ABI) and zero-param callees yield
-/// an empty plan. Independent int / FP argument-register banks
-/// (AAPCS64 6.4.1) mean an FP parameter is placed in d0..d7 without
-/// shifting the integer bank.
+/// Indexed by declared parameter position. A variadic callee that reads
+/// its named parameters outside the generic cell-spill path (Windows
+/// arm64 and Linux aarch64) and zero-param callees yield an empty plan.
+/// Independent int / FP argument-register banks (AAPCS64 6.4.1) mean an
+/// FP parameter is placed in d0..d7 without shifting the integer bank.
 fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<super::ArgPlacement> {
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
@@ -2312,22 +2312,12 @@ fn emit_intrinsic(
                 emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
                 return true;
             }
-            // c5-internal variadic ABI (every target except macOS
-            // arm64): the named arguments are pushed onto the c5 stack
-            // at 16-byte stride adjacent to the variadic tail, so the
-            // next variadic slot is `&last + 16`.
-            let last_place = alloc
-                .places
-                .get(args[1] as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let last_r = match materialize_int(code, last_place, scratch.secondary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
-            emit(code, enc_add_imm(scratch.secondary, last_r, 16));
-            emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
-            true
+            // macOS arm64 (`variadic_on_stack`) and Windows arm64
+            // (`win_arm64_variadic_callee`) return above; Linux aarch64
+            // takes the `aarch64_host_variadic_callee` arm. No other
+            // aarch64 variadic callee shape reaches here.
+            bail_msg("VaStart: variadic callee not matched by a host-ABI branch");
+            false
         }
         I::VaArg if abi.aarch64_host_variadic() => {
             // The AAPCS64 `va_list` is a `__va_list` struct on this
@@ -2340,27 +2330,20 @@ fn emit_intrinsic(
         }
         I::VaArg => {
             // __builtin_va_arg(&ap) returns *ap (the address of the
-            // current variadic slot) and advances *ap to the next.
-            // The stride is a property of the va_list layout the
-            // target builds, not of the current function: the macOS
-            // arm64 variadic ABI lays variadic arguments on the stack
-            // at 8-byte stride (AAPCS64 variadic variant); every other
-            // target uses the c5 cdecl cell stride (16 bytes). A
-            // non-variadic forwarder (e.g. `c5_vsnprintf` taking a
-            // `va_list` argument) must walk the same stride the
-            // variadic caller produced, so this does not depend on
-            // `func.is_variadic`. The macOS arm64 variadic ABI
-            // (`variadic_on_stack`) and the Windows-on-ARM64 variadic
-            // ABI (`variadic_int_only`, Microsoft ARM64 calling
-            // convention) both lay variadic arguments at 8-byte stride
-            // (the stack region, respectively the gr-save area + stack
-            // overflow); the Linux aarch64 c5-internal ABI uses the
-            // 16-byte cdecl cell. args[0] = &ap.
-            let va_stride: u32 = if abi.variadic_on_stack || abi.variadic_int_only {
-                8
-            } else {
-                16
-            };
+            // current variadic slot) and advances *ap to the next. The
+            // stride is a property of the va_list layout the target
+            // builds, not of the current function, so a non-variadic
+            // forwarder (e.g. `c5_vsnprintf` taking a `va_list`) walks the
+            // same stride the variadic caller produced; this does not
+            // depend on `func.is_variadic`. Linux aarch64 routes its
+            // variadic intrinsics through the register-save-area arm above
+            // (gated on `aarch64_host_variadic`), so the cursor arm is
+            // reached only by macOS arm64 (`variadic_on_stack`) and
+            // Windows arm64 (`variadic_int_only`), both of which lay
+            // variadic arguments at 8-byte stride (the incoming stack,
+            // respectively the gr-save area + stack overflow). args[0] =
+            // &ap.
+            let va_stride: u32 = 8;
             // `__builtin_va_arg(self, descriptor)`: args[0] is the
             // va_list-storage address, args[1] the packed
             // `(kind << 16) | size` type descriptor. These stack-based
@@ -2887,56 +2870,15 @@ fn emit_call(
         move_call_result(code, dst, frame, fp_return);
         return true;
     }
+    // Every aarch64 variadic callee is marshaled by a host-ABI branch
+    // above: macOS arm64 (`variadic_on_stack`), Windows arm64
+    // (`variadic_int_only`), or Linux aarch64 (`aarch64_host_variadic`). A
+    // variadic callee reaching this point would fall through to the
+    // non-variadic path and be marshaled without the host variadic
+    // protocol, a silent miscompile; fail the emit instead.
     if callee_is_variadic {
-        // The variadic c5 ABI keeps the c5 stack: every arg is
-        // pushed at a 16-byte stride matching the accumulator
-        // push. The callee's prologue (`emit_prologue` with
-        // entry_spill=0) skips host-arg-reg spills and reads its
-        // args through the address-of-local path at
-        // `fp + 16*(N-1)`. `va_start` continues the walk past the
-        // last named arg.
-        //
-        // Push args in cdecl order: args[N-1] first (deepest), so
-        // args[0] -- the first declared arg -- lands on top of the
-        // stack and the callee reads it through its first param
-        // slot.
-        for (i, &arg_id) in args.iter().rev().enumerate() {
-            let arg_place = alloc
-                .places
-                .get(arg_id as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let sp_shift = (i as u32) * 16;
-            // The c5 variadic ABI ferries every argument through the
-            // 16-byte c5 stack stride as a raw 8-byte pattern. An f64
-            // in a d-register bridges through an int register first,
-            // matching the f64-return bridge; the callee's `va_arg`
-            // reads the same eight bytes back.
-            let src = if let Place::FpReg(dn) = arg_place {
-                emit(code, enc_fmov_d_to_x(scratch.primary, dn));
-                scratch.primary
-            } else {
-                match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
-                    Some(r) => r,
-                    None => return false,
-                }
-            };
-            emit(code, enc_str_pre(src, Reg(31), -16));
-        }
-        fixups.push(Fixup {
-            native_offset: code.len(),
-            target_ent_pc: target_pc,
-            kind: BranchKind::Bl,
-        });
-        emit(code, enc_bl(0));
-        if !args.is_empty() {
-            emit(
-                code,
-                enc_add_imm(Reg(31), Reg(31), (args.len() as u32) * 16),
-            );
-        }
-        move_call_result(code, dst, frame, fp_return);
-        return true;
+        bail_msg("Call: variadic callee not matched by a host-ABI branch");
+        return false;
     }
     // Non-variadic: marshal through the host ABI. `fp_arg_mask`
     // comes from the argument types (set by the walker) rather than

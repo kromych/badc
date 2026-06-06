@@ -2009,10 +2009,11 @@ fn emit_prologue(
     // overflow into one contiguous 8-byte-stride region the variadic
     // tail occupies. Arguments past the fourth already sit on the
     // incoming stack at `[rbp + 16 + i*8]`, so they need no spill. The
-    // c5-internal variadic convention routes every argument (named and
-    // variadic) through the integer registers as a raw 8-byte value
-    // (the caller widens floating-point arguments to double and passes
-    // `fp_arg_mask = 0`), so the spill is uniformly integer.
+    // Win64 host variadic ABI (Microsoft x64 calling convention) routes
+    // every argument (named and variadic) through the integer registers
+    // as a raw 8-byte value (the caller widens floating-point arguments
+    // to double and passes `fp_arg_mask = 0`), so the spill is uniformly
+    // integer.
     //
     // Spill ALL four argument registers, not just the named ones: a
     // variadic argument that landed in a register (rdx/r8/r9 for the
@@ -4508,63 +4509,15 @@ fn emit_call(
         }
         return true;
     }
+    // Every x86_64 variadic callee is marshaled by a host-ABI branch
+    // above: Win64 (`position_indexed_args`) or System V AMD64
+    // (`variadic_zero_xmm_count`, no `position_indexed_args`). A variadic
+    // callee reaching this point would fall through to the non-variadic
+    // path and be marshaled without the host variadic register protocol,
+    // a silent miscompile; fail the emit instead.
     if callee_is_variadic {
-        // c5's variadic ABI keeps the c5 stack: each arg is pushed
-        // at a 16-byte stride matching the accumulator push. The
-        // callee's prologue (`emit_prologue` with
-        // `entry_spill = 0`) skips the host-arg-reg spill and
-        // reads its args through the address-of-local path at
-        // `[rbp + 16*(N-1)]`; `va_start` continues the walk past
-        // the last named arg. Push args in reverse so args[0] --
-        // the first declared arg -- lands on top of the stack at
-        // `[rbp + 16]`.
-        for (i, &arg_id) in args.iter().rev().enumerate() {
-            let arg_place = alloc
-                .places
-                .get(arg_id as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            // Each prior push moved rsp another 16 bytes down.
-            let sp_shift = (i as u32) * 16;
-            let src = match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, sp_shift) {
-                Some(r) => r,
-                None => {
-                    bail_msg("Call (variadic): arg not in int reg / spill");
-                    return false;
-                }
-            };
-            emit_sub_rsp_imm32(code, 16);
-            emit_mov_mem_r(code, Reg::RSP, 0, src);
-        }
-        let call_site = code.len();
-        fixups.push(Fixup {
-            native_offset: call_site,
-            target_ent_pc: target_pc,
-            kind: super::x86_64::BranchKind::Call,
-        });
-        super::x86_64::emit_call_rel32(code, 0);
-        if !args.is_empty() {
-            emit_add_rsp_imm32(code, (args.len() as u32) * 16);
-        }
-        if fp_return {
-            // A floating-point return rides xmm0 (C99 6.2.5p10).
-            match dst {
-                Place::FpReg(r) => {
-                    if r != Reg::XMM0.0 {
-                        emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
-                    }
-                }
-                Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
-                Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
-                Place::None => {}
-            }
-        } else if let Some(rd) = int_or_spill_dst(dst) {
-            if rd.0 != Reg::RAX.0 {
-                emit_mov_rr(code, rd, Reg::RAX);
-            }
-            spill_dst_to_slot(code, dst, rd, frame);
-        }
-        return true;
+        bail_msg("Call: variadic callee not matched by a host-ABI branch");
+        return false;
     }
     // c5-internal call convention: integer / pointer arguments ride
     // the integer argument-register bank, floating-point scalars ride
@@ -5063,17 +5016,13 @@ fn emit_intrinsic(
     current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
-    // Byte stride between adjacent variadic arguments in the va_list
-    // the target lays down. The Win64 host variadic ABI (Microsoft x64
-    // calling convention) packs the variadic tail at 8-byte stride in
-    // the home area + incoming stack; the c5-internal variadic ABI
-    // (SysV x86_64) pushes each argument as a 16-byte c5 cdecl cell.
-    // The stride is a property of the va_list layout, not of the
-    // current function, so a non-variadic forwarder that receives a
-    // `va_list` and runs `va_arg` (e.g. `c5_vsnprintf`) walks the same
-    // stride the variadic caller produced. On x86_64 only Win64 sets
-    // `position_indexed_args`, so this selects Win64 alone.
-    let va_stride: i32 = if abi.position_indexed_args { 8 } else { 16 };
+    // Byte stride between adjacent variadic arguments in the cursor
+    // va_list. System V AMD64 routes its variadic intrinsics through the
+    // register-save-area arms below (gated on `sysv_host_variadic`), so
+    // the only x86_64 target reaching the cursor arms is Win64 (Microsoft
+    // x64 calling convention), which packs the variadic tail at 8-byte
+    // stride in the home area + incoming stack.
+    let va_stride: i32 = 8;
     let intrinsic = match I::from_i64(kind) {
         Some(i) => i,
         None => {
@@ -5203,13 +5152,14 @@ fn emit_intrinsic(
             // __builtin_va_start(&ap, &last). args[0] = &ap,
             // args[1] = &last. *ap = &last + va_stride, the address of
             // the first variadic slot one stride past the last named
-            // parameter. The c5-internal variadic ABI lays named and
-            // variadic arguments at 16-byte stride; the Win64 host
-            // variadic ABI lays them at 8-byte stride (named register
-            // arguments spilled by the prologue into the home area, the
-            // variadic tail on the incoming stack). va_start runs only
-            // in the variadic function itself, whose named parameters
-            // already use `va_stride` (`Frame::param_cell_stride`), so
+            // parameter. System V routes its `va_start` through the
+            // register-save-area arm above, so only the Win64 host
+            // variadic ABI reaches here: it lays named and variadic
+            // arguments at 8-byte stride (named register arguments
+            // spilled by the prologue into the home area, the variadic
+            // tail on the incoming stack). va_start runs only in the
+            // variadic function itself, whose named parameters already
+            // use `va_stride` (`Frame::param_cell_stride`), so
             // `&last + va_stride` lands on the first variadic argument.
             if args.len() != 2 {
                 bail_msg("VaStart: expected 2 args");

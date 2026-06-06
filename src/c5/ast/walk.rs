@@ -1827,15 +1827,19 @@ impl<'a> Walker<'a> {
                             }
                             return Ok(call);
                         }
-                        // The callee keeps the all-integer c5 cdecl ABI
-                        // when it is variadic (on every target other than
-                        // macOS arm64 and System V x86_64, handled above)
-                        // or when its register/stack placement would
-                        // interleave (the same predicate the callee applies
-                        // to its `param_fp_mask`). In that case widen every
-                        // FP argument to an 8-byte double in an integer
-                        // slot, matching what the callee reads back, and
-                        // pass `fp_arg_mask = 0`.
+                        // A variadic callee reaching here is a
+                        // `variadic_int_only` host (Win64 / Windows arm64,
+                        // the Microsoft calling conventions): the macOS
+                        // arm64 (`variadic_on_stack`) and System V /
+                        // AAPCS64 register-save hosts returned above. Its
+                        // named and variadic arguments ride the integer
+                        // register bank -- a floating-point argument as its
+                        // raw bit pattern -- so widen every FP argument to
+                        // an 8-byte double in an integer slot, matching
+                        // what the callee reads back, and pass
+                        // `fp_arg_mask = 0`. The same widening covers a
+                        // non-variadic callee whose register/stack
+                        // placement would interleave.
                         let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
                             args.len(),
                             fp_arg_mask,

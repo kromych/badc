@@ -65,10 +65,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   LoadLocal { off=2, kind=I64 }                    -> x1
-    v4   Imm(0)                                           -> x1
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I64 }                    -> x0
+    v4   Imm(0)                                           -> x0
     v5   Load { addr=v1, kind=U16 }                       -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=2 ---

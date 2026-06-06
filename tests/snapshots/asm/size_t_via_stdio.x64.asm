@@ -72,22 +72,18 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	addq	$0x1, %rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq
-               	movq	%rdi, %rax
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	addq	$0x1, %rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	addq	$0x1, %rcx

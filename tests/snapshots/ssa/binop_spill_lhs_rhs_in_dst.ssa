@@ -4,50 +4,50 @@ fn ent_pc=0 n_params=3 variadic=false locals=3
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x0
-    v2   Imm(0)                                           -> x1
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I32)                            -> x8
-    v4   Imm(0)                                           -> x1
-    v5   ParamRef(2, kind=I32)                            -> x1
-    v6   Imm(0)                                           -> x2
-    v7   LoadLocal { off=2, kind=I64 }                    -> x2
-    v8   LoadLocal { off=4, kind=I32 }                    -> x2
-    v9   BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x2
-    v10  Binop { op=add, lhs=v1, rhs=v9 }                 -> x2
-    v11  Load { addr=v10, kind=I32 }                      -> x2
-    v12  Imm(0)                                           -> x6
-    v13  Imm(0)                                           -> x7
-    v14  Imm(0)                                           -> x6
-    v15  LoadLocal { off=3, kind=I32 }                    -> x6
-    v16  Imm(0)                                           -> x6
+    v4   Imm(0)                                           -> x0
+    v5   ParamRef(2, kind=I32)                            -> x2
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=2, kind=I64 }                    -> x0
+    v8   LoadLocal { off=4, kind=I32 }                    -> x0
+    v9   BinopI { op=shl, lhs=v5, rhs_imm=2 }             -> x0
+    v10  Binop { op=add, lhs=v1, rhs=v9 }                 -> x0
+    v11  Load { addr=v10, kind=I32 }                      -> x0
+    v12  Imm(0)                                           -> x1
+    v13  Imm(0)                                           -> x6
+    v14  Imm(0)                                           -> x1
+    v15  LoadLocal { off=3, kind=I32 }                    -> x1
+    v16  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v3)
   block 1  start_pc=0
-    v17  Phi { incoming=[b0:v13, b2:v33], kind=I64 }      -> x7
+    v17  Phi { incoming=[b0:v13, b2:v33], kind=I64 }      -> x6
     v18  Phi { incoming=[b0:v3, b2:v23], kind=I64 }       -> x8
-    v19  Extend { value=v18, kind=I32 }                   -> x6
+    v19  Extend { value=v18, kind=I32 }                   -> x1
     v20  LoadLocal { off=4, kind=I32 }                    -> x9
-    v21  Binop { op=le, lhs=v19, rhs=v5 }                 -> x6
+    v21  Binop { op=le, lhs=v19, rhs=v5 }                 -> x1
     terminator Bz { cond=v21, target=b4, fall=b3 }   (exit_acc=v21)
   block 2  start_pc=0
-    v22  Extend { value=v18, kind=I32 }                   -> x6
+    v22  Extend { value=v18, kind=I32 }                   -> x1
     v23  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x8
-    v24  Imm(0)                                           -> x6
+    v24  Imm(0)                                           -> x1
     terminator Jmp(b1)   (exit_acc=v23)
   block 3  start_pc=0
-    v25  Extend { value=v17, kind=I32 }                   -> x6
-    v26  LoadLocal { off=2, kind=I64 }                    -> x7
-    v27  Extend { value=v18, kind=I32 }                   -> x7
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=2 }            -> x7
-    v29  Binop { op=add, lhs=v1, rhs=v28 }                -> x7
-    v30  Load { addr=v29, kind=I32 }                      -> x7
-    v31  Binop { op=add, lhs=v25, rhs=v30 }               -> x6
-    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x6
-    v33  BinopI { op=shr, lhs=v32, rhs_imm=32 }           -> x7
-    v34  Imm(0)                                           -> x6
+    v25  Extend { value=v17, kind=I32 }                   -> x1
+    v26  LoadLocal { off=2, kind=I64 }                    -> x6
+    v27  Extend { value=v18, kind=I32 }                   -> x6
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=2 }            -> x6
+    v29  Binop { op=add, lhs=v1, rhs=v28 }                -> x6
+    v30  Load { addr=v29, kind=I32 }                      -> x6
+    v31  Binop { op=add, lhs=v25, rhs=v30 }               -> x1
+    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
+    v33  BinopI { op=shr, lhs=v32, rhs_imm=32 }           -> x6
+    v34  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v33)
   block 4  start_pc=0
-    v35  Extend { value=v17, kind=I32 }                   -> x0
-    v36  Extend { value=v11, kind=I32 }                   -> x1
+    v35  Extend { value=v17, kind=I32 }                   -> x1
+    v36  Extend { value=v11, kind=I32 }                   -> x2
     v37  Binop { op=add, lhs=v35, rhs=v11 }               -> x0
     v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x0
     v39  BinopI { op=shr, lhs=v38, rhs_imm=32 }           -> x0

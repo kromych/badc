@@ -65,13 +65,13 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   ParamRef(1, kind=I32)                            -> x1
-    v4   Imm(0)                                           -> x2
-    v5   LoadLocal { off=2, kind=I64 }                    -> x2
-    v6   LoadLocal { off=3, kind=I32 }                    -> x2
-    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x1
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=2, kind=I64 }                    -> x0
+    v6   LoadLocal { off=3, kind=I32 }                    -> x0
+    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x0
     v8   Binop { op=add, lhs=v1, rhs=v7 }                 -> x0
     v9   Imm(0)                                           -> x1
     v10  Load { addr=v8, kind=U16 }                       -> x1
@@ -88,13 +88,13 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   ParamRef(1, kind=I32)                            -> x1
-    v4   Imm(0)                                           -> x2
-    v5   LoadLocal { off=2, kind=I64 }                    -> x2
-    v6   LoadLocal { off=3, kind=I32 }                    -> x2
-    v7   BinopI { op=mul, lhs=v3, rhs_imm=12 }            -> x1
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=2, kind=I64 }                    -> x0
+    v6   LoadLocal { off=3, kind=I32 }                    -> x0
+    v7   BinopI { op=mul, lhs=v3, rhs_imm=12 }            -> x0
     v8   Binop { op=add, lhs=v1, rhs=v7 }                 -> x0
     v9   Imm(0)                                           -> x1
     v10  Load { addr=v8, kind=I32 }                       -> x1
@@ -117,13 +117,13 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I64)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   ParamRef(1, kind=I32)                            -> x1
-    v4   Imm(0)                                           -> x2
-    v5   LoadLocal { off=2, kind=I64 }                    -> x2
-    v6   LoadLocal { off=3, kind=I32 }                    -> x2
-    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x1
+    v1   ParamRef(0, kind=I64)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x0
+    v5   LoadLocal { off=2, kind=I64 }                    -> x0
+    v6   LoadLocal { off=3, kind=I32 }                    -> x0
+    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x0
     v8   Binop { op=add, lhs=v1, rhs=v7 }                 -> x0
     v9   Imm(0)                                           -> x1
     v10  Load { addr=v8, kind=U8 }                        -> x1

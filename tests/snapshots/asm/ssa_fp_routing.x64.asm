@@ -120,9 +120,8 @@ Disassembly of section .text:
                	setae	%al
                	movzbq	%al, %rax
                	retq
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
-               	cvtsi2sd	%rax, %xmm0
+               	movslq	%edi, %rdi
+               	cvtsi2sd	%rdi, %xmm0
                	retq
                	cvttsd2si	%xmm0, %rax
                	retq
@@ -637,3 +636,5 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -12,33 +12,31 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, %rcx
-               	movq	%rsi, %rdx
                	jmp	<addr>
-               	movzbq	(%rcx), %rsi
-               	cmpq	$0x0, %rsi
+               	movzbq	(%rdi), %rcx
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
-               	addq	$0x1, %rcx
-               	addq	$0x1, %rdx
+               	addq	$0x1, %rdi
+               	addq	$0x1, %rsi
                	jmp	<addr>
-               	movzbq	(%rcx), %rax
+               	movzbq	(%rdi), %rax
                	cmpq	$0x0, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
                	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
-               	movzbq	(%rcx), %rax
-               	movzbq	(%rdx), %rsi
-               	cmpq	%rsi, %rax
-               	sete	%sil
-               	movzbq	%sil, %rsi
+               	movzbq	(%rdi), %rax
+               	movzbq	(%rsi), %rcx
+               	cmpq	%rcx, %rax
+               	sete	%cl
+               	movzbq	%cl, %rcx
                	jmp	<addr>
-               	cmpq	$0x0, %rsi
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
-               	movzbq	(%rdx), %rax
+               	movzbq	(%rsi), %rax
                	cmpq	$0x0, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -177,3 +175,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

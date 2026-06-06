@@ -1306,20 +1306,23 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     if func.is_variadic {
         return;
     }
-    // The cross-clobber hazard kicks in once the allocator can run
-    // out of non-arg-register candidates and starts picking an
-    // earlier ParamRef's arg register as a later ParamRef's
-    // destination. The threshold per target is the count of
-    // integer arg registers it can pull from before that happens;
-    // below that count, firing the hint can perturb a downstream
-    // call's ParamRef placement through a libc v* bridge
-    // (vsnprintf et al).
-    let (int_args, threshold): (&[u8], usize) = match target {
+    // The cross-clobber hazard is register-pressure driven, not a
+    // function of the parameter count: whenever the allocator runs out
+    // of non-arg-register candidates it can park an earlier ParamRef's
+    // destination on a later ParamRef's incoming arg register, and the
+    // later ParamRef's in-place read then sources a clobbered register.
+    // Hinting every integer ParamRef to its own incoming register homes
+    // each parameter in place, so the materialization is a self-update
+    // and no ParamRef can land on another's source. The incoming arg
+    // registers are caller-saved and free at entry, so the hint is
+    // honoured whenever the parameter is not forced elsewhere (live
+    // across a call, or competing for the same register).
+    let int_args: &[u8] = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            (&[0, 1, 2, 3, 4, 5, 6, 7], 5)
+            &[0, 1, 2, 3, 4, 5, 6, 7]
         }
-        Target::LinuxX64 => (&[7, 6, 2, 1, 8, 9], 5),
-        Target::WindowsX64 => (&[1, 2, 8, 9], 4),
+        Target::LinuxX64 => &[7, 6, 2, 1, 8, 9],
+        Target::WindowsX64 => &[1, 2, 8, 9],
     };
     // The hint must target each integer parameter's own incoming
     // register, which is its rank within the integer argument bank, not
@@ -1328,14 +1331,7 @@ fn populate_param_ref_hints(func: &FunctionSsa, target: Target, hints: &mut [Opt
     // AMD64 3.2.3 / AAPCS64 6.4.1). Hinting by declared position would
     // point a later integer ParamRef at the wrong arg register -- one an
     // earlier integer parameter actually arrives in -- reintroducing the
-    // very cross-clobber this pass exists to remove. The threshold counts
-    // integer parameters for the same reason.
-    let int_param_count = (0..func.n_params)
-        .filter(|&i| (func.param_fp_mask & (1u32 << i)) == 0)
-        .count();
-    if int_param_count < threshold {
-        return;
-    }
+    // very cross-clobber this pass exists to remove.
     for (idx, inst) in func.insts.iter().enumerate() {
         if let Inst::ParamRef { idx: i, .. } = inst {
             let pi = *i as usize;

@@ -4,21 +4,21 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
-    v2   Imm(0)                                           -> x1
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I32)                            -> x3
-    v4   Imm(0)                                           -> x1
-    v5   ImmData(520)                                     -> x1
-    v6   Load { addr=v5, kind=I32 }                       -> x2
-    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x2
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
-    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x2
+    v4   Imm(0)                                           -> x0
+    v5   ImmData(520)                                     -> x0
+    v6   Load { addr=v5, kind=I32 }                       -> x1
+    v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x1
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
+    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x1
     v10  Store { addr=v5, value=v9, kind=I32 }            -> -
-    v11  LoadLocal { off=2, kind=I32 }                    -> x1
-    v12  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1
+    v11  LoadLocal { off=2, kind=I32 }                    -> x0
+    v12  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x0
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
-    v13  LoadLocal { off=2, kind=I32 }                    -> x1
+    v13  LoadLocal { off=2, kind=I32 }                    -> x0
     v14  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x0
     v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x0
     v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x7

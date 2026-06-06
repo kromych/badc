@@ -75,23 +75,23 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	sxtw	x0, w0
-               	sxtw	x0, w1
-               	mov	x1, #0x2d18             // =11544
-               	movk	x1, #0x5444, lsl #16
-               	movk	x1, #0x21fb, lsl #32
-               	movk	x1, #0x4009, lsl #48
-               	fmov	d16, x1
+               	sxtw	x1, w1
+               	mov	x0, #0x2d18             // =11544
+               	movk	x0, #0x5444, lsl #16
+               	movk	x0, #0x21fb, lsl #32
+               	movk	x0, #0x4009, lsl #48
+               	fmov	d16, x0
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	mov	x1, #0xfffe             // =65534
-               	movk	x1, #0xffff, lsl #16
-               	movk	x1, #0xffff, lsl #32
-               	movk	x1, #0xffff, lsl #48
-               	scvtf	d0, x1
+               	mov	x0, #0xfffe             // =65534
+               	movk	x0, #0xffff, lsl #16
+               	movk	x0, #0xffff, lsl #32
+               	movk	x0, #0xffff, lsl #48
+               	scvtf	d0, x0
                	sub	x16, x29, #0x8
                	ldr	d1, [x16]
                	fmul	d0, d0, d1
-               	scvtf	d1, x0
+               	scvtf	d1, x1
                	fmul	d0, d0, d1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

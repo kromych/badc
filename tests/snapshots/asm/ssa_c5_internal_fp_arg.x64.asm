@@ -72,8 +72,7 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
-               	cvtsi2sd	%rax, %xmm1
+               	cvtsi2sd	%rdi, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setb	%al
                	movzbq	%al, %rax
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
                	retq
-               	movq	%rdi, %rax
-               	cvtsi2sd	%rax, %xmm1
+               	cvtsi2sd	%rdi, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
@@ -93,69 +91,67 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
+               	movslq	%edi, %rdi
                	movq	%rdi, %rax
-               	movq	%rsi, %rcx
+               	addq	$0x64, %rax
                	movslq	%eax, %rax
-               	movq	%rax, %rcx
-               	addq	$0x64, %rcx
-               	movslq	%ecx, %rcx
-               	subq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	movabsq	$0x4049400000000000, %rdx # imm = 0x4049400000000000
-               	movq	%rax, %r10
-               	subq	%r10, %rax
+               	subq	%rdi, %rax
                	movslq	%eax, %rax
-               	cvtsi2sd	%rax, %xmm0
+               	movabsq	$0x4049400000000000, %rcx # imm = 0x4049400000000000
+               	movq	%rdi, %rdx
+               	subq	%rdi, %rdx
+               	movslq	%edx, %rdx
+               	cvtsi2sd	%rdx, %xmm0
                	movapd	%xmm0, %xmm15
-               	movq	%rdx, %xmm0
+               	movq	%rcx, %xmm0
                	addsd	%xmm15, %xmm0
-               	cvtsi2sd	%rcx, %xmm1
+               	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	cmpq	$0x1, %rax
+               	andq	%r10, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movabsq	$0x4062d00000000000, %rax # imm = 0x4062D00000000000
-               	cvtsi2sd	%rcx, %xmm0
-               	movq	%rax, %xmm14
+               	movabsq	$0x4062d00000000000, %rcx # imm = 0x4062D00000000000
+               	cvtsi2sd	%rax, %xmm0
+               	movq	%rcx, %xmm14
                	ucomisd	%xmm0, %xmm14
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	andq	%r10, %rcx
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	cvtsi2sd	%rcx, %xmm0
-               	cvtsi2sd	%rcx, %xmm1
+               	cvtsi2sd	%rax, %xmm0
+               	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	setbe	%al
-               	movzbq	%al, %rax
+               	setbe	%cl
+               	movzbq	%cl, %rcx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	cmpq	$0x1, %rax
+               	andq	%r10, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	cvtsi2sd	%rcx, %xmm0
-               	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
-               	movq	%rax, %xmm15
+               	cvtsi2sd	%rax, %xmm0
+               	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
+               	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
-               	cvtsi2sd	%rcx, %xmm1
+               	cvtsi2sd	%rax, %xmm1
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
                	movzbq	%al, %rax

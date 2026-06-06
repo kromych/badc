@@ -72,22 +72,19 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	movslq	%esi, %rsi
+               	movq	%rsi, %rax
+               	shlq	$0x2, %rax
+               	addq	%rdi, %rax
                	movzwq	(%rax), %rcx
                	addq	$0x2, %rax
                	movzwq	(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	imulq	$0xc, %rcx, %rcx
-               	addq	%rcx, %rax
+               	movslq	%esi, %rsi
+               	imulq	$0xc, %rsi, %rax
+               	addq	%rdi, %rax
                	movslq	(%rax), %rcx
                	movq	%rax, %rdx
                	addq	$0x4, %rdx
@@ -99,11 +96,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	movslq	%esi, %rsi
+               	movq	%rsi, %rax
+               	shlq	$0x2, %rax
+               	addq	%rdi, %rax
                	movzbq	(%rax), %rcx
                	movq	%rax, %rdx
                	addq	$0x1, %rdx

@@ -12,8 +12,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
+               	movslq	%edi, %rdi
                	movq	%rdi, %rax
-               	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	retq

@@ -77,33 +77,32 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, x2
-               	sub	x2, x29, #0x10
+               	sub	x1, x29, #0x10
                	ldur	x3, [x29, #0x20]
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x3]
-               	str	x10, [x2]
+               	str	x10, [x1]
                	ldr	x10, [x3, #0x8]
-               	str	x10, [x2, #0x8]
+               	str	x10, [x1, #0x8]
                	ldr	x10, [sp], #0x10
-               	sub	x2, x29, #0x10
-               	add	x2, x2, #0x8
-               	ldr	w2, [x2]
-               	cmp	x2, #0x7
+               	sub	x1, x29, #0x10
+               	add	x1, x1, #0x8
+               	ldr	w1, [x1]
+               	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-               	cmp	x1, #0x0
+               	cmp	x2, #0x0
                	b.ne	<addr>
                	mov	x0, #0x14               // =20
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x2]
                	cmp	x1, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1e               // =30

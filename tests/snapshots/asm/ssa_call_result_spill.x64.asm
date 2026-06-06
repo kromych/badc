@@ -9,33 +9,35 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
+               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rcx
+               	shrq	%cl, %rax
+               	movl	$0x40, %ecx
+               	subq	%rsi, %rcx
                	movslq	%ecx, %rcx
-               	movq	%rax, %rdx
-               	shrq	%cl, %rdx
-               	movl	$0x40, %esi
                	movq	%rcx, %r10
-               	movq	%rsi, %rcx
-               	subq	%r10, %rcx
-               	movslq	%ecx, %rcx
-               	shlq	%cl, %rax
-               	orq	%rdx, %rax
+               	movq	%rdi, %rcx
+               	movq	%rcx, %r13
+               	movq	%r10, %rcx
+               	shlq	%cl, %r13
+               	movq	%r13, %rcx
+               	orq	%rcx, %rax
                	retq
                	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	andq	%rax, %rcx
-               	xorq	$-0x1, %rax
-               	andq	%rdx, %rax
+               	andq	%rsi, %rax
+               	movq	%rdi, %rcx
+               	xorq	$-0x1, %rcx
+               	andq	%rdx, %rcx
                	xorq	%rcx, %rax
                	retq
                	movq	%rdi, %rax
-               	movq	%rax, %rcx
-               	rorq	$0xe, %rcx
-               	movq	%rax, %rdx
-               	rorq	$0x12, %rdx
-               	xorq	%rdx, %rcx
-               	rorq	$0x29, %rax
+               	rorq	$0xe, %rax
+               	movq	%rdi, %rcx
+               	rorq	$0x12, %rcx
+               	xorq	%rcx, %rax
+               	movq	%rdi, %rcx
+               	rorq	$0x29, %rcx
                	xorq	%rcx, %rax
                	retq
                	pushq	%rbp
@@ -135,4 +137,3 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

@@ -72,20 +72,20 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movq	%rdi, %rax
-               	movzbq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x1, %rdx
-               	movzbq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
-               	movq	%rax, %rdx
-               	addq	$0x2, %rdx
-               	movzbq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
-               	addq	$0x3, %rax
-               	movzbq	(%rax), %rax
+               	movzbq	(%rdi), %rax
+               	movq	%rdi, %rcx
+               	addq	$0x1, %rcx
+               	movzbq	(%rcx), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	movq	%rdi, %rcx
+               	addq	$0x2, %rcx
+               	movzbq	(%rcx), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	movq	%rdi, %rcx
+               	addq	$0x3, %rcx
+               	movzbq	(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq

@@ -3198,11 +3198,9 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
                	movq	%r15, 0x18(%rsp)
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movq	%rax, %r12
+               	movq	%rdi, %r12
                	addq	$-0x1, %r12
-               	movq	%rcx, %r14
+               	movq	%rsi, %r14
                	addq	$0x8, %r14
                	cmpq	$0x0, %r12
                	setg	%bl
@@ -4835,4 +4833,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

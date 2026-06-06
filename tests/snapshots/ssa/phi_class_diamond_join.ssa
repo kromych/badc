@@ -4,13 +4,13 @@ fn ent_pc=0 n_params=3 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   ParamRef(1, kind=I32)                            -> x1
-    v4   Imm(0)                                           -> x2
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   ParamRef(1, kind=I32)                            -> x6
+    v4   Imm(0)                                           -> x0
     v5   ParamRef(2, kind=I32)                            -> x2
-    v6   Imm(0)                                           -> x6
-    v7   LoadLocal { off=2, kind=I32 }                    -> x6
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=2, kind=I32 }                    -> x0
     terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
   block 1  start_pc=0
     v8   LoadLocal { off=3, kind=I32 }                    -> x0

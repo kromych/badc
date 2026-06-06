@@ -75,16 +75,16 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movslq	%edi, %rax
-               	movslq	%esi, %rax
-               	movabsq	$0x400921fb54442d18, %rcx # imm = 0x400921FB54442D18
-               	movq	%rcx, %xmm14
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	movabsq	$0x400921fb54442d18, %rax # imm = 0x400921FB54442D18
+               	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	movabsq	$-0x2, %rcx
-               	cvtsi2sd	%rcx, %xmm0
+               	movabsq	$-0x2, %rax
+               	cvtsi2sd	%rax, %xmm0
                	movsd	-0x8(%rbp,%riz), %xmm1
                	mulsd	%xmm1, %xmm0
-               	cvtsi2sd	%rax, %xmm1
+               	cvtsi2sd	%rsi, %xmm1
                	mulsd	%xmm1, %xmm0
                	addq	$0x20, %rsp
                	popq	%rbp

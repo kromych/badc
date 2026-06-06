@@ -10,27 +10,26 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	movq	%rdi, %rax
-               	movq	%rax, %rcx
-               	addq	$0x3, %rcx
-               	movzbq	(%rcx), %rcx
-               	movl	%ecx, %ecx
-               	shlq	$0x8, %rcx
-               	movl	%ecx, %ecx
-               	movq	%rax, %rdx
-               	addq	$0x2, %rdx
-               	movzbq	(%rdx), %rdx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %ecx
-               	shlq	$0x8, %rcx
-               	movl	%ecx, %ecx
-               	movq	%rax, %rdx
-               	addq	$0x1, %rdx
-               	movzbq	(%rdx), %rdx
-               	orq	%rdx, %rcx
-               	movl	%ecx, %ecx
-               	shlq	$0x8, %rcx
-               	movl	%ecx, %ecx
+               	addq	$0x3, %rax
                	movzbq	(%rax), %rax
+               	movl	%eax, %eax
+               	shlq	$0x8, %rax
+               	movl	%eax, %eax
+               	movq	%rdi, %rcx
+               	addq	$0x2, %rcx
+               	movzbq	(%rcx), %rcx
+               	orq	%rcx, %rax
+               	movl	%eax, %eax
+               	shlq	$0x8, %rax
+               	movl	%eax, %eax
+               	movq	%rdi, %rcx
+               	addq	$0x1, %rcx
+               	movzbq	(%rcx), %rcx
+               	orq	%rcx, %rax
+               	movl	%eax, %eax
+               	shlq	$0x8, %rax
+               	movl	%eax, %eax
+               	movzbq	(%rdi), %rcx
                	orq	%rcx, %rax
                	retq
                	pushq	%rbp
@@ -202,4 +201,4 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

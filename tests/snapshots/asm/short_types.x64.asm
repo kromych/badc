@@ -72,8 +72,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	movslq	%edi, %rdi
                	movq	%rdi, %rax
-               	movslq	%eax, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movslq	%eax, %rcx
                	andq	$0x8000, %rcx           # imm = 0x8000
@@ -85,8 +85,8 @@ Disassembly of section .text:
                	retq
                	movslq	%eax, %rax
                	retq
+               	movslq	%edi, %rdi
                	movq	%rdi, %rax
-               	movslq	%eax, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
                	pushq	%rbp

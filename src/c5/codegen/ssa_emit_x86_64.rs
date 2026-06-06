@@ -103,13 +103,46 @@ impl Frame {
         let saved_gpr_bytes = super::ssa_emit_common::slots16(alloc.gpr_used.len() as u32);
         let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
         let param_spill_bytes = prologue_param_spill_bytes(func, alloc, abi);
+        // A Win64 variadic callee receives every argument (named and
+        // variadic) in a contiguous 8-byte-per-argument region: the
+        // first four in rcx/rdx/r8/r9 (spilled by the prologue into
+        // the caller-reserved home area at `[rbp + 16 + i*8]`), the
+        // rest on the incoming stack just above it. The body reads its
+        // named parameters and `va_arg` walks the variadic tail with a
+        // single 8-byte stride across that region, so the cell stride
+        // is 8 rather than the 16-byte c5 cdecl cell width. Every other
+        // callee keeps the 16-byte stride.
+        let param_cell_stride = if win64_variadic_callee(func, abi) {
+            8
+        } else {
+            16
+        };
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,
             param_spill_bytes,
-            param_cell_stride: 16,
+            param_cell_stride,
         }
     }
+}
+
+/// True when the function is a variadic c5 callee compiled for the
+/// Win64 host variadic ABI (Microsoft x64 calling convention). Win64
+/// is the only x86_64 target whose `Abi` sets `position_indexed_args`
+/// (the by-position rcx/rdx/r8/r9 placement); SysV x86_64 leaves it
+/// clear, so this gate selects Win64 alone and leaves the SysV
+/// variadic c5 path on its 16-byte cdecl stack-push shape byte for
+/// byte. Under this ABI named arguments arrive in argument registers
+/// and the variadic tail rides the incoming stack at 8-byte stride;
+/// the prologue spills the named register arguments into the caller's
+/// home area, `va_start` points at the first variadic 8-byte slot, and
+/// `va_arg` advances 8.
+fn win64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> bool {
+    debug_assert!(
+        !abi.position_indexed_args || matches!(abi.arch, super::Arch::X86_64),
+        "position_indexed_args is a Win64 x86_64 property"
+    );
+    func.is_variadic && abi.position_indexed_args
 }
 
 /// Registers that are caller-saved on both SysV AMD64 and Win64.
@@ -193,8 +226,15 @@ fn pick_caller_saved_scratch_live_aware(
 /// GPR to spill. The caller-pushed return address sits at top of
 /// stack untouched, so the function can ret directly with no
 /// stack adjustment.
-fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation) -> bool {
+fn is_full_leaf(func: &FunctionSsa, frame: Frame, alloc: &Allocation, abi: super::Abi) -> bool {
     if frame.frame_bytes != 0 || frame.param_spill_bytes != 0 {
+        return false;
+    }
+    // A Win64 variadic callee must establish rbp so the prologue can
+    // spill its named register arguments into the caller's home area
+    // and the body / `va_arg` can address that area through rbp; it is
+    // never leaf-elided.
+    if win64_variadic_callee(func, abi) {
         return false;
     }
     if !alloc.gpr_used.is_empty() {
@@ -1552,7 +1592,7 @@ pub(super) fn emit_function(
                         return false;
                     }
                 } else {
-                    emit_return(code, v, alloc, frame, func)
+                    emit_return(code, v, alloc, frame, func, abi)
                 }
             }
             Terminator::Jmp(t) => {
@@ -1875,12 +1915,40 @@ fn emit_prologue(
     // regs has no work in the standard prologue. SysV / Win64 let
     // it ret directly off the caller-pushed return address with
     // rsp unchanged.
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
+    // Win64 variadic callee home-area spill (Microsoft x64 calling
+    // convention). The caller passes the first four arguments in
+    // rcx/rdx/r8/r9 by position and reserves 32 bytes of home area
+    // above the return address; the callee spills those registers into
+    // the home slots at `[rbp + 16 + i*8]` so the named parameters are
+    // readable through the body's c5 cdecl cell path (cell stride 8,
+    // set on `Frame`) and the home area joins the incoming stack
+    // overflow into one contiguous 8-byte-stride region the variadic
+    // tail occupies. Arguments past the fourth already sit on the
+    // incoming stack at `[rbp + 16 + i*8]`, so they need no spill. The
+    // c5-internal variadic convention routes every argument (named and
+    // variadic) through the integer registers as a raw 8-byte value
+    // (the caller widens floating-point arguments to double and passes
+    // `fp_arg_mask = 0`), so the spill is uniformly integer.
+    //
+    // Spill ALL four argument registers, not just the named ones: a
+    // variadic argument that landed in a register (rdx/r8/r9 for the
+    // second through fourth argument position) must reach the home area
+    // for `va_arg` to read it, and the caller reserves the full 32-byte
+    // home regardless of the argument count, so the stores never fall
+    // outside it. The body reads only the named slots; the surplus
+    // stores feed `va_arg`.
+    if win64_variadic_callee(func, abi) {
+        for (i, &reg) in abi.int_arg_regs.iter().enumerate() {
+            let home_off = (16 + i * 8) as i32;
+            emit_mov_mem_r(code, Reg::RBP, home_off, Reg(reg));
+        }
+    }
     if frame.frame_bytes > 0 {
         emit_stack_alloc(code, frame.frame_bytes, abi);
     }
@@ -2193,14 +2261,15 @@ fn emit_inst(
         Inst::Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
             fp_arg_mask,
-            ..
         } => emit_call(
             code,
             dst,
             *target_pc,
             args,
+            *fixed_args,
             alloc,
             frame,
             abi,
@@ -2238,23 +2307,34 @@ fn emit_inst(
         Inst::CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
             fp_arg_mask,
-            ..
         } => emit_call_indirect(
             code,
             dst,
             *target,
             args,
+            *callee_variadic,
+            *fixed_args,
             alloc,
             frame,
             abi,
             *fp_return,
             *fp_arg_mask,
         ),
-        Inst::Intrinsic { kind, args } => {
-            emit_intrinsic(code, *kind, args, dst, v, alloc, frame, *current_alloca_top)
-        }
+        Inst::Intrinsic { kind, args } => emit_intrinsic(
+            code,
+            *kind,
+            args,
+            dst,
+            v,
+            alloc,
+            frame,
+            abi,
+            *current_alloca_top,
+        ),
         Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
         Inst::Extend { value, kind } => emit_extend(code, dst, *value, *kind, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
@@ -4130,6 +4210,7 @@ fn emit_call(
     dst: Place,
     target_pc: usize,
     args: &[u32],
+    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -4138,6 +4219,58 @@ fn emit_call(
     fp_return: bool,
     fp_arg_mask: u32,
 ) -> bool {
+    if callee_is_variadic && abi.position_indexed_args {
+        // Win64 host variadic ABI (Microsoft x64 calling convention):
+        // the first four arguments (named and variadic) ride
+        // rcx/rdx/r8/r9 by position, the rest the incoming stack at
+        // 8-byte stride above the 32-byte home area. The c5-internal
+        // variadic convention carries every argument as a raw 8-byte
+        // integer value, so the walker widened the variadic
+        // floating-point arguments to double and passed `fp_arg_mask`
+        // 0; `plan_call_args` then routes every argument through the
+        // integer side (position-indexed int registers, then stack).
+        // This is the same marshal `emit_call_ext` performs for a
+        // libc variadic call; Win64 sets `variadic_zero_xmm_count`
+        // false, so no `al` is emitted.
+        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        if plan.scratch_bytes > 0 {
+            emit_sub_rsp_imm32(code, plan.scratch_bytes);
+        }
+        if !marshal_args(code, &plan, args, alloc, frame, "Call (Win64 variadic)") {
+            return false;
+        }
+        let call_site = code.len();
+        fixups.push(Fixup {
+            native_offset: call_site,
+            target_ent_pc: target_pc,
+            kind: super::x86_64::BranchKind::Call,
+        });
+        super::x86_64::emit_call_rel32(code, 0);
+        if plan.scratch_bytes > 0 {
+            emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        // c5 internal call return convention: an integer / pointer
+        // result lives in rax, a floating-point result in xmm0 (C99
+        // 6.2.5p10).
+        if fp_return {
+            match dst {
+                Place::FpReg(r) => {
+                    if r != Reg::XMM0.0 {
+                        emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
+                    }
+                }
+                Place::Spill(_) => fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame),
+                Place::IntReg(r) => super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0),
+                Place::None => {}
+            }
+        } else if let Some(rd) = int_or_spill_dst(dst) {
+            if rd.0 != Reg::RAX.0 {
+                emit_mov_rr(code, rd, Reg::RAX);
+            }
+            spill_dst_to_slot(code, dst, rd, frame);
+        }
+        return true;
+    }
     if callee_is_variadic {
         // c5's variadic ABI keeps the c5 stack: each arg is pushed
         // at a 16-byte stride matching the accumulator push. The
@@ -4393,6 +4526,8 @@ fn emit_call_indirect(
     dst: Place,
     target: u32,
     args: &[u32],
+    callee_variadic: bool,
+    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -4441,7 +4576,23 @@ fn emit_call_indirect(
     // FP scalar arguments ride the FP register bank (System V AMD64
     // 3.2.3); the integer-only `blocked` set above is unaffected since
     // an FP arg never occupies an integer argument register.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    //
+    // A Win64 variadic indirect call (the pointed-to prototype is
+    // variadic and the target is Win64) splits the arguments into the
+    // named prefix and the variadic tail: `plan_call_args` then places
+    // the named prefix per Win64 position-indexing and the variadic
+    // tail at 8-byte stride past the home area (Microsoft x64 calling
+    // convention). The walker widened the variadic floating-point
+    // arguments to double and passed `fp_arg_mask` 0, so every argument
+    // rides the integer side. Every other dialect (SysV, or a
+    // non-variadic Win64 callee) treats all arguments as fixed, which
+    // leaves `fixed = args.len()` and the placement unchanged.
+    let fixed = if callee_variadic && abi.position_indexed_args {
+        fixed_args.min(args.len())
+    } else {
+        args.len()
+    };
+    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
     if let Some(target_scratch) = target_scratch {
         // A free caller-saved register is available: stage the
         // target there, then marshal. The marshal never writes
@@ -4536,9 +4687,21 @@ fn emit_intrinsic(
     _v: super::super::ir::ValueId,
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
     current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
+    // Byte stride between adjacent variadic arguments in the va_list
+    // the target lays down. The Win64 host variadic ABI (Microsoft x64
+    // calling convention) packs the variadic tail at 8-byte stride in
+    // the home area + incoming stack; the c5-internal variadic ABI
+    // (SysV x86_64) pushes each argument as a 16-byte c5 cdecl cell.
+    // The stride is a property of the va_list layout, not of the
+    // current function, so a non-variadic forwarder that receives a
+    // `va_list` and runs `va_arg` (e.g. `c5_vsnprintf`) walks the same
+    // stride the variadic caller produced. On x86_64 only Win64 sets
+    // `position_indexed_args`, so this selects Win64 alone.
+    let va_stride: i32 = if abi.position_indexed_args { 8 } else { 16 };
     let intrinsic = match I::from_i64(kind) {
         Some(i) => i,
         None => {
@@ -4549,8 +4712,16 @@ fn emit_intrinsic(
     match intrinsic {
         I::VaStart => {
             // __builtin_va_start(&ap, &last). args[0] = &ap,
-            // args[1] = &last. *ap = &last + 16 (next c5 slot,
-            // 16-byte stride mirroring the aarch64 path).
+            // args[1] = &last. *ap = &last + va_stride, the address of
+            // the first variadic slot one stride past the last named
+            // parameter. The c5-internal variadic ABI lays named and
+            // variadic arguments at 16-byte stride; the Win64 host
+            // variadic ABI lays them at 8-byte stride (named register
+            // arguments spilled by the prologue into the home area, the
+            // variadic tail on the incoming stack). va_start runs only
+            // in the variadic function itself, whose named parameters
+            // already use `va_stride` (`Frame::param_cell_stride`), so
+            // `&last + va_stride` lands on the first variadic argument.
             if args.len() != 2 {
                 bail_msg("VaStart: expected 2 args");
                 return false;
@@ -4559,8 +4730,8 @@ fn emit_intrinsic(
             // register pressure, so materialize each into a reserved
             // scratch. r10 / r13 sit outside both allocator banks, so
             // they never alias an allocator-chosen `ap` / `last`. The
-            // `last + 16` advance reuses the `last` register, so the peak
-            // register need is two.
+            // `last + va_stride` advance reuses the `last` register, so
+            // the peak register need is two.
             let ap_place = match alloc.places.get(args[0] as usize).copied() {
                 Some(p) => p,
                 None => {
@@ -4583,19 +4754,20 @@ fn emit_intrinsic(
                 bail_msg("VaStart: &last not in int reg / spill");
                 return false;
             };
-            // advance = last + 16 ; mov [ap], advance. When `last` is an
-            // allocator register it may still be live after VaStart, so
-            // the advance lands in r10 rather than clobbering it; when
-            // `last` was spilled it already sits in the throwaway r10
-            // copy, which is reused. r10 is outside both pools, so it
-            // never aliases `ap` or the allocator-chosen `last`.
+            // advance = last + va_stride ; mov [ap], advance. When
+            // `last` is an allocator register it may still be live after
+            // VaStart, so the advance lands in r10 rather than
+            // clobbering it; when `last` was spilled it already sits in
+            // the throwaway r10 copy, which is reused. r10 is outside
+            // both pools, so it never aliases `ap` or the
+            // allocator-chosen `last`.
             let advance = SCRATCH_R10;
-            emit_lea_r_mem(code, advance, last, 16);
+            emit_lea_r_mem(code, advance, last, va_stride);
             emit_mov_mem_r(code, ap, 0, advance);
             true
         }
         I::VaArg => {
-            // Returns *ap, advances *ap by 16. args[0] = &ap.
+            // Returns *ap, advances *ap by va_stride. args[0] = &ap.
             if args.len() != 1 {
                 bail_msg("VaArg: expected 1 arg");
                 return false;
@@ -4653,20 +4825,21 @@ fn emit_intrinsic(
                 Place::IntReg(d) if Reg(d).0 != ap.0 => Reg(d),
                 _ => SCRATCH_R10,
             };
-            // work = *ap (old cursor) ; r10 = work + 16 ; *ap = r10. r10
-            // is the advance temporary; it differs from `ap` (r13 or an
-            // allocator reg) and from `work` (only r10 when the dst is
-            // spilled, in which case `work` is dead after the store back).
+            // work = *ap (old cursor) ; r10 = work + va_stride ; *ap =
+            // r10. r10 is the advance temporary; it differs from `ap`
+            // (r13 or an allocator reg) and from `work` (only r10 when
+            // the dst is spilled, in which case `work` is dead after the
+            // store back).
             emit_mov_r_mem(code, work, ap, 0);
             let advance = SCRATCH_R10;
             if advance.0 == work.0 {
                 // Destination spilled: store the result before reusing
                 // r10 for the advance.
                 spill_dst_to_slot(code, dst, work, frame);
-                emit_lea_r_mem(code, advance, work, 16);
+                emit_lea_r_mem(code, advance, work, va_stride);
                 emit_mov_mem_r(code, ap, 0, advance);
             } else {
-                emit_lea_r_mem(code, advance, work, 16);
+                emit_lea_r_mem(code, advance, work, va_stride);
                 emit_mov_mem_r(code, ap, 0, advance);
                 spill_dst_to_slot(code, dst, work, frame);
             }
@@ -5067,7 +5240,7 @@ fn emit_tail_call(
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
     }
-    if !is_full_leaf(func, frame, alloc) {
+    if !is_full_leaf(func, frame, alloc, abi) {
         if frame.frame_bytes > 0 {
             emit_add_rsp_imm32(code, frame.frame_bytes);
         }
@@ -5097,6 +5270,7 @@ fn emit_return(
     alloc: &Allocation,
     frame: Frame,
     func: &FunctionSsa,
+    abi: super::Abi,
 ) {
     // The integer return value may live in a callee-saved
     // register that the prologue saved and the epilogue is about
@@ -5185,7 +5359,7 @@ fn emit_return(
     // Leaf-function elision: prologue emitted no save, so the
     // epilogue emits no matching restore. The function lowers to
     // the return-value materialization, then `ret`.
-    if is_full_leaf(func, frame, alloc) {
+    if is_full_leaf(func, frame, alloc, abi) {
         emit_ret(code);
         return;
     }

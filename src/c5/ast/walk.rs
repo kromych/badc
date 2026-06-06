@@ -1911,24 +1911,37 @@ impl<'a> Walker<'a> {
                 // cdecl ABI (the pointed-to function applied the same
                 // predicate to its `param_fp_mask`); widen its FP
                 // arguments through the integer slots and pass mask 0.
+                //
+                // A Win64 variadic callee through a function pointer
+                // (`position_indexed_args`) reads its named parameters
+                // from the integer home cells the prologue spills (its
+                // `param_fp_mask` is 0), and the variadic tail rides the
+                // integer side (`variadic_int_only`). Route every
+                // floating-point argument through the integer registers
+                // as a widened double so the call site and the callee
+                // agree; SysV leaves `position_indexed_args` clear, so
+                // its variadic indirect lowering is unchanged.
                 let eff_fp_arg_mask =
                     super::super::codegen::effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
-                let call_fp_arg_mask = if fp_arg_mask != 0 && eff_fp_arg_mask == 0 {
-                    for (i, a) in args.iter().enumerate() {
-                        let arg_is_fp = expr_ty(self.ast.expr(*a))
-                            .map(is_floating_scalar)
-                            .unwrap_or(false);
-                        if arg_is_fp {
-                            let widened = b.fp_widen_to_f64(arg_vals[i]);
-                            let slot = b.alloc_synthetic_local();
-                            b.store_local(slot, widened, super::super::ir::StoreKind::I64);
-                            arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                let force_int_indirect =
+                    callee_variadic && abi.position_indexed_args && fp_arg_mask != 0;
+                let call_fp_arg_mask =
+                    if force_int_indirect || (fp_arg_mask != 0 && eff_fp_arg_mask == 0) {
+                        for (i, a) in args.iter().enumerate() {
+                            let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                .map(is_floating_scalar)
+                                .unwrap_or(false);
+                            if arg_is_fp {
+                                let widened = b.fp_widen_to_f64(arg_vals[i]);
+                                let slot = b.alloc_synthetic_local();
+                                b.store_local(slot, widened, super::super::ir::StoreKind::I64);
+                                arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
+                            }
                         }
-                    }
-                    0
-                } else {
-                    eff_fp_arg_mask
-                };
+                        0
+                    } else {
+                        eff_fp_arg_mask
+                    };
                 // Non-macOS targets keep the c5 cdecl stack-push shape
                 // for the indirect call regardless of `callee_variadic`
                 // (`fixed_args` is unused there); pass the prototype

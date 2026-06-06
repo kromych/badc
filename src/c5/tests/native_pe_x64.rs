@@ -371,6 +371,101 @@ fn variadic_printf_with_six_args_uses_stack_slots() {
     assert_exit(src, "printf6", &[], 10);
 }
 
+/// Emit a c5 program as a Win64 PE and return the raw bytes,
+/// without running it. Lets a test assert on the emitted machine
+/// code on any host (the run-based tests skip without WINE).
+fn build_pe_bytes(src: &str) -> Vec<u8> {
+    let program = Compiler::with_target(super::with_prelude(src), Target::WindowsX64)
+        .compile()
+        .expect("compile");
+    emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
+        .expect("emit_native")
+}
+
+#[test]
+fn c5_internal_variadic_lowers_to_win64_host_abi() {
+    // A c5-internal variadic call on Win64 follows the Microsoft x64
+    // calling convention rather than the c5 cdecl 16-byte stack push:
+    // named and variadic arguments ride rcx/rdx/r8/r9 by position, the
+    // callee spills the named register arguments into the caller's
+    // home area, and the va_list is an 8-byte-stride cursor. This locks
+    // the three byte-level signatures so a regression that reverts the
+    // call site to the 16-byte push, drops the home spill, or restores
+    // the 16-byte va_arg stride is caught on any host.
+    let src = r#"
+        #include <stdarg.h>
+        int vsum(int count, ...) {
+            va_list ap;
+            int total;
+            int i;
+            total = 0;
+            va_start(ap, count);
+            for (i = 0; i < count; i = i + 1)
+                total = total + va_arg(ap, int);
+            va_end(ap);
+            return total;
+        }
+        int main(void) { return vsum(3, 10, 20, 30); }
+    "#;
+    let bytes = build_pe_bytes(src);
+
+    // Callee prologue home spill: `mov [rbp+0x10], rcx` spills the
+    // first named register argument into the caller-reserved home slot
+    // at `[rbp + 16]`. Encoding: REX.W 89 4D 10.
+    let home_spill = [0x48u8, 0x89, 0x4D, 0x10];
+    assert!(
+        contains(&bytes, &home_spill),
+        "Win64 variadic callee must spill rcx into the home slot [rbp+16]"
+    );
+
+    // va_start / va_arg advance the cursor by 8 (the Win64 va_list
+    // stride), not 16. `lea r10, [reg + 8]` with the c5 emit's reserved
+    // r10 scratch encodes as REX.WR 8D 5x 08; the trailing 0x08
+    // displacement is the stride. The c5-internal SysV path would use
+    // 0x10 here. Assert the 8-byte-stride lea is present and the
+    // 16-byte-stride one (`8D 5x 10`) is not produced for this
+    // function shape.
+    let va_stride8 = [0x4Cu8, 0x8D, 0x52, 0x08]; // lea r10, [rdx+8]
+    assert!(
+        contains(&bytes, &va_stride8),
+        "Win64 va_arg / va_start must advance the cursor by 8"
+    );
+    let va_stride16 = [0x4Cu8, 0x8D, 0x52, 0x10]; // lea r10, [rdx+16]
+    assert!(
+        !contains(&bytes, &va_stride16),
+        "Win64 must not emit the 16-byte c5 cdecl va_list stride"
+    );
+}
+
+/// True when `needle` appears as a contiguous subslice of `hay`.
+fn contains(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
+#[test]
+fn c5_internal_variadic_sum_runs() {
+    // End-to-end correctness of the Win64 host variadic ABI: a
+    // c5-internal variadic sum over one named and three variadic
+    // integer arguments returns their total. Skips without a PE host
+    // (no WINE); the parent drives the Windows-box run.
+    let src = r#"
+        #include <stdarg.h>
+        int vsum(int count, ...) {
+            va_list ap;
+            int total;
+            int i;
+            total = 0;
+            va_start(ap, count);
+            for (i = 0; i < count; i = i + 1)
+                total = total + va_arg(ap, int);
+            va_end(ap);
+            return total;
+        }
+        int main(void) { return vsum(3, 10, 20, 30); }
+    "#;
+    assert_exit(src, "c5varsum", &[], 60);
+}
+
 // ---------------- fixture parity ----------------
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {

@@ -506,7 +506,7 @@ fn ent_pc=28 n_params=0 variadic=false locals=2
     terminator Return(v156)   (exit_acc=v156)
   block 48  start_pc=0
     v157 Imm(4591870180066957722)                         -> x3
-    v158 Call { target_pc=27, args=[v157], fp_return=true, fp_arg_mask=0x1 } -> d0
+    v158 Call { target_pc=27, args=[v157], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v159 Binop { op=feq, lhs=v158, rhs=v157 }             -> x0
     terminator Bz { cond=v159, target=b50, fall=b49 }   (exit_acc=v159)
   block 49  start_pc=0
@@ -514,7 +514,7 @@ fn ent_pc=28 n_params=0 variadic=false locals=2
     terminator Return(v160)   (exit_acc=v160)
   block 50  start_pc=0
     v161 Imm(4611686018427387904)                         -> x3
-    v162 Call { target_pc=27, args=[v161], fp_return=true, fp_arg_mask=0x1 } -> d0
+    v162 Call { target_pc=27, args=[v161], fixed_args=1, fp_return=true, fp_arg_mask=0x1 } -> d0
     v163 Binop { op=fne, lhs=v162, rhs=v161 }             -> x0
     terminator Bz { cond=v163, target=b52, fall=b51 }   (exit_acc=v163)
   block 51  start_pc=0

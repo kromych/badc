@@ -711,6 +711,7 @@ impl SsaBuilder {
         &mut self,
         target_pc: usize,
         args: Vec<ValueId>,
+        fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: u32,
     ) -> ValueId {
@@ -718,6 +719,7 @@ impl SsaBuilder {
         self.push(Inst::Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         })
@@ -731,6 +733,7 @@ impl SsaBuilder {
         &mut self,
         sym_idx: u32,
         args: Vec<ValueId>,
+        fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: u32,
     ) -> ValueId {
@@ -738,6 +741,7 @@ impl SsaBuilder {
         let v = self.push(Inst::Call {
             target_pc: 0,
             args,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         });
@@ -750,6 +754,8 @@ impl SsaBuilder {
         &mut self,
         target: ValueId,
         args: Vec<ValueId>,
+        callee_variadic: bool,
+        fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: u32,
     ) -> ValueId {
@@ -757,6 +763,8 @@ impl SsaBuilder {
         self.push(Inst::CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         })
@@ -1017,10 +1025,10 @@ mod tests {
         b.switch_to(recurse);
         let v_n1 = b.load_local(2, LoadKind::I32);
         let v_n_minus_1 = b.binop_imm(BinOp::Sub, v_n1, 1);
-        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], false, 0);
+        let v_call1 = b.call(fake_ent_pc, alloc::vec![v_n_minus_1], 1, false, 0);
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
-        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], false, 0);
+        let v_call2 = b.call(fake_ent_pc, alloc::vec![v_n_minus_2], 1, false, 0);
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
 
@@ -1258,7 +1266,7 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], false, 0);
+        let _ = b.call(0, alloc::vec![], 0, false, 0);
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

@@ -38,7 +38,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v13  Load { addr=v12, kind=I32 }                      -> x14
     v14  Imm(1)                                           -> x7
     v15  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v16  CallIndirect { target=v10, args=[v14], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v16  CallIndirect { target=v10, args=[v14], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v17  Binop { op=add, lhs=v13, rhs=v16 }               -> x0
     v18  Store { addr=v12, value=v17, kind=I32 }          -> -
     v19  Load { addr=v12, kind=I32 }                      -> x0
@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v21  Load { addr=v20, kind=I32 }                      -> x14
     v22  Imm(2)                                           -> x7
     v23  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v24  CallIndirect { target=v10, args=[v22], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v24  CallIndirect { target=v10, args=[v22], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v25  Binop { op=add, lhs=v21, rhs=v24 }               -> x0
     v26  Store { addr=v20, value=v25, kind=I32 }          -> -
     v27  Load { addr=v20, kind=I32 }                      -> x0
@@ -65,7 +65,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v34  Load { addr=v33, kind=I32 }                      -> x12
     v35  Imm(3)                                           -> x7
     v36  LoadLocal { off=-6, kind=I64 }                   -> x0
-    v37  CallIndirect { target=v28, args=[v35], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v37  CallIndirect { target=v28, args=[v35], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v38  Binop { op=add, lhs=v34, rhs=v37 }               -> x0
     v39  Store { addr=v33, value=v38, kind=I32 }          -> -
     v40  Load { addr=v33, kind=I32 }                      -> x0
@@ -78,7 +78,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v45  LocalAddr(-9)                                    -> x0
     v46  Load { addr=v45, kind=I64 }                      -> x0
     v47  Imm(4)                                           -> x7
-    v48  CallIndirect { target=v46, args=[v47], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v48  CallIndirect { target=v46, args=[v47], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v49  Binop { op=add, lhs=v44, rhs=v48 }               -> x0
     v50  Store { addr=v43, value=v49, kind=I32 }          -> -
     v51  Load { addr=v43, kind=I32 }                      -> x0

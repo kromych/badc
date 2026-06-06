@@ -135,19 +135,22 @@ fn fmt_inst(inst: &Inst) -> String {
         Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         } => format!(
-            "Call {{ target_pc={target_pc}, args=[{}], fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
+            "Call {{ target_pc={target_pc}, args=[{}], fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         } => format!(
-            "CallIndirect {{ target=v{target}, args=[{}], fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
+            "CallIndirect {{ target=v{target}, args=[{}], callee_variadic={callee_variadic}, fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
         ),
         CallExt {

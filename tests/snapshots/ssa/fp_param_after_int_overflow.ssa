@@ -71,7 +71,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     v10  Imm(4602678819172646912)                         -> x12
     v11  Imm(0)                                           -> x14
     v12  LoadLocal { off=-13, kind=I64 }                  -> x14
-    v13  Call { target_pc=0, args=[v1, v2, v3, v4, v5, v6, v7, v8, v9, v10], fp_return=true, fp_arg_mask=0x0 } -> d0
+    v13  Call { target_pc=0, args=[v1, v2, v3, v4, v5, v6, v7, v8, v9, v10], fixed_args=10, fp_return=true, fp_arg_mask=0x0 } -> d0
     v14  Imm(0)                                           -> x0
     v15  LoadLocal { off=-1, kind=F64 }                   -> d1
     v16  Imm(4631600373029666816)                         -> x0
@@ -93,7 +93,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=14
     v28  Imm(4598175219545276416)                         -> x12
     v29  Imm(0)                                           -> x14
     v30  LoadLocal { off=-14, kind=I64 }                  -> x14
-    v31  Call { target_pc=0, args=[v19, v20, v21, v22, v23, v24, v25, v26, v27, v28], fp_return=true, fp_arg_mask=0x0 } -> d0
+    v31  Call { target_pc=0, args=[v19, v20, v21, v22, v23, v24, v25, v26, v27, v28], fixed_args=10, fp_return=true, fp_arg_mask=0x0 } -> d0
     v32  Imm(0)                                           -> x0
     v33  LoadLocal { off=-2, kind=F64 }                   -> d1
     v34  Imm(4646628497958109184)                         -> x0

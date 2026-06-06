@@ -138,6 +138,16 @@ pub(crate) enum Inst {
     Call {
         target_pc: usize,
         args: Vec<ValueId>,
+        /// Count of named (fixed) parameters the callee declares.
+        /// For a variadic callee this is the prototype's
+        /// pre-ellipsis parameter count; `args[fixed_args..]` are
+        /// the variadic arguments. For a non-variadic callee it
+        /// equals `args.len()`. The per-arch emit feeds it to
+        /// `plan_call_args` so a host variadic ABI (macOS arm64:
+        /// AAPCS64 6.4.1 for the named args, all-stack at 8-byte
+        /// stride for the variadic tail) places the variadic
+        /// arguments correctly.
+        fixed_args: usize,
         /// True when the callee's return type is a floating-point
         /// scalar (C99 6.2.5p10). The return value lives in the FP
         /// return register (xmm0 / d0), so the call's result is
@@ -158,6 +168,16 @@ pub(crate) enum Inst {
     CallIndirect {
         target: ValueId,
         args: Vec<ValueId>,
+        /// True when the pointed-to function's prototype is variadic.
+        /// The walker reads it off the callee fn-pointer's declared
+        /// type; an unprototyped or non-statically-typed callee
+        /// defaults to false. Drives the per-arch emit's choice of
+        /// the host variadic ABI vs the c5 cdecl stack-push shape.
+        callee_variadic: bool,
+        /// Named (fixed) parameter count of the pointed-to function;
+        /// see [`Self::Call::fixed_args`]. Equals `args.len()` unless
+        /// `callee_variadic`.
+        fixed_args: usize,
         /// See [`Self::Call::fp_return`].
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].

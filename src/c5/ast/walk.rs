@@ -419,6 +419,48 @@ impl<'a> Walker<'a> {
             && self.symbols[idx].is_variadic
     }
 
+    /// Count of named (pre-ellipsis) parameters the `Token::Fun`
+    /// symbol declares. The parser records the prototype's fixed
+    /// parameter types in `Symbol::params`; a variadic callee's
+    /// arguments past this count are the variadic tail. Used to
+    /// split the call's arguments into the fixed (register-bank)
+    /// prefix and the variadic (host-stack) tail for the macOS
+    /// arm64 variadic ABI.
+    fn fun_fixed_args(&self, sym: u32) -> usize {
+        let idx = sym as usize;
+        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
+            self.symbols[idx].params.len()
+        } else {
+            0
+        }
+    }
+
+    /// Resolve an indirect call's callee expression to the pointed-to
+    /// function's `(is_variadic, fixed_arg_count)`. Three statically-
+    /// typed callee shapes carry the prototype:
+    ///   * a direct function name taken as a pointer (`Token::Fun`),
+    ///   * a function-pointer variable whose declaration inherited the
+    ///     prototype from a function-pointer typedef,
+    ///   * the right operand of a comma operator (the `(side, fn)`
+    ///     shape), resolved recursively.
+    /// A callee with no statically-known prototype defaults to
+    /// non-variadic with every argument fixed (`arg_count`), which
+    /// keeps the host-ABI placement identical to a plain call.
+    fn indirect_callee_proto(&self, callee: super::ExprId, arg_count: usize) -> (bool, usize) {
+        match self.ast.expr(callee) {
+            Expr::Ident { sym, .. } => {
+                let idx = *sym as usize;
+                if idx < self.symbols.len() && self.symbols[idx].is_variadic {
+                    (true, self.symbols[idx].params.len())
+                } else {
+                    (false, arg_count)
+                }
+            }
+            Expr::Comma { rhs, .. } => self.indirect_callee_proto(*rhs, arg_count),
+            _ => (false, arg_count),
+        }
+    }
+
     /// Resolve a `Token::Glo` address producer to either an
     /// intra-unit data offset or a cross-TU symbol reference.
     ///
@@ -1599,10 +1641,14 @@ impl<'a> Walker<'a> {
                     // `param_fp_mask` because the hidden out-pointer
                     // shifts every parameter cell), so its arguments
                     // ride the integer bank: `fp_arg_mask` is 0.
+                    // A struct-returning callee is non-variadic (it
+                    // keeps the c5 cdecl shape with the hidden
+                    // out-pointer), so every argument is fixed.
+                    let fixed_args = all_args.len();
                     if target_pc == 0 {
-                        let _ = b.call_extern(*sym, all_args, false, 0);
+                        let _ = b.call_extern(*sym, all_args, fixed_args, false, 0);
                     } else {
-                        let _ = b.call(target_pc as usize, all_args, false, 0);
+                        let _ = b.call(target_pc as usize, all_args, fixed_args, false, 0);
                     }
                     return Ok(b.local_addr(result_slot));
                 }
@@ -1686,17 +1732,72 @@ impl<'a> Walker<'a> {
                         // widened 8-byte double, matching what the callee
                         // reads back, and pass `fp_arg_mask = 0`.
                         let callee_variadic = self.fun_is_variadic(*sym);
+                        let abi = self.target.abi();
+                        // Named (fixed) parameter count of the callee.
+                        // For a variadic callee the prototype records the
+                        // pre-ellipsis parameters in `Symbol::params`;
+                        // `args[fixed_args..]` are the variadic arguments.
+                        // For a non-variadic callee every argument is
+                        // fixed.
+                        let fixed_args = if callee_variadic {
+                            self.fun_fixed_args(*sym).min(args.len())
+                        } else {
+                            args.len()
+                        };
+                        // macOS arm64's variadic ABI (Apple "Writing
+                        // ARM64 Code for Apple Platforms") passes the
+                        // named arguments per AAPCS64 6.4.1 (int bank +
+                        // FP bank) and every variadic argument on the
+                        // stack at 8-byte stride. The codegen marshals
+                        // this exactly like a libc variadic call, so the
+                        // named FP arguments keep their FP-bank placement;
+                        // only the variadic `float` arguments are widened
+                        // to `double` per C99 6.5.2.2p6 (kept FP-classed
+                        // so the 8-byte stack store reads back as a
+                        // double).
+                        if callee_variadic && abi.variadic_on_stack {
+                            for (i, a) in args.iter().enumerate() {
+                                if i < fixed_args {
+                                    continue;
+                                }
+                                let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                    .map(is_floating_scalar)
+                                    .unwrap_or(false);
+                                if arg_is_fp {
+                                    arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
+                                }
+                            }
+                            let fp_return = is_floating_scalar(*ty);
+                            let target_pc = self.live_fun_val(*sym, *val);
+                            let call = if target_pc == 0 {
+                                b.call_extern(*sym, arg_vals, fixed_args, fp_return, fp_arg_mask)
+                            } else {
+                                b.call(
+                                    target_pc as usize,
+                                    arg_vals,
+                                    fixed_args,
+                                    fp_return,
+                                    fp_arg_mask,
+                                )
+                            };
+                            if is_float_ty(*ty) {
+                                return Ok(b.mark_f32(call));
+                            }
+                            return Ok(call);
+                        }
                         // The callee keeps the all-integer c5 cdecl ABI
-                        // when it is variadic or when its register/stack
-                        // placement would interleave (the same predicate
-                        // the callee applies to its `param_fp_mask`). In
-                        // that case widen every FP argument to an 8-byte
-                        // double in an integer slot, matching what the
-                        // callee reads back, and pass `fp_arg_mask = 0`.
+                        // when it is variadic (on every target other than
+                        // macOS arm64, handled above) or when its
+                        // register/stack placement would interleave (the
+                        // same predicate the callee applies to its
+                        // `param_fp_mask`). In that case widen every FP
+                        // argument to an 8-byte double in an integer slot,
+                        // matching what the callee reads back, and pass
+                        // `fp_arg_mask = 0`.
                         let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
                             args.len(),
                             fp_arg_mask,
-                            self.target.abi(),
+                            abi,
                         );
                         let force_int =
                             callee_variadic || (fp_arg_mask != 0 && eff_fp_arg_mask == 0);
@@ -1725,9 +1826,15 @@ impl<'a> Walker<'a> {
                         let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
                         let call = if target_pc == 0 {
-                            b.call_extern(*sym, arg_vals, fp_return, call_fp_arg_mask)
+                            b.call_extern(*sym, arg_vals, fixed_args, fp_return, call_fp_arg_mask)
                         } else {
-                            b.call(target_pc as usize, arg_vals, fp_return, call_fp_arg_mask)
+                            b.call(
+                                target_pc as usize,
+                                arg_vals,
+                                fixed_args,
+                                fp_return,
+                                call_fp_arg_mask,
+                            )
                         };
                         // A `float`-returning callee yields a single-
                         // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
@@ -1746,21 +1853,66 @@ impl<'a> Walker<'a> {
                         return Ok(b.call_ext(*val, arg_vals, fp_arg_mask));
                     }
                 }
+                // Determine the pointed-to function's variadic-ness
+                // and named-parameter count from the callee's static
+                // type. A fn-pointer Ident (`cb(...)` where `cb` is a
+                // variadic-fn-pointer variable) carries the prototype
+                // on its symbol (propagated from the typedef at
+                // declaration). A callee with no statically-known
+                // prototype (e.g. the result of a comma operator)
+                // defaults to non-variadic, all-fixed.
+                //
+                // TODO: a variadic call through a function pointer whose
+                // prototype is not statically recoverable here (a pointer
+                // received as a parameter, or loaded through a non-typedef
+                // path) takes the all-fixed default and, under the host
+                // variadic ABI (`variadic_on_stack`), places the variadic
+                // tail in registers rather than on the stack the callee's
+                // va_arg walks. Carrying the prototype on the pointer's
+                // type rather than the variable symbol would close this.
+                let (callee_variadic, callee_fixed) =
+                    self.indirect_callee_proto(*callee, args.len());
+                let abi = self.target.abi();
                 let target = match indirect_target {
                     Some(t) => t,
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                if callee_variadic && abi.variadic_on_stack {
+                    // macOS arm64 variadic ABI: named arguments follow
+                    // AAPCS64 (int / FP bank), variadic arguments on the
+                    // stack at 8-byte stride. Widen variadic `float`
+                    // arguments to `double` per C99 6.5.2.2p6, kept
+                    // FP-classed so the 8-byte stack store is a double;
+                    // the named FP arguments keep their FP-bank
+                    // placement through the real `fp_arg_mask`.
+                    for (i, a) in args.iter().enumerate() {
+                        if i < callee_fixed {
+                            continue;
+                        }
+                        let arg_is_fp = expr_ty(self.ast.expr(*a))
+                            .map(is_floating_scalar)
+                            .unwrap_or(false);
+                        if arg_is_fp {
+                            arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
+                        }
+                    }
+                    return Ok(b.call_indirect(
+                        target,
+                        arg_vals,
+                        true,
+                        callee_fixed,
+                        fp_return,
+                        fp_arg_mask,
+                    ));
+                }
                 // A function-pointer callee whose register/stack
                 // placement would interleave keeps the all-integer c5
                 // cdecl ABI (the pointed-to function applied the same
                 // predicate to its `param_fp_mask`); widen its FP
                 // arguments through the integer slots and pass mask 0.
-                let eff_fp_arg_mask = super::super::codegen::effective_fp_arg_mask(
-                    args.len(),
-                    fp_arg_mask,
-                    self.target.abi(),
-                );
+                let eff_fp_arg_mask =
+                    super::super::codegen::effective_fp_arg_mask(args.len(), fp_arg_mask, abi);
                 let call_fp_arg_mask = if fp_arg_mask != 0 && eff_fp_arg_mask == 0 {
                     for (i, a) in args.iter().enumerate() {
                         let arg_is_fp = expr_ty(self.ast.expr(*a))
@@ -1777,7 +1929,18 @@ impl<'a> Walker<'a> {
                 } else {
                     eff_fp_arg_mask
                 };
-                Ok(b.call_indirect(target, arg_vals, fp_return, call_fp_arg_mask))
+                // Non-macOS targets keep the c5 cdecl stack-push shape
+                // for the indirect call regardless of `callee_variadic`
+                // (`fixed_args` is unused there); pass the prototype
+                // through so only the macOS path consults it.
+                Ok(b.call_indirect(
+                    target,
+                    arg_vals,
+                    callee_variadic,
+                    callee_fixed,
+                    fp_return,
+                    call_fp_arg_mask,
+                ))
             }
             Expr::Member {
                 obj,

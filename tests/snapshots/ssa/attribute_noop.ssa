@@ -108,7 +108,7 @@ fn ent_pc=17 n_params=0 variadic=false locals=3
     v10  ImmData(88)                                      -> x7
     v11  Imm(1)                                           -> x6
     v12  Imm(2)                                           -> x2
-    v13  Call { target_pc=15, args=[v10, v11, v12], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v13  Call { target_pc=15, args=[v10, v11, v12], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v14  BinopI { op=ne, lhs=v13, rhs_imm=42 }            -> x0
     terminator Bz { cond=v14, target=b4, fall=b3 }   (exit_acc=v14)
   block 3  start_pc=0

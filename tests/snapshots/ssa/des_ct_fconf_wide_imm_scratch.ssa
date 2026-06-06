@@ -679,7 +679,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v14  Load { addr=v13, kind=U32 }                      -> x14
     v15  BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x7
     v16  ImmData(8)                                       -> x6
-    v17  Call { target_pc=1, args=[v15, v16], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  Call { target_pc=1, args=[v15, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v18  Binop { op=xor, lhs=v14, rhs=v17 }               -> x0
     v19  Store { addr=v13, value=v18, kind=I32 }          -> -
     v20  Load { addr=v13, kind=U32 }                      -> x0

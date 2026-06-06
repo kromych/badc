@@ -149,13 +149,27 @@ impl Frame {
     }
 }
 
+/// True when the callee receives its named parameters in argument
+/// registers and must spill them to their c5 cdecl cells on entry.
+/// Non-variadic callees always do. A variadic callee does so only
+/// under the host variadic ABI that passes named arguments in
+/// registers and the variadic tail on the stack (macOS arm64,
+/// `variadic_on_stack`); on every other target a variadic callee
+/// keeps the c5 cdecl stack-push shape and reads its named arguments
+/// off the 16-byte-stride stack the caller laid down.
+fn spills_named_params_on_entry(func: &FunctionSsa, abi: super::Abi) -> bool {
+    !func.is_variadic || abi.variadic_on_stack
+}
+
 /// Per-parameter incoming-register placement from `plan_call_args`.
-/// Indexed by declared parameter position. Variadic and zero-param
-/// callees yield an empty plan. Independent int / FP argument-register
-/// banks (AAPCS64 6.4.1) mean an FP parameter is placed in d0..d7
-/// without shifting the integer bank.
+/// Indexed by declared parameter position. Callees that read their
+/// named arguments off the c5 cdecl stack (every variadic callee
+/// except the macOS arm64 variadic ABI) and zero-param callees yield
+/// an empty plan. Independent int / FP argument-register banks
+/// (AAPCS64 6.4.1) mean an FP parameter is placed in d0..d7 without
+/// shifting the integer bank.
 fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<super::ArgPlacement> {
-    if func.is_variadic || func.n_params == 0 {
+    if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
     super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
@@ -215,7 +229,7 @@ fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) 
 ///   `seeded` is empty, `can_elide` is false, and the full
 ///   `n_params * 16` is returned.
 fn prologue_param_spill_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
-    if func.is_variadic {
+    if !spills_named_params_on_entry(func, abi) {
         return 0;
     }
     let entry_spill = func.n_params;
@@ -366,6 +380,26 @@ fn emit_sp_plus_off(code: &mut Vec<u8>, dst: Reg, off: u32) {
         }
     } else {
         emit(code, enc_add_imm(dst, Reg(31), lo));
+    }
+}
+
+/// Materialise `fp + off` into `dst` using the same shift-12 +
+/// remainder split as `emit_sp_plus_off`, but based on fp (x29).
+/// Used by the macOS arm64 variadic `va_start` to compute the
+/// frame-relative address of the first incoming stack argument.
+fn emit_sp_plus_off_from_fp(code: &mut Vec<u8>, dst: Reg, off: u32) {
+    let hi = off & !0xfff;
+    let lo = off & 0xfff;
+    if hi != 0 {
+        emit(
+            code,
+            super::aarch64::enc_add_imm_lsl12(dst, Reg(29), hi >> 12),
+        );
+        if lo != 0 {
+            emit(code, enc_add_imm(dst, dst, lo));
+        }
+    } else {
+        emit(code, enc_add_imm(dst, Reg(29), lo));
     }
 }
 
@@ -657,6 +691,7 @@ pub(super) fn emit_function(
             let data_fixups_pre_inst = data_fixups.len();
             if !emit_inst(
                 code,
+                func,
                 inst,
                 v,
                 place,
@@ -1060,7 +1095,11 @@ fn emit_prologue(
     // no address taken, and has no surviving slot access, the
     // entire register stripe drops out (`frame.param_spill_bytes`
     // already reflects 0) and no instructions are emitted here.
-    let entry_spill = if func.is_variadic { 0 } else { func.n_params };
+    let entry_spill = if spills_named_params_on_entry(func, abi) {
+        func.n_params
+    } else {
+        0
+    };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
         let (n_reg, n_stack) = param_reg_stack_split(func, abi);
         let placements = param_placements(func, abi);
@@ -1255,6 +1294,7 @@ fn fused_branch_cond(
 #[allow(clippy::too_many_arguments)]
 fn emit_inst(
     code: &mut Vec<u8>,
+    func: &FunctionSsa,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1467,6 +1507,7 @@ fn emit_inst(
         Inst::Call {
             target_pc,
             args,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         } => emit_call(
@@ -1474,6 +1515,7 @@ fn emit_inst(
             dst,
             *target_pc,
             args,
+            *fixed_args,
             alloc,
             frame,
             scratch,
@@ -1504,6 +1546,8 @@ fn emit_inst(
         Inst::CallIndirect {
             target,
             args,
+            callee_variadic,
+            fixed_args,
             fp_return,
             fp_arg_mask,
         } => emit_call_indirect(
@@ -1511,6 +1555,8 @@ fn emit_inst(
             dst,
             *target,
             args,
+            *callee_variadic,
+            *fixed_args,
             alloc,
             frame,
             scratch,
@@ -1525,6 +1571,8 @@ fn emit_inst(
         } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
+            func,
+            abi,
             *kind,
             args,
             dst,
@@ -1773,6 +1821,8 @@ fn emit_tls_addr(
 /// stack / accumulator.
 fn emit_intrinsic(
     code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    abi: super::Abi,
     kind: i64,
     args: &[u32],
     dst: Place,
@@ -1792,7 +1842,8 @@ fn emit_intrinsic(
     match intrinsic {
         I::VaStart => {
             // __builtin_va_start(&ap, &last). args[0] = &ap,
-            // args[1] = &last. Set *ap = &last + 16 (next c5 slot).
+            // args[1] = &last. Set *ap = address of the first
+            // variadic argument.
             if args.len() != 2 {
                 bail_msg("VaStart: expected 2 args");
                 return false;
@@ -1802,15 +1853,52 @@ fn emit_intrinsic(
                 .get(args[0] as usize)
                 .copied()
                 .unwrap_or(Place::None);
+            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            if func.is_variadic && abi.variadic_on_stack {
+                // macOS arm64 variadic ABI: the named arguments arrive
+                // in argument registers (spilled to c5 cdecl cells by
+                // the prologue) and the variadic arguments sit on the
+                // incoming stack above the named arguments' stack
+                // overflow. The named arguments are no longer adjacent
+                // to the variadic tail, so `&last` cannot locate it;
+                // compute the address from the frame.
+                //
+                // The prologue allocates `frame.param_spill_bytes` of
+                // c5 cdecl cells plus the standard 16-byte fp/lr save
+                // below fp, so the incoming-stack region begins at
+                // `fp + param_spill_bytes + 16`. The named arguments
+                // that overflowed the registers occupy the low
+                // `n_stack * 8` bytes of that region (AAPCS64 8-byte
+                // stack stride); the variadic tail follows.
+                let (_, n_stack) = param_reg_stack_split(func, abi);
+                let named_overflow_bytes = (n_stack as u32) * 8;
+                let off = frame.param_spill_bytes + 16 + named_overflow_bytes;
+                // The c5 cdecl cell region the prologue allocates keeps
+                // fp 16-aligned (each cell is 16 bytes, the fp/lr save
+                // is 16 bytes); a non-16-aligned `off` would mean the
+                // frame accounting and the incoming-stack region
+                // disagree.
+                debug_assert_eq!(
+                    (frame.param_spill_bytes + 16) % 16,
+                    0,
+                    "va_start: c5 cdecl cell region must keep fp 16-aligned"
+                );
+                emit_sp_plus_off_from_fp(code, scratch.secondary, off);
+                emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+                return true;
+            }
+            // c5-internal variadic ABI (every target except macOS
+            // arm64): the named arguments are pushed onto the c5 stack
+            // at 16-byte stride adjacent to the variadic tail, so the
+            // next variadic slot is `&last + 16`.
             let last_place = alloc
                 .places
                 .get(args[1] as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
             let last_r = match materialize_int(code, last_place, scratch.secondary, frame) {
                 Some(r) => r,
                 None => return false,
@@ -1820,8 +1908,18 @@ fn emit_intrinsic(
             true
         }
         I::VaArg => {
-            // __builtin_va_arg(&ap) returns *ap and advances *ap
-            // by 16 (one c5 slot in native layout). args[0] = &ap.
+            // __builtin_va_arg(&ap) returns *ap (the address of the
+            // current variadic slot) and advances *ap to the next.
+            // The stride is a property of the va_list layout the
+            // target builds, not of the current function: the macOS
+            // arm64 variadic ABI lays variadic arguments on the stack
+            // at 8-byte stride (AAPCS64 variadic variant); every other
+            // target uses the c5 cdecl cell stride (16 bytes). A
+            // non-variadic forwarder (e.g. `c5_vsnprintf` taking a
+            // `va_list` argument) must walk the same stride the
+            // variadic caller produced, so this does not depend on
+            // `func.is_variadic`. args[0] = &ap.
+            let va_stride: u32 = if abi.variadic_on_stack { 8 } else { 16 };
             if args.len() != 1 {
                 bail_msg("VaArg: expected 1 arg");
                 return false;
@@ -1859,7 +1957,7 @@ fn emit_intrinsic(
                 Reg(19)
             };
             emit(code, enc_ldr_imm(rd, ap_r, 0));
-            emit(code, enc_add_imm(adv, rd, 16));
+            emit(code, enc_add_imm(adv, rd, va_stride));
             emit(code, enc_str_imm(adv, ap_r, 0));
             match dst {
                 Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
@@ -2240,6 +2338,7 @@ fn emit_call(
     dst: Place,
     target_pc: usize,
     args: &[u32],
+    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2249,6 +2348,36 @@ fn emit_call(
     fp_return: bool,
     fp_arg_mask: u32,
 ) -> bool {
+    if callee_is_variadic && abi.variadic_on_stack {
+        // macOS arm64 variadic ABI (Apple "Writing ARM64 Code for
+        // Apple Platforms"): the named (fixed) arguments follow
+        // AAPCS64 6.4.1 (int bank x0..x7 / FP bank d0..d7, overflow
+        // to the stack); every variadic argument is passed on the
+        // stack at 8-byte stride. `plan_call_args` with
+        // `fixed_args` produces exactly this placement, identical to
+        // a libc variadic call. The callee's prologue spills the
+        // named register arguments to its c5 cdecl cells and reads
+        // the variadic tail off the incoming stack; `va_start`
+        // points at the first incoming stack slot.
+        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        if plan.scratch_bytes > 0 {
+            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        }
+        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+            return false;
+        }
+        fixups.push(Fixup {
+            native_offset: code.len(),
+            target_ent_pc: target_pc,
+            kind: BranchKind::Bl,
+        });
+        emit(code, enc_bl(0));
+        if plan.scratch_bytes > 0 {
+            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        }
+        move_call_result(code, dst, frame, fp_return);
+        return true;
+    }
     if callee_is_variadic {
         // The variadic c5 ABI keeps the c5 stack: every arg is
         // pushed at a 16-byte stride matching the accumulator
@@ -2395,6 +2524,8 @@ fn emit_call_indirect(
     dst: Place,
     target: u32,
     args: &[u32],
+    callee_variadic: bool,
+    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2441,6 +2572,28 @@ fn emit_call_indirect(
     };
     if target_r.0 != target_reg.0 {
         emit_mov_reg(code, target_reg, target_r);
+    }
+    if callee_variadic && abi.variadic_on_stack {
+        // macOS arm64 variadic ABI through a function pointer: the
+        // named arguments follow AAPCS64 (int / FP bank) and the
+        // variadic tail rides the stack at 8-byte stride -- the same
+        // placement `emit_call` uses for a direct variadic call. The
+        // target pointer is already captured in `target_reg` (a
+        // non-arg-passing scratch), so `marshal_args` will not clobber
+        // it. `blr` through the captured register.
+        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        if plan.scratch_bytes > 0 {
+            emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        }
+        if !marshal_args(code, &plan, args, alloc, scratch, frame) {
+            return false;
+        }
+        emit(code, enc_blr(target_reg));
+        if plan.scratch_bytes > 0 {
+            emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+        }
+        move_call_result(code, dst, frame, fp_return);
+        return true;
     }
     // Indirect calls keep the c5-stack push shape regardless of
     // whether the callee is variadic. Variadic c5 callees read

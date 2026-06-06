@@ -345,6 +345,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// the array length. Cleared by every base-type parse
     /// (`0` means "not from an array typedef").
     pub typedef_base_array_size: i64,
+    /// Binding-site carrier for a function-pointer typedef's
+    /// prototype: `Some((fixed_param_count, is_variadic))` when the
+    /// base type was a typedef whose alias is a function-pointer
+    /// type. A variable declared `fn_ptr_t cb` inherits the
+    /// callee's variadic-ness and named-parameter count so an
+    /// indirect call through `cb` can split its arguments into the
+    /// fixed register prefix and the variadic stack tail (the macOS
+    /// arm64 variadic ABI). `None` for non-fn-pointer base types.
+    /// Cleared by every base-type parse.
+    pub typedef_fn_proto: Option<(usize, bool)>,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -460,6 +470,7 @@ impl Default for Pending {
             init_inner_dim: 0,
             init_target_array_size: 0,
             typedef_base_array_size: 0,
+            typedef_fn_proto: None,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field

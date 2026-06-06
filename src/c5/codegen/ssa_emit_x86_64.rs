@@ -2195,6 +2195,7 @@ fn emit_inst(
             args,
             fp_return,
             fp_arg_mask,
+            ..
         } => emit_call(
             code,
             dst,
@@ -2239,6 +2240,7 @@ fn emit_inst(
             args,
             fp_return,
             fp_arg_mask,
+            ..
         } => emit_call_indirect(
             code,
             dst,

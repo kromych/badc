@@ -98,7 +98,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=31
     v4   LoadLocal { off=-19, kind=I64 }                  -> x0
     v5   Imm(11)                                          -> x6
     v6   Imm(22)                                          -> x2
-    v7   Call { target_pc=0, args=[v2, v5, v6], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v7   Call { target_pc=0, args=[v2, v5, v6], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v8   LocalAddr(-18)                                   -> x0
     v9   Mcpy { dst=v1, src=v8, size=8 }                  -> x0
     v10  Imm(7)                                           -> x0
@@ -154,7 +154,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=31
     v48  LoadLocal { off=-21, kind=I64 }                  -> x0
     v49  Imm(3)                                           -> x6
     v50  Imm(4)                                           -> x2
-    v51  Call { target_pc=0, args=[v46, v49, v50], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v51  Call { target_pc=0, args=[v46, v49, v50], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v52  LocalAddr(-20)                                   -> x0
     v53  Mcpy { dst=v45, src=v52, size=8 }                -> x0
     v54  LocalAddr(-4)                                    -> x0
@@ -180,7 +180,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=31
     v66  LoadLocal { off=-23, kind=I64 }                  -> x0
     v67  Imm(100)                                         -> x6
     v68  Imm(200)                                         -> x2
-    v69  Call { target_pc=0, args=[v64, v67, v68], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v69  Call { target_pc=0, args=[v64, v67, v68], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v70  LocalAddr(-22)                                   -> x0
     v71  Mcpy { dst=v63, src=v70, size=8 }                -> x0
     v72  LocalAddr(-7)                                    -> x3
@@ -189,7 +189,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=31
     v75  LoadLocal { off=-25, kind=I64 }                  -> x0
     v76  Imm(300)                                         -> x6
     v77  Imm(400)                                         -> x2
-    v78  Call { target_pc=0, args=[v73, v76, v77], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v78  Call { target_pc=0, args=[v73, v76, v77], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v79  LocalAddr(-24)                                   -> x0
     v80  Mcpy { dst=v72, src=v79, size=8 }                -> x0
     v81  LocalAddr(-6)                                    -> x0
@@ -235,16 +235,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=31
     v105 LoadLocal { off=-29, kind=I64 }                  -> x0
     v106 Imm(1)                                           -> x6
     v107 Imm(2)                                           -> x2
-    v108 Call { target_pc=0, args=[v103, v106, v107], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v108 Call { target_pc=0, args=[v103, v106, v107], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v109 LocalAddr(-28)                                   -> x14
     v110 LocalAddr(-30)                                   -> x7
     v111 Imm(0)                                           -> x0
     v112 LoadLocal { off=-31, kind=I64 }                  -> x0
     v113 Imm(3)                                           -> x6
     v114 Imm(4)                                           -> x2
-    v115 Call { target_pc=0, args=[v110, v113, v114], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v115 Call { target_pc=0, args=[v110, v113, v114], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v116 LocalAddr(-30)                                   -> x2
-    v117 Call { target_pc=2, args=[v100, v109, v116], fp_return=false, fp_arg_mask=0x0 } -> x0
+    v117 Call { target_pc=2, args=[v100, v109, v116], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
     v118 LocalAddr(-26)                                   -> x0
     v119 Mcpy { dst=v99, src=v118, size=8 }               -> x0
     v120 LocalAddr(-10)                                   -> x0

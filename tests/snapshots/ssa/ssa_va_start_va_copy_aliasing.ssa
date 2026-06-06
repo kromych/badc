@@ -121,7 +121,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=4
     v1   Imm(2)                                           -> x7
     v2   Imm(11)                                          -> x6
     v3   Imm(22)                                          -> x2
-    v4   Call { target_pc=14, args=[v1, v2, v3], fp_return=false, fp_arg_mask=0x0 } -> x6
+    v4   Call { target_pc=14, args=[v1, v2, v3], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x6
     v5   Imm(0)                                           -> x0
     v6   LoadLocal { off=-1, kind=I64 }                   -> x0
     v7   Imm(22000)                                       -> x0
@@ -137,7 +137,7 @@ fn ent_pc=16 n_params=0 variadic=false locals=4
   block 2  start_pc=0
     v14  Imm(1)                                           -> x7
     v15  Imm(7)                                           -> x6
-    v16  Call { target_pc=15, args=[v14, v15], fp_return=false, fp_arg_mask=0x0 } -> x6
+    v16  Call { target_pc=15, args=[v14, v15], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x6
     v17  Imm(0)                                           -> x0
     v18  LoadLocal { off=-2, kind=I64 }                   -> x0
     v19  Imm(119)                                         -> x0

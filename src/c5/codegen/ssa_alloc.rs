@@ -1962,7 +1962,7 @@ int main(void) { return 0; }
         // across that call (defined in mid, used in exit), but the call
         // pc is below v's definition pc.
         b.switch_to(body);
-        let _ = b.call(0, alloc::vec::Vec::new(), false, 0);
+        let _ = b.call(0, alloc::vec::Vec::new(), 0, false, 0);
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
         // above the call pc.

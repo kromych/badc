@@ -370,6 +370,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("indexed_load_store.c", 0),
     ("struct_field_displacement.c", 0),
     ("indexed_swap_shared_addr.c", 0),
+    ("store_to_load_forward.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy. The x86_64 codegen

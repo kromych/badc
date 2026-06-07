@@ -17,9 +17,9 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x2a, %ecx
                	movl	%ecx, (%rax)
-               	xorq	%rcx, %rcx
-               	movq	%rcx, 0x8(%rax)
-               	movslq	(%rax), %rax
+               	xorq	%rdx, %rdx
+               	movq	%rdx, 0x8(%rax)
+               	movslq	%ecx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

@@ -12,12 +12,11 @@ Disassembly of section .text:
                	blr	x16
                	ldr	x1, [x0]
                	mov	x2, #0x18               // =24
-               	udiv	x1, x1, x2
-               	ldr	x0, [x0]
-               	mov	x2, #0x7                // =7
-               	udiv	x17, x0, x2
-               	msub	x0, x17, x2, x0
-               	sxtw	x1, w1
+               	udiv	x2, x1, x2
+               	mov	x0, #0x7                // =7
+               	udiv	x17, x1, x0
+               	msub	x0, x17, x0, x1
+               	sxtw	x1, w2
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	sxtw	x1, w1

@@ -18,8 +18,8 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v7   TlsAddr(0)                                       -> x1
     v8   Imm(99)                                          -> x1
     v9   Store { addr=v3, disp=0, value=v8, kind=I32 }    -> -
-    v10  TlsAddr(0)                                       -> x1
-    v11  Load { addr=v3, disp=0, kind=I32 }               -> x1
+    v10  TlsAddr(0)                                       -> x2
+    v11  Extend { value=v8, kind=I32 }                    -> x1
     v12  BinopI { op=ne, lhs=v11, rhs_imm=99 }            -> x1
     terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0

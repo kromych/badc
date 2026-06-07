@@ -46,11 +46,12 @@ int main(void) {
         return 1;
     }
     long q = 0;
-    if (deref_twice(&q, 21) != 42) {
+    if (deref_twice(&q, 21) != 2 * 21) {  // *p + *p
         return 2;
     }
     long z = 5;
-    if (no_forward_across_call(&z, 9) != 18 + 9) {
+    // 2*9 from deref_twice plus the reloaded *p (= 9).
+    if (no_forward_across_call(&z, 9) != 3 * 9) {
         return 3;
     }
     return 0;

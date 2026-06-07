@@ -109,8 +109,9 @@ Disassembly of section .text:
                	movk	x0, #0x400f, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, mi
-               	cbnz	x1, <addr>
+               	cset	x0, mi
+               	mov	x2, #0x1                // =1
+               	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x128
                	ldr	d0, [x0]
@@ -120,9 +121,11 @@ Disassembly of section .text:
                	movk	x0, #0x400f, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x1, gt
+               	cset	x0, gt
+               	cmp	x0, #0x0
+               	cset	x2, ne
                	b	<addr>
-               	cbz	x1, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

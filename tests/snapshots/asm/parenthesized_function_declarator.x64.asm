@@ -41,16 +41,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	cmpq	$0x0, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movslq	(%rax), %rax
                	cmpq	$0xa, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

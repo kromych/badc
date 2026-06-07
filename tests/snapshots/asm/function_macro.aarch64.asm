@@ -16,29 +16,35 @@ Disassembly of section .text:
                	mov	x2, x1
                	mov	x1, x0
                	b	<addr>
-               	ldrb	w3, [x1]
-               	cbz	x3, <addr>
+               	ldrb	w0, [x1]
+               	mov	x4, #0x0                // =0
+               	cbz	x0, <addr>
                	b	<addr>
                	add	x1, x1, #0x1
                	add	x2, x2, #0x1
                	b	<addr>
                	ldrb	w0, [x1]
                	cmp	x0, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cset	x0, eq
+               	mov	x3, #0x0                // =0
+               	cbz	x0, <addr>
                	b	<addr>
                	ldrb	w0, [x1]
                	ldrb	w3, [x2]
                	cmp	x0, x3
-               	cset	x3, eq
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	cset	x4, ne
                	b	<addr>
-               	cbz	x3, <addr>
+               	cbz	x4, <addr>
                	b	<addr>
                	ldrb	w0, [x2]
                	cmp	x0, #0x0
-               	cset	x1, eq
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	cset	x3, ne
                	b	<addr>
-               	mov	x0, x1
+               	mov	x0, x3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

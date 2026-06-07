@@ -202,8 +202,9 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcvt	d0, s0
                	fcmp	d0, d1
-               	cset	x20, gt
-               	cbnz	x20, <addr>
+               	cset	x0, gt
+               	mov	x20, #0x1               // =1
+               	cbnz	x0, <addr>
                	sub	x16, x29, #0x30
                	ldr	s0, [x16]
                	mov	x0, #0x4046000000000000 // =4631389266797133824
@@ -211,7 +212,9 @@ Disassembly of section .text:
                	fneg	d1, d16
                	fcvt	d0, s0
                	fcmp	d0, d1
-               	cset	x20, mi
+               	cset	x0, mi
+               	cmp	x0, #0x0
+               	cset	x20, ne
                	b	<addr>
                	cbz	x20, <addr>
                	mov	x0, #0x5                // =5

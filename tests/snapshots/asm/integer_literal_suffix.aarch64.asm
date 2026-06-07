@@ -60,14 +60,17 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
-               	cset	x2, eq
-               	cbz	x2, <addr>
+               	cset	x1, eq
+               	mov	x3, #0x0                // =0
+               	cbz	x1, <addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
-               	cset	x2, eq
+               	cset	x1, eq
+               	cmp	x1, #0x0
+               	cset	x3, ne
                	b	<addr>
-               	cbz	x2, <addr>
+               	cbz	x3, <addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

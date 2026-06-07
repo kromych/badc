@@ -223,13 +223,17 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%rax, -0x2038(%rbp)
+               	movl	$0x1, %ecx
+               	movq	%rcx, -0x2038(%rbp)
                	cmpq	$0x0, %rax
                	jne	<addr>
                	movq	-0x8(%rbp), %rax
                	movzbq	0xf(%rax), %rax
                	xorq	$0x41, %rax
                	movl	%eax, %eax
+               	cmpq	$0x0, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	cmpq	$0x0, %rax
                	setne	%al
                	movzbq	%al, %rax
@@ -252,13 +256,17 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	movq	%rax, -0x2040(%rbp)
+               	movl	$0x1, %ecx
+               	movq	%rcx, -0x2040(%rbp)
                	cmpq	$0x0, %rax
                	jne	<addr>
                	movq	-0x10(%rbp), %rax
                	movzbq	0xf(%rax), %rax
                	xorq	$0x42, %rax
                	movl	%eax, %eax
+               	cmpq	$0x0, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	cmpq	$0x0, %rax
                	setne	%al
                	movzbq	%al, %rax

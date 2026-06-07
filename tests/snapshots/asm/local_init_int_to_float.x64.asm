@@ -82,19 +82,23 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	andq	%r10, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movss	-0x10(%rbp,%riz), %xmm0
                	movabsq	$0x40450ccccccccccd, %rax # imm = 0x40450CCCCCCCCCCD
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%bl
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
@@ -122,19 +126,23 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	andq	%r10, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movss	-0x20(%rbp,%riz), %xmm0
                	movabsq	$0x40c81cc000000000, %rax # imm = 0x40C81CC000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%bl
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
@@ -162,12 +170,13 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm0
                	movsd	0x18(%rsp), %xmm14
                	ucomisd	%xmm0, %xmm14
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	andq	%r10, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movabsq	$0x401a000000000000, %rax # imm = 0x401A000000000000
                	movq	%rax, %xmm0
@@ -176,7 +185,10 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm0
                	movsd	0x18(%rsp), %xmm14
                	ucomisd	%xmm0, %xmm14
-               	seta	%bl
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
@@ -203,19 +215,23 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	andq	%r10, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movss	-0x40(%rbp,%riz), %xmm0
                	movabsq	$0x41f004ccb0000000, %rax # imm = 0x41F004CCB0000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%bl
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx

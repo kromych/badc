@@ -131,9 +131,10 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	seta	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	seta	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movabsq	$0x421e449a94000000, %rax # imm = 0x421E449A94000000
                	movq	%rax, %xmm1
@@ -144,13 +145,16 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm1
                	ucomisd	%xmm1, %xmm0
-               	setb	%cl
-               	movzbq	%cl, %rcx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rcx
+               	andq	%r10, %rax
+               	cmpq	$0x0, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp

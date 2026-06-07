@@ -2346,7 +2346,16 @@ impl<'a> Walker<'a> {
                 let kind_l = super::super::ir::LoadKind::I64;
                 let kind_s = super::super::ir::StoreKind::I64;
                 let lhs_val = self.walk_expr_rvalue(b, *lhs)?;
-                b.store_local(slot, lhs_val, kind_s);
+                // C99 6.5.13p3 / 6.5.14p3: the result is `int` 0 or 1, not
+                // the operand value. When lhs alone decides the result the
+                // operator yields a constant -- `||` yields 1 (lhs is
+                // true), `&&` yields 0 (lhs is false) -- so store that
+                // before the branch rather than the raw lhs.
+                let short_val = match *op {
+                    super::ShortCircuitOp::Lor => b.imm(1),
+                    super::ShortCircuitOp::Lan => b.imm(0),
+                };
+                b.store_local(slot, short_val, kind_s);
                 let rhs_blk = b.new_block();
                 let after_blk = b.new_block();
                 match *op {
@@ -2361,7 +2370,10 @@ impl<'a> Walker<'a> {
                 }
                 b.switch_to(rhs_blk);
                 let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
-                b.store_local(slot, rhs_val, kind_s);
+                // The result on the rhs path is `rhs != 0` normalized to
+                // 0/1, not the raw operand.
+                let rhs_bool = b.binop_imm(super::super::ir::BinOp::Ne, rhs_val, 0);
+                b.store_local(slot, rhs_bool, kind_s);
                 b.jmp(after_blk);
                 b.switch_to(after_blk);
                 Ok(b.load_local(slot, kind_l))

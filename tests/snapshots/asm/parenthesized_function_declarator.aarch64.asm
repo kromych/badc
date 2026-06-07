@@ -40,13 +40,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x0, #0x0
-               	cset	x2, eq
-               	cbnz	x2, <addr>
+               	cset	x1, eq
+               	mov	x3, #0x1                // =1
+               	cbnz	x1, <addr>
                	ldrsw	x0, [x0]
                	cmp	x0, #0xa
-               	cset	x2, ne
+               	cset	x0, ne
+               	cmp	x0, #0x0
+               	cset	x3, ne
                	b	<addr>
-               	cbz	x2, <addr>
+               	cbz	x3, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
                	add	sp, sp, #0x30

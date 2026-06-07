@@ -96,15 +96,18 @@ Disassembly of section .text:
                	movk	x0, #0x407f, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x20, mi
-               	cbnz	x20, <addr>
+               	cset	x0, mi
+               	mov	x20, #0x1               // =1
+               	cbnz	x0, <addr>
                	sub	x16, x29, #0x8
                	ldr	d0, [x16]
                	mov	x0, #0xa00000000000     // =175921860444160
                	movk	x0, #0x407f, lsl #48
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x20, gt
+               	cset	x0, gt
+               	cmp	x0, #0x0
+               	cset	x20, ne
                	b	<addr>
                	cbz	x20, <addr>
                	mov	x0, #0x2                // =2

@@ -35,14 +35,18 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
                	cmpq	$-0x1, %rax
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	sete	%al
+               	movzbq	%al, %rax
+               	xorq	%rbx, %rbx
+               	cmpq	$0x0, %rax
                	je	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$-0x1, %rax
-               	sete	%bl
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
@@ -68,14 +72,18 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x0, %rax
-               	setl	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	setl	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
-               	setge	%bl
+               	setge	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
@@ -133,19 +141,23 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movq	(%rcx), %rcx
                	cmpq	%rcx, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	xorq	%rdx, %rdx
+               	cmpq	$0x0, %rax
                	je	<addr>
                	leaq	-0x20(%rbp), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x10(%rbp), %rcx
                	movq	0x8(%rcx), %rcx
                	cmpq	%rcx, %rax
-               	setl	%cl
-               	movzbq	%cl, %rcx
+               	setl	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x7, %eax
                	movq	%rax, %rcx

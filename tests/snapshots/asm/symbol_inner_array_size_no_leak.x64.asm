@@ -47,17 +47,21 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movswq	(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movswq	0xe(%rax), %rax
                	cmpq	$0x15, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp

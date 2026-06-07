@@ -81,34 +81,46 @@ Disassembly of section .text:
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x1e, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -119,34 +131,46 @@ Disassembly of section .text:
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x75, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x1f, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -157,34 +181,46 @@ Disassembly of section .text:
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x78, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x20, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -195,16 +231,20 @@ Disassembly of section .text:
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x21, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -215,34 +255,46 @@ Disassembly of section .text:
                	xorq	$0x68, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x68, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x22, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -253,20 +305,28 @@ Disassembly of section .text:
                	xorq	$0x68, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rax
+               	cmpq	$0x0, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -282,34 +342,46 @@ Disassembly of section .text:
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x24, %eax
                	addq	$0x150, %rsp            # imm = 0x150
@@ -320,34 +392,46 @@ Disassembly of section .text:
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	movl	$0x1, %esi
+               	cmpq	$0x0, %rcx
                	jne	<addr>
                	movzbq	0x1(%rax), %rcx
                	xorq	$0x6c, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rsi
                	jne	<addr>
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x64, %rcx
                	movl	%ecx, %ecx
                	cmpq	$0x0, %rcx
+               	setne	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
+               	movl	$0x1, %esi
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x25, %eax
                	addq	$0x150, %rsp            # imm = 0x150

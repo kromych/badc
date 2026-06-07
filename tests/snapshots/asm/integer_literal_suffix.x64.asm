@@ -45,17 +45,21 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rax
                	cmpq	$-0x1, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xorq	%rsi, %rsi
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
-               	movq	%rax, %rdx
+               	movq	%rax, %rcx
                	cmpq	%r13, %rax
-               	sete	%dl
-               	movzbq	%dl, %rdx
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	cmpq	$0x0, %rcx
+               	setne	%sil
+               	movzbq	%sil, %rsi
                	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x40, %rsp
@@ -80,3 +84,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)

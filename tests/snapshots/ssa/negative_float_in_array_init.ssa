@@ -116,28 +116,30 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v37  Fneg(v36)                                        -> d1
     v38  Imm(4602678819172646912)                         -> x0
     v39  Binop { op=fadd, lhs=v37, rhs=v38 }              -> d1
-    v40  Binop { op=fgt, lhs=v33, rhs=v39 }               -> x1
-    v41  Imm(0)                                           -> x0
+    v40  Binop { op=fgt, lhs=v33, rhs=v39 }               -> x0
+    v41  Imm(1)                                           -> x2
+    v42  Imm(0)                                           -> x1
     terminator Bnz { cond=v40, target=b11, fall=b7 }   (exit_acc=v40)
   block 7  start_pc=0
-    v42  LoadLocal { off=-1, kind=F64 }                   -> d1
-    v43  Imm(4764320886503243776)                         -> x0
-    v44  Fneg(v43)                                        -> d1
-    v45  Imm(4609434218613702656)                         -> x0
-    v46  Binop { op=fsub, lhs=v44, rhs=v45 }              -> d1
-    v47  Binop { op=flt, lhs=v33, rhs=v46 }               -> x1
-    v48  Imm(0)                                           -> x0
-    terminator Jmp(b8)   (exit_acc=v47)
+    v43  LoadLocal { off=-1, kind=F64 }                   -> d1
+    v44  Imm(4764320886503243776)                         -> x0
+    v45  Fneg(v44)                                        -> d1
+    v46  Imm(4609434218613702656)                         -> x0
+    v47  Binop { op=fsub, lhs=v45, rhs=v46 }              -> d1
+    v48  Binop { op=flt, lhs=v33, rhs=v47 }               -> x0
+    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> x2
+    v50  Imm(0)                                           -> x0
+    terminator Jmp(b8)   (exit_acc=v49)
   block 8  start_pc=0
-    v49  Phi { incoming=[b11:v40, b7:v47], kind=I64 }     -> x1
-    v50  LoadLocal { off=-2, kind=I64 }                   -> x0
-    terminator Bz { cond=v49, target=b10, fall=b9 }   (exit_acc=v49)
+    v51  Phi { incoming=[b11:v41, b7:v49], kind=I64 }     -> x2
+    v52  LoadLocal { off=-2, kind=I64 }                   -> x0
+    terminator Bz { cond=v51, target=b10, fall=b9 }   (exit_acc=v51)
   block 9  start_pc=0
-    v51  Imm(4)                                           -> x0
-    terminator Return(v51)   (exit_acc=v51)
+    v53  Imm(4)                                           -> x0
+    terminator Return(v53)   (exit_acc=v53)
   block 10  start_pc=0
-    v52  Imm(0)                                           -> x0
-    terminator Return(v52)   (exit_acc=v52)
+    v54  Imm(0)                                           -> x0
+    terminator Return(v54)   (exit_acc=v54)
   block 11  start_pc=0
     terminator Jmp(b8)
 ; --- SSA dump (ok=true) ent_pc=0 ---

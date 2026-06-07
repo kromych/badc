@@ -89,18 +89,22 @@ Disassembly of section .text:
                	movabsq	$0x407f800000000000, %rax # imm = 0x407F800000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	setb	%bl
-               	movzbq	%bl, %rbx
+               	setb	%al
+               	movzbq	%al, %rax
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	andq	%r10, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	movsd	-0x8(%rbp,%riz), %xmm0
                	movabsq	$0x407fa00000000000, %rax # imm = 0x407FA00000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
-               	seta	%bl
+               	seta	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx

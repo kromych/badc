@@ -304,22 +304,30 @@ Disassembly of section .text:
                	xorq	$0x68, %rax
                	movl	%eax, %eax
                	cmpq	$0x0, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %edx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movzbq	0x4(%rax), %rax
                	xorq	$0x6f, %rax
                	movl	%eax, %eax
                	cmpq	$0x0, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	movl	$0x1, %ecx
+               	cmpq	$0x0, %rdx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movzbq	0x5(%rax), %rax
+               	cmpq	$0x0, %rax
+               	setne	%al
+               	movzbq	%al, %rax
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx

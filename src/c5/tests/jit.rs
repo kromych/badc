@@ -1164,6 +1164,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("indexed_swap_shared_addr.c", 0),
     ("store_to_load_forward.c", 0),
     ("inc_dec_step_one.c", 0),
+    ("logical_op_normalize.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy. The walker emits it

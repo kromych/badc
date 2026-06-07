@@ -382,6 +382,9 @@ mod tests {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

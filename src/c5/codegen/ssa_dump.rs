@@ -155,6 +155,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => format!(
             "Call {{ target_pc={target_pc}, args=[{}], fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
@@ -166,6 +167,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => format!(
             "CallIndirect {{ target=v{target}, args=[{}], callee_variadic={callee_variadic}, fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
@@ -174,6 +176,7 @@ fn fmt_inst(inst: &Inst) -> String {
             binding_idx,
             args,
             fp_arg_mask,
+            ..
         } => format!(
             "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x} }}",
             fmt_value_list(args),

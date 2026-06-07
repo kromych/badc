@@ -184,6 +184,19 @@ pub(crate) enum Inst {
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: u32,
+        /// Host-ABI aggregate metadata. Parallel to `args`:
+        /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
+        /// an aggregate laid out by the function's `agg_descs[i]`,
+        /// passed by value per the host ABI; `None` is a scalar arg.
+        /// Empty (treated as all-`None`) for a scalar-only call.
+        arg_aggs: Vec<Option<u32>>,
+        /// `Some(i)` when the callee returns the aggregate
+        /// `agg_descs[i]` by value; `None` for scalar / void.
+        ret_agg: Option<u32>,
+        /// Address of the caller-allocated result temporary an
+        /// aggregate return materialises into. `NO_VALUE` unless
+        /// `ret_agg` is set.
+        ret_slot: ValueId,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -205,6 +218,12 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: u32,
+        /// See [`Self::Call::arg_aggs`].
+        arg_aggs: Vec<Option<u32>>,
+        /// See [`Self::Call::ret_agg`].
+        ret_agg: Option<u32>,
+        /// See [`Self::Call::ret_slot`].
+        ret_slot: ValueId,
     },
     /// External library call.
     CallExt {
@@ -432,6 +451,20 @@ pub(crate) struct Block {
     pub exit_acc: ValueId,
 }
 
+/// Layout of an aggregate (struct / union) value for host-ABI
+/// argument / return classification. Interned per function in
+/// [`FunctionSsa::agg_descs`] and referenced by index from the call
+/// instructions' `arg_aggs` / `ret_agg` and the function's own
+/// `param_aggs` / `ret_agg`. Built by the walker via
+/// `Compiler::flatten_fields`; the per-arch emit feeds
+/// `(size, align, fields)` to `abi_classify::classify_aggregate`.
+#[derive(Debug, Clone)]
+pub(crate) struct AggDesc {
+    pub size: u32,
+    pub align: u32,
+    pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
+}
+
 /// Per-function SSA program. Consumed by the allocator and the
 /// per-arch lowering.
 #[derive(Debug, Clone, Default)]
@@ -526,4 +559,20 @@ pub(crate) struct FunctionSsa {
     /// ride the stack where the class no longer selects a register.
     /// Zero for SSA built outside the walker.
     pub param_fp_mask: u32,
+    /// Interned aggregate layouts referenced by the call
+    /// instructions' `arg_aggs` / `ret_agg` and this function's
+    /// `param_aggs` / `ret_agg`. Empty for SSA built outside the
+    /// walker and for functions that neither pass nor return a
+    /// struct by value through the host ABI. Passes that rebuild the
+    /// function copy this through; the inliner concatenates the
+    /// inlinee's table and offsets the inlined call indices.
+    pub agg_descs: Vec<AggDesc>,
+    /// Per declared parameter: `Some(i)` when parameter `k` is an
+    /// aggregate passed by value (described by `agg_descs[i]`).
+    /// Empty / all-`None` for functions with no struct parameters.
+    pub param_aggs: Vec<Option<u32>>,
+    /// `Some(i)` when this function returns the aggregate
+    /// `agg_descs[i]` by value through the host ABI; `None` for a
+    /// scalar / void return.
+    pub ret_agg: Option<u32>,
 }

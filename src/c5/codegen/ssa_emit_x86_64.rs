@@ -2440,6 +2440,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => emit_call(
             code,
             dst,
@@ -2458,6 +2459,7 @@ fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            ..
         } => emit_call_ext(
             code,
             dst,
@@ -2487,6 +2489,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => emit_call_indirect(
             code,
             dst,

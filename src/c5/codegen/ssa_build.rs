@@ -155,6 +155,9 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
         };
         let mut b = Self {
             func,
@@ -753,6 +756,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot: crate::c5::ir::NO_VALUE,
         })
     }
 
@@ -775,6 +781,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot: crate::c5::ir::NO_VALUE,
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -798,6 +807,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot: crate::c5::ir::NO_VALUE,
         })
     }
 

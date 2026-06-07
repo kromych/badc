@@ -676,6 +676,13 @@ fn splice_multi_block(
         extern_tls_refs: Vec::new(),
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
+        // Inlining only splices callees with no aggregate ABI
+        // metadata (see the eligibility guard), so the caller's own
+        // `agg_descs` carry through unchanged and no spliced
+        // instruction references a callee-side index.
+        agg_descs: original.agg_descs,
+        param_aggs: original.param_aggs,
+        ret_agg: original.ret_agg,
     };
 }
 

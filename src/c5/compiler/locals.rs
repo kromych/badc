@@ -29,7 +29,7 @@
 use alloc::format;
 
 use super::super::error::C5Error;
-use super::super::token::Token;
+use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
@@ -646,6 +646,169 @@ impl Compiler {
                 self.emit_local_init_store(local_val, ty)?;
             }
         }
+        Ok(())
+    }
+
+    /// Parse a C99 6.5.2.5 block-scope compound literal `(type){
+    /// init }`. The `(type)` has already been parsed (`t` is the
+    /// element / scalar / struct type; `is_array` / `decl_array_size`
+    /// describe an array declarator, with `decl_array_size == -1`
+    /// for the size-from-initializer `[]` form). The lexer is at the
+    /// opening `{`. Reserves an anonymous frame slot (automatic
+    /// storage, 6.5.2.5p5), captures the initializer through the
+    /// shared local-init helpers, and emits an `Expr::CompoundLiteral`
+    /// whose value is the object's address (array decays per 6.3.2.1p3,
+    /// struct yields its address) or the loaded scalar.
+    pub(super) fn parse_block_compound_literal(
+        &mut self,
+        t: i64,
+        is_array: bool,
+        decl_array_size: i64,
+    ) -> Result<(), C5Error> {
+        self.pending_local_init_ast = None;
+        self.pending_local_aggregate_ast = None;
+        self.pending_local_runtime_elements.clear();
+        self.pending.init_inner_dim = 0;
+
+        let value_ty;
+        let final_array_size;
+        let slot;
+
+        if is_array {
+            let elem_ty = t;
+            let elem_size = self.size_of_type(elem_ty);
+            if decl_array_size == -1 {
+                if self.lex.tk != '{' {
+                    return Err(self.compile_err("`{` expected in compound literal"));
+                }
+                let (count, needs_runtime) = self.scan_array_init()?;
+                self.loc_offs += self.local_storage_slots(elem_ty, count);
+                slot = -self.loc_offs;
+                if self.loc_offs > self.max_loc_offs {
+                    self.max_loc_offs = self.loc_offs;
+                }
+                if needs_runtime {
+                    let full = elem_size * count as usize;
+                    let zero_off = self.data.len();
+                    for _ in 0..full {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(slot, zero_off, full);
+                    self.emit_local_array_init_runtime(slot, elem_ty, count, "<compound literal>")?;
+                } else {
+                    let elements = self.collect_array_initializer(elem_ty)?;
+                    let (start, bytes) = self.pack_initializer_into_data(elem_ty, &elements);
+                    self.emit_local_array_init(slot, start, bytes);
+                }
+                final_array_size = count;
+            } else {
+                let count = decl_array_size;
+                let full = elem_size * count as usize;
+                self.loc_offs += self.local_storage_slots(elem_ty, count);
+                slot = -self.loc_offs;
+                if self.loc_offs > self.max_loc_offs {
+                    self.max_loc_offs = self.loc_offs;
+                }
+                if self.lex.tk == '{' && self.array_init_needs_runtime()? {
+                    let zero_off = self.data.len();
+                    for _ in 0..full {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(slot, zero_off, full);
+                    self.emit_local_array_init_runtime(slot, elem_ty, count, "<compound literal>")?;
+                } else {
+                    self.pending.init_target_array_size = count;
+                    let elements = self.collect_array_initializer(elem_ty)?;
+                    if elements.len() as i64 > count {
+                        return Err(self.compile_err(format!(
+                            "too many initializers for compound literal ({} > {count})",
+                            elements.len()
+                        )));
+                    }
+                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements);
+                    let total = if packed < full {
+                        for _ in 0..(full - packed) {
+                            self.data.push(0);
+                        }
+                        full
+                    } else {
+                        packed
+                    };
+                    self.emit_local_array_init(slot, start, total);
+                }
+                final_array_size = count;
+            }
+            // C99 6.3.2.1p3: an array compound literal used as a
+            // value decays to a pointer to its first element.
+            value_ty = elem_ty + Ty::Ptr as i64;
+        } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
+            let sid = struct_id_of(t);
+            let elem_size = self.size_of_type(t);
+            self.loc_offs += self.slots_of_type(t);
+            slot = -self.loc_offs;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+            let needs_runtime = self.struct_init_needs_runtime()?;
+            let staged = self.data.len();
+            for _ in 0..elem_size {
+                self.data.push(0);
+            }
+            if needs_runtime {
+                self.emit_local_array_init(slot, staged, elem_size);
+                self.emit_struct_local_init_runtime(slot, sid)?;
+            } else {
+                self.collect_struct_initializer(sid, staged as i64)?;
+                self.emit_local_array_init(slot, staged, elem_size);
+            }
+            final_array_size = 0;
+            value_ty = t;
+        } else {
+            // Scalar compound literal `(T){ expr }`.
+            self.loc_offs += self.slots_of_type(t);
+            slot = -self.loc_offs;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+            if self.lex.tk != '{' {
+                return Err(self.compile_err("`{` expected in compound literal"));
+            }
+            self.next()?;
+            self.expr(Token::Assign as i64)?;
+            self.convert_assign_rhs(t);
+            self.pending_local_init_ast = self.ast_acc;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+            if self.lex.tk != '}' {
+                return Err(self.compile_err("`}` expected to close compound literal"));
+            }
+            self.next()?;
+            final_array_size = 0;
+            value_ty = t;
+        }
+
+        let scalar = self.pending_local_init_ast.take();
+        let aggregate = self.pending_local_aggregate_ast.take();
+        let runtime_elements = core::mem::take(&mut self.pending_local_runtime_elements);
+        let init = if let Some(e) = scalar {
+            super::super::ast::LocalInit::Scalar(e)
+        } else if !runtime_elements.is_empty() {
+            super::super::ast::LocalInit::Runtime {
+                zero_init: aggregate,
+                elements: runtime_elements,
+            }
+        } else if let Some((src, size)) = aggregate {
+            super::super::ast::LocalInit::Aggregate {
+                src_data_off: src,
+                size_bytes: size,
+            }
+        } else {
+            super::super::ast::LocalInit::None
+        };
+
+        self.ast_emit_compound_literal(slot, t, final_array_size, init);
+        self.ty = value_ty;
         Ok(())
     }
 

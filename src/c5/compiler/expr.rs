@@ -1086,6 +1086,27 @@ impl Compiler {
                         self.next()?;
                     }
                 }
+                // Top-level array brackets in the abstract
+                // declarator: `(int[]){...}` / `(char[N]){...}`.
+                // Only a compound literal (detected after the `)`)
+                // gives these meaning; `t` stays the element type and
+                // `cast_array_size` records the count (`-1` when the
+                // bracket is empty and the initializer determines it).
+                let mut cast_is_array = false;
+                let mut cast_array_size: i64 = 0;
+                while self.lex.tk == Token::Brak {
+                    cast_is_array = true;
+                    self.next()?;
+                    if self.lex.tk == ']' {
+                        cast_array_size = -1;
+                        self.next()?;
+                    } else {
+                        cast_array_size = self.parse_constant_int()?;
+                        if self.lex.tk == ']' {
+                            self.next()?;
+                        }
+                    }
+                }
                 // Function-pointer cast inside a cast expression:
                 // any abstract function-pointer declarator after
                 // the base type. Common shapes:
@@ -1156,6 +1177,12 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("bad cast"));
                 }
+                if self.lex.tk == '{' {
+                    // C99 6.5.2.5 compound literal: `(type){ init }`.
+                    // The `(type)` parsed above is the literal's
+                    // type, not a cast operator.
+                    self.parse_block_compound_literal(t, cast_is_array, cast_array_size)?;
+                } else {
                 self.expr(Token::Inc as i64)?;
                 let cast_child_ast = self.ast_acc;
                 // FP-vs-int casts emit conversion ops so the bit
@@ -1244,6 +1271,7 @@ impl Compiler {
                     && fpi > 0
                 {
                     self.pending.fn_ptr_chain_depth = fpi - 1;
+                }
                 }
             } else {
                 self.expr(Token::Assign as i64)?;

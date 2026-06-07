@@ -1116,72 +1116,7 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let ty = *ty;
                 let init_clone = init.clone();
-                match init_clone {
-                    super::super::ast::LocalInit::None => Ok(()),
-                    super::super::ast::LocalInit::Scalar(init_id) => {
-                        let v = self.walk_expr_rvalue(b, init_id)?;
-                        // C99 6.7.8p13 struct-value initializer:
-                        // copy the source's bytes into the local
-                        // slot via Mcpy. `v` is the source
-                        // address (the walker's address-as-value
-                        // routing for struct rvalues). Size comes
-                        // from the local's declared struct type.
-                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
-                            let dst = b.local_addr(slot);
-                            let size = self.struct_size(ty);
-                            b.mcpy(dst, v, size);
-                            return Ok(());
-                        }
-                        let kind = store_kind_for(ty, self.target);
-                        // Integer widths fuse into a single
-                        // `StoreLocal`; `F32` routes through
-                        // `LocalAddr` + `Store` because the per-arch
-                        // `StoreLocal` keeps the value in a GPR.
-                        if matches!(kind, super::super::ir::StoreKind::F32) {
-                            let addr = b.local_addr(slot);
-                            b.store(addr, v, kind);
-                        } else {
-                            b.store_local(slot, v, kind);
-                        }
-                        Ok(())
-                    }
-                    super::super::ast::LocalInit::Aggregate {
-                        src_data_off,
-                        size_bytes,
-                    } => {
-                        let dst = b.local_addr(slot);
-                        let src = b.imm_data(src_data_off);
-                        b.mcpy(dst, src, size_bytes);
-                        Ok(())
-                    }
-                    super::super::ast::LocalInit::Runtime {
-                        zero_init,
-                        elements,
-                    } => {
-                        // C99 6.7.8p19 zero prelude (if the parser
-                        // emitted one): Mcpy staged zero bytes
-                        // before the per-element stores.
-                        if let Some((src_data_off, size_bytes)) = zero_init {
-                            let dst = b.local_addr(slot);
-                            let src = b.imm_data(src_data_off);
-                            b.mcpy(dst, src, size_bytes);
-                        }
-                        // Per-element stores: address = local_addr
-                        // + offset, store(walked-value, kind).
-                        for elem in &elements {
-                            let v = self.walk_expr_rvalue(b, elem.value)?;
-                            let base = b.local_addr(slot);
-                            let addr = if elem.offset == 0 {
-                                base
-                            } else {
-                                b.binop_imm(BinOp::Add, base, elem.offset)
-                            };
-                            let kind = store_kind_for(elem.ty, self.target);
-                            b.store(addr, v, kind);
-                        }
-                        Ok(())
-                    }
-                }
+                self.emit_local_init(b, slot, ty, &init_clone)
             }
             super::super::ast::Decl::Vla { .. } => Err(WalkError::UnsupportedStmt {
                 id: 0,
@@ -1195,6 +1130,81 @@ impl<'a> Walker<'a> {
                 // ident reference still resolves through the Glo
                 // path in `load_ident_rvalue` /
                 // `ident_address`.
+                Ok(())
+            }
+        }
+    }
+
+    /// Emit the initialization of a frame slot from a [`LocalInit`].
+    /// Shared by local-variable declarations (`Decl::Local`) and
+    /// block-scope compound literals (`Expr::CompoundLiteral`), both
+    /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
+    /// shapes into the same slot.
+    fn emit_local_init(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        slot: i64,
+        ty: i64,
+        init: &super::super::ast::LocalInit,
+    ) -> Result<(), WalkError> {
+        match init {
+            super::super::ast::LocalInit::None => Ok(()),
+            super::super::ast::LocalInit::Scalar(init_id) => {
+                let v = self.walk_expr_rvalue(b, *init_id)?;
+                // C99 6.7.8p13 struct-value initializer: copy the
+                // source's bytes into the slot via Mcpy. `v` is the
+                // source address (the walker's address-as-value
+                // routing for struct rvalues).
+                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                    let dst = b.local_addr(slot);
+                    let size = self.struct_size(ty);
+                    b.mcpy(dst, v, size);
+                    return Ok(());
+                }
+                let kind = store_kind_for(ty, self.target);
+                // Integer widths fuse into a single `StoreLocal`;
+                // `F32` routes through `LocalAddr` + `Store` because
+                // the per-arch `StoreLocal` keeps the value in a GPR.
+                if matches!(kind, super::super::ir::StoreKind::F32) {
+                    let addr = b.local_addr(slot);
+                    b.store(addr, v, kind);
+                } else {
+                    b.store_local(slot, v, kind);
+                }
+                Ok(())
+            }
+            super::super::ast::LocalInit::Aggregate {
+                src_data_off,
+                size_bytes,
+            } => {
+                let dst = b.local_addr(slot);
+                let src = b.imm_data(*src_data_off);
+                b.mcpy(dst, src, *size_bytes);
+                Ok(())
+            }
+            super::super::ast::LocalInit::Runtime {
+                zero_init,
+                elements,
+            } => {
+                // C99 6.7.8p19 zero prelude (if the parser emitted
+                // one): Mcpy staged zero bytes before the per-element
+                // stores.
+                if let Some((src_data_off, size_bytes)) = zero_init {
+                    let dst = b.local_addr(slot);
+                    let src = b.imm_data(*src_data_off);
+                    b.mcpy(dst, src, *size_bytes);
+                }
+                for elem in elements {
+                    let v = self.walk_expr_rvalue(b, elem.value)?;
+                    let base = b.local_addr(slot);
+                    let addr = if elem.offset == 0 {
+                        base
+                    } else {
+                        b.binop_imm(BinOp::Add, base, elem.offset)
+                    };
+                    let kind = store_kind_for(elem.ty, self.target);
+                    b.store(addr, v, kind);
+                }
                 Ok(())
             }
         }
@@ -2149,6 +2159,7 @@ impl<'a> Walker<'a> {
                     | Expr::ShortCircuit { ty, .. } => *ty,
                     Expr::Cast { to_ty: t, .. } => *t,
                     Expr::Sizeof(s) => s.result_ty,
+                    Expr::CompoundLiteral { ty, .. } => *ty,
                     Expr::StrLit { ty, .. } => *ty,
                     Expr::Intrinsic { ty, .. } => *ty,
                 };
@@ -2340,6 +2351,30 @@ impl<'a> Walker<'a> {
                 Ok(old)
             }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
+            Expr::CompoundLiteral {
+                slot_off,
+                ty,
+                array_size,
+                init,
+            } => {
+                let slot = *slot_off;
+                let ty = *ty;
+                let array_size = *array_size;
+                let init = init.clone();
+                self.emit_local_init(b, slot, ty, &init)?;
+                // C99 6.5.2.5p4: a compound literal is an lvalue. An
+                // array decays to (and a struct is passed by) the
+                // object's address; a scalar literal yields the
+                // loaded value.
+                let address_only =
+                    array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+                if address_only {
+                    Ok(b.local_addr(slot))
+                } else {
+                    let kind = load_kind_for(ty, self.target);
+                    Ok(b.load_local(slot, kind))
+                }
+            }
             Expr::Comma { lhs, rhs, .. } => {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
@@ -2938,6 +2973,7 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::Intrinsic { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
+        Expr::CompoundLiteral { ty, .. } => Some(*ty),
     }
 }
 
@@ -3066,6 +3102,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::PreInc { .. } => "PreInc",
         Expr::PostInc { .. } => "PostInc",
         Expr::Sizeof(_) => "Sizeof",
+        Expr::CompoundLiteral { .. } => "CompoundLiteral",
         Expr::Comma { .. } => "Comma",
         Expr::Intrinsic { .. } => "Intrinsic",
         Expr::ShortCircuit { .. } => "ShortCircuit",

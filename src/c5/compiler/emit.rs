@@ -810,6 +810,31 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Expr::CompoundLiteral { slot_off, ty, array_size, init }`
+    /// (C99 6.5.2.5). The frame slot is already reserved and the
+    /// initializer captured into `init`; the walker emits the init
+    /// at the evaluation point and yields the object's address
+    /// (array / struct) or loaded scalar value.
+    pub(super) fn ast_emit_compound_literal(
+        &mut self,
+        slot_off: i64,
+        ty: i64,
+        array_size: i64,
+        init: super::super::ast::LocalInit,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::CompoundLiteral {
+                slot_off,
+                ty,
+                array_size,
+                init,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+    }
+
     /// Wrap the current `ast_acc` in an `Expr::Cast { to_ty }`.
     /// Used by `convert_assign_rhs` and other implicit-conversion
     /// sites so the walker emits the right `Inst::FpCast`. No-op

@@ -263,6 +263,21 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
+    /// `(type){ initializer-list }` -- C99 6.5.2.5 compound
+    /// literal at block scope. The parser reserves a frame slot
+    /// (automatic storage, lifetime = enclosing block per 6.5.2.5p5)
+    /// and snapshots the initializer; the walker emits the init at
+    /// the evaluation point (so non-constant elements observe the
+    /// surrounding evaluation order) and yields the slot's address
+    /// for array / struct objects, or the loaded scalar value.
+    /// `array_size` is 0 for a scalar / struct literal, > 0 for an
+    /// array literal.
+    CompoundLiteral {
+        slot_off: i64,
+        ty: i64,
+        array_size: i64,
+        init: LocalInit,
+    },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -560,6 +575,16 @@ impl Ast {
                 } if *class == Token::Glo as i64 && !*is_thread_local => {
                     *val += data_base;
                 }
+                Expr::CompoundLiteral { init, .. } => match init {
+                    LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
+                    LocalInit::Runtime {
+                        zero_init: Some((off, _)),
+                        ..
+                    } => {
+                        *off += data_base;
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -749,6 +774,14 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::ShortCircuit { ty, .. }
         | Expr::Intrinsic { ty, .. } => f(ty),
         Expr::Cast { to_ty, .. } => f(to_ty),
+        Expr::CompoundLiteral { ty, init, .. } => {
+            f(ty);
+            if let LocalInit::Runtime { elements, .. } = init {
+                for e in elements {
+                    f(&mut e.ty);
+                }
+            }
+        }
         Expr::Sizeof(_) => {}
     }
 }

@@ -356,28 +356,26 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
   block 12  start_pc=0
     v74  Phi { incoming=[b17:v63, b11:v72], kind=I64 }    -> x2
     v75  LoadLocal { off=-5, kind=I64 }                   -> x0
-    v76  Imm(1)                                           -> x1
-    v77  Imm(0)                                           -> x0
+    v76  Imm(0)                                           -> x0
     terminator Bnz { cond=v74, target=b18, fall=b13 }   (exit_acc=v74)
   block 13  start_pc=0
-    v78  LocalAddr(-3)                                    -> x0
-    v79  Imm(5)                                           -> x1
-    v80  BinopI { op=add, lhs=v78, rhs_imm=5 }            -> x1
-    v81  Load { addr=v78, disp=5, kind=U8 }               -> x0
-    v82  BinopI { op=ne, lhs=v81, rhs_imm=0 }             -> x0
-    v83  BinopI { op=ne, lhs=v82, rhs_imm=0 }             -> x1
-    v84  Imm(0)                                           -> x0
-    terminator Jmp(b14)   (exit_acc=v83)
+    v77  LocalAddr(-3)                                    -> x0
+    v78  Imm(5)                                           -> x1
+    v79  BinopI { op=add, lhs=v77, rhs_imm=5 }            -> x1
+    v80  Load { addr=v77, disp=5, kind=U8 }               -> x0
+    v81  BinopI { op=ne, lhs=v80, rhs_imm=0 }             -> x2
+    v82  Imm(0)                                           -> x0
+    terminator Jmp(b14)   (exit_acc=v81)
   block 14  start_pc=0
-    v85  Phi { incoming=[b18:v76, b13:v83], kind=I64 }    -> x1
-    v86  LoadLocal { off=-4, kind=I64 }                   -> x0
-    terminator Bz { cond=v85, target=b16, fall=b15 }   (exit_acc=v85)
+    v83  Phi { incoming=[b18:v74, b13:v81], kind=I64 }    -> x2
+    v84  LoadLocal { off=-4, kind=I64 }                   -> x0
+    terminator Bz { cond=v83, target=b16, fall=b15 }   (exit_acc=v83)
   block 15  start_pc=0
-    v87  Imm(6)                                           -> x0
-    terminator Return(v87)   (exit_acc=v87)
+    v85  Imm(6)                                           -> x0
+    terminator Return(v85)   (exit_acc=v85)
   block 16  start_pc=0
-    v88  Imm(0)                                           -> x0
-    terminator Return(v88)   (exit_acc=v88)
+    v86  Imm(0)                                           -> x0
+    terminator Return(v86)   (exit_acc=v86)
   block 17  start_pc=0
     terminator Jmp(b12)
   block 18  start_pc=0

@@ -83,16 +83,13 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x2, ne
                	b	<addr>
-               	mov	x1, #0x1                // =1
                	cbnz	x2, <addr>
                	sub	x0, x29, #0x28
                	ldr	x0, [x0, #0x20]
                	cmp	x0, #0x1
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x2, ne
                	b	<addr>
-               	cbz	x1, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
                	add	sp, sp, #0x80

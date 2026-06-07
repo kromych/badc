@@ -32,9 +32,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x0, #0x5
-               	cset	x1, ge
-               	mov	x3, #0x0                // =0
-               	cbz	x1, <addr>
+               	cset	x2, ge
+               	cbz	x2, <addr>
                	b	<addr>
                	cmp	x0, #0x1
                	b.eq	<addr>
@@ -46,11 +45,9 @@ Disassembly of section .text:
                	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x8
-               	cset	x0, le
-               	cmp	x0, #0x0
-               	cset	x3, ne
+               	cset	x2, le
                	b	<addr>
-               	cbz	x3, <addr>
+               	cbz	x2, <addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10

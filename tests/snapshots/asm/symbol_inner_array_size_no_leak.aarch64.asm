@@ -47,17 +47,14 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldrsh	x0, [x0]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	mov	x2, #0x1                // =1
-               	cbnz	x0, <addr>
+               	cset	x1, ne
+               	cbnz	x1, <addr>
                	sub	x0, x29, #0x10
                	ldrsh	x0, [x0, #0xe]
                	cmp	x0, #0x15
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x2, ne
+               	cset	x1, ne
                	b	<addr>
-               	cbz	x2, <addr>
+               	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

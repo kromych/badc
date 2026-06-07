@@ -93,9 +93,8 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	mov	x20, #0x1               // =1
-               	cbnz	x0, <addr>
+               	cset	x20, mi
+               	cbnz	x20, <addr>
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	mov	x0, #0xcccd             // =52429
@@ -105,9 +104,7 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	cset	x20, ne
+               	cset	x20, gt
                	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
@@ -136,9 +133,8 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	mov	x20, #0x1               // =1
-               	cbnz	x0, <addr>
+               	cset	x20, mi
+               	cbnz	x20, <addr>
                	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	mov	x0, #0x1cc000000000     // =31610959298560
@@ -146,9 +142,7 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	cset	x20, ne
+               	cset	x20, gt
                	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
@@ -174,16 +168,13 @@ Disassembly of section .text:
                	fmov	d16, x0
                	fneg	d0, d16
                	fcmp	d8, d0
-               	cset	x0, mi
-               	mov	x20, #0x1               // =1
-               	cbnz	x0, <addr>
+               	cset	x20, mi
+               	cbnz	x20, <addr>
                	mov	x0, #0x401a000000000000 // =4619004367821864960
                	fmov	d16, x0
                	fneg	d0, d16
                	fcmp	d8, d0
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	cset	x20, ne
+               	cset	x20, gt
                	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
@@ -212,9 +203,8 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, mi
-               	mov	x20, #0x1               // =1
-               	cbnz	x0, <addr>
+               	cset	x20, mi
+               	cbnz	x20, <addr>
                	sub	x16, x29, #0x40
                	ldr	s0, [x16]
                	mov	x0, #0xb0000000         // =2952790016
@@ -223,9 +213,7 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fmov	d17, x0
                	fcmp	d0, d17
-               	cset	x0, gt
-               	cmp	x0, #0x0
-               	cset	x20, ne
+               	cset	x20, gt
                	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>

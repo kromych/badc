@@ -320,19 +320,15 @@ Disassembly of section .text:
                	setne	%dl
                	movzbq	%dl, %rdx
                	jmp	<addr>
-               	movl	$0x1, %ecx
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
                	movzbq	0x5(%rax), %rax
                	cmpq	$0x0, %rax
-               	setne	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	setne	%cl
-               	movzbq	%cl, %rcx
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x30, %rsp

@@ -116,28 +116,26 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
   block 10  start_pc=0
     v60  Phi { incoming=[b17:v51, b9:v58], kind=I64 }     -> x2
     v61  LoadLocal { off=-11, kind=I64 }                  -> x0
-    v62  Imm(1)                                           -> x1
-    v63  Imm(0)                                           -> x0
+    v62  Imm(0)                                           -> x0
     terminator Bnz { cond=v60, target=b18, fall=b11 }   (exit_acc=v60)
   block 11  start_pc=0
-    v64  LocalAddr(-5)                                    -> x0
-    v65  Imm(32)                                          -> x1
-    v66  BinopI { op=add, lhs=v64, rhs_imm=32 }           -> x1
-    v67  Load { addr=v64, disp=32, kind=I64 }             -> x0
-    v68  BinopI { op=ne, lhs=v67, rhs_imm=1 }             -> x0
-    v69  BinopI { op=ne, lhs=v68, rhs_imm=0 }             -> x1
-    v70  Imm(0)                                           -> x0
-    terminator Jmp(b12)   (exit_acc=v69)
+    v63  LocalAddr(-5)                                    -> x0
+    v64  Imm(32)                                          -> x1
+    v65  BinopI { op=add, lhs=v63, rhs_imm=32 }           -> x1
+    v66  Load { addr=v63, disp=32, kind=I64 }             -> x0
+    v67  BinopI { op=ne, lhs=v66, rhs_imm=1 }             -> x2
+    v68  Imm(0)                                           -> x0
+    terminator Jmp(b12)   (exit_acc=v67)
   block 12  start_pc=0
-    v71  Phi { incoming=[b18:v62, b11:v69], kind=I64 }    -> x1
-    v72  LoadLocal { off=-10, kind=I64 }                  -> x0
-    terminator Bz { cond=v71, target=b14, fall=b13 }   (exit_acc=v71)
+    v69  Phi { incoming=[b18:v60, b11:v67], kind=I64 }    -> x2
+    v70  LoadLocal { off=-10, kind=I64 }                  -> x0
+    terminator Bz { cond=v69, target=b14, fall=b13 }   (exit_acc=v69)
   block 13  start_pc=0
-    v73  Imm(1)                                           -> x0
-    terminator Return(v73)   (exit_acc=v73)
+    v71  Imm(1)                                           -> x0
+    terminator Return(v71)   (exit_acc=v71)
   block 14  start_pc=0
-    v74  Imm(0)                                           -> x0
-    terminator Return(v74)   (exit_acc=v74)
+    v72  Imm(0)                                           -> x0
+    terminator Return(v72)   (exit_acc=v72)
   block 15  start_pc=0
     terminator Jmp(b6)
   block 16  start_pc=0

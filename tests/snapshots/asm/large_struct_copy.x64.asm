@@ -301,19 +301,15 @@ Disassembly of section .text:
                	setne	%r12b
                	movzbq	%r12b, %r12
                	jmp	<addr>
-               	movl	$0x1, %ebx
                	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
                	movslq	0xc(%rax), %rax
                	cmpq	$0x190, %rax            # imm = 0x190
-               	setne	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -352,19 +348,15 @@ Disassembly of section .text:
                	setne	%r12b
                	movzbq	%r12b, %r12
                	jmp	<addr>
-               	movl	$0x1, %ebx
                	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
                	movslq	0x208(%rax), %rax
                	cmpq	$0x320, %rax            # imm = 0x320
-               	setne	%al
-               	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

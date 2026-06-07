@@ -188,10 +188,9 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	cvtss2sd	%xmm0, %xmm0
                	ucomisd	%xmm1, %xmm0
-               	seta	%al
-               	movzbq	%al, %rax
-               	movl	$0x1, %ebx
-               	cmpq	$0x0, %rax
+               	seta	%bl
+               	movzbq	%bl, %rbx
+               	cmpq	$0x0, %rbx
                	jne	<addr>
                	movss	-0x30(%rbp,%riz), %xmm0
                	movabsq	$0x4046000000000000, %rax # imm = 0x4046000000000000
@@ -201,14 +200,11 @@ Disassembly of section .text:
                	xorpd	%xmm15, %xmm1
                	cvtss2sd	%xmm0, %xmm0
                	ucomisd	%xmm1, %xmm0
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%bl
+               	movzbq	%bl, %rbx
                	setnp	%r10b
                	movzbq	%r10b, %r10
-               	andq	%r10, %rax
-               	cmpq	$0x0, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	andq	%r10, %rbx
                	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>

@@ -334,16 +334,13 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	cset	x2, ne
                	b	<addr>
-               	mov	x1, #0x1                // =1
                	cbnz	x2, <addr>
                	sub	x0, x29, #0x18
                	ldrb	w0, [x0, #0x5]
                	cmp	x0, #0x0
-               	cset	x0, ne
-               	cmp	x0, #0x0
-               	cset	x1, ne
+               	cset	x2, ne
                	b	<addr>
-               	cbz	x1, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

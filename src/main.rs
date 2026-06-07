@@ -957,7 +957,7 @@ fn main() {
                 &default_path
             }
         };
-        write_output(out, &bytes, quiet);
+        write_output(out, &bytes, target, quiet);
         set_executable(out);
         post_write_native(out, target);
         return;
@@ -1327,7 +1327,7 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// binary emit, native-binary emit -- so the chatter is uniform.
 /// Routes the info line through `eprint_diagnostic` so the
 /// severity word picks up the green TTY color.
-fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
+fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
         eprint_diagnostic(format!(
             "badc: error: failed to write {}: {e}",
@@ -1336,7 +1336,10 @@ fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
         std::process::exit(1);
     }
     if !quiet {
-        eprint_diagnostic(format!("info: wrote file {}", out.display()));
+        eprint_diagnostic(format!(
+            "info: wrote file {} for target {target:?}",
+            out.display()
+        ));
     }
 }
 

@@ -8,9 +8,7 @@
 // Today this is a single hook used by the writer's `_start`
 // stub to flush stdio buffers (via libc's `exit` atexit chain)
 // before the process leaves. Future entries: the `_start`
-// stub itself once c5 grows inline asm or a syscall builtin,
-// and the c5io / variadic plumbing currently inlined into
-// each TU through `c5io.h`.
+// stub itself once/if c5 grows inline asm or a syscall builtin.
 
 // Bind to libc's `exit` ourselves so the runtime helper
 // resolves regardless of what the user TU includes. The

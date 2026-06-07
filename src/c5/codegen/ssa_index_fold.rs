@@ -15,13 +15,18 @@
 //!   v = LoadIndexed { base, index=i, scale=width, kind }
 //! ```
 //!
-//! The fold fires only when the shift amount matches the access width
-//! (the per-arch emit requires `scale == width`) and when the shift and
-//! the add each feed nothing but this one access, so the collapsed
-//! instructions become unreferenced and the emit's use-count skip drops
-//! them. A shared address (one `base + i*scale` feeding several accesses)
-//! is left alone: re-deriving it inside each addressing mode would not
-//! remove the shared computation.
+//! The fold fires when the shift amount matches the access width (the
+//! per-arch emit requires `scale == width`) and the shift feeds only its
+//! address. A shared `base + i*scale` (one address feeding both the load
+//! and the store of a swapped element) folds into every use, provided
+//! every use is a load or store of the matching width, so the shared
+//! shift and add still drop out; an address that also feeds non-access
+//! uses is left alone.
+//!
+//! The same pass folds a constant pointer offset (a struct field offset)
+//! into the load/store displacement: a single-use `BinopI(Add, base, c)`
+//! address with an aligned, in-range `c` becomes `Load { addr=base,
+//! disp=c }`.
 
 use alloc::vec::Vec;
 
@@ -78,44 +83,76 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// When `addr` is `Add(base, Shl(index, s))` with `1 << s == width`, and
-/// the add and shift each have a single use, return `(base, index)`.
-fn scaled_address(
+/// Scaled-index addresses whose every use is a same-width load or store,
+/// keyed by the address value id and mapping to `(base, index, scale)`.
+/// A shared `base + index*scale` (one address feeding both the load and
+/// the store of a swapped element) folds into every access so the shared
+/// shift and add drop out, not only the single-use case.
+fn foldable_scaled_addresses(
     func: &FunctionSsa,
     counts: &[u32],
-    addr: ValueId,
-    width: u8,
-) -> Option<(ValueId, ValueId)> {
-    if counts.get(addr as usize).copied().unwrap_or(0) != 1 {
-        return None;
-    }
-    let Inst::Binop {
-        op: BinOp::Add,
-        lhs,
-        rhs,
-    } = func.insts.get(addr as usize)?
-    else {
-        return None;
-    };
-    // The shift may be either operand of the commutative add.
-    let try_arm = |base: ValueId, scaled: ValueId| -> Option<(ValueId, ValueId)> {
-        if counts.get(scaled as usize).copied().unwrap_or(0) != 1 {
-            return None;
-        }
-        let Inst::BinopI {
-            op: BinOp::Shl,
-            lhs: index,
-            rhs_imm,
-        } = func.insts.get(scaled as usize)?
+) -> alloc::collections::BTreeMap<ValueId, (ValueId, ValueId, u8)> {
+    let mut cand: alloc::collections::BTreeMap<ValueId, (ValueId, ValueId, u8)> =
+        alloc::collections::BTreeMap::new();
+    for (p, inst) in func.insts.iter().enumerate() {
+        let Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } = inst
         else {
-            return None;
+            continue;
         };
-        if *rhs_imm < 0 || *rhs_imm > 3 || (1u8 << *rhs_imm) != width {
-            return None;
+        // The shift may be either operand of the commutative add; it must
+        // feed only this address so it dies once the address is folded.
+        for (base, scaled) in [(*lhs, *rhs), (*rhs, *lhs)] {
+            if counts.get(scaled as usize).copied().unwrap_or(0) != 1 {
+                continue;
+            }
+            let Some(Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: index,
+                rhs_imm,
+            }) = func.insts.get(scaled as usize)
+            else {
+                continue;
+            };
+            if *rhs_imm >= 1 && *rhs_imm <= 3 {
+                cand.insert(p as ValueId, (base, *index, 1u8 << *rhs_imm));
+                break;
+            }
         }
-        Some((base, *index))
-    };
-    try_arm(*lhs, *rhs).or_else(|| try_arm(*rhs, *lhs))
+    }
+    // Count, per candidate address, the uses that are a load or store of
+    // the matching width; keep only addresses whose every use qualifies.
+    let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
+    for inst in &func.insts {
+        let (addr, width) = match inst {
+            Inst::Load {
+                addr,
+                disp: 0,
+                kind,
+            } => (*addr, load_width(*kind)),
+            Inst::Store {
+                addr,
+                disp: 0,
+                kind,
+                ..
+            } => (*addr, store_width(*kind)),
+            _ => continue,
+        };
+        if let Some(&(_, _, scale)) = cand.get(&addr)
+            && width == Some(scale)
+        {
+            *valid.entry(addr).or_insert(0) += 1;
+        }
+    }
+    cand.into_iter()
+        .filter(|(p, _)| {
+            let total = counts.get(*p as usize).copied().unwrap_or(0);
+            total >= 1 && valid.get(p).copied().unwrap_or(0) == total
+        })
+        .collect()
 }
 
 /// When `addr` is a single-use `BinopI(Add, base, c)` whose constant `c`
@@ -153,6 +190,7 @@ fn displaced_address(
 pub(super) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = use_counts(func);
+        let scaled = foldable_scaled_addresses(func, &counts);
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for idx in 0..n {
@@ -165,13 +203,14 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                 } => {
                     if let Some(width) = load_width(*kind) {
-                        if let Some((base, index)) = scaled_address(func, &counts, *addr, width) {
+                        if let Some(&(base, index, scale)) = scaled.get(addr) {
+                            debug_assert_eq!(scale, width);
                             rewrites.push((
                                 idx,
                                 Inst::LoadIndexed {
                                     base,
                                     index,
-                                    scale: width,
+                                    scale,
                                     kind: *kind,
                                 },
                             ));
@@ -196,13 +235,14 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
                     kind,
                 } => {
                     if let Some(width) = store_width(*kind) {
-                        if let Some((base, index)) = scaled_address(func, &counts, *addr, width) {
+                        if let Some(&(base, index, scale)) = scaled.get(addr) {
+                            debug_assert_eq!(scale, width);
                             rewrites.push((
                                 idx,
                                 Inst::StoreIndexed {
                                     base,
                                     index,
-                                    scale: width,
+                                    scale,
                                     value: *value,
                                     kind: *kind,
                                 },

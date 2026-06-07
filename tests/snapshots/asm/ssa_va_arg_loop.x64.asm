@@ -45,7 +45,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rdx
                	movq	%rdx, %r13

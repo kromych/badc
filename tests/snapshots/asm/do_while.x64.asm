@@ -12,7 +12,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax

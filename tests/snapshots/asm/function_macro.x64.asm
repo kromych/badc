@@ -17,14 +17,15 @@ Disassembly of section .text:
                	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
-               	addq	$0x1, %rdi
-               	addq	$0x1, %rsi
+               	incq	%rdi
+               	incq	%rsi
                	jmp	<addr>
                	movzbq	(%rdi), %rax
                	cmpq	$0x0, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	xorq	%rdx, %rdx
+               	cmpq	$0x0, %rax
                	je	<addr>
                	jmp	<addr>
                	movzbq	(%rdi), %rax
@@ -38,10 +39,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movzbq	(%rsi), %rax
                	cmpq	$0x0, %rax
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%dl
+               	movzbq	%dl, %rdx
                	jmp	<addr>
-               	movq	%rcx, %rax
+               	movq	%rdx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -175,4 +179,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

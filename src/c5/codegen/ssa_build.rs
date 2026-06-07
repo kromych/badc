@@ -422,7 +422,11 @@ impl SsaBuilder {
     /// 6.3.1.8); tag it f32 so the codegen keeps it in the s-view of an
     /// FP register without a widening conversion.
     pub(crate) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
-        let v = self.push(Inst::Load { addr, kind });
+        let v = self.push(Inst::Load {
+            addr,
+            disp: 0,
+            kind,
+        });
         if matches!(kind, LoadKind::F32) {
             self.mark_f32(v);
         }
@@ -437,7 +441,12 @@ impl SsaBuilder {
     /// CSE entry so a later `load_local` re-reads the slot.
     pub(crate) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {
         self.local_cache.clear();
-        self.push(Inst::Store { addr, value, kind })
+        self.push(Inst::Store {
+            addr,
+            disp: 0,
+            value,
+            kind,
+        })
     }
 
     /// `Inst::LoadLocal` -- fused [`Inst::LocalAddr`] + [`Inst::Load`].

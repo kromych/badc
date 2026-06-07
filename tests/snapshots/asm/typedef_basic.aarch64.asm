@@ -28,27 +28,23 @@ Disassembly of section .text:
                	mov	x5, #0x7                // =7
                	str	w5, [x4]
                	sub	x4, x29, #0x30
-               	add	x4, x4, #0x8
                	mov	x5, #0x0                // =0
-               	str	x5, [x4]
+               	str	x5, [x4, #0x8]
                	sub	x4, x29, #0x38
                	mov	x5, #0xb                // =11
                	str	w5, [x4]
                	sub	x4, x29, #0x38
-               	add	x4, x4, #0x4
                	mov	x5, #0x16               // =22
-               	str	w5, [x4]
+               	str	w5, [x4, #0x4]
                	sub	x4, x29, #0x48
                	mov	x5, #0x1                // =1
                	str	w5, [x4]
                	sub	x4, x29, #0x48
-               	add	x4, x4, #0x4
                	mov	x5, #0x2                // =2
-               	str	w5, [x4]
+               	str	w5, [x4, #0x4]
                	sub	x4, x29, #0x48
-               	add	x4, x4, #0x8
                	mov	x5, #0x3                // =3
-               	str	w5, [x4]
+               	str	w5, [x4, #0x8]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	cmp	x0, #0xa5
@@ -80,8 +76,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x38
                	ldrsw	x0, [x0]
                	sub	x3, x29, #0x38
-               	add	x3, x3, #0x4
-               	ldrsw	x3, [x3]
+               	ldrsw	x3, [x3, #0x4]
                	add	x0, x0, x3
                	sxtw	x0, w0
                	cmp	x0, #0x21
@@ -93,13 +88,11 @@ Disassembly of section .text:
                	sub	x0, x29, #0x48
                	ldrsw	x0, [x0]
                	sub	x3, x29, #0x48
-               	add	x3, x3, #0x4
-               	ldrsw	x3, [x3]
+               	ldrsw	x3, [x3, #0x4]
                	add	x0, x0, x3
                	sxtw	x0, w0
                	sub	x3, x29, #0x48
-               	add	x3, x3, #0x8
-               	ldrsw	x3, [x3]
+               	ldrsw	x3, [x3, #0x8]
                	add	x0, x0, x3
                	sxtw	x0, w0
                	cmp	x0, #0x6

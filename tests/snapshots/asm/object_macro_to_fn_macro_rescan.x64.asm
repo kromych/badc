@@ -42,7 +42,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rbx, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	cmpq	$0x8, %rax
                	jne	<addr>

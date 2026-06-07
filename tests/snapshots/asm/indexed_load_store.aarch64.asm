@@ -1,0 +1,94 @@
+
+indexed_load_store.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	sxtw	x2, w2
+               	sxtw	x3, w3
+               	mov	x5, #0x0                // =0
+               	mov	x4, x5
+               	b	<addr>
+               	sxtw	x6, w4
+               	cmp	x6, x2
+               	b.ge	<addr>
+               	b	<addr>
+               	sxtw	x4, w4
+               	add	x4, x4, #0x1
+               	b	<addr>
+               	sxtw	x6, w4
+               	lsl	x6, x6, #2
+               	add	x7, x0, x6
+               	ldrsw	x8, [x7]
+               	add	x8, x8, x3
+               	sxtw	x8, w8
+               	add	x6, x1, x6
+               	ldrsw	x6, [x6]
+               	sub	x6, x6, x3
+               	sxtw	x6, w6
+               	sxtw	x6, w6
+               	str	w6, [x7]
+               	sxtw	x6, w4
+               	sxtw	x7, w8
+               	str	w7, [x1, x6, lsl #2]
+               	sxtw	x5, w5
+               	sxtw	x6, w4
+               	lsl	x6, x6, #2
+               	add	x7, x0, x6
+               	ldrsw	x7, [x7]
+               	add	x6, x1, x6
+               	ldrsw	x6, [x6]
+               	mul	x6, x7, x6
+               	sxtw	x6, w6
+               	add	x5, x5, x6
+               	sxtw	x5, w5
+               	b	<addr>
+               	sxtw	x0, w5
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x70
+               	mov	x1, #0x0                // =0
+               	b	<addr>
+               	sxtw	x0, w1
+               	cmp	x0, #0x8
+               	b.ge	<addr>
+               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	b	<addr>
+               	sub	x0, x29, #0x20
+               	sxtw	x2, w1
+               	add	x3, x2, #0x1
+               	sxtw	x3, w3
+               	str	w3, [x0, x2, lsl #2]
+               	sub	x0, x29, #0x40
+               	sxtw	x2, w1
+               	add	x3, x2, #0x1
+               	sxtw	x3, w3
+               	mov	x17, #0xa               // =10
+               	mul	x3, x3, x17
+               	sxtw	x3, w3
+               	str	w3, [x0, x2, lsl #2]
+               	b	<addr>
+               	sub	x0, x29, #0x20
+               	sub	x1, x29, #0x40
+               	mov	x2, #0x8                // =8
+               	mov	x3, #0x3                // =3
+               	bl	<addr>
+               	cmp	x0, #0xb7c
+               	b.ne	<addr>
+               	mov	x1, #0x0                // =0
+               	b	<addr>
+               	mov	x1, #0x1                // =1
+               	b	<addr>
+               	mov	x0, x1
+               	add	sp, sp, #0x70
+               	ldp	x29, x30, [sp], #0x10
+               	ret

@@ -626,7 +626,7 @@ impl<'a> Walker<'a> {
                 then_s,
                 else_s,
             } => {
-                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let cond_v = self.walk_cond_value(b, *cond)?;
                 let then_blk = b.new_block();
                 let after_blk = b.new_block();
                 let else_blk = if else_s.is_some() {
@@ -660,7 +660,7 @@ impl<'a> Walker<'a> {
                 let after = b.new_block();
                 b.jmp(header);
                 b.switch_to(header);
-                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let cond_v = self.walk_cond_value(b, *cond)?;
                 b.branch_zero(cond_v, after, body_blk);
                 let body_id = *body;
                 b.switch_to(body_blk);
@@ -687,7 +687,7 @@ impl<'a> Walker<'a> {
                     b.jmp(cond_blk);
                 }
                 b.switch_to(cond_blk);
-                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let cond_v = self.walk_cond_value(b, *cond)?;
                 b.branch_nonzero(cond_v, body_blk, after);
                 b.switch_to(after);
                 Ok(false)
@@ -724,7 +724,7 @@ impl<'a> Walker<'a> {
                 b.jmp(header);
                 b.switch_to(header);
                 let cond_v = match cond_clone {
-                    Some(c) => self.walk_expr_rvalue(b, c)?,
+                    Some(c) => self.walk_cond_value(b, c)?,
                     None => b.imm(1),
                 };
                 b.branch_zero(cond_v, after, body_blk);
@@ -1563,7 +1563,7 @@ impl<'a> Walker<'a> {
                 // through the FP register class; everything else
                 // stays on the I64 `StoreLocal` / `LoadLocal` fast
                 // path the emit lowers in a single `stur` / `ldur`.
-                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let cond_v = self.walk_cond_value(b, *cond)?;
                 let then_blk = b.new_block();
                 let else_blk = b.new_block();
                 let after_blk = b.new_block();
@@ -2332,40 +2332,9 @@ impl<'a> Walker<'a> {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
             }
-            Expr::ShortCircuit { op, lhs, rhs, .. } => {
-                // C99 6.5.13 / 6.5.14. Evaluate lhs; if it
-                // already determines the result, skip rhs and
-                // jump to the merge block. Otherwise evaluate
-                // rhs and jump to merge with rhs's value. Use a
-                // synthetic local slot as a phi substitute --
-                // both arms `store_local` into it and the merge
-                // block `load_local`s the result. The slot
-                // bumps `func.locals` so the per-arch frame
-                // emit reserves it.
-                let slot = b.alloc_synthetic_local();
-                let kind_l = super::super::ir::LoadKind::I64;
-                let kind_s = super::super::ir::StoreKind::I64;
-                let lhs_val = self.walk_expr_rvalue(b, *lhs)?;
-                b.store_local(slot, lhs_val, kind_s);
-                let rhs_blk = b.new_block();
-                let after_blk = b.new_block();
-                match *op {
-                    super::ShortCircuitOp::Lan => {
-                        // `a && b`: skip rhs when lhs == 0.
-                        b.branch_zero(lhs_val, after_blk, rhs_blk);
-                    }
-                    super::ShortCircuitOp::Lor => {
-                        // `a || b`: skip rhs when lhs != 0.
-                        b.branch_nonzero(lhs_val, after_blk, rhs_blk);
-                    }
-                }
-                b.switch_to(rhs_blk);
-                let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
-                b.store_local(slot, rhs_val, kind_s);
-                b.jmp(after_blk);
-                b.switch_to(after_blk);
-                Ok(b.load_local(slot, kind_l))
-            }
+            // A short-circuit in value position: the result is used, so
+            // normalize it to 0/1.
+            Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
             Expr::Intrinsic { kind, args, .. } => {
                 let intr_kind = *kind;
                 let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
@@ -2477,6 +2446,80 @@ impl<'a> Walker<'a> {
 
     /// Walk a `Expr::Unary` rvalue. AddrOf hands off to the
     /// lvalue walk; Deref loads from the rvalue-shaped address;
+    /// Lower a `&&` / `||` expression (C99 6.5.13 / 6.5.14). Evaluate
+    /// lhs; if it decides the result, skip rhs and jump to the merge
+    /// block, otherwise evaluate rhs. A synthetic local slot stands in
+    /// for the phi -- both arms store into it and the merge block loads
+    /// it.
+    ///
+    /// `normalize` controls whether the stored value is reduced to 0/1.
+    /// In value position the result is observed as an integer, so it
+    /// must be `int` 0 or 1: store the constant the deciding lhs yields
+    /// (`||` -> 1, `&&` -> 0) and `rhs != 0` on the evaluated path. In a
+    /// branch condition only the truthiness is observed, so the raw
+    /// operands are stored and the `!= 0` and the constant are skipped.
+    fn walk_short_circuit(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        id: ExprId,
+        normalize: bool,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let (op, lhs, rhs) = match self.ast.expr(id) {
+            Expr::ShortCircuit { op, lhs, rhs, .. } => (*op, *lhs, *rhs),
+            _ => unreachable!("walk_short_circuit on non-ShortCircuit"),
+        };
+        let slot = b.alloc_synthetic_local();
+        let kind_l = super::super::ir::LoadKind::I64;
+        let kind_s = super::super::ir::StoreKind::I64;
+        let lhs_val = self.walk_expr_rvalue(b, lhs)?;
+        // On the short-circuit path the lhs already carries the deciding
+        // truth value, so in branch context its raw value suffices.
+        let short_val = if normalize {
+            match op {
+                super::ShortCircuitOp::Lor => b.imm(1),
+                super::ShortCircuitOp::Lan => b.imm(0),
+            }
+        } else {
+            lhs_val
+        };
+        b.store_local(slot, short_val, kind_s);
+        let rhs_blk = b.new_block();
+        let after_blk = b.new_block();
+        match op {
+            // `a && b`: skip rhs when lhs == 0.
+            super::ShortCircuitOp::Lan => b.branch_zero(lhs_val, after_blk, rhs_blk),
+            // `a || b`: skip rhs when lhs != 0.
+            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_val, after_blk, rhs_blk),
+        }
+        b.switch_to(rhs_blk);
+        let rhs_val = self.walk_expr_rvalue(b, rhs)?;
+        let stored = if normalize {
+            b.binop_imm(super::super::ir::BinOp::Ne, rhs_val, 0)
+        } else {
+            rhs_val
+        };
+        b.store_local(slot, stored, kind_s);
+        b.jmp(after_blk);
+        b.switch_to(after_blk);
+        Ok(b.load_local(slot, kind_l))
+    }
+
+    /// Walk an expression used as a branch condition, returning a value
+    /// to test against zero. A top-level `&&` / `||` is lowered without
+    /// normalizing its result, since only its truthiness is observed;
+    /// any other expression is walked normally.
+    fn walk_cond_value(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        cond: ExprId,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        if matches!(self.ast.expr(cond), Expr::ShortCircuit { .. }) {
+            self.walk_short_circuit(b, cond, false)
+        } else {
+            self.walk_expr_rvalue(b, cond)
+        }
+    }
+
     /// Neg / BitNot / LogNot lower to a binop against an
     /// immediate.
     fn walk_unary(

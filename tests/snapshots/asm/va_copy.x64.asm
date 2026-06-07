@@ -67,7 +67,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	movslq	%eax, %rax
                	movslq	%ecx, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rcx

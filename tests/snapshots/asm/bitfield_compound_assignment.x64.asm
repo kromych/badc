@@ -195,7 +195,7 @@ Disassembly of section .text:
                	movzwq	(%rdx), %rdx
                	sarq	$0x4, %rdx
                	andq	$0xf, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	andq	$0xf, %rdx
                	shlq	$0x4, %rdx
                	orq	%rdx, %rcx

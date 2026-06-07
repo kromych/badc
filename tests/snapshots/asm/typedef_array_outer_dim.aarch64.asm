@@ -40,20 +40,16 @@ Disassembly of section .text:
                	lsl	x5, x3, #7
                	add	x5, x0, x5
                	sxtw	x6, w4
-               	lsl	x7, x6, #3
-               	add	x5, x5, x7
                	lsl	x3, x3, #4
                	sxtw	x3, w3
                	add	x3, x3, x6
                	sxtw	x3, w3
-               	str	x3, [x5]
+               	str	x3, [x5, x6, lsl #3]
                	sxtw	x3, w1
                	lsl	x3, x3, #7
                	add	x3, x0, x3
                	sxtw	x5, w4
-               	lsl	x5, x5, #3
-               	add	x3, x3, x5
-               	ldr	x3, [x3]
+               	ldr	x3, [x3, x5, lsl #3]
                	add	x2, x2, x3
                	b	<addr>
                	b	<addr>
@@ -99,8 +95,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x200
-               	add	x0, x0, #0x1f8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x1f8]
                	cmp	x0, #0x3f
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -109,8 +104,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x200
-               	add	x0, x0, #0xb8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0xb8]
                	cmp	x0, #0x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

@@ -352,6 +352,34 @@ jobs:
         # other library demos.
         run: python demos/monocypher/smoke.py
 
+      - name: capture monocypher -O crash under cdb (Windows only)
+        # Builds the optimized monocypher smoke binary directly and runs
+        # it under cdb to dump the faulting instruction, register /
+        # exception context, and stack on the first access violation.
+        # `.ecxr` pins the registers to the exception context; `kn` gives
+        # the faulting function and stack pointer so a guard-page fault
+        # versus a data fault is distinguishable.
+        if: runner.os == 'Windows' && failure()
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal enabledelayedexpansion
+          set "CDB="
+          for %%A in (arm64 x64) do (
+            if not defined CDB if exist "C:\Program Files (x86)\Windows Kits\10\Debuggers\%%A\cdb.exe" (
+              set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%%A\cdb.exe"
+            )
+          )
+          if not defined CDB ( echo cdb.exe not found & exit /b 0 )
+          set "BADC=%CD%\target\release\badc.exe"
+          set "M=%GITHUB_WORKSPACE%\demos\monocypher"
+          python "%GITHUB_WORKSPACE%\scripts\amalgamate.py" -o "%RUNNER_TEMP%\mono.c" "%M%\monocypher.c" "%M%\monocypher-ed25519.c" "%M%\smoke_main.c"
+          "%BADC%" -O -g -I "%M%" "%RUNNER_TEMP%\mono.c" -o "%RUNNER_TEMP%\mono_O.exe"
+          echo === running mono_O.exe under cdb ===
+          "%CDB%" -c "g; .ecxr; .lastevent; r; kn 40; lm; u . L20; qd" "%RUNNER_TEMP%\mono_O.exe" 2>&1
+          echo === cdb exit code: %ERRORLEVEL% ===
+
       - name: bearssl smoke (TU + archive + upstream KATs)
         # Builds every .c file under demos/bearssl/src into a
         # static archive, links it against the bundled

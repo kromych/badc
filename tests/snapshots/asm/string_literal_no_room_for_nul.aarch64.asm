@@ -22,8 +22,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x0, x0, #0xf
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x6b              // =107
                	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
@@ -47,8 +46,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xf0
-               	add	x0, x0, #0x4
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x6f              // =111
                	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
@@ -60,16 +58,14 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xf0
-               	add	x0, x0, #0x5
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x5]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xf0
-               	add	x0, x0, #0x13
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x13]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
@@ -88,8 +84,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0x114
-               	add	x0, x0, #0x4
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x4]
                	mov	x17, #0x64              // =100
                	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
@@ -101,8 +96,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0x114
-               	add	x0, x0, #0x5
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x5]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x9                // =9

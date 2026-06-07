@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movl	%edx, (%rcx)
                	movslq	%esi, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movslq	%edx, %rsi
                	jmp	<addr>
                	movslq	-0x8(%rbp), %rax

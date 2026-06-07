@@ -25,7 +25,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	%rbx, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movslq	%eax, %rdi
                	callq	<addr>
                	imulq	%rbx, %rax

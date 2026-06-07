@@ -47,14 +47,12 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x0, #0x3f800000         // =1065353216
                	str	w0, [x21]
-               	add	x0, x21, #0x4
-               	mov	x1, #0x40000000         // =1073741824
-               	str	w1, [x0]
+               	mov	x0, #0x40000000         // =1073741824
+               	str	w0, [x21, #0x4]
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	str	x0, [x20]
-               	add	x0, x20, #0x8
-               	mov	x1, #0x4000000000000000 // =4611686018427387904
-               	str	x1, [x0]
+               	mov	x0, #0x4000000000000000 // =4611686018427387904
+               	str	x0, [x20, #0x8]
                	ldrsw	x0, [x21]
                	mov	x17, #0x3f800000        // =1065353216
                	cmp	x0, x17
@@ -66,8 +64,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x21, #0x4
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x21, #0x4]
                	mov	x17, #0x40000000        // =1073741824
                	cmp	x0, x17
                	b.eq	<addr>
@@ -89,8 +86,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x20, #0x8
-               	ldr	x0, [x0]
+               	ldr	x0, [x20, #0x8]
                	mov	x17, #0x4000000000000000 // =4611686018427387904
                	cmp	x0, x17
                	b.eq	<addr>

@@ -5,12 +5,12 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
-    v2   Load { addr=v1, kind=I32 }                       -> x1
+    v2   Load { addr=v1, disp=0, kind=I32 }               -> x1
     terminator Bz { cond=v2, target=b2, fall=b1 }   (exit_acc=v2)
   block 1  start_pc=0
     v3   ImmData(8)                                       -> x1
     v4   Imm(2)                                           -> x1
-    v5   Store { addr=v1, value=v4, kind=I32 }            -> -
+    v5   Store { addr=v1, disp=0, value=v4, kind=I32 }    -> -
     terminator Jmp(b2)   (exit_acc=v5)
   block 2  start_pc=0
     v6   Imm(0)                                           -> x0

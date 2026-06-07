@@ -44,7 +44,6 @@ mod mach_o;
 mod pe;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
-mod ssa_c5_cdecl_audit;
 mod ssa_constfold_branch;
 mod ssa_dedup_imm;
 mod ssa_drop_redundant_extend;
@@ -54,6 +53,7 @@ mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
 mod ssa_fma;
+mod ssa_index_fold;
 mod ssa_inline;
 mod ssa_liveness;
 pub(crate) mod ssa_mem2reg;
@@ -62,6 +62,7 @@ mod ssa_phi_class;
 mod ssa_rotate;
 pub(crate) mod ssa_shadow;
 mod ssa_split_crit_edges;
+mod ssa_store_forward;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};
@@ -1694,6 +1695,11 @@ pub(crate) struct Abi {
     /// `xor eax, eax` before each variadic call. Win64 has no
     /// such requirement.
     pub variadic_zero_xmm_count: bool,
+    /// Windows commits thread stack on demand behind a guard page, so a
+    /// prologue allocating more than one page must touch each page in
+    /// descending order or a later access faults. SysV / macOS grow the
+    /// stack without a probe. Set for the Windows targets.
+    pub stack_probe: bool,
 }
 
 impl Abi {
@@ -1773,6 +1779,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -1782,6 +1789,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -1791,6 +1799,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
+                stack_probe: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -1800,6 +1809,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
+                stack_probe: true,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -1809,6 +1819,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: true,
             },
         }
     }

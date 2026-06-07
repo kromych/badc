@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=2 variadic=true locals=5
     v27  LocalAddr(-3)                                    -> x0
     v28  Imm(8)                                           -> x6
     v29  Intrinsic { kind=5, args=[v27, v28] }            -> x0
-    v30  Load { addr=v29, kind=I64 }                      -> x0
+    v30  Load { addr=v29, disp=0, kind=I64 }              -> x0
     v31  Binop { op=add, lhs=v13, rhs=v30 }               -> x2
     v32  Imm(0)                                           -> x0
     terminator Jmp(b6)   (exit_acc=v31)
@@ -55,7 +55,7 @@ fn ent_pc=0 n_params=2 variadic=true locals=5
     v35  LocalAddr(-3)                                    -> x0
     v36  Imm(65544)                                       -> x6
     v37  Intrinsic { kind=5, args=[v35, v36] }            -> x0
-    v38  Load { addr=v37, kind=F64 }                      -> d0
+    v38  Load { addr=v37, disp=0, kind=F64 }              -> d0
     v39  FpCast { kind=FpToInt, value=v38 }               -> x0
     v40  Binop { op=add, lhs=v13, rhs=v39 }               -> x2
     v41  Imm(0)                                           -> x0
@@ -91,7 +91,7 @@ fn ent_pc=1 n_params=1 variadic=true locals=5
     v17  LocalAddr(-3)                                    -> x0
     v18  Imm(65544)                                       -> x2
     v19  Intrinsic { kind=5, args=[v17, v18] }            -> x0
-    v20  Load { addr=v19, kind=F64 }                      -> d1
+    v20  Load { addr=v19, disp=0, kind=F64 }              -> d1
     v21  Binop { op=fadd, lhs=v9, rhs=v20 }               -> d0
     v22  Imm(0)                                           -> x0
     v23  LoadLocal { off=-4, kind=F64 }                   -> d1

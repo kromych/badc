@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v1   Imm(4591870180066957722)                         -> x0
     v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
     v3   LocalAddr(-1)                                    -> x0
-    v4   Store { addr=v3, value=v2, kind=F32 }            -> -
+    v4   Store { addr=v3, disp=0, value=v2, kind=F32 }    -> -
     v5   Imm(4596373779694328218)                         -> x0
     v6   StoreLocal { off=-2, value=v5, kind=F64 }        -> -
     v7   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
@@ -52,7 +52,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v1   Imm(4591870180066957722)                         -> x0
     v2   FpCast { kind=F64ToF32, value=v1 }               -> d0 [f32]
     v3   LocalAddr(-1)                                    -> x0
-    v4   Store { addr=v3, value=v2, kind=F32 }            -> -
+    v4   Store { addr=v3, disp=0, value=v2, kind=F32 }    -> -
     v5   LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v6   FpCast { kind=F32ToF64, value=v5 }               -> d0
     v7   Imm(0)                                           -> x0
@@ -95,16 +95,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v3   LoadLocal { off=-1, kind=F64 }                   -> d0
     v4   FpCast { kind=F64ToF32, value=v3 }               -> d0 [f32]
     v5   LocalAddr(-2)                                    -> x0
-    v6   Store { addr=v5, value=v4, kind=F32 }            -> -
+    v6   Store { addr=v5, disp=0, value=v4, kind=F32 }    -> -
     v7   Imm(4593560419918210649)                         -> x0
     v8   FpCast { kind=F64ToF32, value=v7 }               -> d0 [f32]
     v9   LocalAddr(-3)                                    -> x0
-    v10  Store { addr=v9, value=v8, kind=F32 }            -> -
+    v10  Store { addr=v9, disp=0, value=v8, kind=F32 }    -> -
     v11  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v12  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v13  Binop { op=fsub, lhs=v11, rhs=v12 }              -> d0 [f32]
     v14  LocalAddr(-4)                                    -> x0
-    v15  Store { addr=v14, value=v13, kind=F32 }          -> -
+    v15  Store { addr=v14, disp=0, value=v13, kind=F32 }  -> -
     v16  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v17  Imm(0)                                           -> x0
     v18  FpCast { kind=IntToFp, value=v17 }               -> d1
@@ -115,7 +115,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=6
     v21  LocalAddr(-4)                                    -> x0
     v22  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v23  Fneg(v22)                                        -> d0 [f32]
-    v24  Store { addr=v21, value=v23, kind=F32 }          -> -
+    v24  Store { addr=v21, disp=0, value=v23, kind=F32 }  -> -
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v25  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
@@ -171,16 +171,16 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v5   LoadLocal { off=-1, kind=F64 }                   -> d1
     v6   FpCast { kind=F64ToF32, value=v3 }               -> d0 [f32]
     v7   LocalAddr(-2)                                    -> x0
-    v8   Store { addr=v7, value=v6, kind=F32 }            -> -
+    v8   Store { addr=v7, disp=0, value=v6, kind=F32 }    -> -
     v9   Imm(4599676419595205767)                         -> x0
     v10  FpCast { kind=F64ToF32, value=v9 }               -> d0 [f32]
     v11  LocalAddr(-3)                                    -> x0
-    v12  Store { addr=v11, value=v10, kind=F32 }          -> -
+    v12  Store { addr=v11, disp=0, value=v10, kind=F32 }  -> -
     v13  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v14  LoadLocal { off=-3, kind=F32 }                   -> d1 [f32]
     v15  Binop { op=fsub, lhs=v13, rhs=v14 }              -> d0 [f32]
     v16  LocalAddr(-4)                                    -> x0
-    v17  Store { addr=v16, value=v15, kind=F32 }          -> -
+    v17  Store { addr=v16, disp=0, value=v15, kind=F32 }  -> -
     v18  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v19  Imm(0)                                           -> x0
     v20  FpCast { kind=IntToFp, value=v19 }               -> d1
@@ -191,7 +191,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=4
     v23  LocalAddr(-4)                                    -> x0
     v24  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]
     v25  Fneg(v24)                                        -> d0 [f32]
-    v26  Store { addr=v23, value=v25, kind=F32 }          -> -
+    v26  Store { addr=v23, disp=0, value=v25, kind=F32 }  -> -
     terminator Jmp(b2)   (exit_acc=v26)
   block 2  start_pc=0
     v27  LoadLocal { off=-4, kind=F32 }                   -> d0 [f32]

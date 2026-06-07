@@ -16,32 +16,26 @@ Disassembly of section .text:
                	movl	$0x5, %ecx
                	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x4, %rax
                	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x8, %rax
                	movl	$0xe, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x8(%rax)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0xc, %rax
                	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0xc(%rax)
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rax
                	leaq	-0x10(%rbp), %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	leaq	-0x10(%rbp), %rcx
-               	addq	$0xc, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0xc(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp

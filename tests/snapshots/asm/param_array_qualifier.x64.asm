@@ -10,50 +10,34 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	movslq	(%rdi), %rax
-               	movq	%rdi, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rdi, %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
                	movslq	(%rdi), %rax
-               	movq	%rdi, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rdi, %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
                	movslq	(%rdi), %rax
-               	movq	%rdi, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rdi, %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
                	movslq	(%rdi), %rax
-               	movq	%rdi, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
-               	movq	%rdi, %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
@@ -76,13 +60,10 @@ Disassembly of section .text:
                	popq	%r11
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
+               	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x6, %rax
@@ -93,13 +74,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
+               	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x6, %rax
@@ -110,13 +88,10 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
+               	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x6, %rax
@@ -137,13 +112,10 @@ Disassembly of section .text:
                	popq	%r11
                	leaq	-0x28(%rbp), %rax
                	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
+               	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0xf, %rax

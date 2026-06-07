@@ -14,10 +14,10 @@ fn ent_pc=0 n_params=8 variadic=false locals=2
     v8   Imm(0)                                           -> x0
     v9   LocalAddr(-1)                                    -> x0
     v10  ParamRef(0, kind=F32)                            -> d0 [f32]
-    v11  Store { addr=v9, value=v10, kind=F32 }           -> -
+    v11  Store { addr=v9, disp=0, value=v10, kind=F32 }   -> -
     v12  LocalAddr(-2)                                    -> x0
     v13  ParamRef(1, kind=F32)                            -> d0 [f32]
-    v14  Store { addr=v12, value=v13, kind=F32 }          -> -
+    v14  Store { addr=v12, disp=0, value=v13, kind=F32 }  -> -
     v15  LoadLocal { off=-1, kind=F32 }                   -> d0 [f32]
     v16  FpCast { kind=F32ToF64, value=v15 }              -> d0
     v17  FpCast { kind=FpToInt, value=v16 }               -> x0
@@ -43,7 +43,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=2
     v37  BinopI { op=shl, lhs=v36, rhs_imm=32 }           -> x0
     v38  BinopI { op=shr, lhs=v37, rhs_imm=32 }           -> x0
     v39  LoadLocal { off=7, kind=I64 }                    -> x2
-    v40  Load { addr=v7, kind=I32 }                       -> x1
+    v40  Load { addr=v7, disp=0, kind=I32 }               -> x1
     v41  BinopI { op=mul, lhs=v40, rhs_imm=100 }          -> x1
     v42  BinopI { op=shl, lhs=v41, rhs_imm=32 }           -> x1
     v43  BinopI { op=shr, lhs=v42, rhs_imm=32 }           -> x1

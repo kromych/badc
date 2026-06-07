@@ -830,6 +830,47 @@ fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame)
     materialize_int_shifted(code, place, scratch, frame, 0)
 }
 
+/// Materialize up to two integer operands into distinct registers. A
+/// register-resident operand keeps its register; a spilled operand is
+/// loaded into one of the reserved scratch registers (`r10` / `r13`)
+/// that holds no other operand. Both scratch registers sit outside the
+/// allocator's pool, so loading a spilled operand cannot clobber an
+/// allocated value. Returns `None` if an operand is neither a register
+/// nor a spill slot.
+fn materialize_int_operands_distinct(
+    code: &mut Vec<u8>,
+    places: &[Place],
+    frame: Frame,
+) -> Option<alloc::vec::Vec<Reg>> {
+    let mut regs: alloc::vec::Vec<Option<Reg>> = alloc::vec![None; places.len()];
+    let mut occupied = [false; 16];
+    for (i, &p) in places.iter().enumerate() {
+        match p {
+            Place::IntReg(r) => {
+                regs[i] = Some(Reg(r));
+                occupied[r as usize] = true;
+            }
+            Place::Spill(_) => {}
+            _ => return None,
+        }
+    }
+    let pool = [SCRATCH_R10, SCRATCH_R13];
+    for (i, &p) in places.iter().enumerate() {
+        if regs[i].is_some() {
+            continue;
+        }
+        let scratch = pool.iter().copied().find(|s| !occupied[s.0 as usize])?;
+        occupied[scratch.0 as usize] = true;
+        materialize_int(code, p, scratch, frame)?;
+        regs[i] = Some(scratch);
+    }
+    Some(
+        regs.into_iter()
+            .map(|r| r.expect("operand register assigned"))
+            .collect(),
+    )
+}
+
 /// Like [`materialize_int`] but accounts for a temporary `rsp`
 /// adjustment that hasn't been undone yet (e.g. the call-args
 /// scratch frame). Spill offsets are computed from the
@@ -1453,11 +1494,12 @@ pub(super) fn emit_function(
     // distinct -- then `schedule_place_moves` sequentializes it and
     // breaks any cycle through a scratch register. When two ParamRef
     // values share a home (sequentially-live parameters the allocator
-    // packed into one register, each consumed by an intervening store
-    // before the next is produced) the placement is not a parallel
-    // copy; the in-order per-inst emit is the correct lowering and the
-    // batch is skipped. A shared home is never an argument register, so
-    // that path carries no clobber hazard.
+    // packed into one register) the move set is not a permutation, so
+    // the batch is skipped and each ParamRef is placed in program order.
+    // That per-inst path is safe only while no parameter's home is a
+    // later parameter's incoming register; the allocator's ParamRef
+    // self-home hint keeps it so. The `param-shuffle-clobber` check in
+    // `verify_allocation` guards the invariant under `codegen_test`.
     let mut param_prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
     {
         // Each integer parameter's incoming register comes from the
@@ -2351,12 +2393,22 @@ fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
-        Inst::Load { addr, kind } => {
-            emit_load(code, dst, *addr, *kind, alloc.is_f32(v), alloc, frame)
-        }
-        Inst::Store { addr, value, kind } => {
-            emit_store(code, dst, v, *addr, *value, *kind, alloc, frame)
-        }
+        Inst::Load { addr, disp, kind } => emit_load(
+            code,
+            dst,
+            *addr,
+            *disp,
+            *kind,
+            alloc.is_f32(v),
+            alloc,
+            frame,
+        ),
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => emit_store(code, dst, v, *addr, *disp, *value, *kind, alloc, frame),
         Inst::LoadLocal { off, kind } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
@@ -2934,20 +2986,14 @@ fn emit_load_indexed(
         .get(index as usize)
         .copied()
         .unwrap_or(Place::None);
-    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
+    let regs = match materialize_int_operands_distinct(code, &[base_place, index_place], frame) {
         Some(r) => r,
         None => {
-            bail_msg("LoadIndexed: base Place not int reg / spill");
+            bail_msg("LoadIndexed: base / index not int reg / spill");
             return false;
         }
     };
-    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("LoadIndexed: index Place not int reg / spill");
-            return false;
-        }
-    };
+    let (rbase, rindex) = (regs[0], regs[1]);
     let Some(rd) = int_or_spill_dst(dst) else {
         bail_msg("LoadIndexed: dst not int reg / spill");
         return false;
@@ -3009,40 +3055,77 @@ fn emit_store_indexed(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
+    let regs = match materialize_int_operands_distinct(code, &[base_place, index_place], frame) {
         Some(r) => r,
         None => {
-            bail_msg("StoreIndexed: base Place not int reg / spill");
+            bail_msg("StoreIndexed: base / index not int reg / spill");
             return false;
         }
     };
-    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("StoreIndexed: index Place not int reg / spill");
-            return false;
-        }
-    };
-    let rv = if let Place::FpReg(xr) = value_place
-        && matches!(kind, StoreKind::I64)
-    {
-        super::x86_64::emit_movq_r_xmm(code, SCRATCH_RDX, Reg(xr));
-        SCRATCH_RDX
-    } else {
-        match materialize_int(code, value_place, SCRATCH_RDX, frame) {
-            Some(r) => r,
+    let (rbase, rindex) = (regs[0], regs[1]);
+    // The store also needs the value in a register distinct from the
+    // base and index. r10 / r13 are the only reserved scratch; when both
+    // already hold the spilled base and index there is none left, so the
+    // effective address is precomputed into r10 (consuming the base and
+    // index registers) and the freed r13 receives the value.
+    let fp_value = matches!(value_place, Place::FpReg(_)) && matches!(kind, StoreKind::I64);
+    let free = [SCRATCH_R10, SCRATCH_R13]
+        .into_iter()
+        .find(|s| s.0 != rbase.0 && s.0 != rindex.0);
+    let mut precomputed_addr: Option<Reg> = None;
+    let rv = if fp_value {
+        let Place::FpReg(xr) = value_place else {
+            unreachable!()
+        };
+        let target = match free {
+            Some(s) => s,
             None => {
-                bail_msg("StoreIndexed: value Place not int reg / spill");
-                return false;
+                super::x86_64::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                precomputed_addr = Some(SCRATCH_R10);
+                SCRATCH_R13
+            }
+        };
+        super::x86_64::emit_movq_r_xmm(code, target, Reg(xr));
+        target
+    } else if let Place::IntReg(r) = value_place {
+        Reg(r)
+    } else {
+        match free {
+            Some(s) => match materialize_int(code, value_place, s, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("StoreIndexed: value not int reg / spill");
+                    return false;
+                }
+            },
+            None => {
+                super::x86_64::emit_lea_r_sib(code, SCRATCH_R10, rbase, rindex, scale);
+                precomputed_addr = Some(SCRATCH_R10);
+                match materialize_int(code, value_place, SCRATCH_R13, frame) {
+                    Some(r) => r,
+                    None => {
+                        bail_msg("StoreIndexed: value not int reg / spill");
+                        return false;
+                    }
+                }
             }
         }
     };
-    match kind {
-        StoreKind::I64 => super::x86_64::emit_mov_sib_r(code, rbase, rindex, scale, rv),
-        StoreKind::I32 => super::x86_64::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
-        StoreKind::I16 => super::x86_64::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
-        StoreKind::I8 => super::x86_64::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+    match precomputed_addr {
+        Some(addr) => match kind {
+            StoreKind::I64 => super::x86_64::emit_mov_mem_r(code, addr, 0, rv),
+            StoreKind::I32 => super::x86_64::emit_mov_mem_r32(code, addr, 0, rv),
+            StoreKind::I16 => super::x86_64::emit_mov_mem_r16(code, addr, 0, rv),
+            StoreKind::I8 => super::x86_64::emit_mov_mem_r8(code, addr, 0, rv),
+            StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        },
+        None => match kind {
+            StoreKind::I64 => super::x86_64::emit_mov_sib_r(code, rbase, rindex, scale, rv),
+            StoreKind::I32 => super::x86_64::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
+            StoreKind::I16 => super::x86_64::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
+            StoreKind::I8 => super::x86_64::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
+            StoreKind::F32 | StoreKind::F64 => unreachable!(),
+        },
     }
     // c5 store-op leaves the value in the accumulator.
     if let Some(rd) = int_or_spill_dst(dst) {
@@ -3058,6 +3141,7 @@ fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     alloc: &Allocation,
@@ -3090,7 +3174,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit_movss_xmm_mem(code, dd, base, 0);
+        emit_movss_xmm_mem(code, dd, base, disp);
         if !keep_f32 {
             emit_cvtss2sd(code, dd, dd);
         }
@@ -3106,7 +3190,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit_movsd_xmm_mem(code, dd, base, 0);
+        emit_movsd_xmm_mem(code, dd, base, disp);
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return true;
     }
@@ -3115,13 +3199,13 @@ fn emit_load(
         return false;
     };
     match kind {
-        LoadKind::I64 => emit_mov_r_mem(code, rd, base, 0),
-        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, 0),
-        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, 0),
-        LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, 0),
-        LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, 0),
-        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, 0),
-        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, 0),
+        LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
+        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, disp),
+        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, disp),
+        LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, disp),
+        LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
+        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, disp),
+        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, disp),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -3133,6 +3217,7 @@ fn emit_store(
     dst: Place,
     _v: super::super::ir::ValueId,
     addr: u32,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
@@ -3178,7 +3263,7 @@ fn emit_store(
             }
         };
         if alloc.is_f32(value) {
-            emit_movss_mem_xmm(code, base, 0, dn);
+            emit_movss_mem_xmm(code, base, disp, dn);
             match dst {
                 Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
                 Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3190,7 +3275,7 @@ fn emit_store(
         // allocator-held xmm holding the wider f64 the result Place
         // expects) survives.
         emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-        emit_movss_mem_xmm(code, base, 0, SCRATCH_XMM15);
+        emit_movss_mem_xmm(code, base, disp, SCRATCH_XMM15);
         match dst {
             Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3206,7 +3291,7 @@ fn emit_store(
             bail_msg("Store F64: value not fp reg / spill / int reg");
             return false;
         };
-        emit_movsd_mem_xmm(code, base, 0, dn);
+        emit_movsd_mem_xmm(code, base, disp, dn);
         match dst {
             Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3238,10 +3323,10 @@ fn emit_store(
         return false;
     };
     match kind {
-        StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
-        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, 0, rs),
-        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, 0, rs),
-        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, 0, rs),
+        StoreKind::I64 => emit_mov_mem_r(code, base, disp, rs),
+        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, disp, rs),
+        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, disp, rs),
+        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, disp, rs),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     }
     // Stored value also feeds dst when the allocator wants it
@@ -4264,6 +4349,14 @@ fn emit_binop_imm(
             super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
             true
         }
+        // Multiply by 3 / 5 / 9 is one `lea rd, [rn + rn*2/4/8]`: a
+        // single-cycle address-unit operation instead of the multi-cycle
+        // `imul`. The base and index are both `rn`, so the result may
+        // reuse `rn` (the effective address is read before the write).
+        BinOp::Mul if matches!(rhs_imm, 3 | 5 | 9) => {
+            super::x86_64::emit_lea_r_sib(code, rd, rn, rn, (rhs_imm - 1) as u8);
+            true
+        }
         // `imul rd, rn, imm32` reads `rn` and writes `rd` in one
         // instruction, so it needs neither a staging mov nor an
         // immediate-scratch register. This covers the multiply by a
@@ -4299,6 +4392,33 @@ fn emit_binop_imm(
                 emit_mov_rr(code, rd, rn);
             }
             super::x86_64::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
+            true
+        }
+        // A step of one encodes as `inc` / `dec` (three bytes) rather
+        // than `add` / `sub` with an immediate (seven). The flags differ
+        // -- `inc` / `dec` leave the carry flag unchanged -- but the
+        // result register is identical and no consumer reads the carry
+        // of a `BinopI` result.
+        BinOp::Add if rhs_imm == 1 || rhs_imm == -1 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            if rhs_imm == 1 {
+                super::x86_64::emit_inc_r(code, rd);
+            } else {
+                super::x86_64::emit_dec_r(code, rd);
+            }
+            true
+        }
+        BinOp::Sub if rhs_imm == 1 || rhs_imm == -1 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            if rhs_imm == 1 {
+                super::x86_64::emit_dec_r(code, rd);
+            } else {
+                super::x86_64::emit_inc_r(code, rd);
+            }
             true
         }
         BinOp::Add if imm_fits_i32 => {

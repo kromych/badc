@@ -18,13 +18,13 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	cmpq	$0x0, %rdi
                	jle	<addr>
                	movq	%rdi, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movslq	%eax, %rdi
                	movq	%rbx, %rsi
                	callq	<addr>

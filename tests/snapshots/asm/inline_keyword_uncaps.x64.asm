@@ -13,7 +13,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
                	movq	%rdi, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	addq	$0x2, %rax
                	addq	$0x3, %rax
                	addq	$0x4, %rax

@@ -20,7 +20,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	movl	$0x5, %eax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	shlq	$0x1, %rax

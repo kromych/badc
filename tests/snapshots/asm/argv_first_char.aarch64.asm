@@ -15,7 +15,6 @@ Disassembly of section .text:
                	b.ge	<addr>
                	mov	x0, #0x0                // =0
                	ret
-               	add	x0, x1, #0x8
-               	ldr	x0, [x0]
+               	ldr	x0, [x1, #0x8]
                	ldrb	w0, [x0]
                	ret

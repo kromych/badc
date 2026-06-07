@@ -300,6 +300,34 @@ pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg)
     emit_modrm_mem(code, src, base, disp);
 }
 
+/// `MOV [base + disp], r32` -- 32-bit store.
+pub(super) fn emit_mov_mem_r32(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    if src.high() || base.high() {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
+/// `MOV [base + disp], r16` -- 16-bit store.
+pub(super) fn emit_mov_mem_r16(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    emit_byte(code, 0x66);
+    if src.high() || base.high() {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
+/// `MOV [base + disp], r8` -- 8-bit store. The REX prefix (even empty)
+/// selects the uniform byte registers so `sil` / `dil` and the high
+/// extensions encode rather than `ah` / `ch`.
+pub(super) fn emit_mov_mem_r8(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    emit_byte(code, rex(false, src.high(), false, base.high()));
+    emit_byte(code, 0x88);
+    emit_modrm_mem(code, src, base, disp);
+}
+
 /// `MOVSXD r64, [base + disp]` -- 32-bit load sign-extended into a
 /// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`LoadKind::I32`]
 /// for signed `int` lvalue reads -- C signed semantics require the
@@ -1054,6 +1082,21 @@ pub(super) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 5, dst, imm);
 }
 
+/// `INC r64` -- `REX.W FF /0`. The single-byte `40+rd` encoding is a
+/// REX prefix in 64-bit mode, so the `FF` form is the only one.
+pub(super) fn emit_inc_r(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 0, dst.lo()));
+}
+
+/// `DEC r64` -- `REX.W FF /1`.
+pub(super) fn emit_dec_r(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 1, dst.lo()));
+}
+
 /// `AND r64, imm32`.
 pub(super) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 4, dst, imm);
@@ -1345,6 +1388,13 @@ pub(super) fn emit_movsxd_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: 
 pub(super) fn emit_mov_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
     emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
     emit_byte(code, 0x8B);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `LEA r64, [base + index * scale]` -- compute the effective address.
+pub(super) fn emit_lea_r_sib(code: &mut Vec<u8>, dst: Reg, base: Reg, index: Reg, scale: u8) {
+    emit_byte(code, rex(true, dst.high(), index.high(), base.high()));
+    emit_byte(code, 0x8D);
     emit_modrm_sib_mem(code, dst, base, index, scale, 0);
 }
 
@@ -1699,12 +1749,22 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (x86_64)", || {
             super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
         });
+        // Scaled-index addressing: fold `base + index*scale` into the
+        // load / store. Runs last so it sees the final address shape;
+        // the optimizer passes never traverse `LoadIndexed` /
+        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        super::ssa_emit_common::time_pass("ssa_index_fold::run (x86_64)", || {
+            super::ssa_index_fold::run(&mut ssa_funcs);
+        });
+        // Store-to-load and load-to-load forwarding within a block. Runs
+        // after the index fold so a struct field's store and load address
+        // are both normalised to the same `(base, disp)`. Bounded by
+        // live-range extension so it does not pin scattered re-reads in a
+        // register-starved unrolled loop.
+        super::ssa_emit_common::time_pass("ssa_store_forward::run (x86_64)", || {
+            super::ssa_store_forward::run(&mut ssa_funcs);
+        });
     }
-    // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
-    // and emits one stderr line per function classifying it as
-    // eligible for the host-ABI prologue or as requiring the c5
-    // cdecl 16-byte-cell layout.
-    super::ssa_c5_cdecl_audit::maybe_dump_audit(&ssa_funcs);
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds

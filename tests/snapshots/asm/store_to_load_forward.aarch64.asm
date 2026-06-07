@@ -1,0 +1,99 @@
+
+store_to_load_forward.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
+               	sxtw	x2, w2
+               	str	x1, [x0]
+               	str	w2, [x0, #0x8]
+               	sxth	x1, w2
+               	strh	w1, [x0, #0xc]
+               	sxtb	x1, w2
+               	strb	w1, [x0, #0xe]
+               	mov	x17, #0xff              // =255
+               	and	x2, x2, x17
+               	strb	w2, [x0, #0xf]
+               	ldr	x2, [x0]
+               	ldrsw	x3, [x0, #0x8]
+               	ldrsh	x4, [x0, #0xc]
+               	sxtb	x1, w1
+               	ldrb	w0, [x0, #0xf]
+               	add	x2, x2, x3
+               	add	x2, x2, x4
+               	add	x1, x2, x1
+               	mov	x17, #0xff              // =255
+               	and	x0, x0, x17
+               	add	x0, x1, x0
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	str	x1, [x0]
+               	add	x0, x1, x1
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x30
+               	str	x20, [sp]
+               	str	x21, [sp, #0x8]
+               	mov	x20, x0
+               	mov	x21, #0x0               // =0
+               	str	x1, [x20]
+               	mov	x0, x20
+               	bl	<addr>
+               	add	x0, x21, x0
+               	ldr	x1, [x20]
+               	add	x0, x0, x1
+               	ldr	x20, [sp]
+               	ldr	x21, [sp, #0x8]
+               	add	sp, sp, #0x30
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
+               	sub	x0, x29, #0x10
+               	mov	x1, #0x3e8              // =1000
+               	mov	x2, #0x7                // =7
+               	bl	<addr>
+               	cmp	x0, #0x404
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	stur	x0, [x29, #-0x20]
+               	sub	x0, x29, #0x20
+               	mov	x1, #0x15               // =21
+               	bl	<addr>
+               	cmp	x0, #0x2a
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x5                // =5
+               	stur	x0, [x29, #-0x28]
+               	sub	x0, x29, #0x28
+               	mov	x1, #0x9                // =9
+               	bl	<addr>
+               	cmp	x0, #0x1b
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	ret

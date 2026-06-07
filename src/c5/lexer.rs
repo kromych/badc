@@ -377,6 +377,92 @@ impl Lexer {
     /// are absorbed into the current token so the parser's narrow
     /// concatenation loop does not interleave a 1-byte gap, and a
     /// 16-bit `0` terminator is appended at the end.
+    /// Parse the rest of a C99 6.4.4.2 hexadecimal floating
+    /// constant. The integer hex digits occupy `[mant_start,
+    /// self.pos)`; `self.pos` points at the `.` or the binary-
+    /// exponent letter `p`/`P`. Consumes the optional fractional
+    /// digits, the mandatory `p`/`P` [sign] decimal exponent, and an
+    /// optional `f`/`F`/`l`/`L` suffix, returning the value as f64.
+    fn lex_hex_float(&mut self, mant_start: usize) -> Result<f64, C5Error> {
+        let hex_val = |b: u8| -> Option<u32> {
+            match b {
+                b'0'..=b'9' => Some((b - b'0') as u32),
+                b'a'..=b'f' => Some((b - b'a' + 10) as u32),
+                b'A'..=b'F' => Some((b - b'A' + 10) as u32),
+                _ => None,
+            }
+        };
+        let mut mant: f64 = 0.0;
+        for &b in &self.src[mant_start..self.pos] {
+            mant = mant * 16.0 + hex_val(b).unwrap_or(0) as f64;
+        }
+        if self.pos < self.src.len() && self.src[self.pos] == b'.' {
+            self.pos += 1;
+            let mut scale = 1.0_f64 / 16.0;
+            while self.pos < self.src.len() {
+                let Some(d) = hex_val(self.src[self.pos]) else {
+                    break;
+                };
+                mant += d as f64 * scale;
+                scale /= 16.0;
+                self.pos += 1;
+            }
+        }
+        if self.pos >= self.src.len()
+            || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
+        {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "{}: hexadecimal floating constant requires a binary exponent (`p`)",
+                    self.line
+                ),
+            )));
+        }
+        self.pos += 1;
+        let exp_neg = if self.pos < self.src.len()
+            && (self.src[self.pos] == b'+' || self.src[self.pos] == b'-')
+        {
+            let neg = self.src[self.pos] == b'-';
+            self.pos += 1;
+            neg
+        } else {
+            false
+        };
+        let exp_start = self.pos;
+        let mut exp: i32 = 0;
+        while self.pos < self.src.len() && self.src[self.pos].is_ascii_digit() {
+            exp = exp
+                .saturating_mul(10)
+                .saturating_add((self.src[self.pos] - b'0') as i32);
+            self.pos += 1;
+        }
+        if self.pos == exp_start {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("{}: binary exponent has no digits", self.line),
+            )));
+        }
+        let mut exp = if exp_neg { -exp } else { exp };
+        // The `f`/`F`/`l`/`L` suffix only selects the type; c5 stores
+        // every floating constant as f64, so it is consumed and
+        // discarded.
+        if self.pos < self.src.len()
+            && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
+        {
+            self.pos += 1;
+        }
+        // Scale by 2^exp through exact doubling / halving so the
+        // result needs no std-only float intrinsics.
+        while exp > 0 {
+            mant *= 2.0;
+            exp -= 1;
+        }
+        while exp < 0 {
+            mant *= 0.5;
+            exp += 1;
+        }
+        Ok(mant)
+    }
+
     fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
@@ -835,6 +921,7 @@ impl Lexer {
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
                 {
                     self.pos += 1;
+                    let hex_body_start = self.pos;
                     // Accumulate via wrapping_mul / wrapping_add so a
                     // hex literal that fills the full 64-bit range
                     // (e.g. `0xFFFFFFFFFFFFFFFEul`) doesn't trip
@@ -855,6 +942,21 @@ impl Lexer {
                         };
                         val = val.wrapping_mul(16).wrapping_add(digit);
                         self.pos += 1;
+                    }
+                    // C99 6.4.4.2 hex floating constant: the integer
+                    // hex digits are followed by a `.` and/or the
+                    // mandatory binary-exponent part `p`/`P`. Detect
+                    // either marker here; a plain `0x...` with neither
+                    // stays an integer constant.
+                    let next_is_dot =
+                        self.pos < self.src.len() && self.src[self.pos] == b'.';
+                    let next_is_bexp = self.pos < self.src.len()
+                        && (self.src[self.pos] == b'p' || self.src[self.pos] == b'P');
+                    if next_is_dot || next_is_bexp {
+                        let f = self.lex_hex_float(hex_body_start)?;
+                        self.ival = f.to_bits() as i64;
+                        self.tk = Tok(Token::FloatNum as i64);
+                        return Ok(());
                     }
                     // Hex literals can carry the standard integer suffix
                     // letters (u/U/l/L plus ll/LL combinations such as

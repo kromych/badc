@@ -557,7 +557,10 @@ fn original_c4_compiles_and_runs_hello_natively() {
 
     let output = exec_with_retry_args(
         &bin_path,
-        &[concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")],
+        &[concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/c/c4_selfhost_hello.c"
+        )],
     )
     .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);

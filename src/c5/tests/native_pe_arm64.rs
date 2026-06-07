@@ -608,7 +608,10 @@ fn original_c4_compiles_and_runs_hello_pe() {
     path.push("c4.c");
     let src = std::fs::read_to_string(&path).expect("read c4.c");
     let mut hello_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    hello_path.push("hello.c");
+    hello_path.push("tests");
+    hello_path.push("fixtures");
+    hello_path.push("c");
+    hello_path.push("c4_selfhost_hello.c");
     let outcome = build_and_run(
         &src,
         "c4-self-host",

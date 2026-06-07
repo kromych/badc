@@ -732,10 +732,13 @@ fn original_c4_compiles_and_runs_hello_pe() {
     path.push("c4.c");
     let src = std::fs::read_to_string(&path).expect("read c4.c");
     // c4.c reads its first user argv entry as the source file to
-    // compile-and-run. Hand it the canonical hello.c and expect
-    // the c4-VM to print "Hello 123" and exit 0.
+    // compile-and-run. Hand it the c4-subset self-host fixture and
+    // expect the c4-VM to print "Hello 123" and exit 0.
     let mut hello_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    hello_path.push("hello.c");
+    hello_path.push("tests");
+    hello_path.push("fixtures");
+    hello_path.push("c");
+    hello_path.push("c4_selfhost_hello.c");
     let outcome = build_and_run(
         &src,
         "c4-self-host",

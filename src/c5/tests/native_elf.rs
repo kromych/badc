@@ -591,8 +591,8 @@ fn getenv_value_natively() {
 fn original_c4_compiles_and_runs_hello_natively() {
     // Native ELF counterpart of the macOS `original_c4_compiles_and_runs_hello_natively`.
     // c4.c reads its first user argv entry as the source file to
-    // compile-and-run; we hand it hello.c and expect the resulting
-    // c4-VM run to print "Hello 123" and exit 0.
+    // compile-and-run; we hand it the c4-subset self-host fixture and
+    // expect the resulting c4-VM run to print "Hello 123" and exit 0.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("fixtures");
@@ -606,7 +606,10 @@ fn original_c4_compiles_and_runs_hello_natively() {
     set_executable(&bin_path);
 
     // ETXTBUSY-tolerant exec; retry helper carries the argv.
-    let arg = concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c");
+    let arg = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/c/c4_selfhost_hello.c"
+    );
     let mut last: Option<std::io::Result<std::process::Output>> = None;
     for attempt in 0..10 {
         match Command::new(&bin_path).arg(arg).output() {

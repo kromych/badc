@@ -488,6 +488,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("fma_contraction.c", 0),
     ("fma_numeric_kernels.c", 0),
     ("param_incoming_reg_clobber.c", 0),
+    ("indexed_load_store.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Inst::Mcpy.

@@ -1699,6 +1699,12 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (x86_64)", || {
             super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
         });
+        // Scaled-index addressing (`ssa_index_fold`) is wired for AArch64
+        // only. The x86-64 LoadIndexed / StoreIndexed emit was never
+        // reached before and still has register-assignment defects under
+        // pressure (a spilled operand's scratch can alias a live operand,
+        // and the folded address producers are left allocated); enabling
+        // the fold here is held until that emit is sound. TODO.
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

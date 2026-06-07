@@ -21,16 +21,12 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	b	<addr>
                	sxtw	x3, w1
-               	lsl	x4, x3, #2
-               	add	x4, x0, x4
-               	str	w3, [x4]
+               	str	w3, [x0, x3, lsl #2]
                	add	x3, x0, #0x28
                	sxtw	x4, w1
-               	lsl	x5, x4, #2
-               	add	x3, x3, x5
-               	add	x4, x4, #0x1
-               	sxtw	x4, w4
-               	str	w4, [x3]
+               	add	x5, x4, #0x1
+               	sxtw	x5, w5
+               	str	w5, [x3, x4, lsl #2]
                	sxtw	x2, w2
                	sxtw	x3, w1
                	lsl	x3, x3, #2

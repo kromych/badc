@@ -19,9 +19,7 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sxtw	x2, w2
                	sxtw	x3, w3
-               	lsl	x4, x3, #2
-               	add	x4, x0, x4
-               	ldrsw	x4, [x4]
+               	ldrsw	x4, [x0, x3, lsl #2]
                	add	x2, x2, x4
                	sxtw	x2, w2
                	add	x3, x3, #0x1
@@ -39,11 +37,9 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sub	x0, x29, #0x18
                	sxtw	x2, w1
-               	lsl	x3, x2, #2
-               	add	x0, x0, x3
-               	add	x2, x2, #0x1
-               	sxtw	x2, w2
-               	str	w2, [x0]
+               	add	x3, x2, #0x1
+               	sxtw	x3, w3
+               	str	w3, [x0, x2, lsl #2]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
                	sxtw	x1, w0
@@ -70,12 +66,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
                	sxtw	x2, w1
-               	lsl	x3, x2, #2
-               	add	x0, x0, x3
                	mov	x17, #0xa               // =10
-               	mul	x2, x2, x17
-               	sxtw	x2, w2
-               	str	w2, [x0]
+               	mul	x3, x2, x17
+               	sxtw	x3, w3
+               	str	w3, [x0, x2, lsl #2]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
                	sxtw	x1, w0
@@ -226,11 +220,9 @@ Disassembly of section .text:
                	b.ge	<addr>
                	sub	x0, x29, #0x68
                	sxtw	x2, w1
-               	lsl	x3, x2, #2
-               	add	x0, x0, x3
-               	add	x2, x2, #0x1
-               	sxtw	x2, w2
-               	str	w2, [x0]
+               	add	x3, x2, #0x1
+               	sxtw	x3, w3
+               	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x68
                	add	x0, x0, #0x20
                	sub	x2, x29, #0x68
@@ -238,9 +230,7 @@ Disassembly of section .text:
                	ldrsw	x2, [x2]
                	sub	x3, x29, #0x68
                	sxtw	x4, w1
-               	lsl	x4, x4, #2
-               	add	x3, x3, x4
-               	ldrsw	x3, [x3]
+               	ldrsw	x3, [x3, x4, lsl #2]
                	add	x2, x2, x3
                	sxtw	x2, w2
                	str	w2, [x0]

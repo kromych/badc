@@ -830,6 +830,45 @@ fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame)
     materialize_int_shifted(code, place, scratch, frame, 0)
 }
 
+/// Materialize several integer operands into distinct registers. A
+/// register-resident operand keeps its register; a spilled operand is
+/// loaded into a scratch register (`r10` / `rcx` / `rdx`) that holds no
+/// other operand. `rcx` and `rdx` are allocatable on System V, so a
+/// spilled operand must not reuse a scratch a register-resident operand
+/// already occupies -- otherwise the load clobbers that operand before
+/// the access reads it. Returns `None` if an operand is neither a
+/// register nor a spill slot. The three scratch registers cover the
+/// three operands of an indexed store, so a free scratch always remains.
+fn materialize_int_operands_distinct(
+    code: &mut Vec<u8>,
+    places: &[Place],
+    frame: Frame,
+) -> Option<alloc::vec::Vec<Reg>> {
+    let mut regs: alloc::vec::Vec<Option<Reg>> = alloc::vec![None; places.len()];
+    let mut occupied = [false; 16];
+    for (i, &p) in places.iter().enumerate() {
+        match p {
+            Place::IntReg(r) => {
+                regs[i] = Some(Reg(r));
+                occupied[r as usize] = true;
+            }
+            Place::Spill(_) => {}
+            _ => return None,
+        }
+    }
+    let pool = [SCRATCH_R10, SCRATCH_RCX, SCRATCH_RDX];
+    for (i, &p) in places.iter().enumerate() {
+        if regs[i].is_some() {
+            continue;
+        }
+        let scratch = pool.iter().copied().find(|s| !occupied[s.0 as usize])?;
+        occupied[scratch.0 as usize] = true;
+        materialize_int(code, p, scratch, frame)?;
+        regs[i] = Some(scratch);
+    }
+    Some(regs.into_iter().map(|r| r.expect("operand register assigned")).collect())
+}
+
 /// Like [`materialize_int`] but accounts for a temporary `rsp`
 /// adjustment that hasn't been undone yet (e.g. the call-args
 /// scratch frame). Spill offsets are computed from the
@@ -2935,20 +2974,14 @@ fn emit_load_indexed(
         .get(index as usize)
         .copied()
         .unwrap_or(Place::None);
-    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
+    let regs = match materialize_int_operands_distinct(code, &[base_place, index_place], frame) {
         Some(r) => r,
         None => {
-            bail_msg("LoadIndexed: base Place not int reg / spill");
+            bail_msg("LoadIndexed: base / index not int reg / spill");
             return false;
         }
     };
-    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("LoadIndexed: index Place not int reg / spill");
-            return false;
-        }
-    };
+    let (rbase, rindex) = (regs[0], regs[1]);
     let Some(rd) = int_or_spill_dst(dst) else {
         bail_msg("LoadIndexed: dst not int reg / spill");
         return false;
@@ -3010,33 +3043,44 @@ fn emit_store_indexed(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("StoreIndexed: base Place not int reg / spill");
-            return false;
-        }
-    };
-    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("StoreIndexed: index Place not int reg / spill");
-            return false;
-        }
-    };
-    let rv = if let Place::FpReg(xr) = value_place
-        && matches!(kind, StoreKind::I64)
-    {
-        super::x86_64::emit_movq_r_xmm(code, SCRATCH_RDX, Reg(xr));
-        SCRATCH_RDX
-    } else {
-        match materialize_int(code, value_place, SCRATCH_RDX, frame) {
+    // A `double` stored through an `I64` indexed store arrives in an xmm
+    // register; move it to a general register that is not the base or
+    // index. The base and index take distinct scratch registers first;
+    // the remaining scratch receives the moved-out FP value.
+    let fp_value = matches!(value_place, Place::FpReg(_)) && matches!(kind, StoreKind::I64);
+    let (rbase, rindex, rv) = if fp_value {
+        let regs = match materialize_int_operands_distinct(code, &[base_place, index_place], frame) {
             Some(r) => r,
             None => {
-                bail_msg("StoreIndexed: value Place not int reg / spill");
+                bail_msg("StoreIndexed: base / index not int reg / spill");
                 return false;
             }
-        }
+        };
+        let pool = [SCRATCH_R10, SCRATCH_RCX, SCRATCH_RDX];
+        let Some(rv) = pool
+            .iter()
+            .copied()
+            .find(|s| s.0 != regs[0].0 && s.0 != regs[1].0)
+        else {
+            bail_msg("StoreIndexed: no scratch for FP value");
+            return false;
+        };
+        let Place::FpReg(xr) = value_place else {
+            unreachable!()
+        };
+        super::x86_64::emit_movq_r_xmm(code, rv, Reg(xr));
+        (regs[0], regs[1], rv)
+    } else {
+        let regs =
+            match materialize_int_operands_distinct(code, &[base_place, index_place, value_place], frame)
+            {
+                Some(r) => r,
+                None => {
+                    bail_msg("StoreIndexed: base / index / value not int reg / spill");
+                    return false;
+                }
+            };
+        (regs[0], regs[1], regs[2])
     };
     match kind {
         StoreKind::I64 => super::x86_64::emit_mov_sib_r(code, rbase, rindex, scale, rv),

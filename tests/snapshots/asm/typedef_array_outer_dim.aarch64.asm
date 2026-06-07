@@ -40,20 +40,16 @@ Disassembly of section .text:
                	lsl	x5, x3, #7
                	add	x5, x0, x5
                	sxtw	x6, w4
-               	lsl	x7, x6, #3
-               	add	x5, x5, x7
                	lsl	x3, x3, #4
                	sxtw	x3, w3
                	add	x3, x3, x6
                	sxtw	x3, w3
-               	str	x3, [x5]
+               	str	x3, [x5, x6, lsl #3]
                	sxtw	x3, w1
                	lsl	x3, x3, #7
                	add	x3, x0, x3
                	sxtw	x5, w4
-               	lsl	x5, x5, #3
-               	add	x3, x3, x5
-               	ldr	x3, [x3]
+               	ldr	x3, [x3, x5, lsl #3]
                	add	x2, x2, x3
                	b	<addr>
                	b	<addr>

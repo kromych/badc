@@ -1365,6 +1365,13 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
             super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
         });
+        // Scaled-index addressing: fold `base + index*scale` into the
+        // load / store. Runs last so it sees the final address shape;
+        // the optimizer passes never traverse `LoadIndexed` /
+        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        super::ssa_emit_common::time_pass("ssa_index_fold::run (aarch64)", || {
+            super::ssa_index_fold::run(&mut ssa_funcs);
+        });
     }
     // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
     // and emits one stderr line per function classifying it as

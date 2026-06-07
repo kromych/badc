@@ -24,12 +24,10 @@ Disassembly of section .text:
                	b	<addr>
                	sub	x1, x29, #0xa0
                	sxtw	x3, w2
-               	lsl	x3, x3, #2
-               	add	x1, x1, x3
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	and	x3, x0, x17
-               	str	w3, [x1]
+               	and	x4, x0, x17
+               	str	w4, [x1, x3, lsl #2]
                	b	<addr>
                	mov	x1, #0x0                // =0
                	mov	x0, x1
@@ -91,9 +89,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	sub	x2, x29, #0x68
                	sxtw	x3, w1
-               	lsl	x3, x3, #2
-               	add	x2, x2, x3
-               	ldr	w2, [x2]
+               	ldr	w2, [x2, x3, lsl #2]
                	add	x0, x0, x2
                	b	<addr>
                	mov	x17, #0xffff            // =65535

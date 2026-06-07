@@ -44,13 +44,14 @@ Disassembly of section .text:
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x80
+               	sub	sp, sp, #0x90
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
                	str	x23, [sp, #0x18]
                	str	x24, [sp, #0x20]
                	str	x25, [sp, #0x28]
+               	str	x26, [sp, #0x30]
                	mov	x20, x0
                	mov	x23, x3
                	mov	x22, x2
@@ -64,52 +65,44 @@ Disassembly of section .text:
                	sxtw	x0, w24
                	add	x24, x0, #0x1
                	b	<addr>
-               	sub	x0, x29, #0x40
-               	sxtw	x1, w24
+               	sub	x25, x29, #0x40
+               	sxtw	x0, w24
                	mov	x17, #0x5               // =5
-               	mul	x2, x1, x17
-               	sxtw	x2, w2
-               	lsl	x2, x2, #2
-               	add	x25, x0, x2
-               	lsl	x0, x1, #2
+               	mul	x1, x0, x17
+               	sxtw	x26, w1
+               	lsl	x0, x0, #2
                	sxtw	x0, w0
                	add	x0, x23, x0
                	bl	<addr>
-               	str	w0, [x25]
-               	sub	x0, x29, #0x40
-               	sxtw	x1, w24
-               	add	x2, x1, #0x1
-               	sxtw	x2, w2
-               	lsl	x2, x2, #2
-               	add	x25, x0, x2
-               	lsl	x0, x1, #2
+               	str	w0, [x25, x26, lsl #2]
+               	sub	x25, x29, #0x40
+               	sxtw	x0, w24
+               	add	x1, x0, #0x1
+               	sxtw	x26, w1
+               	lsl	x0, x0, #2
                	sxtw	x0, w0
                	add	x0, x22, x0
                	bl	<addr>
-               	str	w0, [x25]
-               	sub	x0, x29, #0x40
-               	sxtw	x1, w24
-               	add	x2, x1, #0x6
-               	sxtw	x2, w2
-               	lsl	x2, x2, #2
-               	add	x25, x0, x2
-               	lsl	x0, x1, #2
+               	str	w0, [x25, x26, lsl #2]
+               	sub	x25, x29, #0x40
+               	sxtw	x0, w24
+               	add	x1, x0, #0x6
+               	sxtw	x26, w1
+               	lsl	x0, x0, #2
                	sxtw	x0, w0
                	add	x0, x21, x0
                	bl	<addr>
-               	str	w0, [x25]
-               	sub	x0, x29, #0x40
-               	sxtw	x1, w24
-               	add	x2, x1, #0xb
-               	sxtw	x2, w2
-               	lsl	x2, x2, #2
-               	add	x25, x0, x2
-               	add	x0, x22, #0x10
-               	lsl	x1, x1, #2
-               	sxtw	x1, w1
-               	add	x0, x0, x1
+               	str	w0, [x25, x26, lsl #2]
+               	sub	x25, x29, #0x40
+               	sxtw	x0, w24
+               	add	x1, x0, #0xb
+               	sxtw	x26, w1
+               	add	x1, x22, #0x10
+               	lsl	x0, x0, #2
+               	sxtw	x0, w0
+               	add	x0, x1, x0
                	bl	<addr>
-               	str	w0, [x25]
+               	str	w0, [x25, x26, lsl #2]
                	b	<addr>
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x40
@@ -135,7 +128,8 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x25, [sp, #0x28]
-               	add	sp, sp, #0x80
+               	ldr	x26, [sp, #0x30]
+               	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
                	stp	x29, x30, [sp, #-0x10]!

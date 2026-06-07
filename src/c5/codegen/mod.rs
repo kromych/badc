@@ -1695,6 +1695,11 @@ pub(crate) struct Abi {
     /// `xor eax, eax` before each variadic call. Win64 has no
     /// such requirement.
     pub variadic_zero_xmm_count: bool,
+    /// Windows commits thread stack on demand behind a guard page, so a
+    /// prologue allocating more than one page must touch each page in
+    /// descending order or a later access faults. SysV / macOS grow the
+    /// stack without a probe. Set for the Windows targets.
+    pub stack_probe: bool,
 }
 
 impl Abi {
@@ -1774,6 +1779,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: false,
             },
             Target::LinuxAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -1783,6 +1789,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: false,
             },
             Target::LinuxX64 => Abi {
                 arch: Arch::X86_64,
@@ -1792,6 +1799,7 @@ impl Target {
                 variadic_int_only: false,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: true,
+                stack_probe: false,
             },
             Target::WindowsX64 => Abi {
                 arch: Arch::X86_64,
@@ -1801,6 +1809,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: true,
                 variadic_zero_xmm_count: false,
+                stack_probe: true,
             },
             Target::WindowsAarch64 => Abi {
                 arch: Arch::Aarch64,
@@ -1810,6 +1819,7 @@ impl Target {
                 variadic_int_only: true,
                 position_indexed_args: false,
                 variadic_zero_xmm_count: false,
+                stack_probe: true,
             },
         }
     }

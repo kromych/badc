@@ -1194,6 +1194,40 @@ impl ScratchPool {
     }
 }
 
+/// Allocate `bytes` of stack frame. On the Windows targets a frame
+/// larger than one page is page-walked in descending order, touching
+/// each page so the guard page commits the next before the frame reaches
+/// it; a single subtract that skips the guard page faults on the first
+/// access. SysV / macOS grow the stack on demand and allocate with one
+/// subtract. `counter` is a scratch register the prologue does not need
+/// across the allocation.
+fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi, counter: Reg) {
+    const PAGE: u32 = 4096;
+    if !abi.stack_probe || bytes < PAGE {
+        emit_sub_sp_imm(code, bytes);
+        return;
+    }
+    let n_pages = bytes >> 12;
+    let remainder = bytes & 0xfff;
+    super::aarch64::load_imm64(code, counter, n_pages as u64);
+    // loop: sub sp, sp, #PAGE; str counter, [sp]; subs counter, #1; b.ne loop
+    let loop_start = code.len();
+    emit(code, super::aarch64::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    emit(code, super::aarch64::enc_str_imm(counter, Reg::SP, 0));
+    emit(code, super::aarch64::enc_subs_imm(counter, counter, 1));
+    let off = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(
+        code,
+        super::aarch64::enc_b_cond(super::aarch64::Cond::Ne, off as i32),
+    );
+    if remainder != 0 {
+        emit(
+            code,
+            super::aarch64::enc_sub_imm(Reg::SP, Reg::SP, remainder),
+        );
+    }
+}
+
 /// Emit the function prologue.
 fn emit_prologue(
     code: &mut Vec<u8>,
@@ -1239,7 +1273,7 @@ fn emit_prologue(
         emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
         emit(code, enc_add_imm(Reg(29), Reg(31), 0));
         if frame.frame_bytes > 0 {
-            emit_sub_sp_imm(code, frame.frame_bytes);
+            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
         }
         emit_prologue_saved_regs(code, alloc, frame);
         return;
@@ -1280,7 +1314,7 @@ fn emit_prologue(
         emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
         emit(code, enc_add_imm(Reg(29), Reg(31), 0));
         if frame.frame_bytes > 0 {
-            emit_sub_sp_imm(code, frame.frame_bytes);
+            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
         }
         emit_prologue_saved_regs(code, alloc, frame);
         return;
@@ -1397,7 +1431,7 @@ fn emit_prologue(
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
     if frame.frame_bytes > 0 {
-        emit_sub_sp_imm(code, frame.frame_bytes);
+        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
     }
     emit_prologue_saved_regs(code, alloc, frame);
 }

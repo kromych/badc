@@ -1049,13 +1049,13 @@ fn main() {
                 std::process::exit(1);
             }
             let bytes = compile_one(&sources[0]);
-            write_output(out, &bytes, quiet);
+            write_output(out, &bytes, target, quiet);
         } else {
             for src_path in sources.iter().take(source_count) {
                 let p = std::path::Path::new(src_path);
                 let out = p.with_extension("o");
                 let bytes = compile_one(src_path);
-                write_output(&out, &bytes, quiet);
+                write_output(&out, &bytes, target, quiet);
             }
         }
         return;
@@ -1187,7 +1187,7 @@ fn main() {
             });
         }
         let blob = badc::write_archive(&members, &sym_index);
-        write_output(&out_path, &blob, quiet);
+        write_output(&out_path, &blob, target, quiet);
         return;
     }
 
@@ -1337,8 +1337,9 @@ fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool
     }
     if !quiet {
         eprint_diagnostic(format!(
-            "info: wrote file {} for target {target:?}",
-            out.display()
+            "info: wrote file {} for target {}",
+            out.display(),
+            target.id_str()
         ));
     }
 }
@@ -1355,8 +1356,8 @@ fn post_write_native(out: &std::path::Path, target: Target) {
             #[cfg(not(target_os = "macos"))]
             {
                 let _ = out;
-                eprintln!(
-                    "badc: produced a Mach-O on a non-macOS host; copy to macOS \
+                eprint_diagnostic!(
+                    "info: produced a Mach-O on a non-macOS host; copy to macOS \
                      and `codesign --sign - <path>` before running."
                 );
             }
@@ -1364,35 +1365,29 @@ fn post_write_native(out: &std::path::Path, target: Target) {
         Target::LinuxAarch64 => {
             let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-            eprintln!(
-                "badc: produced a Linux/aarch64 ELF on a different host; \
-                 run it on a Linux/arm64 box, or via Docker `--platform linux/arm64`."
+            eprint_diagnostic(
+                "info: produced a Linux/aarch64 ELF on a different host. It won't run here",
             );
         }
         Target::LinuxX64 => {
             let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-            eprintln!(
-                "badc: produced a Linux/x86_64 ELF on a different host; \
-                 run it on a Linux/x64 box, or via Docker `--platform linux/amd64`."
+            eprint_diagnostic(
+                "info: produced a Linux/x86_64 ELF on a different host. It won't run here",
             );
         }
         Target::WindowsX64 => {
             let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
-            eprintln!(
-                "badc: produced a Windows/x86_64 PE on a non-Windows host; \
-                 run it on Windows or under WINE (`wine path.exe`)."
+            eprint_diagnostic(
+                "info: produced a Windows/x86_64 PE on a different host. It won't run here",
             );
         }
         Target::WindowsAarch64 => {
             let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
-            eprintln!(
-                "badc: produced a Windows/AArch64 PE on a different host; \
-                 run it on a Windows-on-ARM box. WINE on macOS doesn't \
-                 ship the aarch64-windows DLL set, so local execution \
-                 isn't supported there yet."
+            eprint_diagnostic(
+                "info: produced a Windows/AArch64 PE on a different host. It won't run here",
             );
         }
     }

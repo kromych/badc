@@ -19,9 +19,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	movl	$0x5, %ecx
-               	addq	$0x1, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x5, %eax
+               	addq	$0x1, %rax
+               	movslq	%eax, %rax
                	movslq	%eax, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax

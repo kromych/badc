@@ -34,25 +34,26 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movslq	%r8d, %r8
                	movslq	%r9d, %r9
-               	addq	%rsi, %rdi
-               	movslq	%edi, %rsi
-               	addq	%rdx, %rsi
-               	movslq	%esi, %rdx
-               	addq	%rcx, %rdx
-               	movslq	%edx, %rcx
-               	addq	%r8, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%r9, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	0x70(%rbp), %rax
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	0x80(%rbp), %rax
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
-               	movslq	0x90(%rbp), %rax
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movq	%rdi, %rax
+               	addq	%rsi, %rax
+               	movslq	%eax, %rax
+               	addq	%rdx, %rax
+               	movslq	%eax, %rax
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	addq	%r8, %rax
+               	movslq	%eax, %rax
+               	addq	%r9, %rax
+               	movslq	%eax, %rax
+               	movslq	0x70(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	movslq	0x80(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	movslq	0x90(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	cvtsi2sd	%rax, %xmm0
                	movsd	0xa0(%rbp,%riz), %xmm1
                	addsd	%xmm1, %xmm0
@@ -148,3 +149,4 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

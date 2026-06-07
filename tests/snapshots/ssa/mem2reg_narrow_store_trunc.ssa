@@ -8,9 +8,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   Imm(0)                                           -> x0
-    v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x7
-    v6   BinopI { op=xor, lhs=v5, rhs_imm=44 }            -> x7
-    v7   BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x7
+    v5   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
+    v6   BinopI { op=xor, lhs=v5, rhs_imm=44 }            -> x0
+    v7   BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> x0
     v8   BinopI { op=eq, lhs=v7, rhs_imm=0 }              -> x0
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0

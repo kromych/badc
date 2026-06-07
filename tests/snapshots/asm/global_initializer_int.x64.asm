@@ -21,10 +21,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movslq	(%rax), %rcx
-               	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	retq
                	addb	%al, (%rax)

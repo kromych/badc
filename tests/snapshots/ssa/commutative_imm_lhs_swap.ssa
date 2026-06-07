@@ -73,9 +73,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v41  Imm(7)                                           -> x0
     terminator Return(v41)   (exit_acc=v41)
   block 14  start_pc=0
-    v42  Imm(10)                                          -> x2
-    v43  LoadLocal { off=-1, kind=I32 }                   -> x1
-    v44  Binop { op=sub, lhs=v42, rhs=v1 }                -> x2
+    v42  Imm(10)                                          -> x1
+    v43  LoadLocal { off=-1, kind=I32 }                   -> x2
+    v44  Binop { op=sub, lhs=v42, rhs=v1 }                -> x1
     v45  BinopI { op=shl, lhs=v44, rhs_imm=32 }           -> x1
     v46  BinopI { op=shr, lhs=v45, rhs_imm=32 }           -> x1
     v47  BinopI { op=ne, lhs=v46, rhs_imm=3 }             -> x1

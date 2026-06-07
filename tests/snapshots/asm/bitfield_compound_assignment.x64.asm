@@ -82,10 +82,8 @@ Disassembly of section .text:
                	andq	$-0xf, %rcx
                	leaq	-0x8(%rbp), %rdx
                	movzwq	(%rdx), %rdx
-               	movq	%rdx, %rsi
-               	sarq	$0x1, %rsi
-               	andq	$0x6, %rsi
-               	movq	%rsi, %rdx
+               	sarq	$0x1, %rdx
+               	andq	$0x6, %rdx
                	shlq	$0x1, %rdx
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
@@ -295,4 +293,3 @@ Disassembly of section .text:
                	addq	$0x60, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

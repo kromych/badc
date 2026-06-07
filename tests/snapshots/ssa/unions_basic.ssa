@@ -33,9 +33,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Return(v20)   (exit_acc=v20)
   block 4  start_pc=0
     v21  LocalAddr(-1)                                    -> x0
-    v22  Load { addr=v21, kind=I64 }                      -> x1
-    v23  Imm(1)                                           -> x0
-    v24  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x1
+    v22  Load { addr=v21, kind=I64 }                      -> x0
+    v23  Imm(1)                                           -> x1
+    v24  BinopI { op=add, lhs=v22, rhs_imm=1 }            -> x0
     v25  Load { addr=v24, kind=U8 }                       -> x0
     v26  BinopI { op=xor, lhs=v25, rhs_imm=105 }          -> x0
     v27  BinopI { op=and, lhs=v26, rhs_imm=4294967295 }   -> x0

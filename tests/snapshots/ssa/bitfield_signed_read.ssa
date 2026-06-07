@@ -219,9 +219,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v165 Load { addr=v164, kind=U16 }                     -> x1
     v166 BinopI { op=and, lhs=v165, rhs_imm=3 }           -> x1
     v167 BinopI { op=shl, lhs=v166, rhs_imm=62 }          -> x1
-    v168 BinopI { op=shr, lhs=v167, rhs_imm=62 }          -> x2
-    v169 LoadLocal { off=-4, kind=I32 }                   -> x1
-    v170 Binop { op=add, lhs=v168, rhs=v161 }             -> x2
+    v168 BinopI { op=shr, lhs=v167, rhs_imm=62 }          -> x1
+    v169 LoadLocal { off=-4, kind=I32 }                   -> x2
+    v170 Binop { op=add, lhs=v168, rhs=v161 }             -> x0
     v171 BinopI { op=shl, lhs=v170, rhs_imm=32 }          -> x0
     v172 BinopI { op=shr, lhs=v171, rhs_imm=32 }          -> x0
     v173 BinopI { op=ne, lhs=v172, rhs_imm=5 }            -> x0

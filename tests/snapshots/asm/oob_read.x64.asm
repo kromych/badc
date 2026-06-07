@@ -15,11 +15,9 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rcx
-               	addq	$0x190, %rcx            # imm = 0x190
-               	movslq	(%rcx), %rax
+               	addq	$0x190, %rax            # imm = 0x190
+               	movslq	(%rax), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

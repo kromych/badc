@@ -25,7 +25,9 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use super::super::ir::{
+    BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+};
 
 /// Access width in bytes for a load kind, or `None` for the floating
 /// kinds (the indexed emit handles integers only).

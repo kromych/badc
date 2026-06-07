@@ -28,8 +28,8 @@ Disassembly of section .text:
                	subq	$0x1, %rax
                	movslq	%eax, %rdi
                	callq	<addr>
-               	imulq	%rax, %rbx
-               	movslq	%ebx, %rax
+               	imulq	%rbx, %rax
+               	movslq	%eax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax

@@ -32,14 +32,14 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rcx
-               	addq	$0x8, %rcx
-               	leaq	<rip>, %rax
-               	movq	%rax, (%rcx)
-               	leaq	-0x18(%rbp), %rcx
-               	addq	$0x10, %rcx
-               	leaq	<rip>, %rax
-               	movq	%rax, (%rcx)
+               	leaq	-0x18(%rbp), %rax
+               	addq	$0x8, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rcx, (%rax)
+               	leaq	-0x18(%rbp), %rax
+               	addq	$0x10, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -64,7 +64,8 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rax
+               	movq	%rax, %rcx
                	addq	$0x1, %rcx
                	jmp	<addr>
                	xorq	%rsi, %rsi
@@ -75,16 +76,17 @@ Disassembly of section .text:
                	cmpq	$0x10, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%esi, %rsi
+               	movslq	%esi, %rax
+               	movq	%rax, %rsi
                	addq	$0x1, %rsi
                	jmp	<addr>
+               	movslq	%edx, %rax
+               	movslq	%ecx, %rdx
+               	imulq	$0x64, %rdx, %rdx
                	movslq	%edx, %rdx
-               	movslq	%ecx, %rax
-               	imulq	$0x64, %rax, %rax
-               	movslq	%eax, %rdi
-               	movslq	%esi, %rax
-               	addq	%rax, %rdi
-               	movslq	%edi, %rax
+               	movslq	%esi, %rdi
+               	addq	%rdi, %rdx
+               	movslq	%edx, %rdx
                	addq	%rax, %rdx
                	jmp	<addr>
                	jmp	<addr>
@@ -99,4 +101,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

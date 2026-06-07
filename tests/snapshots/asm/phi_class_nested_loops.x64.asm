@@ -36,10 +36,10 @@ Disassembly of section .text:
                	addq	$0x1, %rsi
                	movslq	%esi, %rsi
                	jmp	<addr>
-               	movslq	%ecx, %rdx
-               	movslq	%esi, %rcx
-               	addq	%rcx, %rdx
-               	movslq	%edx, %rcx
+               	movslq	%ecx, %rcx
+               	movslq	%esi, %rdx
+               	addq	%rdx, %rcx
+               	movslq	%ecx, %rcx
                	jmp	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp

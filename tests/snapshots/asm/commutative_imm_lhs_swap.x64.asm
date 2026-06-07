@@ -73,9 +73,9 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movl	$0xa, %edx
-               	subq	%rax, %rdx
-               	movslq	%edx, %rcx
+               	movl	$0xa, %ecx
+               	subq	%rax, %rcx
+               	movslq	%ecx, %rcx
                	cmpq	$0x3, %rcx
                	je	<addr>
                	movl	$0x8, %eax

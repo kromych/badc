@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v13  LoadLocal { off=2, kind=I32 }                    -> x0
-    v14  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x7
+    v14  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x0
     v15  BinopI { op=shl, lhs=v14, rhs_imm=32 }           -> x0
     v16  BinopI { op=shr, lhs=v15, rhs_imm=32 }           -> x7
     v17  LoadLocal { off=3, kind=I32 }                    -> x0

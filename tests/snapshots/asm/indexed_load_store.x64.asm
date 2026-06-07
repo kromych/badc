@@ -30,9 +30,9 @@ Disassembly of section .text:
                	shlq	$0x2, %r9
                	movq	%rdi, %r11
                	addq	%r9, %r11
-               	movslq	(%r11), %r12
-               	addq	%rcx, %r12
-               	movslq	%r12d, %rbx
+               	movslq	(%r11), %rbx
+               	addq	%rcx, %rbx
+               	movslq	%ebx, %rbx
                	addq	%rsi, %r9
                	movslq	(%r9), %r9
                	subq	%rcx, %r9
@@ -42,18 +42,18 @@ Disassembly of section .text:
                	movslq	%eax, %r9
                	movslq	%ebx, %r11
                	movl	%r11d, (%rsi,%r9,4)
-               	movslq	%r8d, %rbx
-               	movslq	%eax, %r8
-               	shlq	$0x2, %r8
-               	movq	%rdi, %r9
-               	addq	%r8, %r9
-               	movslq	(%r9), %r11
-               	addq	%rsi, %r8
-               	movslq	(%r8), %r8
-               	imulq	%r8, %r11
-               	movslq	%r11d, %r8
-               	addq	%r8, %rbx
-               	movslq	%ebx, %r8
+               	movslq	%r8d, %r8
+               	movslq	%eax, %r9
+               	shlq	$0x2, %r9
+               	movq	%rdi, %r11
+               	addq	%r9, %r11
+               	movslq	(%r11), %r11
+               	addq	%rsi, %r9
+               	movslq	(%r9), %r9
+               	imulq	%r11, %r9
+               	movslq	%r9d, %r9
+               	addq	%r9, %r8
+               	movslq	%r8d, %r8
                	jmp	<addr>
                	movslq	%r8d, %rax
                	movq	%rax, %rcx
@@ -72,7 +72,8 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	jge	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rax
+               	movq	%rax, %rcx
                	addq	$0x1, %rcx
                	jmp	<addr>
                	leaq	-0x20(%rbp), %rax
@@ -105,4 +106,4 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -290,21 +290,6 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // expires only when every member is dead.
     let liveness = super::ssa_liveness::Liveness::compute(func);
     let mut classes = super::ssa_phi_class::PhiClasses::build(func, &liveness);
-    // Two-address coalescing: on a destructive-arithmetic target the
-    // lowering of `dst = lhs op rhs` stages the left operand with
-    // `mov dst, lhs` whenever the result and the left operand land in
-    // different registers. Coalescing the result with its dying left
-    // operand drops the move. AArch64 is three-address and never emits
-    // it, so the pass runs only for x86-64. The degree test reads a
-    // preliminary interference graph built from the phi-only classes.
-    if matches!(target, Target::LinuxX64 | Target::WindowsX64) {
-        let prelim_node_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
-            .map(|v| classes.find(v))
-            .collect();
-        let prelim_interference = liveness.interference(func, &prelim_node_of);
-        let k = banks.caller_gprs.len() + banks.callee_gprs.len();
-        classes.coalesce_two_address(func, &liveness, &prelim_interference, &last_use, k);
-    }
     let class_last_use: Vec<u32> = {
         let n = func.insts.len();
         let mut cl = alloc::vec![0u32; n];
@@ -724,9 +709,8 @@ fn verify_allocation(
                 params.push((vid, home, incoming));
             }
         }
-        let homes_distinct = (0..params.len()).all(|a| {
-            ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1))
-        });
+        let homes_distinct = (0..params.len())
+            .all(|a| ((a + 1)..params.len()).all(|b| key(params[a].1) != key(params[b].1)));
         if !homes_distinct {
             for a in 0..params.len() {
                 for b in 0..params.len() {

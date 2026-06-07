@@ -22,12 +22,12 @@ fn ent_pc=0 n_params=1 variadic=true locals=8
     v14  Binop { op=lt, lhs=v12, rhs=v13 }                -> x2
     terminator Bz { cond=v14, target=b3, fall=b2 }   (exit_acc=v14)
   block 2  start_pc=0
-    v15  Extend { value=v11, kind=I32 }                   -> x6
-    v16  LocalAddr(-6)                                    -> x0
-    v17  Imm(4)                                           -> x2
-    v18  Intrinsic { kind=5, args=[v16, v17] }            -> x0
-    v19  Load { addr=v18, kind=I32 }                      -> x0
-    v20  Binop { op=add, lhs=v15, rhs=v19 }               -> x6
+    v15  Extend { value=v11, kind=I32 }                   -> x0
+    v16  LocalAddr(-6)                                    -> x2
+    v17  Imm(4)                                           -> x6
+    v18  Intrinsic { kind=5, args=[v16, v17] }            -> x2
+    v19  Load { addr=v18, kind=I32 }                      -> x2
+    v20  Binop { op=add, lhs=v15, rhs=v19 }               -> x0
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x0
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x0
     v23  Imm(0)                                           -> x2

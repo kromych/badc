@@ -32,14 +32,14 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
-               	leaq	-0x18(%rbp), %rcx
-               	addq	$0x8, %rcx
-               	leaq	<rip>, %rax
-               	movq	%rax, (%rcx)
-               	leaq	-0x18(%rbp), %rcx
-               	addq	$0x10, %rcx
-               	leaq	<rip>, %rax
-               	movq	%rax, (%rcx)
+               	leaq	-0x18(%rbp), %rax
+               	addq	$0x8, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rcx, (%rax)
+               	leaq	-0x18(%rbp), %rax
+               	addq	$0x10, %rax
+               	leaq	<rip>, %rcx
+               	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -145,15 +145,16 @@ Disassembly of section .text:
                	leaq	<rip>, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x80(%rbp), %rdi
+               	leaq	-0x80(%rbp), %rax
+               	movq	%rax, %rdi
                	addq	$0x2, %rdi
                	leaq	-0x80(%rbp), %rsi
                	movl	$0x5, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x80(%rbp), %rcx
-               	addq	$0x2, %rcx
-               	movzbq	(%rcx), %rax
+               	leaq	-0x80(%rbp), %rax
+               	addq	$0x2, %rax
+               	movzbq	(%rax), %rax
                	xorq	$0x30, %rax
                	movl	%eax, %eax
                	cmpq	$0x0, %rax
@@ -162,9 +163,9 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0x80(%rbp), %rcx
-               	addq	$0x6, %rcx
-               	movzbq	(%rcx), %rax
+               	leaq	-0x80(%rbp), %rax
+               	addq	$0x6, %rax
+               	movzbq	(%rax), %rax
                	xorq	$0x34, %rax
                	movl	%eax, %eax
                	cmpq	$0x0, %rax
@@ -324,5 +325,3 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

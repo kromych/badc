@@ -9,30 +9,30 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	leaq	<rip>, %rcx
-               	movq	%rcx, %rax
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$-0x4650, %rax          # imm = 0xB9B0
+               	leaq	<rip>, %rax
+               	movq	%rax, %rcx
+               	addq	$0x8, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$-0x4650, %rcx          # imm = 0xB9B0
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0x18, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$-0x5460, %rax          # imm = 0xABA0
+               	movq	%rax, %rcx
+               	addq	$0x18, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$-0x5460, %rcx          # imm = 0xABA0
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0x28, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$-0x6234, %rax          # imm = 0x9DCC
+               	movq	%rax, %rcx
+               	addq	$0x28, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$-0x6234, %rcx          # imm = 0x9DCC
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	addq	$0x38, %rcx
-               	movslq	(%rcx), %rax
+               	addq	$0x38, %rax
+               	movslq	(%rax), %rax
                	cmpq	$-0x9, %rax
                	je	<addr>
                	movl	$0x4, %eax

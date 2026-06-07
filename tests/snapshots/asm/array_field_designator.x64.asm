@@ -9,35 +9,35 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rax
-               	cmpq	$0xa, %rax
+               	leaq	<rip>, %rax
+               	movslq	(%rax), %rcx
+               	cmpq	$0xa, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	movq	%rax, %rcx
+               	addq	$0x4, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x1e, %rax
+               	movq	%rax, %rcx
+               	addq	$0x8, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$0x1e, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0xc, %rax
-               	movslq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	movq	%rax, %rcx
+               	addq	$0xc, %rcx
+               	movslq	(%rcx), %rcx
+               	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	addq	$0x10, %rcx
-               	movslq	(%rcx), %rax
+               	addq	$0x10, %rax
+               	movslq	(%rax), %rax
                	cmpq	$0x32, %rax
                	je	<addr>
                	movl	$0x5, %eax

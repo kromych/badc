@@ -28,10 +28,10 @@ Disassembly of section .text:
                	popq	%rax
                	movslq	%eax, %rax
                	imulq	$0x64, %rax, %rax
-               	movslq	%eax, %rdx
-               	movslq	%ecx, %rax
-               	addq	%rax, %rdx
-               	movslq	%edx, %rax
+               	movslq	%eax, %rax
+               	movslq	%ecx, %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

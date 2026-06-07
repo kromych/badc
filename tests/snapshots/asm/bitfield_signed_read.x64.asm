@@ -214,10 +214,9 @@ Disassembly of section .text:
                	movzwq	(%rcx), %rcx
                	andq	$0x3, %rcx
                	shlq	$0x3e, %rcx
-               	movq	%rcx, %rdx
-               	sarq	$0x3e, %rdx
-               	addq	%rax, %rdx
-               	movslq	%edx, %rax
+               	sarq	$0x3e, %rcx
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x22, %eax
@@ -228,3 +227,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -864,7 +864,11 @@ fn materialize_int_operands_distinct(
         materialize_int(code, p, scratch, frame)?;
         regs[i] = Some(scratch);
     }
-    Some(regs.into_iter().map(|r| r.expect("operand register assigned")).collect())
+    Some(
+        regs.into_iter()
+            .map(|r| r.expect("operand register assigned"))
+            .collect(),
+    )
 }
 
 /// Like [`materialize_int`] but accounts for a temporary `rsp`

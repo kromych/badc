@@ -15,19 +15,18 @@ Disassembly of section .text:
                	movl	$0x8, %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%rax, %rdx
-               	movl	$0x1, %eax
-               	movl	%eax, (%rdx)
-               	movq	%rdx, %rax
-               	addq	$0x4, %rax
-               	movl	$0x2, %ecx
+               	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	movslq	(%rdx), %rcx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rax
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rax
+               	movq	%rax, %rcx
+               	addq	$0x4, %rcx
+               	movl	$0x2, %edx
+               	movl	%edx, (%rcx)
+               	movslq	(%rax), %rcx
+               	addq	$0x4, %rax
+               	movslq	(%rax), %rax
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

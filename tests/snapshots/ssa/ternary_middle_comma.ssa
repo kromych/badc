@@ -24,15 +24,15 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v14  Imm(0)                                           -> x7
     v15  ImmData(32)                                      -> x1
     v16  Store { addr=v13, value=v15, kind=I64 }          -> -
-    v17  LocalAddr(-3)                                    -> x1
-    v18  Imm(8)                                           -> x0
-    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x1
-    v20  ImmData(38)                                      -> x0
+    v17  LocalAddr(-3)                                    -> x0
+    v18  Imm(8)                                           -> x1
+    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x0
+    v20  ImmData(38)                                      -> x1
     v21  Store { addr=v19, value=v20, kind=I64 }          -> -
-    v22  LocalAddr(-3)                                    -> x1
-    v23  Imm(16)                                          -> x0
-    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x1
-    v25  ImmData(45)                                      -> x0
+    v22  LocalAddr(-3)                                    -> x0
+    v23  Imm(16)                                          -> x1
+    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x0
+    v25  ImmData(45)                                      -> x1
     v26  Store { addr=v24, value=v25, kind=I64 }          -> -
     v27  LocalAddr(-3)                                    -> x0
     v28  LoadLocal { off=2, kind=I32 }                    -> x1
@@ -238,9 +238,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v127 LoadLocal { off=-9, kind=I32 }                   -> x0
     v128 Binop { op=add, lhs=v120, rhs=v122 }             -> x0
     v129 BinopI { op=shl, lhs=v128, rhs_imm=32 }          -> x0
-    v130 BinopI { op=shr, lhs=v129, rhs_imm=32 }          -> x1
-    v131 LoadLocal { off=-10, kind=I32 }                  -> x0
-    v132 Binop { op=add, lhs=v130, rhs=v124 }             -> x1
+    v130 BinopI { op=shr, lhs=v129, rhs_imm=32 }          -> x0
+    v131 LoadLocal { off=-10, kind=I32 }                  -> x1
+    v132 Binop { op=add, lhs=v130, rhs=v124 }             -> x0
     v133 BinopI { op=shl, lhs=v132, rhs_imm=32 }          -> x0
     v134 BinopI { op=shr, lhs=v133, rhs_imm=32 }          -> x3
     v135 Imm(0)                                           -> x0
@@ -302,17 +302,17 @@ fn ent_pc=1 n_params=0 variadic=false locals=28
     v171 LocalAddr(-12)                                   -> x0
     v172 ImmData(159)                                     -> x1
     v173 Mcpy { dst=v171, src=v172, size=4 }              -> x0
-    v174 Imm(200)                                         -> x2
-    v175 Imm(0)                                           -> x0
-    v176 LoadLocal { off=-2, kind=I32 }                   -> x0
-    v177 BinopI { op=and, lhs=v174, rhs_imm=4294967295 }  -> x0
-    v178 BinopI { op=ult, lhs=v177, rhs_imm=128 }         -> x0
+    v174 Imm(200)                                         -> x0
+    v175 Imm(0)                                           -> x1
+    v176 LoadLocal { off=-2, kind=I32 }                   -> x1
+    v177 BinopI { op=and, lhs=v174, rhs_imm=4294967295 }  -> x1
+    v178 BinopI { op=ult, lhs=v177, rhs_imm=128 }         -> x1
     terminator Bz { cond=v178, target=b34, fall=b33 }   (exit_acc=v178)
   block 33  start_pc=0
-    v179 LocalAddr(-12)                                   -> x0
-    v180 Imm(0)                                           -> x1
-    v181 LoadLocal { off=-2, kind=I32 }                   -> x1
-    v182 BinopI { op=and, lhs=v174, rhs_imm=255 }         -> x2
+    v179 LocalAddr(-12)                                   -> x1
+    v180 Imm(0)                                           -> x2
+    v181 LoadLocal { off=-2, kind=I32 }                   -> x2
+    v182 BinopI { op=and, lhs=v174, rhs_imm=255 }         -> x0
     v183 Store { addr=v179, value=v182, kind=I8 }         -> -
     v184 Imm(1)                                           -> x3
     v185 Imm(0)                                           -> x0

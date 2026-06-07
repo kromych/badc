@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v7   LoadLocal { off=2, kind=I64 }                    -> x0
     v8   LoadLocal { off=3, kind=I32 }                    -> x0
     v9   LoadLocal { off=4, kind=I32 }                    -> x0
-    v10  Binop { op=add, lhs=v3, rhs=v5 }                 -> x6
+    v10  Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
     v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x0
     v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x0
     v13  Store { addr=v1, value=v12, kind=I32 }           -> -

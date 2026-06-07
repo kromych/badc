@@ -15,34 +15,34 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	movl	$0x1, %r14d
-               	movl	$0x2, %eax
-               	movl	$0x3, %ecx
-               	movl	$0x4, %edx
-               	movl	$0x5, %esi
-               	movl	$0x6, %edi
-               	movl	$0x7, %r8d
-               	movl	$0x8, %r9d
-               	movl	$0x9, %r11d
-               	movl	$0xa, %ebx
-               	addq	%rax, %r14
-               	movslq	%r14d, %r12
-               	addq	%rcx, %r12
-               	movslq	%r12d, %rcx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rdi, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%r8, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%r9, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%r11, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rbx, %rcx
-               	movslq	%ecx, %rax
+               	movl	$0x1, %eax
+               	movl	$0x2, %ecx
+               	movl	$0x3, %edx
+               	movl	$0x4, %esi
+               	movl	$0x5, %edi
+               	movl	$0x6, %r8d
+               	movl	$0x7, %r9d
+               	movl	$0x8, %r11d
+               	movl	$0x9, %ebx
+               	movl	$0xa, %r12d
+               	addq	%rcx, %rax
+               	movslq	%eax, %rax
+               	addq	%rdx, %rax
+               	movslq	%eax, %rax
+               	addq	%rsi, %rax
+               	movslq	%eax, %rax
+               	addq	%rdi, %rax
+               	movslq	%eax, %rax
+               	addq	%r8, %rax
+               	movslq	%eax, %rax
+               	addq	%r9, %rax
+               	movslq	%eax, %rax
+               	addq	%r11, %rax
+               	movslq	%eax, %rax
+               	addq	%rbx, %rax
+               	movslq	%eax, %rax
+               	addq	%r12, %rax
+               	movslq	%eax, %rax
                	leaq	-0x20(%rbp), %rcx
                	leaq	<rip>, %rdx
                	pushq	%rax

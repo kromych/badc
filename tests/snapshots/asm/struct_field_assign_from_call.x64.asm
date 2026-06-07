@@ -76,6 +76,7 @@ Disassembly of section .text:
                	movq	(%r14), %r15
                	movq	0x18(%rbx), %r10
                	movq	%r10, 0x38(%rsp)
+               	movq	(%r14), %rdi
                	movq	%rbx, %rsi
                	addq	$0x14, %rsi
                	movslq	0x10(%rbx), %rax
@@ -85,7 +86,6 @@ Disassembly of section .text:
                	movq	%r10, 0x30(%rsp)
                	movl	$0x7fff, %r10d          # imm = 0x7FFF
                	movq	%r10, 0x28(%rsp)
-               	movq	%r15, %rdi
                	movq	%r12, %r9
                	movq	0x30(%rsp), %rcx
                	movq	0x28(%rsp), %r8

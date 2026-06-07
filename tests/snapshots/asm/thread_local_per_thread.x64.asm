@@ -21,7 +21,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x63, %ecx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rcx
+               	movslq	(%rax), %rcx
                	cmpq	$0x63, %rcx
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2

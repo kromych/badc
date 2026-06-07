@@ -16,7 +16,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	sxtw	x1, w1
                	str	w1, [x0]
-               	sxtw	x0, w1
+               	ldrsw	x0, [x0]
                	ret
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -35,15 +35,15 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	sxtw	x1, w1
                	str	w1, [x0]
-               	adrp	x2, <page>
-               	add	x2, x2, #0xf0
-               	ldrsw	x3, [x2]
-               	sxtw	x1, w1
-               	add	x1, x3, x1
-               	sxtw	x1, w1
-               	str	w1, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, #0xf0
+               	ldrsw	x2, [x1]
+               	ldrsw	x3, [x0]
+               	add	x2, x2, x3
+               	sxtw	x2, w2
+               	str	w2, [x1]
                	ldrsw	x0, [x0]
-               	sxtw	x1, w1
+               	ldrsw	x1, [x1]
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	sxtw	x1, w1
                	str	w1, [x0]
-               	sxtw	x0, w1
+               	ldrsw	x0, [x0]
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0x100
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	sxtw	x1, w1
                	str	w1, [x0]
-               	sxtw	x0, w1
+               	ldrsw	x0, [x0]
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

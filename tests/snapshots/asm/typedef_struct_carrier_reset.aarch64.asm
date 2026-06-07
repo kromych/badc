@@ -41,7 +41,7 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x1, w2
                	str	w1, [x0, #0xa0]
-               	sxtw	x0, w1
+               	ldrsw	x0, [x0, #0xa0]
                	ret
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

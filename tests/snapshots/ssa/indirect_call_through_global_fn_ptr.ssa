@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v6   Store { addr=v4, disp=0, value=v5, kind=I32 }    -> -
     v7   ImmData(8)                                       -> x3
     v8   Load { addr=v1, disp=0, kind=I32 }               -> x6
-    v9   Extend { value=v5, kind=I32 }                    -> x2
+    v9   Load { addr=v4, disp=0, kind=I32 }               -> x2
     v10  ImmData(32)                                      -> x0
     v11  Load { addr=v10, disp=0, kind=I64 }              -> x0
     v12  CallIndirect { target=v11, args=[v7, v8, v9], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0

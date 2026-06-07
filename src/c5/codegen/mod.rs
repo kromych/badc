@@ -62,7 +62,6 @@ mod ssa_phi_class;
 mod ssa_rotate;
 pub(crate) mod ssa_shadow;
 mod ssa_split_crit_edges;
-mod ssa_store_forward;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};

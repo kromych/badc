@@ -109,7 +109,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=8
     v9   BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
     v10  Load { addr=v1, disp=24, kind=I64 }              -> [spill 0]
     v11  Imm(0)                                           -> x0
-    v12  Load { addr=v6, disp=0, kind=I64 }               -> x0
+    v12  Load { addr=v6, disp=0, kind=I64 }               -> x7
     v13  BinopI { op=add, lhs=v1, rhs_imm=20 }            -> x6
     v14  BinopI { op=add, lhs=v1, rhs_imm=16 }            -> x0
     v15  Load { addr=v1, disp=16, kind=I32 }              -> x0
@@ -119,7 +119,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=8
     v19  Imm(16)                                          -> [spill 1]
     v20  Imm(32767)                                       -> [spill 2]
     v21  LoadLocal { off=3, kind=I64 }                    -> x0
-    v22  Call { target_pc=1, args=[v7, v13, v18, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v22  Call { target_pc=1, args=[v12, v13, v18, v19, v20, v3], fixed_args=6, fp_return=false, fp_arg_mask=0x0 } -> x0
     v23  Store { addr=v6, disp=0, value=v22, kind=I64 }   -> -
     v24  LoadLocal { off=2, kind=I64 }                    -> x0
     v25  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x14

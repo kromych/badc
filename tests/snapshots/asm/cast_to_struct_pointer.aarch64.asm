@@ -18,9 +18,9 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, #0x2a               // =42
                	str	w1, [x0]
-               	mov	x2, #0x0                // =0
-               	str	x2, [x0, #0x8]
-               	sxtw	x0, w1
+               	mov	x1, #0x0                // =0
+               	str	x1, [x0, #0x8]
+               	ldrsw	x0, [x0]
                	ldr	x19, [sp]
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

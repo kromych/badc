@@ -82,16 +82,16 @@ Disassembly of section .text:
                	add	x22, x20, #0x8
                	ldr	x23, [x22]
                	ldr	x24, [x20, #0x18]
+               	ldr	x0, [x22]
                	add	x1, x20, #0x14
-               	ldrsw	x0, [x20, #0x10]
-               	add	x0, x0, #0x1
-               	sxtw	x2, w0
+               	ldrsw	x2, [x20, #0x10]
+               	add	x2, x2, #0x1
+               	sxtw	x2, w2
                	mov	x25, #0x10              // =16
                	mov	x26, #0x7fff            // =32767
-               	mov	x0, x23
+               	mov	x3, x25
                	mov	x5, x21
                	mov	x4, x26
-               	mov	x3, x25
                	bl	<addr>
                	str	x0, [x22]
                	add	x22, x20, #0x18

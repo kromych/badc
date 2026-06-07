@@ -1756,14 +1756,6 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_index_fold::run (x86_64)", || {
             super::ssa_index_fold::run(&mut ssa_funcs);
         });
-        // Store-to-load and load-to-load forwarding within a block. Runs
-        // after the index fold so a struct field's store and load address
-        // are both normalised to the same `(base, disp)`; before the fold
-        // each is a separate `BinopI(Add, base, off)` value and the two
-        // do not match.
-        super::ssa_emit_common::time_pass("ssa_store_forward::run (x86_64)", || {
-            super::ssa_store_forward::run(&mut ssa_funcs);
-        });
     }
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc

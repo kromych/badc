@@ -14,7 +14,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movslq	(%rax), %rax
                	retq
                	movslq	%edi, %rdi
                	cmpq	$0x0, %rdi
@@ -31,14 +31,14 @@ Disassembly of section .text:
                	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rdx
-               	movslq	(%rdx), %rsi
-               	movslq	%ecx, %rcx
-               	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
-               	movl	%ecx, (%rdx)
+               	leaq	<rip>, %rcx
+               	movslq	(%rcx), %rdx
+               	movslq	(%rax), %rsi
+               	addq	%rsi, %rdx
+               	movslq	%edx, %rdx
+               	movl	%edx, (%rcx)
                	movslq	(%rax), %rax
-               	movslq	%ecx, %rcx
+               	movslq	(%rcx), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
@@ -47,14 +47,14 @@ Disassembly of section .text:
                	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movslq	(%rax), %rax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
-               	movslq	%ecx, %rax
+               	movslq	(%rax), %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

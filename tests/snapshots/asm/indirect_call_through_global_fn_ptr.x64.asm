@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rbx
                	movslq	(%rax), %rsi
-               	movslq	%edx, %rdx
+               	movslq	(%rcx), %rdx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movq	%rax, %r11

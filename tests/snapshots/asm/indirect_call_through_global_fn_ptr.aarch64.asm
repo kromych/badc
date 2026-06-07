@@ -32,14 +32,14 @@ Disassembly of section .text:
                	str	w2, [x1]
                	adrp	x20, <page>
                	add	x20, x20, #0xd0
-               	ldrsw	x1, [x0]
-               	sxtw	x2, w2
-               	adrp	x0, <page>
-               	add	x0, x0, #0xe8
-               	ldr	x0, [x0]
-               	mov	x9, x0
+               	ldrsw	x0, [x0]
+               	ldrsw	x2, [x1]
+               	adrp	x1, <page>
+               	add	x1, x1, #0xe8
+               	ldr	x1, [x1]
+               	mov	x9, x1
                	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
+               	str	x0, [sp, #-0x10]!
                	str	x20, [sp, #-0x10]!
                	ldr	x0, [sp]
                	ldr	x1, [sp, #0x10]

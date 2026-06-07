@@ -43,6 +43,10 @@ pub(super) struct IntModifiers {
     pub saw_signed: bool,
     pub saw_unsigned: bool,
     pub saw_short: bool,
+    /// True when the base type spelled `_Bool`. Tracked separately
+    /// because `_Bool` is a distinct C99 type, not an `int`
+    /// modifier; the implicit-int path must yield `Ty::Bool`.
+    pub saw_bool: bool,
     pub long_count: u8,
     /// True if any int-style modifier was observed -- drives the
     /// "implicit int" rule (`unsigned x;` becomes `unsigned int x;`).
@@ -64,6 +68,11 @@ impl IntModifiers {
     /// -> `Ty::Short`; bare `int` -> `Ty::Int`. Adds the
     /// `UNSIGNED_BIT` when `saw_unsigned` is set.
     pub fn int_base(&self) -> i64 {
+        if self.saw_bool {
+            // `_Bool` does not combine with any other integer
+            // modifier in valid C, so it wins outright.
+            return Ty::Bool as i64;
+        }
         let base = if self.saw_long_long() {
             Ty::LongLong as i64
         } else if self.saw_long() {
@@ -106,6 +115,8 @@ impl Compiler {
         m: &mut IntModifiers,
     ) -> Result<bool, C5Error> {
         if self.lex.tk == Token::IntMod {
+            // `_Bool` is the only keyword mapped to `IntMod`.
+            m.saw_bool = true;
             m.saw_int_mod = true;
         } else if self.lex.tk == Token::Signed {
             m.saw_signed = true;

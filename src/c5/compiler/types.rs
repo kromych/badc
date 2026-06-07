@@ -121,6 +121,8 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
         (Ty::Short as i64, "short")
     } else if (Ty::LongLong as i64..Ty::LongLong as i64 + FP_BAND_SIZE).contains(&bare) {
         (Ty::LongLong as i64, "long long")
+    } else if (Ty::Bool as i64..Ty::Bool as i64 + FP_BAND_SIZE).contains(&bare) {
+        (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
         // Integer family: char = 0, int = 1, then +2 per `*` level.
         let depth = (bare / 2) as usize;
@@ -180,6 +182,27 @@ pub(super) fn struct_ptr_depth(ty: i64) -> i64 {
 
 pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
+}
+
+/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
+/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `_Bool*` = 602, `_Bool**` = 604, etc.
+pub(crate) fn is_bool_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
+    let base = Ty::Bool as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// Pointer depth within the bool band. Returns 0 for a scalar
+/// `_Bool`, 1 for `_Bool*`, etc.
+pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
+    if is_bool_ty(ty) {
+        (ty - Ty::Bool as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
 }
 
 pub(crate) fn is_float_ty(ty: i64) -> bool {
@@ -245,7 +268,13 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// C99 rule never fires here.
 pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
-    if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 {
+    // `_Bool` (6.3.1.1) and the sub-int integer types all have a
+    // rank below `int` and every value they hold fits in a signed
+    // `int`, so they promote to signed `int`.
+    if stripped == Ty::Char as i64
+        || stripped == Ty::Short as i64
+        || stripped == Ty::Bool as i64
+    {
         Ty::Int as i64
     } else {
         ty
@@ -429,6 +458,8 @@ pub(crate) fn is_pointer_ty(ty: i64) -> bool {
         long_ptr_depth(ty) > 0
     } else if is_short_ty(ty) {
         short_ptr_depth(ty) > 0
+    } else if is_bool_ty(ty) {
+        bool_ptr_depth(ty) > 0
     } else {
         ty >= Ty::Ptr as i64
     }
@@ -455,6 +486,9 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Short as i64) + (Ty::Ptr as i64) {
         // Bare `short*` -- pointee is a 2-byte short.
         2
+    } else if ty == (Ty::Bool as i64) + (Ty::Ptr as i64) {
+        // Bare `_Bool*` -- pointee is a 1-byte `_Bool`.
+        1
     } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
         // Bare `float*` -- pointee is a 4-byte single-precision
         // float; `(float *)p + 1` strides four bytes, and the
@@ -550,7 +584,11 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
         // `float *` through LoadKind::F32.
         return LoadKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 {
+        // `_Bool` is a 1-byte slot holding 0 or 1; always
+        // zero-extends on load.
+        LoadKind::U8
+    } else if stripped == Ty::Char as i64 {
         if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
         if unsigned {

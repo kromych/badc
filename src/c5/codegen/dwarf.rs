@@ -110,6 +110,7 @@ const DW_AT_CONST_VALUE: u32 = 0x1c;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
+const DW_ATE_BOOLEAN: u8 = 0x02;
 const DW_ATE_FLOAT: u8 = 0x04;
 const DW_ATE_SIGNED: u8 = 0x05;
 const DW_ATE_SIGNED_CHAR: u8 = 0x06;
@@ -1059,6 +1060,9 @@ fn classify(ty: i64, target: Target) -> CatalogEntry {
     } else if (Ty::LongLong as i64..Ty::LongLong as i64 + band_size).contains(&bare) {
         let depth = ((bare - Ty::LongLong as i64) / ptr_step) as u8;
         (Ty::LongLong as i64, depth)
+    } else if (Ty::Bool as i64..Ty::Bool as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Bool as i64) / ptr_step) as u8;
+        (Ty::Bool as i64, depth)
     } else {
         return CatalogEntry::VoidStar;
     };
@@ -1089,7 +1093,13 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
     let unsigned = types::is_unsigned_ty(leaf_tag);
     let bare = types::strip_unsigned(leaf_tag);
 
-    let key = if bare == Ty::Char as i64 {
+    let key = if bare == Ty::Bool as i64 {
+        BaseTypeKey {
+            name: "_Bool",
+            byte_size: 1,
+            encoding: DW_ATE_BOOLEAN,
+        }
+    } else if bare == Ty::Char as i64 {
         BaseTypeKey {
             name: if unsigned { "unsigned char" } else { "char" },
             byte_size: 1,

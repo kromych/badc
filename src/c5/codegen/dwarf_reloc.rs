@@ -153,6 +153,7 @@ const DW_ATE_SIGNED: u8 = 0x05;
 const DW_ATE_UNSIGNED: u8 = 0x07;
 const DW_ATE_SIGNED_CHAR: u8 = 0x06;
 const DW_ATE_UNSIGNED_CHAR: u8 = 0x08;
+const DW_ATE_BOOLEAN: u8 = 0x02;
 const DW_ATE_FLOAT: u8 = 0x04;
 
 const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
@@ -1386,6 +1387,8 @@ fn decompose_pointer_chain(type_tag: i64) -> Option<TypeKey> {
             Ty::LongLong as i64,
             ((bare - Ty::LongLong as i64) / TY_PTR) as u8,
         )
+    } else if (Ty::Bool as i64..Ty::Bool as i64 + BAND_SIZE).contains(&bare) {
+        (Ty::Bool as i64, ((bare - Ty::Bool as i64) / TY_PTR) as u8)
     } else {
         return None;
     };
@@ -1405,7 +1408,13 @@ fn base_type_for_leaf(
     const UNSIGNED_BIT: i64 = 1 << 30;
     let unsigned = (leaf & UNSIGNED_BIT) != 0;
     let bare = leaf & !UNSIGNED_BIT;
-    let desc = if bare == Ty::Char as i64 {
+    let desc = if bare == Ty::Bool as i64 {
+        BaseTypeDesc {
+            name: "_Bool",
+            byte_size: 1,
+            encoding: DW_ATE_BOOLEAN,
+        }
+    } else if bare == Ty::Char as i64 {
         BaseTypeDesc {
             name: if unsigned { "unsigned char" } else { "char" },
             byte_size: 1,

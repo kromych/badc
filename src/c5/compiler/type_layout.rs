@@ -152,6 +152,9 @@ impl Compiler {
             } else {
                 self.structs[struct_id_of(ty)].size
             }
+        } else if ty == Ty::Bool as i64 {
+            // C99 6.2.5p2 / 6.5.3.4: `_Bool` is a 1-byte object.
+            1
         } else if ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {
@@ -200,6 +203,8 @@ impl Compiler {
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)
             }
+        } else if ty == Ty::Bool as i64 {
+            1
         } else if ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {

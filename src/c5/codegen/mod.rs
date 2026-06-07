@@ -481,6 +481,10 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
             ReturnExt::Sign32
         };
     }
+    if bare == Ty::Bool as i64 {
+        // `_Bool` holds 0 / 1 in the low byte; zero-extend.
+        return ReturnExt::Zero8;
+    }
     if bare == Ty::Short as i64 {
         return if unsigned {
             ReturnExt::Zero16

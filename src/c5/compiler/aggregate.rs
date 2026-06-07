@@ -127,6 +127,7 @@ impl Compiler {
             let mut saw_unsigned = false;
             let mut long_count: u8 = 0;
             let mut saw_short = false;
+            let mut saw_bool = false;
             // Set when the field-type prefix is an anonymous
             // (no-tag) `struct { ... }` / `union { ... }` whose
             // members should promote into the enclosing struct
@@ -138,6 +139,8 @@ impl Compiler {
             let mut anon_aggregate_inner_id: Option<usize> = None;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod {
+                    // `_Bool` is the only keyword mapped to `IntMod`.
+                    saw_bool = true;
                     saw_int_mod = true;
                 } else if self.lex.tk == Token::Signed {
                     saw_signed = true;
@@ -291,19 +294,23 @@ impl Compiler {
                 self.next()?;
                 aliased
             } else if saw_int_mod {
-                let base = if saw_long_long {
-                    Ty::LongLong as i64
-                } else if saw_long {
-                    Ty::Long as i64
-                } else if saw_short {
-                    Ty::Short as i64
+                if saw_bool {
+                    Ty::Bool as i64
                 } else {
-                    Ty::Int as i64
-                };
-                if saw_unsigned {
-                    base | UNSIGNED_BIT
-                } else {
-                    base
+                    let base = if saw_long_long {
+                        Ty::LongLong as i64
+                    } else if saw_long {
+                        Ty::Long as i64
+                    } else if saw_short {
+                        Ty::Short as i64
+                    } else {
+                        Ty::Int as i64
+                    };
+                    if saw_unsigned {
+                        base | UNSIGNED_BIT
+                    } else {
+                        base
+                    }
                 }
             } else {
                 return Err(self.compile_err("type expected in struct field"));

@@ -482,4 +482,12 @@ pub(crate) enum Ty {
     /// integer" in real C, and c5 keeps the same guarantee.
     /// `long long*` = 502, `long long**` = 504, etc.
     LongLong = 500,
+    /// C99 `_Bool` (6.2.5p2): a 1-byte unsigned integer type that
+    /// holds only 0 or 1. Distinct from `unsigned char` so the
+    /// conversion sites can apply the 6.3.1.2 normalisation
+    /// (any nonzero scalar becomes 1) that a plain `unsigned char`
+    /// store must not. Sits in its own band [600, 700); the same
+    /// +2-per-`*` scheme applies, so `_Bool*` = 602, `_Bool**` =
+    /// 604, etc.
+    Bool = 600,
 }

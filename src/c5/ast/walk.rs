@@ -2154,6 +2154,18 @@ impl<'a> Walker<'a> {
                 };
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
+                // C99 6.3.1.2: a conversion to `_Bool` yields 0 when
+                // the source compares equal to 0, else 1. This holds
+                // for every scalar source, so it precedes the
+                // width/fp-ness conversions below.
+                if is_bool_scalar(*to_ty) {
+                    if source_is_fp {
+                        let d = b.fp_widen_to_f64(v);
+                        let zero = b.imm(0);
+                        return Ok(b.binop(BinOp::Fne, d, zero));
+                    }
+                    return Ok(b.binop_imm(BinOp::Ne, v, 0));
+                }
                 if target_is_fp && !source_is_fp {
                     // Integer -> FP. `IntToFp` produces an f64; a `float`
                     // target then narrows to single precision (6.3.1.4).
@@ -2788,7 +2800,10 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     if is_pointer_ty(ty) {
         return LoadKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 {
+        // 1-byte `_Bool`, always zero-extends (holds only 0 / 1).
+        LoadKind::U8
+    } else if stripped == Ty::Char as i64 {
         if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
         if unsigned {
@@ -2823,7 +2838,9 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     if is_pointer_ty(ty) {
         return StoreKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 {
+        StoreKind::I8
+    } else if stripped == Ty::Char as i64 {
         StoreKind::I8
     } else if stripped == Ty::Short as i64 {
         StoreKind::I16
@@ -2877,6 +2894,13 @@ fn is_float_ty(ty: i64) -> bool {
     (ty & !UNSIGNED_BIT) == Ty::Float as i64
 }
 
+/// True for the scalar `_Bool` type (not a pointer to one). Used by
+/// the cast lowering to apply the C99 6.3.1.2 conversion (any
+/// nonzero scalar becomes 1).
+fn is_bool_scalar(ty: i64) -> bool {
+    (ty & !UNSIGNED_BIT) == Ty::Bool as i64
+}
+
 /// `Token::Ty` unsigned-bit position. The compiler-side helper is
 /// `pub(super)`-visible to the parser module only; the walker
 /// keeps a local copy to avoid coupling to the compiler module.
@@ -2927,7 +2951,7 @@ fn type_size_bytes(ty: i64, target: Target) -> usize {
     if is_pointer_ty(ty) {
         return 8;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         1
     } else if stripped == Ty::Short as i64 {
         2

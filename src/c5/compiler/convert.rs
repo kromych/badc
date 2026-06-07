@@ -23,7 +23,8 @@
 
 use super::Compiler;
 use super::types::{
-    is_float_ty, is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_unsigned_ty,
+    usual_arith_common_ty,
 };
 
 impl Compiler {
@@ -40,6 +41,16 @@ impl Compiler {
     /// round-trips through the IEEE-754 representation rather than the
     /// raw integer bit pattern.
     pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
+        // C99 6.3.1.2: storing any scalar into a `_Bool` lvalue
+        // normalises it to 0 / 1. Wrap the accumulator in an
+        // `Expr::Cast` to `_Bool` so the walker emits the `!= 0`
+        // test; a source already typed `_Bool` is already 0 / 1
+        // and needs no re-normalisation.
+        if is_bool_ty(dest_ty) && !is_bool_ty(self.ty) {
+            self.ast_apply_assign_conv(dest_ty);
+            self.ty = dest_ty;
+            return;
+        }
         let dest_is_fp = is_floating_scalar(dest_ty);
         let src_is_fp = is_floating_scalar(self.ty);
         if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {

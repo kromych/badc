@@ -9,6 +9,24 @@ fn arithmetic() {
 }
 
 #[test]
+fn hex_float_literal() {
+    // C99 6.4.4.2 hexadecimal floating constants.
+    assert_eq!(run_fixture("hex_float_literal.c"), 0);
+}
+
+#[test]
+fn bool_normalize_c99() {
+    // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
+    assert_eq!(run_fixture("bool_normalize_c99.c"), 0);
+}
+
+#[test]
+fn compound_literal_block() {
+    // C99 6.5.2.5 block-scope compound literals.
+    assert_eq!(run_fixture("compound_literal_block.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }

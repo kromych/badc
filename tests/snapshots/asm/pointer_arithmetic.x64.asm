@@ -17,12 +17,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	movl	$0x2, %ecx
-               	movl	%ecx, 0x4(%rax)
-               	movslq	(%rax), %rcx
-               	movslq	0x4(%rax), %rax
+               	movl	$0x2, %edx
+               	movl	%edx, 0x4(%rax)
+               	movslq	%ecx, %rcx
+               	movslq	%edx, %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

@@ -41,7 +41,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
-               	movslq	(%rax), %rax
+               	movslq	%ecx, %rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x3, %eax

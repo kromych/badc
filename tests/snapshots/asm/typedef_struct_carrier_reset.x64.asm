@@ -44,7 +44,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movl	%eax, 0xa0(%rdi)
-               	movslq	0xa0(%rdi), %rax
+               	movslq	%eax, %rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp

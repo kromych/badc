@@ -57,9 +57,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v43  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x0
     v44  Extend { value=v6, kind=I32 }                    -> x0
     v45  Store { addr=v1, disp=160, value=v44, kind=I32 } -> -
-    v46  LoadLocal { off=2, kind=I64 }                    -> x0
-    v47  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x0
-    v48  Load { addr=v1, disp=160, kind=I32 }             -> x0
+    v46  LoadLocal { off=2, kind=I64 }                    -> x1
+    v47  BinopI { op=add, lhs=v1, rhs_imm=160 }           -> x1
+    v48  Extend { value=v44, kind=I32 }                   -> x0
     terminator Return(v48)   (exit_acc=v48)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main

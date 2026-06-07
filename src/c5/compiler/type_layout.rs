@@ -203,9 +203,7 @@ impl Compiler {
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)
             }
-        } else if ty == Ty::Bool as i64 {
-            1
-        } else if ty == Ty::Char as i64 {
+        } else if ty == Ty::Bool as i64 || ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {
             2

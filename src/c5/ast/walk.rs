@@ -2873,9 +2873,7 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     if is_pointer_ty(ty) {
         return StoreKind::I64;
     }
-    if stripped == Ty::Bool as i64 {
-        StoreKind::I8
-    } else if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         StoreKind::I8
     } else if stripped == Ty::Short as i64 {
         StoreKind::I16

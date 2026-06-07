@@ -16,23 +16,23 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
                	movq	%r15, 0x18(%rsp)
-               	leaq	<rip>, %rax
-               	movq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x8, %rdx
-               	movq	(%rdx), %rbx
-               	movq	%rax, %rdx
-               	addq	$0x10, %rdx
-               	movq	(%rdx), %r12
-               	movq	%rax, %rdx
-               	addq	$0x20, %rdx
-               	movq	(%rdx), %r14
-               	addq	$0x28, %rax
-               	movq	(%rax), %r15
+               	leaq	<rip>, %rdx
+               	movq	(%rdx), %rax
+               	movq	%rdx, %rcx
+               	addq	$0x8, %rcx
+               	movq	(%rcx), %rbx
+               	movq	%rdx, %rcx
+               	addq	$0x10, %rcx
+               	movq	(%rcx), %r12
+               	movq	%rdx, %rcx
+               	addq	$0x20, %rcx
+               	movq	(%rcx), %r14
+               	addq	$0x28, %rdx
+               	movq	(%rdx), %r15
                	leaq	<rip>, %rdi
                	movl	$0x42, %esi
                	movl	$0x1a4, %edx            # imm = 0x1A4
-               	movq	%rcx, %r11
+               	movq	%rax, %r11
                	callq	*%r11
                	movq	%rax, 0x28(%rsp)
                	movq	0x28(%rsp), %rax

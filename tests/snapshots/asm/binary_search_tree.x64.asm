@@ -67,48 +67,41 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
-               	movq	%r12, 0x8(%rsp)
-               	movq	%rdi, %rbx
-               	movq	%rsi, %r12
-               	cmpq	$0x0, %rbx
+               	movq	%rsi, %rbx
+               	cmpq	$0x0, %rdi
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rbx), %rax
-               	cmpq	%r12, %rax
+               	movq	(%rdi), %rax
+               	cmpq	%rbx, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	(%rbx), %rax
-               	cmpq	%rax, %r12
+               	movq	(%rdi), %rax
+               	cmpq	%rax, %rbx
                	jge	<addr>
-               	movq	%rbx, %rax
+               	movq	%rdi, %rax
                	addq	$0x8, %rax
                	movq	(%rax), %rdi
-               	movq	%r12, %rsi
+               	movq	%rbx, %rsi
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	jmp	<addr>
-               	movq	%rbx, %rax
-               	addq	$0x10, %rax
-               	movq	(%rax), %rdi
-               	movq	%r12, %rsi
+               	addq	$0x10, %rdi
+               	movq	(%rdi), %rdi
+               	movq	%rbx, %rsi
                	movq	(%rsp), %rbx
-               	movq	0x8(%rsp), %r12
                	addq	$0x10, %rsp
                	popq	%rbp
                	jmp	<addr>
@@ -182,4 +175,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

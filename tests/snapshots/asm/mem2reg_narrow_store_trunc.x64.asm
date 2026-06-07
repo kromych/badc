@@ -13,11 +13,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movslq	%edi, %rdi
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	xorq	$0x2c, %rax
-               	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	andq	$0xff, %rdi
+               	xorq	$0x2c, %rdi
+               	movl	%edi, %edi
+               	cmpq	$0x0, %rdi
                	jne	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>
@@ -32,4 +31,3 @@ Disassembly of section .text:
                	movl	$0x12c, %edi            # imm = 0x12C
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

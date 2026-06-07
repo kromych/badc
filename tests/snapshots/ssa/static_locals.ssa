@@ -38,15 +38,15 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v14  BinopI { op=shr, lhs=v13, rhs_imm=32 }           -> x1
     v15  Store { addr=v10, value=v14, kind=I32 }          -> -
     v16  ImmData(24)                                      -> x1
-    v17  Load { addr=v16, kind=I32 }                      -> x2
-    v18  Load { addr=v10, kind=I32 }                      -> x6
-    v19  Binop { op=add, lhs=v17, rhs=v18 }               -> x2
+    v17  Load { addr=v16, kind=I32 }                      -> x6
+    v18  Load { addr=v10, kind=I32 }                      -> x2
+    v19  Binop { op=add, lhs=v17, rhs=v18 }               -> x6
     v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x2
     v21  BinopI { op=shr, lhs=v20, rhs_imm=32 }           -> x2
     v22  Store { addr=v16, value=v21, kind=I32 }          -> -
-    v23  Load { addr=v10, kind=I32 }                      -> x0
-    v24  Load { addr=v16, kind=I32 }                      -> x1
-    v25  Binop { op=add, lhs=v23, rhs=v24 }               -> x0
+    v23  Load { addr=v10, kind=I32 }                      -> x2
+    v24  Load { addr=v16, kind=I32 }                      -> x0
+    v25  Binop { op=add, lhs=v23, rhs=v24 }               -> x2
     v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x0
     v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x0
     terminator Return(v27)   (exit_acc=v27)

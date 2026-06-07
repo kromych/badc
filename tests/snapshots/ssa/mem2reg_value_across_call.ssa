@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
-    v4   BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x0
+    v4   BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x7
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=noise

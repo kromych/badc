@@ -51,18 +51,19 @@ Disassembly of section .text:
                	movl	$0x80000000, %ecx       # imm = 0x80000000
                	movl	$0x5, %edx
                	movq	%rdx, %r10
-               	pushq	%rdx
+               	pushq	%rax
                	xorq	%rdx, %rdx
                	divq	%r10
-               	popq	%rdx
-               	cmpq	%rax, %rcx
+               	movq	%rax, %rdx
+               	popq	%rax
+               	cmpq	%rdx, %rcx
                	jae	<addr>
                	movq	%rcx, %rdx
                	jmp	<addr>
-               	movl	%eax, %edx
+               	movl	%edx, %edx
                	jmp	<addr>
-               	movl	%edx, %eax
-               	cmpq	%rcx, %rax
+               	movl	%edx, %edx
+               	cmpq	%rcx, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x30, %rsp
@@ -73,3 +74,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -47,45 +47,45 @@ Disassembly of section .text:
                	movq	0x8(%r13), %r10
                	addq	$0x8, 0x8(%r13)
                	movq	%r10, %rax
+               	movslq	(%rax), %rdx
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rax, %r13
+               	movl	(%r13), %r10d
+               	cmpq	$0x30, %r10
+               	jae	<addr>
+               	addq	0x10(%r13), %r10
+               	addl	$0x8, (%r13)
+               	jmp	<addr>
+               	movq	0x8(%r13), %r10
+               	addq	$0x8, 0x8(%r13)
+               	movq	%r10, %rax
+               	movslq	(%rax), %rdi
+               	leaq	-0x18(%rbp), %rax
+               	movq	%rax, %r13
+               	movl	(%r13), %r10d
+               	cmpq	$0x30, %r10
+               	jae	<addr>
+               	addq	0x10(%r13), %r10
+               	addl	$0x8, (%r13)
+               	jmp	<addr>
+               	movq	0x8(%r13), %r10
+               	addq	$0x8, 0x8(%r13)
+               	movq	%r10, %rax
                	movslq	(%rax), %rax
                	leaq	-0x18(%rbp), %rcx
-               	movq	%rcx, %r13
-               	movl	(%r13), %r10d
-               	cmpq	$0x30, %r10
-               	jae	<addr>
-               	addq	0x10(%r13), %r10
-               	addl	$0x8, (%r13)
-               	jmp	<addr>
-               	movq	0x8(%r13), %r10
-               	addq	$0x8, 0x8(%r13)
-               	movq	%r10, %rcx
-               	movslq	(%rcx), %rcx
-               	leaq	-0x18(%rbp), %rdx
-               	movq	%rdx, %r13
-               	movl	(%r13), %r10d
-               	cmpq	$0x30, %r10
-               	jae	<addr>
-               	addq	0x10(%r13), %r10
-               	addl	$0x8, (%r13)
-               	jmp	<addr>
-               	movq	0x8(%r13), %r10
-               	addq	$0x8, 0x8(%r13)
-               	movq	%r10, %rdx
-               	movslq	(%rdx), %rdx
-               	leaq	-0x18(%rbp), %rsi
-               	movslq	-0xe0(%rbp), %rsi
-               	imulq	$0x3e8, %rsi, %rsi      # imm = 0x3E8
-               	movslq	%esi, %rsi
-               	imulq	$0x64, %rax, %rax
-               	movslq	%eax, %rax
-               	addq	%rsi, %rax
-               	movslq	%eax, %rax
-               	imulq	$0xa, %rcx, %rcx
-               	movslq	%ecx, %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
-               	addq	%rdx, %rax
-               	movslq	%eax, %rax
+               	movslq	-0xe0(%rbp), %rcx
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
+               	movslq	%ecx, %rsi
+               	imulq	$0x64, %rdx, %rdx
+               	movslq	%edx, %rcx
+               	addq	%rcx, %rsi
+               	movslq	%esi, %rdx
+               	imulq	$0xa, %rdi, %rdi
+               	movslq	%edi, %rcx
+               	addq	%rcx, %rdx
+               	movslq	%edx, %rdx
+               	addq	%rax, %rdx
+               	movslq	%edx, %rax
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq

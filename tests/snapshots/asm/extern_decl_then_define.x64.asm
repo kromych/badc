@@ -11,33 +11,32 @@ Disassembly of section .text:
                	callq	*<rip>
                	leaq	<rip>, %rax
                	retq
-               	leaq	<rip>, %rax
                	leaq	<rip>, %rcx
-               	cmpq	%rcx, %rax
+               	leaq	<rip>, %rdx
+               	cmpq	%rdx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
-               	movl	(%rax), %edx
+               	movl	(%rcx), %eax
                	movl	$0xc1059ed8, %r13d      # imm = 0xC1059ED8
-               	cmpq	%r13, %rdx
+               	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	(%rcx), %edx
-               	cmpq	$0x6a09e667, %rdx       # imm = 0x6A09E667
+               	movl	(%rdx), %eax
+               	cmpq	$0x6a09e667, %rax       # imm = 0x6A09E667
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	addq	$0x1c, %rax
-               	movl	(%rax), %eax
+               	addq	$0x1c, %rcx
+               	movl	(%rcx), %eax
                	movl	$0xbefa4fa4, %r13d      # imm = 0xBEFA4FA4
                	cmpq	%r13, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rcx, %rax
-               	addq	$0x1c, %rax
-               	movl	(%rax), %eax
+               	addq	$0x1c, %rdx
+               	movl	(%rdx), %eax
                	cmpq	$0x5be0cd19, %rax       # imm = 0x5BE0CD19
                	je	<addr>
                	movl	$0x5, %eax
@@ -65,4 +64,3 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	addb	%al, 0x41(%rdx)

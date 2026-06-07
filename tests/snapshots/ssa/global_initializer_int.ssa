@@ -21,10 +21,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
   block 4  start_pc=0
     v9   ImmData(8)                                       -> x1
-    v10  Load { addr=v1, kind=I32 }                       -> x0
-    v11  ImmData(16)                                      -> x1
-    v12  Load { addr=v11, kind=I32 }                      -> x1
-    v13  Binop { op=add, lhs=v10, rhs=v12 }               -> x0
+    v10  Load { addr=v1, kind=I32 }                       -> x1
+    v11  ImmData(16)                                      -> x0
+    v12  Load { addr=v11, kind=I32 }                      -> x0
+    v13  Binop { op=add, lhs=v10, rhs=v12 }               -> x1
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x0
     v15  BinopI { op=shr, lhs=v14, rhs_imm=32 }           -> x0
     terminator Return(v15)   (exit_acc=v15)

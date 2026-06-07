@@ -10,8 +10,8 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	movslq	%edi, %rdi
-               	imulq	$0x3, %rdi, %rax
-               	movslq	%eax, %rax
+               	imulq	$0x3, %rdi, %rdi
+               	movslq	%edi, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
                	retq
@@ -33,9 +33,9 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x2, %eax
-               	imulq	$0x3, %rax, %rax
-               	movslq	%eax, %rax
+               	movl	$0x2, %ecx
+               	imulq	$0x3, %rcx, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
                	cmpq	$0x7, %rax
@@ -43,9 +43,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movabsq	$-0x1, %rax
-               	imulq	$0x3, %rax, %rax
-               	movslq	%eax, %rax
+               	movabsq	$-0x1, %rcx
+               	imulq	$0x3, %rcx, %rcx
+               	movslq	%ecx, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
                	cmpq	$-0x2, %rax

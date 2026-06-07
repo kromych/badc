@@ -24,20 +24,20 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v14  Imm(0)                                           -> x7
     v15  ImmData(32)                                      -> x1
     v16  Store { addr=v13, value=v15, kind=I64 }          -> -
-    v17  LocalAddr(-3)                                    -> x0
-    v18  Imm(8)                                           -> x1
-    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x0
-    v20  ImmData(38)                                      -> x1
+    v17  LocalAddr(-3)                                    -> x1
+    v18  Imm(8)                                           -> x0
+    v19  BinopI { op=add, lhs=v17, rhs_imm=8 }            -> x1
+    v20  ImmData(38)                                      -> x0
     v21  Store { addr=v19, value=v20, kind=I64 }          -> -
-    v22  LocalAddr(-3)                                    -> x0
-    v23  Imm(16)                                          -> x1
-    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x0
-    v25  ImmData(45)                                      -> x1
+    v22  LocalAddr(-3)                                    -> x1
+    v23  Imm(16)                                          -> x0
+    v24  BinopI { op=add, lhs=v22, rhs_imm=16 }           -> x1
+    v25  ImmData(45)                                      -> x0
     v26  Store { addr=v24, value=v25, kind=I64 }          -> -
-    v27  LocalAddr(-3)                                    -> x0
-    v28  LoadLocal { off=2, kind=I32 }                    -> x1
-    v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
-    v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x0
+    v27  LocalAddr(-3)                                    -> x1
+    v28  LoadLocal { off=2, kind=I32 }                    -> x0
+    v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x0
+    v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x1
     v31  Load { addr=v30, kind=I64 }                      -> x6
     v32  CallExt { binding_idx=98, args=[v14, v31], fp_arg_mask=0x0 } -> x0
     v33  Imm(0)                                           -> x1
@@ -56,7 +56,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v42  ImmData(8)                                       -> x0
     v43  LoadLocal { off=2, kind=I32 }                    -> x0
     v44  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x0
-    v45  Binop { op=add, lhs=v3, rhs=v44 }                -> x0
+    v45  Binop { op=add, lhs=v3, rhs=v44 }                -> x12
     v46  Load { addr=v45, kind=I64 }                      -> x0
     terminator Return(v46)   (exit_acc=v46)
 ; --- SSA dump (ok=true) ent_pc=1 ---

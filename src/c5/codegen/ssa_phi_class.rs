@@ -21,16 +21,22 @@
 
 use alloc::vec::Vec;
 
-use super::super::ir::{FunctionSsa, Inst, NO_VALUE, ValueId};
+use super::super::ir::{BinOp, FunctionSsa, Inst, NO_VALUE, ValueId};
 use super::ssa_liveness::Liveness;
 
 /// Union-find over `ValueId`s. Two values share a class when a chain
-/// of non-interfering phi merges connects them.
+/// of non-interfering phi merges (or two-address coalesces) connects
+/// them.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(super) struct PhiClasses {
     /// Parent pointer per value. `parent[v] == v` marks `v` as a root.
     parent: Vec<ValueId>,
+    /// Member list per root. Meaningful only when the index is a root;
+    /// a non-root's list is emptied into its new root on merge. Kept so
+    /// later coalescing passes can interference-check class against
+    /// class without rebuilding the grouping.
+    members: Vec<Vec<ValueId>>,
 }
 
 #[allow(dead_code)]
@@ -45,11 +51,8 @@ impl PhiClasses {
         let n = func.insts.len();
         let mut classes = Self {
             parent: (0..n as ValueId).collect(),
+            members: (0..n as ValueId).map(|v| alloc::vec![v]).collect(),
         };
-        // Per-root member lists. A value's list is meaningful only when
-        // it is a root; a non-root's list is emptied into its new root
-        // on merge.
-        let mut members: Vec<Vec<ValueId>> = (0..n as ValueId).map(|v| alloc::vec![v]).collect();
 
         for idx in 0..n {
             let Inst::Phi { incoming, .. } = &func.insts[idx] else {
@@ -64,40 +67,98 @@ impl PhiClasses {
                 .filter(|s| *s != NO_VALUE && (*s as usize) < n)
                 .collect();
             for src in operands {
-                let rr = classes.find(idx as ValueId);
-                let rs = classes.find(src);
-                if rr == rs {
-                    continue;
-                }
-                // Never coalesce two values whose register class differs:
-                // the allocator places every class member in one physical
-                // location, and an FP value and an integer value cannot
-                // share a register or a slot's classification. An FP phi's
-                // operands are FP, so this normally never fires, but it
-                // guards against an FP-classed operand merging with an
-                // integer-classed one (a class-crossing location share).
-                if super::ssa_alloc::produces_fp_result(&func.insts[idx])
-                    != super::ssa_alloc::produces_fp_result(&func.insts[src as usize])
-                {
-                    continue;
-                }
-                if classes_interfere(func, live, &members[rr as usize], &members[rs as usize]) {
-                    continue;
-                }
-                // Attach the smaller member list to the larger to keep
-                // the union-find shallow. The retained root owns the
-                // combined member list.
-                let (keep, drop) = if members[rr as usize].len() >= members[rs as usize].len() {
-                    (rr, rs)
-                } else {
-                    (rs, rr)
-                };
-                let moved = core::mem::take(&mut members[drop as usize]);
-                members[keep as usize].extend(moved);
-                classes.parent[drop as usize] = keep;
+                classes.try_merge(func, live, idx as ValueId, src);
             }
         }
         classes
+    }
+
+    /// Attempt to coalesce `a`'s class with `b`'s. Refuses when the
+    /// classes already coincide, when their register classes differ, or
+    /// when any pair of members interferes. Returns true on a merge.
+    fn try_merge(&mut self, func: &FunctionSsa, live: &Liveness, a: ValueId, b: ValueId) -> bool {
+        let rr = self.find(a);
+        let rs = self.find(b);
+        if rr == rs {
+            return false;
+        }
+        // Never coalesce two values whose register class differs: the
+        // allocator places every class member in one physical location,
+        // and an FP value and an integer value cannot share a register
+        // or a slot's classification.
+        if super::ssa_alloc::produces_fp_result(&func.insts[a as usize])
+            != super::ssa_alloc::produces_fp_result(&func.insts[b as usize])
+        {
+            return false;
+        }
+        if classes_interfere(
+            func,
+            live,
+            &self.members[rr as usize],
+            &self.members[rs as usize],
+        ) {
+            return false;
+        }
+        // Attach the smaller member list to the larger to keep the
+        // union-find shallow. The retained root owns the combined list.
+        let (keep, drop) = if self.members[rr as usize].len() >= self.members[rs as usize].len() {
+            (rr, rs)
+        } else {
+            (rs, rr)
+        };
+        let moved = core::mem::take(&mut self.members[drop as usize]);
+        self.members[keep as usize].extend(moved);
+        self.parent[drop as usize] = keep;
+        true
+    }
+
+    /// Coalesce each two-address binop's result with its left operand on
+    /// targets whose integer arithmetic is destructive (x86-64:
+    /// `dst = dst op src`). Without this the lowering stages the left
+    /// operand with `mov dst, lhs` whenever the result and the left
+    /// operand land in different registers; coalescing them drops the
+    /// move. AArch64 is three-address and never emits the move, so the
+    /// pass is skipped there.
+    ///
+    /// Only the left operand's final use at the binop is coalesced, and
+    /// only when a conservative degree test (Briggs) shows the merge
+    /// keeps the node colourable, so the saved move never costs a spill.
+    /// Operands of div / mod / shift-by-register and the comparison
+    /// forms are excluded: their lowering pins specific registers.
+    pub(super) fn coalesce_two_address(
+        &mut self,
+        func: &FunctionSsa,
+        live: &Liveness,
+        interference: &super::ssa_liveness::Interference,
+        last_use: &[u32],
+        k: usize,
+    ) {
+        let n = func.insts.len();
+        for idx in 0..n {
+            let (op, lhs) = match &func.insts[idx] {
+                Inst::Binop { op, lhs, .. } => (*op, *lhs),
+                Inst::BinopI { op, lhs, .. } => (*op, *lhs),
+                _ => continue,
+            };
+            if !two_address_coalescable(op) {
+                continue;
+            }
+            // Only when the left operand's last use is this binop. Then
+            // result and lhs do not interfere and the merge models the
+            // value flowing through the destructive destination.
+            if last_use.get(lhs as usize).copied() != Some(idx as u32) {
+                continue;
+            }
+            let rr = self.find(idx as ValueId);
+            let rl = self.find(lhs);
+            if rr == rl {
+                continue;
+            }
+            if !briggs_colourable(interference, rr, rl, k) {
+                continue;
+            }
+            self.try_merge(func, live, idx as ValueId, lhs);
+        }
     }
 
     /// Find the root of `v`'s class, compressing the path on the way.
@@ -122,6 +183,49 @@ impl PhiClasses {
     pub(super) fn len(&self) -> usize {
         self.parent.len()
     }
+}
+
+/// Integer binary operators whose x86-64 lowering is the destructive
+/// two-address form `dst = dst op src`, so coalescing the result with
+/// the left operand removes a `mov dst, lhs`. Division and remainder
+/// (fixed `rax` / `rdx`), the register shift count (`cl`), and the
+/// comparison forms (flags plus `setcc`, not a two-address result) are
+/// excluded because their lowering pins specific registers.
+fn two_address_coalescable(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Mul
+    )
+}
+
+/// Briggs' conservative coalescing test: merging the classes rooted at
+/// `a` and `b` keeps the result colourable when the merged node has
+/// fewer than `k` neighbours of significant degree (degree >= `k`). The
+/// low-degree neighbours simplify away during colouring and cannot block
+/// the merged node, so the merge never turns a `k`-colourable function
+/// into one that spills. The interference graph is the pre-coalescing
+/// one; using it as the degree estimate is conservative (a later merge
+/// only lowers the live node count).
+fn briggs_colourable(
+    interference: &super::ssa_liveness::Interference,
+    a: ValueId,
+    b: ValueId,
+    k: usize,
+) -> bool {
+    let mut seen = alloc::collections::BTreeSet::new();
+    let mut significant = 0usize;
+    for &nb in interference.neighbors(a).iter().chain(interference.neighbors(b).iter()) {
+        if nb == a || nb == b || !seen.insert(nb) {
+            continue;
+        }
+        if interference.neighbors(nb).len() >= k {
+            significant += 1;
+            if significant >= k {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Whether any member of `a` interferes with any member of `b`.

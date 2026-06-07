@@ -15,17 +15,17 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
+               	leaq	<rip>, %rdx
+               	movslq	(%rdx), %rcx
+               	movq	%rdx, %rax
+               	addq	$0x4, %rax
                	movslq	(%rax), %rax
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	addq	%rax, %rcx
+               	movslq	%ecx, %rcx
+               	addq	$0x8, %rdx
+               	movslq	(%rdx), %rax
+               	addq	%rax, %rcx
+               	movslq	%ecx, %rax
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x2, %eax

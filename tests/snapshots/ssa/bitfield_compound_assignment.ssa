@@ -74,9 +74,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=11
     v60  BinopI { op=and, lhs=v59, rhs_imm=-15 }          -> x1
     v61  LocalAddr(-1)                                    -> x2
     v62  Load { addr=v61, kind=U16 }                      -> x2
-    v63  BinopI { op=shr, lhs=v62, rhs_imm=1 }            -> x2
-    v64  BinopI { op=and, lhs=v63, rhs_imm=7 }            -> x6
-    v65  BinopI { op=and, lhs=v63, rhs_imm=6 }            -> x2
+    v63  BinopI { op=shr, lhs=v62, rhs_imm=1 }            -> x6
+    v64  BinopI { op=and, lhs=v63, rhs_imm=7 }            -> x2
+    v65  BinopI { op=and, lhs=v63, rhs_imm=6 }            -> x6
     v66  BinopI { op=shl, lhs=v65, rhs_imm=1 }            -> x2
     v67  Binop { op=or, lhs=v60, rhs=v66 }                -> x1
     v68  Store { addr=v58, value=v67, kind=I16 }          -> -

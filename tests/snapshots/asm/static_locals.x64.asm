@@ -32,15 +32,15 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	movslq	(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movslq	%edx, %rdx
+               	movslq	(%rcx), %rsi
+               	movslq	(%rax), %rdx
+               	addq	%rdx, %rsi
+               	movslq	%esi, %rdx
                	movl	%edx, (%rcx)
-               	movslq	(%rax), %rax
-               	movslq	(%rcx), %rcx
-               	addq	%rcx, %rax
-               	movslq	%eax, %rax
+               	movslq	(%rax), %rdx
+               	movslq	(%rcx), %rax
+               	addq	%rax, %rdx
+               	movslq	%edx, %rax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx

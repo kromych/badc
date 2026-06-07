@@ -18,9 +18,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v12  Extend { value=v6, kind=I32 }                    -> x0
     v13  BinopI { op=mul, lhs=v12, rhs_imm=100 }          -> x0
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x0
-    v15  BinopI { op=shr, lhs=v14, rhs_imm=32 }           -> x0
-    v16  Extend { value=v10, kind=I32 }                   -> x1
-    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x0
+    v15  BinopI { op=shr, lhs=v14, rhs_imm=32 }           -> x2
+    v16  Extend { value=v10, kind=I32 }                   -> x0
+    v17  Binop { op=add, lhs=v15, rhs=v16 }               -> x2
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x0
     v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x0
     terminator Return(v19)   (exit_acc=v19)

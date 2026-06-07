@@ -20,9 +20,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v12  BinopI { op=lt, lhs=v11, rhs_imm=4 }             -> x7
     terminator Bz { cond=v12, target=b3, fall=b2 }   (exit_acc=v12)
   block 2  start_pc=0
-    v13  Extend { value=v9, kind=I32 }                    -> x6
-    v14  Extend { value=v1, kind=I8 }                     -> x7
-    v15  Binop { op=add, lhs=v13, rhs=v14 }               -> x6
+    v13  Extend { value=v9, kind=I32 }                    -> x7
+    v14  Extend { value=v1, kind=I8 }                     -> x6
+    v15  Binop { op=add, lhs=v13, rhs=v14 }               -> x7
     v16  BinopI { op=shl, lhs=v15, rhs_imm=32 }           -> x6
     v17  BinopI { op=shr, lhs=v16, rhs_imm=32 }           -> x6
     v18  Imm(0)                                           -> x7

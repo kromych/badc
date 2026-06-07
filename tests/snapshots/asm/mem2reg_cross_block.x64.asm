@@ -19,9 +19,9 @@ Disassembly of section .text:
                	movslq	%edx, %rsi
                	cmpq	$0x3, %rsi
                	jge	<addr>
-               	movslq	%ecx, %rcx
-               	addq	%rax, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rsi
+               	addq	%rax, %rsi
+               	movslq	%esi, %rcx
                	movslq	%edx, %rdx
                	addq	$0x1, %rdx
                	movslq	%edx, %rdx

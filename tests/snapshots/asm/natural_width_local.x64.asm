@@ -20,10 +20,10 @@ Disassembly of section .text:
                	movslq	%edx, %rdi
                	cmpq	$0x4, %rdi
                	jge	<addr>
-               	movslq	%esi, %rsi
-               	movsbq	%al, %rdi
-               	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
+               	movslq	%esi, %rdi
+               	movsbq	%al, %rsi
+               	addq	%rsi, %rdi
+               	movslq	%edi, %rsi
                	movslq	%edx, %rdx
                	addq	$0x1, %rdx
                	movslq	%edx, %rdx

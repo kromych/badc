@@ -36,9 +36,9 @@ Disassembly of section .text:
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rdx
+               	movslq	%eax, %rcx
+               	addq	%rcx, %rdx
+               	movslq	%edx, %rcx
                	jmp	<addr>
                	addb	%al, (%rax)

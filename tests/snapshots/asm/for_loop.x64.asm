@@ -19,10 +19,10 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	addq	$0x1, %rax
                	jmp	<addr>
-               	movslq	%ecx, %rcx
-               	movslq	%eax, %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%ecx, %rdx
+               	movslq	%eax, %rcx
+               	addq	%rcx, %rdx
+               	movslq	%edx, %rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	retq

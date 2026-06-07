@@ -37,18 +37,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v19  LoadLocal { off=-1, kind=I64 }                   -> x2
     v20  Imm(5)                                           -> x2
     v21  Imm(21474836480)                                 -> x6
-    v22  Binop { op=divu, lhs=v2, rhs=v20 }               -> x0
-    v23  Imm(0)                                           -> x2
-    v24  LoadLocal { off=-2, kind=U32 }                   -> x2
-    v25  LoadLocal { off=-3, kind=I64 }                   -> x2
-    v26  Binop { op=ult, lhs=v17, rhs=v22 }               -> x2
+    v22  Binop { op=divu, lhs=v2, rhs=v20 }               -> x2
+    v23  Imm(0)                                           -> x0
+    v24  LoadLocal { off=-2, kind=U32 }                   -> x0
+    v25  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v26  Binop { op=ult, lhs=v17, rhs=v22 }               -> x0
     terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
   block 7  start_pc=0
     v27  LoadLocal { off=-2, kind=U32 }                   -> x0
     v28  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v17)
   block 8  start_pc=0
-    v29  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v29  LoadLocal { off=-3, kind=I64 }                   -> x0
     v30  BinopI { op=and, lhs=v22, rhs_imm=4294967295 }   -> x2
     v31  Imm(0)                                           -> x0
     terminator Jmp(b9)   (exit_acc=v30)
@@ -56,8 +56,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
     v32  Phi { incoming=[b7:v17, b8:v30], kind=I64 }      -> x2
     v33  LoadLocal { off=-5, kind=I64 }                   -> x0
     v34  Imm(0)                                           -> x0
-    v35  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x0
-    v36  LoadLocal { off=-2, kind=U32 }                   -> x2
+    v35  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x2
+    v36  LoadLocal { off=-2, kind=U32 }                   -> x0
     v37  Binop { op=ne, lhs=v35, rhs=v17 }                -> x0
     terminator Bz { cond=v37, target=b11, fall=b10 }   (exit_acc=v37)
   block 10  start_pc=0

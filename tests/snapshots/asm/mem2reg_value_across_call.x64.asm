@@ -9,8 +9,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
+               	addq	$0x7, %rdi
                	movq	%rdi, %rax
-               	addq	$0x7, %rax
                	retq
                	movq	%rdi, %rax
                	shlq	$0x1, %rax

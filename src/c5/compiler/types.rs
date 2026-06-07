@@ -271,10 +271,7 @@ pub(super) fn integer_promote(ty: i64) -> i64 {
     // `_Bool` (6.3.1.1) and the sub-int integer types all have a
     // rank below `int` and every value they hold fits in a signed
     // `int`, so they promote to signed `int`.
-    if stripped == Ty::Char as i64
-        || stripped == Ty::Short as i64
-        || stripped == Ty::Bool as i64
-    {
+    if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 || stripped == Ty::Bool as i64 {
         Ty::Int as i64
     } else {
         ty

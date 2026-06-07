@@ -408,8 +408,7 @@ impl Lexer {
                 self.pos += 1;
             }
         }
-        if self.pos >= self.src.len()
-            || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
+        if self.pos >= self.src.len() || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
         {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
@@ -445,9 +444,7 @@ impl Lexer {
         // The `f`/`F`/`l`/`L` suffix only selects the type; c5 stores
         // every floating constant as f64, so it is consumed and
         // discarded.
-        if self.pos < self.src.len()
-            && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
-        {
+        if self.pos < self.src.len() && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L') {
             self.pos += 1;
         }
         // Scale by 2^exp through exact doubling / halving so the
@@ -948,8 +945,7 @@ impl Lexer {
                     // mandatory binary-exponent part `p`/`P`. Detect
                     // either marker here; a plain `0x...` with neither
                     // stays an integer constant.
-                    let next_is_dot =
-                        self.pos < self.src.len() && self.src[self.pos] == b'.';
+                    let next_is_dot = self.pos < self.src.len() && self.src[self.pos] == b'.';
                     let next_is_bexp = self.pos < self.src.len()
                         && (self.src[self.pos] == b'p' || self.src[self.pos] == b'P');
                     if next_is_dot || next_is_bexp {

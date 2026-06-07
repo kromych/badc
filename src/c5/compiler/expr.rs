@@ -1183,95 +1183,95 @@ impl Compiler {
                     // type, not a cast operator.
                     self.parse_block_compound_literal(t, cast_is_array, cast_array_size)?;
                 } else {
-                self.expr(Token::Inc as i64)?;
-                let cast_child_ast = self.ast_acc;
-                // FP-vs-int casts emit conversion ops so the bit
-                // pattern in r13 is consistent with the new type.
-                // Same-class casts (int<->ptr, float<->double) are
-                // bit-pattern-compatible and need no conversion.
-                let target_is_fp = is_floating_scalar(t);
-                let source_is_fp = is_floating_scalar(self.ty);
-                if target_is_fp ^ source_is_fp {
-                    // Mixed FP / int cast: route through ast_fpcast
-                    // regardless of direction. The shared call is
-                    // the AST shape for `int -> fp` *and* `fp ->
-                    // int`; the actual register conversion lives in
-                    // the per-arch emit.
-                    self.ast_fpcast();
-                } else if !target_is_fp
-                    && !source_is_fp
-                    && !is_pointer_ty(t)
-                    && !is_pointer_ty(self.ty)
-                {
-                    // Cast to a non-pointer integer narrower than
-                    // 8 bytes: re-extend the accumulator to the
-                    // target storage width. c5 keeps every value
-                    // sign- or zero-extended to 64 bits in the
-                    // accumulator, so a cast that narrows in C99
-                    // is otherwise invisible until the value lands
-                    // in a typed slot.
-                    //
-                    // Unsigned target -> mask the high bits.
-                    // Signed target  -> shift-left then arith-shift-
-                    //                   right by (64 - width*8) so
-                    //                   the high bit of the target
-                    //                   propagates.
-                    let target_size = self.size_of_type(t);
-                    let source_size = self.size_of_type(self.ty);
-                    if is_unsigned_ty(t) {
-                        let mask: i64 = match target_size {
-                            1 => 0xff,
-                            2 => 0xffff,
-                            4 => 0xffff_ffff,
-                            _ => -1,
-                        };
-                        if mask != -1 {
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
-                        }
-                    } else if target_size == 1 || target_size == 2 || target_size == 4 {
-                        // Signed cast: shift-pair to mask + sign-extend
-                        // to the target storage width. Fires when:
-                        //  * the cast genuinely narrows (target_size <
-                        //    source_size) -- e.g. `(signed char)int_val`,
-                        //  * source is unsigned at the same width as the
-                        //    signed target -- the accumulator is zero-
-                        //    extended, but `(signed char)(unsigned char)`
-                        //    has to flip values >= 0x80 to negative per
-                        //    C99 6.3.1.3.
-                        // Skipped for same-width signed-to-signed casts
-                        // (already correctly sign-extended in the
-                        //  accumulator) and widening signed casts (the
-                        //  source-side load did the extension).
-                        let source_is_unsigned = is_unsigned_ty(self.ty);
-                        let needs_extend = target_size < source_size
-                            || (target_size == source_size && source_is_unsigned);
-                        if needs_extend {
-                            let bits = 64i64 - (target_size as i64) * 8;
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
+                    self.expr(Token::Inc as i64)?;
+                    let cast_child_ast = self.ast_acc;
+                    // FP-vs-int casts emit conversion ops so the bit
+                    // pattern in r13 is consistent with the new type.
+                    // Same-class casts (int<->ptr, float<->double) are
+                    // bit-pattern-compatible and need no conversion.
+                    let target_is_fp = is_floating_scalar(t);
+                    let source_is_fp = is_floating_scalar(self.ty);
+                    if target_is_fp ^ source_is_fp {
+                        // Mixed FP / int cast: route through ast_fpcast
+                        // regardless of direction. The shared call is
+                        // the AST shape for `int -> fp` *and* `fp ->
+                        // int`; the actual register conversion lives in
+                        // the per-arch emit.
+                        self.ast_fpcast();
+                    } else if !target_is_fp
+                        && !source_is_fp
+                        && !is_pointer_ty(t)
+                        && !is_pointer_ty(self.ty)
+                    {
+                        // Cast to a non-pointer integer narrower than
+                        // 8 bytes: re-extend the accumulator to the
+                        // target storage width. c5 keeps every value
+                        // sign- or zero-extended to 64 bits in the
+                        // accumulator, so a cast that narrows in C99
+                        // is otherwise invisible until the value lands
+                        // in a typed slot.
+                        //
+                        // Unsigned target -> mask the high bits.
+                        // Signed target  -> shift-left then arith-shift-
+                        //                   right by (64 - width*8) so
+                        //                   the high bit of the target
+                        //                   propagates.
+                        let target_size = self.size_of_type(t);
+                        let source_size = self.size_of_type(self.ty);
+                        if is_unsigned_ty(t) {
+                            let mask: i64 = match target_size {
+                                1 => 0xff,
+                                2 => 0xffff,
+                                4 => 0xffff_ffff,
+                                _ => -1,
+                            };
+                            if mask != -1 {
+                                self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
+                            }
+                        } else if target_size == 1 || target_size == 2 || target_size == 4 {
+                            // Signed cast: shift-pair to mask + sign-extend
+                            // to the target storage width. Fires when:
+                            //  * the cast genuinely narrows (target_size <
+                            //    source_size) -- e.g. `(signed char)int_val`,
+                            //  * source is unsigned at the same width as the
+                            //    signed target -- the accumulator is zero-
+                            //    extended, but `(signed char)(unsigned char)`
+                            //    has to flip values >= 0x80 to negative per
+                            //    C99 6.3.1.3.
+                            // Skipped for same-width signed-to-signed casts
+                            // (already correctly sign-extended in the
+                            //  accumulator) and widening signed casts (the
+                            //  source-side load did the extension).
+                            let source_is_unsigned = is_unsigned_ty(self.ty);
+                            let needs_extend = target_size < source_size
+                                || (target_size == source_size && source_is_unsigned);
+                            if needs_extend {
+                                let bits = 64i64 - (target_size as i64) * 8;
+                                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bits);
+                                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bits);
+                            }
                         }
                     }
-                }
-                self.ty = t;
-                // Overwrite the AST acc with a canonical Cast
-                // node so any intermediate Binary nodes the
-                // conversion-shaping sequence pushed don't surface
-                // as the cast's value. The dropped nodes have no
-                // consumers; the SSA walker won't visit them.
-                if let Some(child) = cast_child_ast {
-                    self.ast_emit_cast(child, t);
-                }
-                // Re-seed the fn-ptr chain depth from the
-                // cast destination so a unary `*` chain that
-                // follows a `(fn_t*)expr` cast (e.g.
-                // `(**(finder_type*)pVfs->pAppData)(...)`) can
-                // recognise the decay. The cast result lives
-                // in `a`, so the depth is `cast_fpi - 1`.
-                if let Some(fpi) = cast_fpi
-                    && fpi > 0
-                {
-                    self.pending.fn_ptr_chain_depth = fpi - 1;
-                }
+                    self.ty = t;
+                    // Overwrite the AST acc with a canonical Cast
+                    // node so any intermediate Binary nodes the
+                    // conversion-shaping sequence pushed don't surface
+                    // as the cast's value. The dropped nodes have no
+                    // consumers; the SSA walker won't visit them.
+                    if let Some(child) = cast_child_ast {
+                        self.ast_emit_cast(child, t);
+                    }
+                    // Re-seed the fn-ptr chain depth from the
+                    // cast destination so a unary `*` chain that
+                    // follows a `(fn_t*)expr` cast (e.g.
+                    // `(**(finder_type*)pVfs->pAppData)(...)`) can
+                    // recognise the decay. The cast result lives
+                    // in `a`, so the depth is `cast_fpi - 1`.
+                    if let Some(fpi) = cast_fpi
+                        && fpi > 0
+                    {
+                        self.pending.fn_ptr_chain_depth = fpi - 1;
+                    }
                 }
             } else {
                 self.expr(Token::Assign as i64)?;

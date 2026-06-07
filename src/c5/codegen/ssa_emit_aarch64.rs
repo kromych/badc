@@ -1669,19 +1669,25 @@ fn emit_inst(
             true
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, kind } => emit_load(
+        Inst::Load { addr, disp, kind } => emit_load(
             code,
             dst,
             *addr,
+            *disp,
             *kind,
             alloc.is_f32(v),
             alloc,
             frame,
             scratch,
         ),
-        Inst::Store { addr, value, kind } => {
-            emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
-        }
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => emit_store(
+            code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
+        ),
         Inst::LoadLocal { off, kind } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
         }
@@ -3476,12 +3482,18 @@ fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // `disp` is a byte offset folded from a constant pointer addition.
+    // ssa_index_fold only emits a displacement that is a multiple of the
+    // access width and within the scaled-immediate range, so it passes
+    // straight to the immediate-offset encoders below.
+    let disp = disp as u32;
     let addr_place = alloc
         .places
         .get(addr as usize)
@@ -3540,13 +3552,13 @@ fn emit_load(
         Place::FpReg(_) | Place::None => return false,
     };
     match kind {
-        LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, 0)),
-        LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, 0)),
-        LoadKind::U32 => emit(code, enc_ldr32_imm(rd, rn, 0)),
-        LoadKind::I16 => emit(code, enc_ldrsh_imm(rd, rn, 0)),
-        LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, 0)),
-        LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, 0)),
-        LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
+        LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, disp)),
+        LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, disp)),
+        LoadKind::U32 => emit(code, enc_ldr32_imm(rd, rn, disp)),
+        LoadKind::I16 => emit(code, enc_ldrsh_imm(rd, rn, disp)),
+        LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, disp)),
+        LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, disp)),
+        LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, disp)),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
@@ -4006,12 +4018,17 @@ fn emit_store(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // `disp` is a width-aligned, in-range byte offset folded from a
+    // constant pointer addition; it passes straight to the immediate-
+    // offset store encoders.
+    let disp = disp as u32;
     // The c5 store ops leave the stored value in the accumulator
     // afterward, so `dst` may be a register or spill slot the
     // allocator wants the value parked in. We compute the value
@@ -4042,7 +4059,7 @@ fn emit_store(
                 Some(r) => r,
                 None => return false,
             };
-            emit(code, enc_str_s_imm(sn, rn, 0));
+            emit(code, enc_str_s_imm(sn, rn, disp));
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
@@ -4078,7 +4095,7 @@ fn emit_store(
         // V register, so narrowing in place over a pooled register
         // would destroy a value the surrounding code still reads.
         emit(code, enc_fcvt_s_d(SCRATCH_FP1, dn));
-        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, 0));
+        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, enc_fmov_d_to_x(scratch.primary, dn));
@@ -4095,7 +4112,7 @@ fn emit_store(
         let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
             return false;
         };
-        emit(code, super::aarch64::enc_str_d_imm(dn, rn, 0));
+        emit(code, super::aarch64::enc_str_d_imm(dn, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, super::aarch64::enc_fmov_d_d(rd, dn));
@@ -4122,10 +4139,10 @@ fn emit_store(
         }
     };
     match kind {
-        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, 0)),
-        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
-        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
-        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
+        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, disp)),
+        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
+        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
+        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
         StoreKind::F32 | StoreKind::F64 => {
             unreachable!("FP store handled in the FP branch above")
         }

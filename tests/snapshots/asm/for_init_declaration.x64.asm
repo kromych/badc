@@ -33,13 +33,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -153,17 +151,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	<rip>, %rax
-               	xorq	%rdi, %rdi
+               	xorq	%rsi, %rsi
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
                	movl	$0x4, %ecx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movl	$0x2, %esi
-               	movl	%esi, (%rdx)
-               	movq	%rax, %rdx
-               	addq	$0x8, %rdx
-               	movl	%ecx, (%rdx)
+               	movl	$0x2, %edx
+               	movl	%edx, 0x4(%rax)
+               	movl	%ecx, 0x8(%rax)
                	movq	%rax, %rcx
                	jmp	<addr>
                	movq	%rax, %rdx
@@ -173,12 +167,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	addq	$0x4, %rcx
                	jmp	<addr>
-               	movslq	%edi, %rdx
+               	movslq	%esi, %rdx
                	movslq	(%rcx), %rsi
-               	movq	%rdx, %rdi
-               	addq	%rsi, %rdi
+               	addq	%rdx, %rsi
                	jmp	<addr>
-               	movslq	%edi, %rax
+               	movslq	%esi, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
@@ -278,4 +271,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

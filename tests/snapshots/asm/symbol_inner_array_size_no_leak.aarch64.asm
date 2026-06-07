@@ -50,8 +50,7 @@ Disassembly of section .text:
                	cset	x1, ne
                	cbnz	x1, <addr>
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0xe
-               	ldrsh	x0, [x0]
+               	ldrsh	x0, [x0, #0xe]
                	cmp	x0, #0x15
                	cset	x1, ne
                	b	<addr>
@@ -61,12 +60,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0xe
                	mov	x1, #0x63               // =99
-               	strh	w1, [x0]
+               	strh	w1, [x0, #0xe]
                	sub	x0, x29, #0x28
-               	add	x0, x0, #0xe
-               	ldrsh	x0, [x0]
+               	ldrsh	x0, [x0, #0xe]
                	cmp	x0, #0x63
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

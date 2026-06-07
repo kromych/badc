@@ -33,13 +33,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -64,9 +62,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
                	leaq	<rip>, %rbx
-               	movq	%rbx, %rax
-               	addq	$0x38, %rax
-               	movq	(%rax), %rax
+               	movq	0x38(%rbx), %rax
                	leaq	<rip>, %rdi
                	movl	$0x4, %esi
                	movq	%rax, %r11
@@ -83,9 +79,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rsi, %rsi
-               	movq	%rbx, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %rax
+               	movq	0x8(%rbx), %rax
                	leaq	<rip>, %rdi
                	movq	%rax, %r11
                	movq	%rsi, %rdx
@@ -103,18 +97,14 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	popq	%rbp
                	retq
-               	movq	%rbx, %rax
-               	addq	$0x68, %rax
-               	movq	(%rax), %rax
+               	movq	0x68(%rbx), %rax
                	movslq	%r12d, %rdi
                	leaq	-0x48(%rbp), %rsi
                	movl	$0x4, %edx
                	movq	%rax, %r11
                	callq	*%r11
                	movq	%rax, %r14
-               	movq	%rbx, %rax
-               	addq	$0x20, %rax
-               	movq	(%rax), %rax
+               	movq	0x20(%rbx), %rax
                	movslq	%r12d, %rdi
                	movq	%rax, %r11
                	callq	*%r11

@@ -10,8 +10,7 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	add	x1, x0, #0x3
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x3]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x1, x1, x17
@@ -19,8 +18,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x1, x1, x17
-               	add	x2, x0, #0x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x2]
                	orr	x1, x1, x2
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -29,8 +27,7 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x1, x1, x17
-               	add	x2, x0, #0x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x1]
                	orr	x1, x1, x2
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -108,16 +105,13 @@ Disassembly of section .text:
                	sub	x1, x29, #0x40
                	ldr	w1, [x1]
                	sub	x2, x29, #0x40
-               	add	x2, x2, #0x14
-               	ldr	w2, [x2]
+               	ldr	w2, [x2, #0x14]
                	eor	x1, x1, x2
                	sub	x2, x29, #0x40
-               	add	x2, x2, #0x28
-               	ldr	w2, [x2]
+               	ldr	w2, [x2, #0x28]
                	eor	x1, x1, x2
                	sub	x2, x29, #0x40
-               	add	x2, x2, #0x3c
-               	ldr	w2, [x2]
+               	ldr	w2, [x2, #0x3c]
                	eor	x1, x1, x2
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17

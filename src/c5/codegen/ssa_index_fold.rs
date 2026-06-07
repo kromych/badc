@@ -118,6 +118,37 @@ fn scaled_address(
     try_arm(*lhs, *rhs).or_else(|| try_arm(*rhs, *lhs))
 }
 
+/// When `addr` is a single-use `BinopI(Add, base, c)` whose constant `c`
+/// is a non-negative byte offset aligned to `width` and within the
+/// scaled immediate-offset range of both targets, return `(base, c)`.
+/// Aligning to the access width keeps the AArch64 `ldr` / `str`
+/// immediate encoding (which scales by the width) valid; struct field
+/// offsets for a width-`width` field are naturally width-aligned, while
+/// a packed field at an unaligned offset is left for the plain add path.
+fn displaced_address(
+    func: &FunctionSsa,
+    counts: &[u32],
+    addr: ValueId,
+    width: u8,
+) -> Option<(ValueId, i32)> {
+    if counts.get(addr as usize).copied().unwrap_or(0) != 1 {
+        return None;
+    }
+    let Inst::BinopI {
+        op: BinOp::Add,
+        lhs,
+        rhs_imm,
+    } = func.insts.get(addr as usize)?
+    else {
+        return None;
+    };
+    let c = *rhs_imm;
+    if c <= 0 || c % (width as i64) != 0 || c >= (width as i64) * 4096 {
+        return None;
+    }
+    Some((*lhs, c as i32))
+}
+
 /// Rewrite recognised scaled-index loads and stores in place.
 pub(super) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
@@ -126,35 +157,69 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for idx in 0..n {
             match &func.insts[idx] {
-                Inst::Load { addr, kind } => {
-                    if let Some(width) = load_width(*kind)
-                        && let Some((base, index)) = scaled_address(func, &counts, *addr, width)
-                    {
-                        rewrites.push((
-                            idx,
-                            Inst::LoadIndexed {
-                                base,
-                                index,
-                                scale: width,
-                                kind: *kind,
-                            },
-                        ));
+                // A displacement already present means the address was
+                // folded once; leave it rather than compose for now.
+                Inst::Load {
+                    addr,
+                    disp: 0,
+                    kind,
+                } => {
+                    if let Some(width) = load_width(*kind) {
+                        if let Some((base, index)) = scaled_address(func, &counts, *addr, width) {
+                            rewrites.push((
+                                idx,
+                                Inst::LoadIndexed {
+                                    base,
+                                    index,
+                                    scale: width,
+                                    kind: *kind,
+                                },
+                            ));
+                        } else if let Some((base, disp)) =
+                            displaced_address(func, &counts, *addr, width)
+                        {
+                            rewrites.push((
+                                idx,
+                                Inst::Load {
+                                    addr: base,
+                                    disp,
+                                    kind: *kind,
+                                },
+                            ));
+                        }
                     }
                 }
-                Inst::Store { addr, value, kind } => {
-                    if let Some(width) = store_width(*kind)
-                        && let Some((base, index)) = scaled_address(func, &counts, *addr, width)
-                    {
-                        rewrites.push((
-                            idx,
-                            Inst::StoreIndexed {
-                                base,
-                                index,
-                                scale: width,
-                                value: *value,
-                                kind: *kind,
-                            },
-                        ));
+                Inst::Store {
+                    addr,
+                    disp: 0,
+                    value,
+                    kind,
+                } => {
+                    if let Some(width) = store_width(*kind) {
+                        if let Some((base, index)) = scaled_address(func, &counts, *addr, width) {
+                            rewrites.push((
+                                idx,
+                                Inst::StoreIndexed {
+                                    base,
+                                    index,
+                                    scale: width,
+                                    value: *value,
+                                    kind: *kind,
+                                },
+                            ));
+                        } else if let Some((base, disp)) =
+                            displaced_address(func, &counts, *addr, width)
+                        {
+                            rewrites.push((
+                                idx,
+                                Inst::Store {
+                                    addr: base,
+                                    disp,
+                                    value: *value,
+                                    kind: *kind,
+                                },
+                            ));
+                        }
                     }
                 }
                 _ => {}

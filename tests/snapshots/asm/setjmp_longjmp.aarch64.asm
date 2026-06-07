@@ -15,8 +15,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	str	x19, [sp]
                	sxtw	x1, w1
-               	add	x2, x0, #0x200
-               	str	w1, [x2]
+               	str	w1, [x0, #0x200]
                	bl	<addr>
                	uxtb	w0, w0
                	mov	x0, #0x0                // =0
@@ -76,8 +75,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x208
-               	add	x0, x0, #0x200
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x200]
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0xf                // =15

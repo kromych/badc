@@ -72,7 +72,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=12
     v39  StoreLocal { off=-9, value=v38, kind=I64 }       -> -
     v40  Extend { value=v26, kind=I32 }                   -> x3
     v41  LocalAddr(-9)                                    -> x0
-    v42  Load { addr=v41, kind=I64 }                      -> x0
+    v42  Load { addr=v41, disp=0, kind=I64 }              -> x0
     v43  Imm(4)                                           -> x7
     v44  CallIndirect { target=v42, args=[v43], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v45  Binop { op=add, lhs=v40, rhs=v44 }               -> x0

@@ -252,8 +252,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x4
-               	ldrh	w0, [x0]
+               	ldrh	w0, [x0, #0x4]
                	mov	x17, #0x3               // =3
                	and	x0, x0, x17
                	lsl	x0, x0, #62
@@ -269,8 +268,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x4
-               	ldrh	w0, [x0]
+               	ldrh	w0, [x0, #0x4]
                	asr	x0, x0, #2
                	mov	x17, #0x3               // =3
                	and	x0, x0, x17
@@ -284,8 +282,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x6                // =6
                	sub	x1, x29, #0x18
-               	add	x1, x1, #0x4
-               	ldrh	w1, [x1]
+               	ldrh	w1, [x1, #0x4]
                	mov	x17, #0x3               // =3
                	and	x1, x1, x17
                	lsl	x1, x1, #62

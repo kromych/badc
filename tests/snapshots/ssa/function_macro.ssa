@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   Phi { incoming=[b0:v1, b2:v11], kind=I64 }       -> x7
     v6   Phi { incoming=[b0:v3, b2:v14], kind=I64 }       -> x6
     v7   LoadLocal { off=2, kind=I64 }                    -> x0
-    v8   Load { addr=v5, kind=U8 }                        -> x1
+    v8   Load { addr=v5, disp=0, kind=U8 }                -> x1
     v9   Imm(0)                                           -> x0
     terminator Bz { cond=v8, target=b8, fall=b4 }   (exit_acc=v8)
   block 2  start_pc=0
@@ -26,15 +26,15 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     terminator Jmp(b1)   (exit_acc=v14)
   block 3  start_pc=0
     v16  LoadLocal { off=2, kind=I64 }                    -> x0
-    v17  Load { addr=v5, kind=U8 }                        -> x0
+    v17  Load { addr=v5, disp=0, kind=U8 }                -> x0
     v18  BinopI { op=eq, lhs=v17, rhs_imm=0 }             -> x1
     v19  Imm(0)                                           -> x0
     terminator Bz { cond=v18, target=b9, fall=b6 }   (exit_acc=v18)
   block 4  start_pc=0
     v20  LoadLocal { off=2, kind=I64 }                    -> x0
-    v21  Load { addr=v5, kind=U8 }                        -> x0
+    v21  Load { addr=v5, disp=0, kind=U8 }                -> x0
     v22  LoadLocal { off=3, kind=I64 }                    -> x1
-    v23  Load { addr=v6, kind=U8 }                        -> x1
+    v23  Load { addr=v6, disp=0, kind=U8 }                -> x1
     v24  Binop { op=eq, lhs=v21, rhs=v23 }                -> x1
     v25  Imm(0)                                           -> x0
     terminator Jmp(b5)   (exit_acc=v24)
@@ -44,7 +44,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     terminator Bz { cond=v26, target=b3, fall=b2 }   (exit_acc=v26)
   block 6  start_pc=0
     v28  LoadLocal { off=3, kind=I64 }                    -> x0
-    v29  Load { addr=v6, kind=U8 }                        -> x0
+    v29  Load { addr=v6, disp=0, kind=U8 }                -> x0
     v30  BinopI { op=eq, lhs=v29, rhs_imm=0 }             -> x1
     v31  Imm(0)                                           -> x0
     terminator Jmp(b7)   (exit_acc=v30)

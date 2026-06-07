@@ -35,15 +35,13 @@ Disassembly of section .text:
                	add	x2, x2, #0x100
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x106
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x10d
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
@@ -68,9 +66,8 @@ Disassembly of section .text:
                	mov	x1, #0x5                // =5
                	str	w1, [x0]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x4
                	mov	x1, #0x1                // =1
-               	str	w1, [x0]
+               	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x8
                	ldrsw	x0, [x0]
                	cmp	x0, #0x5
@@ -80,8 +77,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x4
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -92,9 +88,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x4
                	mov	x1, #0x7                // =7
-               	str	w1, [x0]
+               	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x10
                	ldrsw	x0, [x0]
                	cmp	x0, #0x1
@@ -104,8 +99,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x4
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

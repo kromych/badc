@@ -64,15 +64,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
   block 2  start_pc=0
     v8   LocalAddr(-2)                                    -> x0
     v9   Imm(0)                                           -> x1
-    v10  Load { addr=v8, kind=I16 }                       -> x0
+    v10  Load { addr=v8, disp=0, kind=I16 }               -> x0
     v11  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x1
     v12  Imm(0)                                           -> x0
     terminator Bnz { cond=v11, target=b9, fall=b3 }   (exit_acc=v11)
   block 3  start_pc=0
     v13  LocalAddr(-2)                                    -> x0
     v14  Imm(14)                                          -> x1
-    v15  BinopI { op=add, lhs=v13, rhs_imm=14 }           -> x0
-    v16  Load { addr=v15, kind=I16 }                      -> x0
+    v15  BinopI { op=add, lhs=v13, rhs_imm=14 }           -> x1
+    v16  Load { addr=v13, disp=14, kind=I16 }             -> x0
     v17  BinopI { op=ne, lhs=v16, rhs_imm=21 }            -> x1
     v18  Imm(0)                                           -> x0
     terminator Jmp(b4)   (exit_acc=v17)
@@ -88,13 +88,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=6
     v23  Imm(8)                                           -> x1
     v24  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
     v25  Imm(6)                                           -> x1
-    v26  BinopI { op=add, lhs=v22, rhs_imm=14 }           -> x0
+    v26  BinopI { op=add, lhs=v22, rhs_imm=14 }           -> x1
     v27  Imm(99)                                          -> x1
-    v28  Store { addr=v26, value=v27, kind=I16 }          -> -
+    v28  Store { addr=v22, disp=14, value=v27, kind=I16 } -> -
     v29  LocalAddr(-5)                                    -> x0
     v30  BinopI { op=add, lhs=v29, rhs_imm=8 }            -> x1
-    v31  BinopI { op=add, lhs=v29, rhs_imm=14 }           -> x0
-    v32  Load { addr=v31, kind=I16 }                      -> x0
+    v31  BinopI { op=add, lhs=v29, rhs_imm=14 }           -> x1
+    v32  Load { addr=v29, disp=14, kind=I16 }             -> x0
     v33  BinopI { op=ne, lhs=v32, rhs_imm=99 }            -> x0
     terminator Bz { cond=v33, target=b8, fall=b7 }   (exit_acc=v33)
   block 7  start_pc=0

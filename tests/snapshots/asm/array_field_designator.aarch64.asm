@@ -17,26 +17,22 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	add	x1, x0, #0x4
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x0, #0x4]
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x1, x0, #0x8
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x0, #0x8]
                	cmp	x1, #0x1e
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	add	x1, x0, #0xc
-               	ldrsw	x1, [x1]
+               	ldrsw	x1, [x0, #0xc]
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x0, x0, #0x10
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x10]
                	cmp	x0, #0x32
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

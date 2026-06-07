@@ -7,11 +7,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I64 }                    -> x0
-    v4   Load { addr=v1, kind=I64 }                       -> x0
+    v4   Load { addr=v1, disp=0, kind=I64 }               -> x0
     v5   Imm(24)                                          -> x1
     v6   Binop { op=divu, lhs=v4, rhs=v5 }                -> x0
     v7   Imm(0)                                           -> x1
-    v8   Load { addr=v1, kind=I64 }                       -> x1
+    v8   Load { addr=v1, disp=0, kind=I64 }               -> x1
     v9   Imm(7)                                           -> x2
     v10  Binop { op=modu, lhs=v8, rhs=v9 }                -> x1
     v11  Imm(0)                                           -> x2

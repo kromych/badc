@@ -2393,12 +2393,22 @@ fn emit_inst(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
-        Inst::Load { addr, kind } => {
-            emit_load(code, dst, *addr, *kind, alloc.is_f32(v), alloc, frame)
-        }
-        Inst::Store { addr, value, kind } => {
-            emit_store(code, dst, v, *addr, *value, *kind, alloc, frame)
-        }
+        Inst::Load { addr, disp, kind } => emit_load(
+            code,
+            dst,
+            *addr,
+            *disp,
+            *kind,
+            alloc.is_f32(v),
+            alloc,
+            frame,
+        ),
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => emit_store(code, dst, v, *addr, *disp, *value, *kind, alloc, frame),
         Inst::LoadLocal { off, kind } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
         }
@@ -3131,6 +3141,7 @@ fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     alloc: &Allocation,
@@ -3163,7 +3174,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit_movss_xmm_mem(code, dd, base, 0);
+        emit_movss_xmm_mem(code, dd, base, disp);
         if !keep_f32 {
             emit_cvtss2sd(code, dd, dd);
         }
@@ -3179,7 +3190,7 @@ fn emit_load(
                 return false;
             }
         };
-        emit_movsd_xmm_mem(code, dd, base, 0);
+        emit_movsd_xmm_mem(code, dd, base, disp);
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return true;
     }
@@ -3188,13 +3199,13 @@ fn emit_load(
         return false;
     };
     match kind {
-        LoadKind::I64 => emit_mov_r_mem(code, rd, base, 0),
-        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, 0),
-        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, 0),
-        LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, 0),
-        LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, 0),
-        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, 0),
-        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, 0),
+        LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
+        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, disp),
+        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, disp),
+        LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, disp),
+        LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
+        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, disp),
+        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, disp),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     spill_dst_to_slot(code, dst, rd, frame);
@@ -3206,6 +3217,7 @@ fn emit_store(
     dst: Place,
     _v: super::super::ir::ValueId,
     addr: u32,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
@@ -3251,7 +3263,7 @@ fn emit_store(
             }
         };
         if alloc.is_f32(value) {
-            emit_movss_mem_xmm(code, base, 0, dn);
+            emit_movss_mem_xmm(code, base, disp, dn);
             match dst {
                 Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
                 Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3263,7 +3275,7 @@ fn emit_store(
         // allocator-held xmm holding the wider f64 the result Place
         // expects) survives.
         emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
-        emit_movss_mem_xmm(code, base, 0, SCRATCH_XMM15);
+        emit_movss_mem_xmm(code, base, disp, SCRATCH_XMM15);
         match dst {
             Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3279,7 +3291,7 @@ fn emit_store(
             bail_msg("Store F64: value not fp reg / spill / int reg");
             return false;
         };
-        emit_movsd_mem_xmm(code, base, 0, dn);
+        emit_movsd_mem_xmm(code, base, disp, dn);
         match dst {
             Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
             Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
@@ -3311,10 +3323,10 @@ fn emit_store(
         return false;
     };
     match kind {
-        StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
-        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, 0, rs),
-        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, 0, rs),
-        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, 0, rs),
+        StoreKind::I64 => emit_mov_mem_r(code, base, disp, rs),
+        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, disp, rs),
+        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, disp, rs),
+        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, disp, rs),
         StoreKind::F32 | StoreKind::F64 => unreachable!(),
     }
     // Stored value also feeds dst when the allocator wants it

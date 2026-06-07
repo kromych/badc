@@ -11,8 +11,7 @@ Disassembly of section .text:
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	ldrb	w1, [x0]
-               	add	x0, x0, #0x1
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x1]
                	add	x0, x1, x0
                	sxtw	x0, w0
                	ret

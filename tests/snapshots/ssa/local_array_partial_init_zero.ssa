@@ -30,11 +30,11 @@ fn ent_pc=0 n_params=1 variadic=false locals=22
   block 4  start_pc=0
     v17  LocalAddr(-20)                                   -> x0
     v18  Imm(0)                                           -> x1
-    v19  Load { addr=v17, kind=U32 }                      -> x0
+    v19  Load { addr=v17, disp=0, kind=U32 }              -> x0
     v20  LocalAddr(-20)                                   -> x2
     v21  Imm(156)                                         -> x6
-    v22  BinopI { op=add, lhs=v20, rhs_imm=156 }          -> x2
-    v23  Load { addr=v22, kind=U32 }                      -> x2
+    v22  BinopI { op=add, lhs=v20, rhs_imm=156 }          -> x6
+    v23  Load { addr=v20, disp=156, kind=U32 }            -> x2
     v24  Binop { op=add, lhs=v19, rhs=v23 }               -> x0
     v25  BinopI { op=and, lhs=v24, rhs_imm=4294967295 }   -> x0
     v26  Imm(0)                                           -> x2

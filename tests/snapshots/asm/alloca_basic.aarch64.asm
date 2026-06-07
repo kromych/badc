@@ -35,15 +35,13 @@ Disassembly of section .text:
                	add	x2, x2, #0x110
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x116
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x11d
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
@@ -240,8 +238,7 @@ Disassembly of section .text:
                	str	x0, [x17]
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x8]
-               	add	x0, x0, #0xf
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535
@@ -278,8 +275,7 @@ Disassembly of section .text:
                	str	x0, [x17]
                	cbnz	x0, <addr>
                	ldur	x0, [x29, #-0x10]
-               	add	x0, x0, #0xf
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
                	mov	x17, #0xffff            // =65535

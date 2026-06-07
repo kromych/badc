@@ -42,21 +42,17 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	leaq	-0x18(%rbp), %rax
                	movl	$0x4, %edx
-               	addq	$0x4, %rax
                	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	movl	$0xf, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0xc, %rax
                	movl	$0x5, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0xc(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	movl	$0xa, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rdi
                	callq	<addr>
                	addq	$0x30, %rsp

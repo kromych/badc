@@ -20,12 +20,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0xd8
                	ldrsw	x1, [x0]
-               	add	x2, x0, #0x4
-               	ldrsw	x2, [x2]
+               	ldrsw	x2, [x0, #0x4]
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	add	x0, x0, #0x8
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0x8]
                	add	x0, x1, x0
                	sxtw	x0, w0
                	cmp	x0, #0x6

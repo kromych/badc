@@ -33,13 +33,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -126,19 +124,15 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm14, %xmm0
                	movss	%xmm0, (%rax,%riz)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
                	movl	$0x12345678, %ecx       # imm = 0x12345678
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
-               	movq	%rax, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rax), %rcx
                	cmpq	$0x12345678, %rcx       # imm = 0x12345678
                	je	<addr>
                	leaq	<rip>, %rdi
                	movl	$0x4, %ebx
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rsi
+               	movslq	0x4(%rax), %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
@@ -458,4 +452,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

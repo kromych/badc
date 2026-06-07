@@ -19,9 +19,7 @@ Disassembly of section .text:
                	movzbq	%dl, %rdx
                	cmpq	$0x0, %rdx
                	jne	<addr>
-               	movq	%rax, %rcx
-               	addq	$0x4, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x4(%rax), %rcx
                	cmpq	$0xb, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -32,17 +30,13 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rcx
-               	addq	$0x8, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x8(%rax), %rcx
                	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	cmpq	$0x0, %rdx
                	jne	<addr>
-               	movq	%rax, %rcx
-               	addq	$0xc, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0xc(%rax), %rcx
                	cmpq	$0x0, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -53,16 +47,13 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	movq	%rax, %rcx
-               	addq	$0x10, %rcx
-               	movslq	(%rcx), %rcx
+               	movslq	0x10(%rax), %rcx
                	cmpq	$0x1e, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
                	cmpq	$0x0, %rdx
                	jne	<addr>
-               	addq	$0x14, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x14(%rax), %rax
                	cmpq	$0x1f, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
@@ -80,4 +71,5 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

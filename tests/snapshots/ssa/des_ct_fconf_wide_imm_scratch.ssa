@@ -81,40 +81,40 @@ fn ent_pc=1 n_params=2 variadic=false locals=40
     v54  BinopI { op=and, lhs=v46, rhs_imm=4294967295 }   -> x8
     v55  LoadLocal { off=3, kind=I64 }                    -> x11
     v56  Imm(0)                                           -> x11
-    v57  Load { addr=v3, kind=U32 }                       -> x11
+    v57  Load { addr=v3, disp=0, kind=U32 }               -> x11
     v58  Binop { op=xor, lhs=v54, rhs=v57 }               -> x8
     v59  Imm(0)                                           -> x11
     v60  BinopI { op=and, lhs=v58, rhs_imm=4294967295 }   -> x8
     v61  Imm(4)                                           -> x11
     v62  BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x11
-    v63  Load { addr=v62, kind=U32 }                      -> x11
+    v63  Load { addr=v3, disp=4, kind=U32 }               -> x11
     v64  Binop { op=xor, lhs=v48, rhs=v63 }               -> x1
     v65  Imm(0)                                           -> x11
     v66  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
     v67  BinopI { op=and, lhs=v28, rhs_imm=4294967295 }   -> x2
     v68  Imm(8)                                           -> x11
     v69  BinopI { op=add, lhs=v3, rhs_imm=8 }             -> x11
-    v70  Load { addr=v69, kind=U32 }                      -> x11
+    v70  Load { addr=v3, disp=8, kind=U32 }               -> x11
     v71  Binop { op=xor, lhs=v67, rhs=v70 }               -> x2
     v72  Imm(0)                                           -> x11
     v73  BinopI { op=and, lhs=v71, rhs_imm=4294967295 }   -> x2
     v74  BinopI { op=and, lhs=v34, rhs_imm=4294967295 }   -> x7
     v75  Imm(12)                                          -> x11
     v76  BinopI { op=add, lhs=v3, rhs_imm=12 }            -> x3
-    v77  Load { addr=v76, kind=U32 }                      -> x3
+    v77  Load { addr=v3, disp=12, kind=U32 }              -> x3
     v78  Binop { op=xor, lhs=v74, rhs=v77 }               -> x7
     v79  Imm(0)                                           -> x3
     v80  BinopI { op=and, lhs=v78, rhs_imm=4294967295 }   -> x7
     v81  Imm(16)                                          -> x3
     v82  BinopI { op=add, lhs=v3, rhs_imm=16 }            -> x3
-    v83  Load { addr=v82, kind=U32 }                      -> x3
+    v83  Load { addr=v3, disp=16, kind=U32 }              -> x3
     v84  Binop { op=xor, lhs=v42, rhs=v83 }               -> x0
     v85  Imm(0)                                           -> x3
     v86  BinopI { op=and, lhs=v84, rhs_imm=4294967295 }   -> x0
     v87  BinopI { op=and, lhs=v52, rhs_imm=4294967295 }   -> x9
     v88  Imm(20)                                          -> x3
-    v89  BinopI { op=add, lhs=v3, rhs_imm=20 }            -> x6
-    v90  Load { addr=v89, kind=U32 }                      -> x6
+    v89  BinopI { op=add, lhs=v3, rhs_imm=20 }            -> x3
+    v90  Load { addr=v3, disp=20, kind=U32 }              -> x6
     v91  Binop { op=xor, lhs=v87, rhs=v90 }               -> x6
     v92  Imm(0)                                           -> x9
     v93  BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x6

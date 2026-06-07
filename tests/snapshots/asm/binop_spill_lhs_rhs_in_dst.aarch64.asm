@@ -42,21 +42,17 @@ Disassembly of section .text:
                	str	w2, [x0]
                	sub	x0, x29, #0x18
                	mov	x2, #0x4                // =4
-               	add	x0, x0, #0x4
                	mov	x3, #0x7                // =7
-               	str	w3, [x0]
+               	str	w3, [x0, #0x4]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	mov	x3, #0xf                // =15
-               	str	w3, [x0]
+               	str	w3, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0xc
                	mov	x3, #0x5                // =5
-               	str	w3, [x0]
+               	str	w3, [x0, #0xc]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	mov	x3, #0xa                // =10
-               	str	w3, [x0]
+               	str	w3, [x0, #0x10]
                	sub	x0, x29, #0x18
                	bl	<addr>
                	add	sp, sp, #0x30

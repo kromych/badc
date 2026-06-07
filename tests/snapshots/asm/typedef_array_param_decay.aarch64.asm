@@ -89,8 +89,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x100
-               	add	x0, x0, #0x78
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x78]
                	cmp	x0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

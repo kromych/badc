@@ -25,9 +25,8 @@ Disassembly of section .text:
                	add	x1, x1, #0x238
                	str	x1, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x8
                	mov	x1, #0x0                // =0
-               	str	w1, [x0]
+               	str	w1, [x0, #0x8]
                	sub	x20, x29, #0x10
                	ldr	x0, [x20]
                	mov	x1, #0x3                // =3

@@ -13,9 +13,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	<rip>, %rax
-               	addq	$0x5, %rax
-               	movzbq	(%rax), %rax
+               	movzbq	0x5(%rax), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

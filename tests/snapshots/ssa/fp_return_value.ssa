@@ -71,7 +71,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v32  FpCast { kind=F64ToF32, value=v31 }              -> d1 [f32]
     v33  Binop { op=fadd, lhs=v24, rhs=v32 }              -> d0 [f32]
     v34  LocalAddr(-2)                                    -> x0
-    v35  Store { addr=v34, value=v33, kind=F32 }          -> -
+    v35  Store { addr=v34, disp=0, value=v33, kind=F32 }  -> -
     v36  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v37  Imm(4611686018427387904)                         -> x0
     v38  FpCast { kind=F32ToF64, value=v36 }              -> d0

@@ -709,8 +709,8 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = (prog.tls_base as i64).wrapping_add(*off);
             return Ok(());
         }
-        Inst::Load { addr, kind } => {
-            let a = frame.regs[*addr as usize];
+        Inst::Load { addr, disp, kind } => {
+            let a = frame.regs[*addr as usize].wrapping_add(*disp as i64);
             if a & CODE_ADDR_MASK != 0
                 || a < 0
                 || ((a as usize) >= super::super::CODE_BASE
@@ -724,8 +724,13 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
             return Ok(());
         }
-        Inst::Store { addr, value, kind } => {
-            let a = frame.regs[*addr as usize];
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => {
+            let a = frame.regs[*addr as usize].wrapping_add(*disp as i64);
             if a & CODE_ADDR_MASK != 0
                 || a < 0
                 || ((a as usize) >= super::super::CODE_BASE

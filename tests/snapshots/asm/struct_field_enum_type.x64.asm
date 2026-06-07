@@ -33,13 +33,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
@@ -64,9 +62,8 @@ Disassembly of section .text:
                	movl	$0x5, %ecx
                	movl	%ecx, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	addq	$0x4, %rax
                	movl	$0x1, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x5, %rax
@@ -76,8 +73,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x8(%rbp), %rax
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x4(%rax), %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -88,9 +84,8 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x4, %rax
                	movl	$0x7, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x1, %rax
@@ -100,8 +95,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x4(%rax), %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax

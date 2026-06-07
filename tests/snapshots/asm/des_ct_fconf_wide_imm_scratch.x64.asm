@@ -94,32 +94,23 @@ Disassembly of section .text:
                	movl	(%rsi), %r11d
                	xorq	%r11, %r8
                	movl	%r8d, %r8d
-               	movq	%rsi, %r11
-               	addq	$0x4, %r11
-               	movl	(%r11), %r11d
+               	movl	0x4(%rsi), %r11d
                	xorq	%r11, %rcx
                	movl	%ecx, %ecx
                	movl	%edx, %edx
-               	movq	%rsi, %r11
-               	addq	$0x8, %r11
-               	movl	(%r11), %r11d
+               	movl	0x8(%rsi), %r11d
                	xorq	%r11, %rdx
                	movl	%edx, %edx
                	movl	%edi, %edi
                	movl	$0xc, %r11d
-               	movq	%rsi, %rbx
-               	addq	$0xc, %rbx
-               	movl	(%rbx), %ebx
+               	movl	0xc(%rsi), %ebx
                	xorq	%rbx, %rdi
                	movl	%edi, %edi
-               	movq	%rsi, %rbx
-               	addq	$0x10, %rbx
-               	movl	(%rbx), %ebx
+               	movl	0x10(%rsi), %ebx
                	xorq	%rbx, %rax
                	movl	%eax, %eax
                	movl	%r9d, %r9d
-               	addq	$0x14, %rsi
-               	movl	(%rsi), %esi
+               	movl	0x14(%rsi), %esi
                	xorq	%r9, %rsi
                	movl	%esi, %esi
                	movl	$0xec7ac69c, %r9d       # imm = 0xEC7AC69C
@@ -752,4 +743,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

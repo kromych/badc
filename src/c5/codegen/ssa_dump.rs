@@ -87,9 +87,17 @@ fn fmt_inst(inst: &Inst) -> String {
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
-        Load { addr, kind } => format!("Load {{ addr=v{addr}, kind={} }}", fmt_load_kind(*kind)),
-        Store { addr, value, kind } => format!(
-            "Store {{ addr=v{addr}, value=v{value}, kind={} }}",
+        Load { addr, disp, kind } => format!(
+            "Load {{ addr=v{addr}, disp={disp}, kind={} }}",
+            fmt_load_kind(*kind)
+        ),
+        Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => format!(
+            "Store {{ addr=v{addr}, disp={disp}, value=v{value}, kind={} }}",
             fmt_store_kind(*kind),
         ),
         LoadLocal { off, kind } => {

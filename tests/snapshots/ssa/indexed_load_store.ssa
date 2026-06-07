@@ -33,7 +33,7 @@ fn ent_pc=0 n_params=4 variadic=false locals=4
     v21  Extend { value=v13, kind=I32 }                   -> x9
     v22  BinopI { op=shl, lhs=v21, rhs_imm=2 }            -> x9
     v23  Binop { op=add, lhs=v1, rhs=v22 }                -> x11
-    v24  Load { addr=v23, kind=I32 }                      -> x3
+    v24  Load { addr=v23, disp=0, kind=I32 }              -> x3
     v25  LoadLocal { off=5, kind=I32 }                    -> x12
     v26  Binop { op=add, lhs=v24, rhs=v7 }                -> x3
     v27  BinopI { op=shl, lhs=v26, rhs_imm=32 }           -> x3
@@ -41,13 +41,13 @@ fn ent_pc=0 n_params=4 variadic=false locals=4
     v29  Imm(0)                                           -> x12
     v30  LoadLocal { off=3, kind=I64 }                    -> x12
     v31  Binop { op=add, lhs=v3, rhs=v22 }                -> x9
-    v32  Load { addr=v31, kind=I32 }                      -> x9
+    v32  Load { addr=v31, disp=0, kind=I32 }              -> x9
     v33  Binop { op=sub, lhs=v32, rhs=v7 }                -> x9
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x9
     v35  BinopI { op=shr, lhs=v34, rhs_imm=32 }           -> x9
     v36  Imm(0)                                           -> x12
     v37  Extend { value=v35, kind=I32 }                   -> x9
-    v38  Store { addr=v23, value=v37, kind=I32 }          -> -
+    v38  Store { addr=v23, disp=0, value=v37, kind=I32 }  -> -
     v39  LoadLocal { off=3, kind=I64 }                    -> x9
     v40  Extend { value=v13, kind=I32 }                   -> x9
     v41  BinopI { op=shl, lhs=v40, rhs_imm=2 }            -> x11
@@ -59,10 +59,10 @@ fn ent_pc=0 n_params=4 variadic=false locals=4
     v47  Extend { value=v13, kind=I32 }                   -> x9
     v48  BinopI { op=shl, lhs=v47, rhs_imm=2 }            -> x9
     v49  Binop { op=add, lhs=v1, rhs=v48 }                -> x11
-    v50  Load { addr=v49, kind=I32 }                      -> x11
+    v50  Load { addr=v49, disp=0, kind=I32 }              -> x11
     v51  LoadLocal { off=3, kind=I64 }                    -> x3
     v52  Binop { op=add, lhs=v3, rhs=v48 }                -> x9
-    v53  Load { addr=v52, kind=I32 }                      -> x9
+    v53  Load { addr=v52, disp=0, kind=I32 }              -> x9
     v54  Binop { op=mul, lhs=v50, rhs=v53 }               -> x9
     v55  BinopI { op=shl, lhs=v54, rhs_imm=32 }           -> x9
     v56  BinopI { op=shr, lhs=v55, rhs_imm=32 }           -> x9

@@ -35,15 +35,13 @@ Disassembly of section .text:
                	add	x2, x2, #0x108
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x10e
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x115
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
@@ -70,13 +68,11 @@ Disassembly of section .text:
                	mov	x1, #0xa                // =10
                	strb	w1, [x0]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x1
                	mov	x2, #0x64               // =100
-               	strb	w2, [x0]
+               	strb	w2, [x0, #0x1]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x2
                	mov	x2, #0xc8               // =200
-               	strb	w2, [x0]
+               	strb	w2, [x0, #0x2]
                	sub	x0, x29, #0x8
                	ldrb	w0, [x0]
                	scvtf	d0, x0
@@ -84,15 +80,13 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	str	s0, [x0]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x1
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x1]
                	scvtf	d0, x0
                	fcvt	s0, d0
                	sub	x0, x29, #0x18
                	str	s0, [x0]
                	sub	x0, x29, #0x8
-               	add	x0, x0, #0x2
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x2]
                	scvtf	d0, x0
                	fcvt	s0, d0
                	sub	x0, x29, #0x20
@@ -146,8 +140,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x28
                	sub	x1, x29, #0x8
-               	add	x1, x1, #0x1
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x1]
                	scvtf	d0, x1
                	fcvt	s0, d0
                	str	s0, [x0]

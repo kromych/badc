@@ -34,6 +34,11 @@ use super::error::C5Error;
 use super::program::Program;
 
 mod aarch64;
+// Host-ABI aggregate classifier. Consumed by `plan_call_args` and
+// the walker once struct arguments / returns route through the host
+// ABI; the rules + unit tests land first as a standalone unit.
+#[allow(dead_code)]
+pub(crate) mod abi_classify;
 mod dwarf;
 mod dwarf_reloc;
 mod elf;

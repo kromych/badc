@@ -21,19 +21,14 @@ Disassembly of section .text:
                	addq	$0x1, %rax
                	jmp	<addr>
                	movslq	%eax, %rdx
-               	movq	%rdx, %rsi
-               	shlq	$0x2, %rsi
-               	addq	%r8, %rsi
-               	movl	%edx, (%rsi)
-               	movq	%r8, %rsi
-               	addq	$0x28, %rsi
-               	movslq	%eax, %rdi
-               	movq	%rdi, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rsi
+               	movl	%edx, (%r8,%rdx,4)
+               	movq	%r8, %rdx
+               	addq	$0x28, %rdx
+               	movslq	%eax, %rsi
+               	movq	%rsi, %rdi
                	addq	$0x1, %rdi
-               	movslq	%edi, %rdx
-               	movl	%edx, (%rsi)
+               	movslq	%edi, %rdi
+               	movl	%edi, (%rdx,%rsi,4)
                	movslq	%ecx, %rcx
                	movslq	%eax, %rdx
                	shlq	$0x2, %rdx
@@ -98,3 +93,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

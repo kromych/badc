@@ -43,9 +43,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v23  LoadLocal { off=2, kind=I64 }                    -> x2
     v24  Extend { value=v7, kind=I32 }                    -> x2
     v25  BinopI { op=shl, lhs=v24, rhs_imm=7 }            -> x8
-    v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x11
-    v27  Extend { value=v17, kind=I32 }                   -> x8
-    v28  BinopI { op=shl, lhs=v27, rhs_imm=3 }            -> x9
+    v26  Binop { op=add, lhs=v1, rhs=v25 }                -> x8
+    v27  Extend { value=v17, kind=I32 }                   -> x9
+    v28  BinopI { op=shl, lhs=v27, rhs_imm=3 }            -> x11
     v29  Binop { op=add, lhs=v26, rhs=v28 }               -> x11
     v30  BinopI { op=shl, lhs=v24, rhs_imm=4 }            -> x2
     v31  BinopI { op=shl, lhs=v30, rhs_imm=32 }           -> x2
@@ -53,16 +53,16 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v33  Binop { op=add, lhs=v32, rhs=v27 }               -> x2
     v34  BinopI { op=shl, lhs=v33, rhs_imm=32 }           -> x2
     v35  BinopI { op=shr, lhs=v34, rhs_imm=32 }           -> x2
-    v36  Store { addr=v29, value=v35, kind=I64 }          -> -
+    v36  StoreIndexed { base=v26, index=v27, scale=8, value=v35, kind=I64 } -> -
     v37  LoadLocal { off=-3, kind=I64 }                   -> x2
     v38  LoadLocal { off=2, kind=I64 }                    -> x2
     v39  Extend { value=v7, kind=I32 }                    -> x2
     v40  BinopI { op=shl, lhs=v39, rhs_imm=7 }            -> x2
-    v41  Binop { op=add, lhs=v1, rhs=v40 }                -> x8
-    v42  Extend { value=v17, kind=I32 }                   -> x2
-    v43  BinopI { op=shl, lhs=v42, rhs_imm=3 }            -> x2
-    v44  Binop { op=add, lhs=v41, rhs=v43 }               -> x8
-    v45  Load { addr=v44, kind=I64 }                      -> x2
+    v41  Binop { op=add, lhs=v1, rhs=v40 }                -> x2
+    v42  Extend { value=v17, kind=I32 }                   -> x8
+    v43  BinopI { op=shl, lhs=v42, rhs_imm=3 }            -> x9
+    v44  Binop { op=add, lhs=v41, rhs=v43 }               -> x9
+    v45  LoadIndexed { base=v41, index=v42, scale=8, kind=I64 } -> x2
     v46  Binop { op=add, lhs=v16, rhs=v45 }               -> x1
     v47  Imm(0)                                           -> x2
     terminator Jmp(b6)   (exit_acc=v46)

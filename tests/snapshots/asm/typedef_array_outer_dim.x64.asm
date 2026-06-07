@@ -38,25 +38,18 @@ Disassembly of section .text:
                	movslq	%eax, %rdx
                	movq	%rdx, %r8
                	shlq	$0x7, %r8
-               	movq	%rdi, %r11
-               	addq	%r8, %r11
-               	movslq	%esi, %r8
-               	movq	%r8, %r9
-               	shlq	$0x3, %r9
-               	addq	%r9, %r11
+               	addq	%rdi, %r8
+               	movslq	%esi, %r9
                	shlq	$0x4, %rdx
                	movslq	%edx, %rdx
-               	addq	%r8, %rdx
+               	addq	%r9, %rdx
                	movslq	%edx, %rdx
-               	movq	%rdx, (%r11)
+               	movq	%rdx, (%r8,%r9,8)
                	movslq	%eax, %rdx
                	shlq	$0x7, %rdx
-               	movq	%rdi, %r8
-               	addq	%rdx, %r8
-               	movslq	%esi, %rdx
-               	shlq	$0x3, %rdx
-               	addq	%rdx, %r8
-               	movq	(%r8), %rdx
+               	addq	%rdi, %rdx
+               	movslq	%esi, %r8
+               	movq	(%rdx,%r8,8), %rdx
                	addq	%rdx, %rcx
                	jmp	<addr>
                	jmp	<addr>
@@ -139,3 +132,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

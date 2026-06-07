@@ -35,9 +35,9 @@ fn ent_pc=0 n_params=3 variadic=false locals=3
     v23  Imm(0)                                           -> x9
     v24  LoadLocal { off=4, kind=I32 }                    -> x9
     v25  LoadLocal { off=2, kind=I64 }                    -> x9
-    v26  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x0
-    v27  Binop { op=add, lhs=v1, rhs=v26 }                -> x0
-    v28  Load { addr=v27, kind=I32 }                      -> x0
+    v26  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x9
+    v27  Binop { op=add, lhs=v1, rhs=v26 }                -> x9
+    v28  LoadIndexed { base=v1, index=v19, scale=4, kind=I32 } -> x0
     v29  Binop { op=sub, lhs=v5, rhs=v28 }                -> x0
     v30  BinopI { op=shl, lhs=v29, rhs_imm=32 }           -> x0
     v31  BinopI { op=shr, lhs=v30, rhs_imm=32 }           -> x9
@@ -57,9 +57,9 @@ fn ent_pc=0 n_params=3 variadic=false locals=3
     v39  Phi { incoming=[b11:v31, b5:v37], kind=I64 }     -> x9
     v40  LoadLocal { off=2, kind=I64 }                    -> x0
     v41  Extend { value=v9, kind=I32 }                    -> x0
-    v42  BinopI { op=shl, lhs=v41, rhs_imm=2 }            -> x0
-    v43  Binop { op=add, lhs=v1, rhs=v42 }                -> x0
-    v44  Load { addr=v43, kind=I32 }                      -> x0
+    v42  BinopI { op=shl, lhs=v41, rhs_imm=2 }            -> x11
+    v43  Binop { op=add, lhs=v1, rhs=v42 }                -> x11
+    v44  LoadIndexed { base=v1, index=v41, scale=4, kind=I32 } -> x0
     v45  LoadLocal { off=4, kind=I32 }                    -> x11
     v46  Binop { op=eq, lhs=v44, rhs=v5 }                 -> x0
     terminator Bz { cond=v46, target=b8, fall=b7 }   (exit_acc=v46)
@@ -129,8 +129,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=5
     v27  LoadLocal { off=3, kind=I32 }                    -> x0
     v28  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x0
     v29  Binop { op=add, lhs=v1, rhs=v28 }                -> x0
-    v30  Extend { value=v11, kind=I32 }                   -> x1
-    v31  Store { addr=v29, value=v30, kind=I32 }          -> -
+    v30  Extend { value=v11, kind=I32 }                   -> x0
+    v31  StoreIndexed { base=v1, index=v3, scale=4, value=v30, kind=I32 } -> -
     v32  Extend { value=v12, kind=I32 }                   -> x15
     v33  LoadLocal { off=2, kind=I64 }                    -> x0
     v34  LoadLocal { off=3, kind=I32 }                    -> x0

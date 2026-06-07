@@ -10,7 +10,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	movslq	%edi, %rdi
-               	imulq	$0x3, %rdi, %rdi
+               	leaq	(%rdi,%rdi,2), %rdi
                	movslq	%edi, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
@@ -34,7 +34,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %ecx
-               	imulq	$0x3, %rcx, %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
                	movslq	%ecx, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0x1, %rcx
-               	imulq	$0x3, %rcx, %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
                	movslq	%ecx, %rax
                	addq	$0x1, %rax
                	movslq	%eax, %rax
@@ -70,3 +70,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

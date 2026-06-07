@@ -123,7 +123,7 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
-               	imulq	$0x3, %rsi, %rsi
+               	leaq	(%rsi,%rsi,2), %rsi
                	movslq	%esi, %rcx
                	movswq	%cx, %rcx
                	cmpq	$-0x7e, %rcx
@@ -406,4 +406,4 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

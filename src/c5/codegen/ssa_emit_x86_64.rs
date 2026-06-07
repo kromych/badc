@@ -4333,6 +4333,14 @@ fn emit_binop_imm(
             super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
             true
         }
+        // Multiply by 3 / 5 / 9 is one `lea rd, [rn + rn*2/4/8]`: a
+        // single-cycle address-unit operation instead of the multi-cycle
+        // `imul`. The base and index are both `rn`, so the result may
+        // reuse `rn` (the effective address is read before the write).
+        BinOp::Mul if matches!(rhs_imm, 3 | 5 | 9) => {
+            super::x86_64::emit_lea_r_sib(code, rd, rn, rn, (rhs_imm - 1) as u8);
+            true
+        }
         // `imul rd, rn, imm32` reads `rn` and writes `rd` in one
         // instruction, so it needs neither a staging mov nor an
         // immediate-scratch register. This covers the multiply by a

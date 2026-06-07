@@ -71,7 +71,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	%ecx, %rdx
-               	imulq	$0x3, %rdx, %rsi
+               	leaq	(%rdx,%rdx,2), %rsi
                	movslq	%esi, %rsi
                	movswq	%si, %rsi
                	movw	%si, (%rax,%rdx,2)
@@ -113,4 +113,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

@@ -687,7 +687,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	imulq	$0x3, %rbx, %rbx
+               	leaq	(%rbx,%rbx,2), %rbx
                	jmp	<addr>
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
@@ -1286,4 +1286,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

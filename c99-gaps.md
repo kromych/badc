@@ -45,8 +45,14 @@ array designated initializers (`[N] = ...`); partial brace
 initializers for function-scope arrays zero-fill the trailing
 range per C99 6.7.9p21 (both the constant Mcpy-from-data fast
 path and the per-element runtime store path); `static` /
-`extern` / `_Thread_local`; varargs at the c5-internal
-calling convention; the C99 for-init declaration
+`extern` / `_Thread_local`; varargs through the host variadic
+ABI (SysV AMD64 / AAPCS64 / Win64), including floating-point
+variadic arguments and the integer / FP register split; libc
+calls whose declared return type is narrower than the register
+get the matching sign / zero extension applied to the result
+before it is used (`tests/fixtures/c/libc_fp_return_value.c`,
+`aapcs64_variadic_host_abi.c`, `sysv_variadic_host_abi.c`); the
+C99 for-init declaration
 (`for (int i = 0; ...; ...)`); switch with `case` /
 `default` / fall-through; full set of compound assignment
 and increment / decrement operators; pointer arithmetic,
@@ -113,21 +119,17 @@ arithmetic. Severity: 4.
 
 ### libc `struct`-by-value ABI, severity 2
 
-`div(...)`, `gmtime(...)`, and other libc functions that
-take or return a struct by value are rejected at compile
-time. The c5-internal struct ABI doesn't match SysV / Win64
-/ AAPCS64.
-
-### Floating-point variadic boundary, severity 3
-
-AArch64 macOS variadic FP spills differ from Linux / x86_64;
-programs that pass more than a couple of FP variadic args
-may see garbage. The `objc_msgSend` shape in
-`demos/gui_hello/hello_macos.c` works around this by binding
-separate non-variadic prototypes per selector signature
-(`objc_msgSend_rect`, `objc_msgSend_b`, `objc_msgSend_p`)
-that route through the standard AAPCS64 register-passing
-path.
+`div(...)`, `gmtime(...)`, and other libc functions that take
+or return a struct by value are rejected at compile time (the
+diagnostic names the call). c5's own struct calling convention
+passes every struct argument by the source's address and returns
+every struct through a hidden out-pointer prepended to the
+argument list, regardless of the struct's size. SysV / Win64 /
+AAPCS64 instead pack a small struct (typically <= 16 bytes) into
+argument / result registers, so c5's convention cannot call a
+host function that takes or returns a struct by value. c5-to-c5
+struct pass / return works (see `tests/fixtures/c/
+struct_by_value_param.c` and `struct_by_value_return.c`).
 
 ### `long double` is 8-byte FP64 in c5 storage, severity 5
 
@@ -153,14 +155,6 @@ through the FP64 pipeline, so an `0x1p120L` literal would lose
 the trailing exponent range and a binary built against c5 cannot
 represent the full Linux aarch64 binary128 dynamic range.
 
-### libc `int`-returning calls used as register-resident rvalue, severity 3
-
-`strcmp`, `atoi`, etc. leave only the low 32 bits defined
-per ABI; not every libc sign-extends. Storing through an
-`int` lvalue truncates and sign-extends correctly; using the
-rvalue directly without a typed slot may carry the host's
-high-half garbage.
-
 ### Compound literals (`(struct Foo){.x=1}`), severity 4
 
 Supported at file scope (C99 6.5.2.5p5, static storage
@@ -177,15 +171,13 @@ observed. The one remaining gap is a brace-wrapped string
 initializer for a `char` array (`(char[N]){"abc"}`), which
 shares the file-scope `char a[N] = {"abc"}` limitation.
 
-### Standalone abstract function-pointer declarators, severity 4
+### Abstract function-pointer declarator in `sizeof`, severity 5
 
-`(int(*)(int))ptr` in `sizeof` / cast position is rejected.
-Works inside typedef / parameter / struct-field declarators.
-
-### Field access on opaque forward-declared struct, severity 4
-
-Compile error at the access site (the struct has no fields
-to look up).
+`sizeof(int(*)(int))` is rejected (the `sizeof` operand parser
+doesn't accept the abstract function-pointer declarator). The
+same declarator in cast position -- `(int(*)(int))p` -- is
+accepted and calls through correctly, as does its use in
+typedef / parameter / struct-field declarators.
 
 ## Rejected modern features (rare in C99 source)
 
@@ -243,6 +235,6 @@ C11+ features showing up in modern code:
 ## Roadmap
 
 1. libc `struct`-by-value ABI bridge.
-2. Standalone abstract function-pointer declarators in `sizeof` / cast position.
+2. Abstract function-pointer declarator in `sizeof`.
 3. Brace-wrapped string initializer for `char` arrays
    (`char a[N] = {"abc"}` / `(char[N]){"abc"}`).

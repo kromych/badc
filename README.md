@@ -15,7 +15,7 @@ Its small footprint and embedded headers (which you can override) give
 a fun one-executable experience. Its codebase of moderate size can be
 a good pedagogical material. It lowers through an SSA intermediate
 representation and a graph-coloring register allocator, but doesn't go for
-the exquisite optimization passes a titan toolchain like clang gcc or msvc
+the exquisite optimization passes a titan toolchain like clang, gcc or msvc
 run. All told, to stay slim, it's unlikely to surpass the ability of
 multi-gigabyte compiler suites to squeeze the last drop of perf from the
 machine, and that's fine.
@@ -43,14 +43,16 @@ can be debugged and performance can be profiled.
 `badc` optimizes when you specify `-O` and can produce code that's faster
 than `clang -O0`, especially on ARM64. To get an idea of the codegen
 quality, take a look at `./tests/snapshots` with assembly and SSA snapshots
-of the test fixtures.
+of the test fixtures. The optimizations produced should work on all modern ARM64
+processors, and x86_64 processors of Intel Hasswell (+) and AMD Zen (+) lineages
+(>= 2013, due to the FMA folding).
 
 `badc` produces real native binaries (macOS Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
-Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
-(can be omitted). Can also JIT into the machine code and recognize being
-used as `#!` so that C source code becomes a script. It supports
-separate translation units and has a small linker inside it as well.
+Linux (ARM64, x86_64), Windows ({ARM64, x86_64} x {console, GUI, NT}),
+with full debug information (if requested). Can also JIT into the machine
+code and recognize being used as `#!` so that C source code becomes a script.
+It supports separate translation units and has a small linker inside it as well.
 
 There are various demo's under [`demos`](./demos/):
 
@@ -93,20 +95,30 @@ badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
 or you can really crank the fun up with something like
 
 ```sh
-    badc --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
+badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 ```
 
 to run it quadro-nested :)
 
-## How to install
+## How to install and first steps
 
-If you have Rust installed, clone the repo install it with
+You can download the latest release from the releases page. There will be one executable,
+that's all you need. Put it on the `PATH` for convenience.
+
+If you have Rust installed, and would like to build from th source code, then
+clone the repo, and install it with
 
 ```sh
 cargo install --path .
 ```
 
-Now `badc` is available on the PATH.
+Otherwise, use just
+
+```sh
+cargo install badc
+```
+
+Now `badc` is available on the `PATH`.
 
 If you don't have Rust installed, download one of the binary release packages
 matching you hardware and the OS.

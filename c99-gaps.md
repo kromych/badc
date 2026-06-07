@@ -24,11 +24,16 @@ conversions and 6.3.1.1 integer promotions; integer literal
 `u` / `U` / `l` / `L` / `ll` / `LL` suffixes per C99 6.4.4.1
 drive longness + signedness in decimal, hex, octal, and
 binary constants; signed and unsigned `char` / `short` /
-`int` / `long` / `long long`; `void`-returning functions
+`int` / `long` / `long long`; `_Bool` as a distinct one-byte
+type that normalises any scalar to 0 / 1 on every conversion
+(assignment, cast, initialiser, argument, return) per C99
+6.3.1.2; `void`-returning functions
 (with the 6.8.6.4p1 constraint on `return <expr>;` diagnosed
 and 6.8.6.4p3 "no value" enforced); IEEE 754 single-
 precision `float` (4-byte storage) and double-precision
-`double` (8-byte); pointers, arrays, multi-dim arrays,
+`double` (8-byte); decimal and C99 6.4.4.2 hexadecimal
+(`0x1.8p3`) floating constants; wide string / character
+literals (`L"..."` / `L'...'`, UTF-16 storage); pointers, arrays, multi-dim arrays,
 function pointers and chains thereof; `struct` / `union` /
 `enum` / `typedef`, bitfields (signed and unsigned, sign-
 extending read per C99 6.7.2.1p4, adjacent same-base-type
@@ -156,19 +161,21 @@ per ABI; not every libc sign-extends. Storing through an
 rvalue directly without a typed slot may carry the host's
 high-half garbage.
 
-### `_Bool` 0/1 normalisation, severity 4
-
-`_Bool` tokenizes and stores; loads don't mask to 0/1.
-
-### Compound literals (`(struct Foo){.x=1}`), severity 3
+### Compound literals (`(struct Foo){.x=1}`), severity 4
 
 Supported at file scope (C99 6.5.2.5p5, static storage
 duration): `Type *p = &(T){...};` and the empty form
 `Scope *s = &(T){};` synthesize an anonymous internal-linkage
 symbol of the named struct type and patch the surrounding `&`
-reloc to point at it. Block-scope compound literals
-(`f(&(struct Pt){1, 2})`, automatic storage duration with
-lifetime equal to the enclosing block) are still rejected.
+reloc to point at it. Block-scope compound literals (automatic
+storage duration with lifetime equal to the enclosing block,
+6.5.2.5p5) are also supported for scalar, struct, and array
+types: `f(&(struct Pt){1, 2})`, `(int[]){1, 2, 3}`,
+`(char *[]){"a", "b"}`. Non-constant element values are stored
+at the evaluation point so the surrounding evaluation order is
+observed. The one remaining gap is a brace-wrapped string
+initializer for a `char` array (`(char[N]){"abc"}`), which
+shares the file-scope `char a[N] = {"abc"}` limitation.
 
 ### Standalone abstract function-pointer declarators, severity 4
 
@@ -180,10 +187,6 @@ Works inside typedef / parameter / struct-field declarators.
 Compile error at the access site (the struct has no fields
 to look up).
 
-### Wide string literals (`L"..."`), severity 4
-
-Rejected.
-
 ## Rejected modern features (rare in C99 source)
 
 `register` / `auto` are accepted as no-ops. `inline` /
@@ -194,11 +197,10 @@ no-op (the optimizer hint isn't propagated). `#line` is
 supported -- both the C99 `#line N "file"` form and the GNU
 `# N "file"` shape route through the same lexer hook.
 `_Complex`, `_Imaginary`, `_Pragma`, `__STDC_VERSION__`,
-`__STDC_HOSTED__`, hex floats (`0x1p10`), float `++` / `--`,
-universal character names, digraphs / trigraphs, K&R
-identifier-list function declarators, GCC named-rest
-variadic (`#define foo(args...)`) -- all rejected. Severity
-4-5.
+`__STDC_HOSTED__`, float `++` / `--`, universal character
+names, digraphs / trigraphs, K&R identifier-list function
+declarators, GCC named-rest variadic (`#define foo(args...)`)
+-- all rejected. Severity 4-5.
 
 ## Beyond C99
 
@@ -241,6 +243,6 @@ C11+ features showing up in modern code:
 ## Roadmap
 
 1. libc `struct`-by-value ABI bridge.
-2. `_Bool` 0/1 normalisation.
-3. Block-scope compound literals (`f(&(struct Pt){1, 2})`).
-4. Standalone abstract function-pointer declarators in `sizeof` / cast position.
+2. Standalone abstract function-pointer declarators in `sizeof` / cast position.
+3. Brace-wrapped string initializer for `char` arrays
+   (`char a[N] = {"abc"}` / `(char[N]){"abc"}`).

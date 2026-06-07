@@ -10,46 +10,37 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	sxtw	x0, w0
                	mov	x2, #0x0                // =0
-               	stur	w2, [x29, #-0x8]
+               	mov	x1, x2
                	b	<addr>
-               	ldursw	x1, [x29, #-0x8]
-               	cmp	x1, x0
+               	sxtw	x3, w1
+               	cmp	x3, x0
                	b.ge	<addr>
                	b	<addr>
-               	sub	x1, x29, #0x8
-               	ldrsw	x3, [x1]
-               	add	x3, x3, #0x1
-               	str	w3, [x1]
+               	sxtw	x1, w1
+               	add	x1, x1, #0x1
                	b	<addr>
-               	mov	x3, #0x0                // =0
-               	stur	w3, [x29, #-0x10]
+               	mov	x4, #0x0                // =0
+               	mov	x3, x4
                	b	<addr>
                	sxtw	x0, w2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x1, [x29, #-0x10]
-               	cmp	x1, x0
+               	sxtw	x5, w3
+               	cmp	x5, x0
                	b.ge	<addr>
                	b	<addr>
-               	sub	x1, x29, #0x10
-               	ldrsw	x4, [x1]
+               	sxtw	x3, w3
+               	add	x3, x3, #0x1
+               	b	<addr>
+               	sxtw	x4, w4
                	add	x4, x4, #0x1
-               	str	w4, [x1]
+               	sxtw	x4, w4
                	b	<addr>
-               	sxtw	x1, w3
-               	add	x1, x1, #0x1
-               	sxtw	x3, w1
-               	b	<addr>
-               	sxtw	x1, w2
-               	sxtw	x2, w3
-               	add	x1, x1, x2
-               	sxtw	x2, w1
+               	sxtw	x2, w2
+               	sxtw	x3, w4
+               	add	x2, x2, x3
+               	sxtw	x2, w2
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp

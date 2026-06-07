@@ -17,16 +17,10 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
-               	movq	%rbx, %rax
-               	shlq	$0x3, %rax
-               	addq	%r12, %rax
-               	movq	(%rax), %rax
+               	movq	(%r12,%rbx,8), %rax
                	cmpq	$0x0, %rax
                	je	<addr>
-               	movq	%rbx, %rax
-               	shlq	$0x3, %rax
-               	addq	%r12, %rax
-               	movq	(%rax), %rax
+               	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -39,32 +33,21 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movq	%rcx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x10, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
-               	movq	%rbx, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
-               	movq	(%rax), %rsi
+               	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x0, %rax
                	je	<addr>
-               	movq	%rbx, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%r12, %rcx
                	movq	(%rax), %rax
-               	movq	%rax, (%rcx)
+               	movq	%rax, (%r12,%rbx,8)
                	jmp	<addr>
-               	movq	%rbx, %rax
-               	shlq	$0x3, %rax
-               	addq	%r12, %rax
-               	movq	(%rax), %rax
+               	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
@@ -76,88 +59,71 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x480, %rsp            # imm = 0x480
                	movq	%rbx, (%rsp)
+               	movq	%r12, 0x8(%rsp)
                	leaq	-0x210(%rbp), %rax
                	movl	$0x64, %ecx
                	movl	%ecx, (%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x4, %rax
                	movl	$0xc8, %ecx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x8, %rax
                	movl	$0x12c, %ecx            # imm = 0x12C
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x8(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0xc, %rax
                	movl	$0x190, %ecx            # imm = 0x190
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0xc(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0xb0, %rax
                	movabsq	$-0x1, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0xb0(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x154, %rax            # imm = 0x154
                	movabsq	$-0x2, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x154(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x1f8, %rax            # imm = 0x1F8
                	movabsq	$-0x3, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x1f8(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x1fc, %rax            # imm = 0x1FC
                	movl	$0x1f4, %ecx            # imm = 0x1F4
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x1fc(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x200, %rax            # imm = 0x200
                	movl	$0x258, %ecx            # imm = 0x258
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x200(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x204, %rax            # imm = 0x204
                	movl	$0x2bc, %ecx            # imm = 0x2BC
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x204(%rax)
                	leaq	-0x210(%rbp), %rax
-               	addq	$0x208, %rax            # imm = 0x208
                	movl	$0x320, %ecx            # imm = 0x320
-               	movl	%ecx, (%rax)
-               	xorq	%rax, %rax
-               	movl	%eax, -0x428(%rbp)
+               	movl	%ecx, 0x208(%rax)
+               	xorq	%rcx, %rcx
                	jmp	<addr>
-               	movslq	-0x428(%rbp), %rax
+               	movslq	%ecx, %rax
                	cmpq	$0x28, %rax
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x428(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rax
+               	movq	%rax, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	leaq	-0x210(%rbp), %rax
                	addq	$0x10, %rax
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	addq	$0x3e8, %rcx            # imm = 0x3E8
-               	movslq	%ecx, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	addq	$0x3e8, %rsi            # imm = 0x3E8
+               	movslq	%esi, %rsi
+               	movl	%esi, (%rax,%rdx,4)
                	leaq	-0x210(%rbp), %rax
                	addq	$0xb4, %rax
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	addq	$0x7d0, %rcx            # imm = 0x7D0
-               	movslq	%ecx, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	addq	$0x7d0, %rsi            # imm = 0x7D0
+               	movslq	%esi, %rsi
+               	movl	%esi, (%rax,%rdx,4)
                	leaq	-0x210(%rbp), %rax
                	addq	$0x158, %rax            # imm = 0x158
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	addq	$0xbb8, %rcx            # imm = 0xBB8
-               	movslq	%ecx, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rdx
+               	movq	%rdx, %rsi
+               	addq	$0xbb8, %rsi            # imm = 0xBB8
+               	movslq	%esi, %rsi
+               	movl	%esi, (%rax,%rdx,4)
                	jmp	<addr>
                	leaq	-0x420(%rbp), %rdi
                	movl	$0x7e, %esi
@@ -309,141 +275,147 @@ Disassembly of section .text:
                	leaq	-0x420(%rbp), %rax
                	movslq	(%rax), %rax
                	cmpq	$0x64, %rax
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x4(%rax), %rax
                	cmpq	$0xc8, %rax
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
+               	movl	$0x1, %r12d
                	cmpq	$0x0, %rbx
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	cmpq	$0x12c, %rax            # imm = 0x12C
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0xc, %rax
-               	movslq	(%rax), %rax
+               	movslq	0xc(%rax), %rax
                	cmpq	$0x190, %rax            # imm = 0x190
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x1fc, %rax            # imm = 0x1FC
-               	movslq	(%rax), %rax
+               	movslq	0x1fc(%rax), %rax
                	cmpq	$0x1f4, %rax            # imm = 0x1F4
-               	setne	%bl
-               	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
+               	movl	$0x1, %ebx
+               	cmpq	$0x0, %rax
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x200, %rax            # imm = 0x200
-               	movslq	(%rax), %rax
+               	movslq	0x200(%rax), %rax
                	cmpq	$0x258, %rax            # imm = 0x258
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
                	jmp	<addr>
+               	movl	$0x1, %r12d
                	cmpq	$0x0, %rbx
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x204, %rax            # imm = 0x204
-               	movslq	(%rax), %rax
+               	movslq	0x204(%rax), %rax
                	cmpq	$0x2bc, %rax            # imm = 0x2BC
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%al
+               	movzbq	%al, %rax
+               	cmpq	$0x0, %rax
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x208, %rax            # imm = 0x208
-               	movslq	(%rax), %rax
+               	movslq	0x208(%rax), %rax
                	cmpq	$0x320, %rax            # imm = 0x320
-               	setne	%bl
-               	movzbq	%bl, %rbx
+               	setne	%r12b
+               	movzbq	%r12b, %r12
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
-               	addq	$0xb0, %rax
-               	movslq	(%rax), %rax
+               	movslq	0xb0(%rax), %rax
                	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x154, %rax            # imm = 0x154
-               	movslq	(%rax), %rax
+               	movslq	0x154(%rax), %rax
                	cmpq	$-0x2, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
-               	addq	$0x1f8, %rax            # imm = 0x1F8
-               	movslq	(%rax), %rax
+               	movslq	0x1f8(%rax), %rax
                	cmpq	$-0x3, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
-               	xorq	%rax, %rax
-               	movl	%eax, -0x428(%rbp)
+               	xorq	%rbx, %rbx
                	jmp	<addr>
-               	movslq	-0x428(%rbp), %rax
+               	movslq	%ebx, %rax
                	cmpq	$0x28, %rax
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x428(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ebx, %rax
+               	movq	%rax, %rbx
+               	incq	%rbx
                	jmp	<addr>
                	leaq	-0x420(%rbp), %rax
                	addq	$0x10, %rax
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	movslq	(%rax), %rax
+               	movslq	%ebx, %rcx
+               	movslq	(%rax,%rcx,4), %rax
                	addq	$0x3e8, %rcx            # imm = 0x3E8
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
@@ -456,55 +428,53 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
-               	movslq	-0x428(%rbp), %rax
+               	movslq	%ebx, %rax
                	addq	$0xa, %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
                	addq	$0xb4, %rax
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	movslq	(%rax), %rax
+               	movslq	%ebx, %rcx
+               	movslq	(%rax,%rcx,4), %rax
                	addq	$0x7d0, %rcx            # imm = 0x7D0
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
-               	movslq	-0x428(%rbp), %rax
+               	movslq	%ebx, %rax
                	addq	$0x3c, %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp
                	retq
                	leaq	-0x420(%rbp), %rax
                	addq	$0x158, %rax            # imm = 0x158
-               	movslq	-0x428(%rbp), %rcx
-               	movq	%rcx, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rax
-               	movslq	(%rax), %rax
+               	movslq	%ebx, %rcx
+               	movslq	(%rax,%rcx,4), %rax
                	addq	$0xbb8, %rcx            # imm = 0xBB8
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
-               	movslq	-0x428(%rbp), %rax
+               	movslq	%ebx, %rax
                	addq	$0x6e, %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
+               	movq	0x8(%rsp), %r12
                	movq	%rcx, %rax
                	addq	$0x480, %rsp            # imm = 0x480
                	popq	%rbp

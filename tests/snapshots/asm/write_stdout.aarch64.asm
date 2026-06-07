@@ -22,15 +22,12 @@ Disassembly of section .text:
                	mov	x0, #0x68               // =104
                	strb	w0, [x1]
                	mov	x0, #0x1                // =1
-               	add	x2, x1, #0x1
-               	mov	x3, #0x69               // =105
-               	strb	w3, [x2]
-               	add	x2, x1, #0x2
-               	mov	x3, #0xa                // =10
-               	strb	w3, [x2]
+               	mov	x2, #0x69               // =105
+               	strb	w2, [x1, #0x1]
+               	mov	x2, #0xa                // =10
+               	strb	w2, [x1, #0x2]
                	mov	x2, #0x3                // =3
-               	add	x3, x1, #0x3
-               	strb	w20, [x3]
+               	strb	w20, [x1, #0x3]
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, x20

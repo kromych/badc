@@ -184,8 +184,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
-               	movzwq	(%rax), %rax
+               	movzwq	0x4(%rax), %rax
                	andq	$0x3, %rax
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
@@ -196,8 +195,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
-               	movzwq	(%rax), %rax
+               	movzwq	0x4(%rax), %rax
                	sarq	$0x2, %rax
                	andq	$0x3, %rax
                	shlq	$0x3e, %rax
@@ -210,8 +208,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x6, %eax
                	leaq	-0x18(%rbp), %rcx
-               	addq	$0x4, %rcx
-               	movzwq	(%rcx), %rcx
+               	movzwq	0x4(%rcx), %rcx
                	andq	$0x3, %rcx
                	shlq	$0x3e, %rcx
                	sarq	$0x3e, %rcx
@@ -227,5 +224,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

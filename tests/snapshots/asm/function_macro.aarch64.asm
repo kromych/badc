@@ -10,52 +10,40 @@ Disassembly of section .text:
                	adrp	x16, <page>
                	ldr	x16, [x16, #0xc0]
                	blr	x16
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	stur	x0, [x29, #0x10]
-               	mov	x0, x1
-               	stur	x0, [x29, #0x20]
+               	mov	x2, x1
+               	mov	x1, x0
                	b	<addr>
-               	ldur	x0, [x29, #0x10]
-               	ldrb	w1, [x0]
-               	cbz	x1, <addr>
+               	ldrb	w3, [x1]
+               	cbz	x3, <addr>
                	b	<addr>
-               	add	x0, x29, #0x10
-               	ldr	x1, [x0]
                	add	x1, x1, #0x1
-               	str	x1, [x0]
-               	add	x0, x29, #0x20
-               	ldr	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	x1, [x0]
+               	add	x2, x2, #0x1
                	b	<addr>
-               	ldur	x0, [x29, #0x10]
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x1]
                	cmp	x0, #0x0
-               	cset	x1, eq
-               	cbz	x1, <addr>
+               	cset	x0, eq
+               	mov	x3, #0x0                // =0
+               	cbz	x0, <addr>
                	b	<addr>
-               	ldur	x0, [x29, #0x10]
-               	ldrb	w0, [x0]
-               	ldur	x1, [x29, #0x20]
-               	ldrb	w1, [x1]
-               	cmp	x0, x1
-               	cset	x1, eq
+               	ldrb	w0, [x1]
+               	ldrb	w3, [x2]
+               	cmp	x0, x3
+               	cset	x3, eq
                	b	<addr>
-               	cbz	x1, <addr>
+               	cbz	x3, <addr>
                	b	<addr>
-               	ldur	x0, [x29, #0x20]
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x2]
                	cmp	x0, #0x0
-               	cset	x1, eq
+               	cset	x0, eq
+               	cmp	x0, #0x0
+               	cset	x3, ne
                	b	<addr>
-               	mov	x0, x1
+               	mov	x0, x3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
-               	add	sp, sp, #0x20
                	ret
                	b	<addr>
                	b	<addr>

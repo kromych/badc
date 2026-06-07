@@ -18,17 +18,15 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
-               	add	x1, x0, #0x4
                	mov	x2, #0x4                // =4
-               	str	w2, [x1]
-               	ldrsw	x1, [x0]
-               	ldrsw	x2, [x0]
-               	mul	x1, x1, x2
+               	str	w2, [x0, #0x4]
+               	sxtw	x2, w1
+               	sxtw	x1, w1
+               	mul	x1, x2, x1
                	sxtw	x1, w1
                	add	x0, x0, #0x4
                	ldrsw	x2, [x0]
-               	ldrsw	x0, [x0]
-               	mul	x0, x2, x0
+               	mul	x0, x2, x2
                	sxtw	x0, w0
                	add	x0, x1, x0
                	sxtw	x0, w0

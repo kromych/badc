@@ -4,9 +4,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   LoadLocal { off=2, kind=I32 }                    -> x1
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   FpCast { kind=IntToFp, value=v1 }                -> d0
     v5   Imm(4602678819172646912)                         -> x0
     v6   Binop { op=fadd, lhs=v4, rhs=v5 }                -> d0
@@ -17,9 +17,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
-    v2   Imm(0)                                           -> x1
-    v3   LoadLocal { off=2, kind=I32 }                    -> x1
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   FpCast { kind=IntToFp, value=v1 }                -> d0
     v5   FpCast { kind=F64ToF32, value=v4 }               -> d0 [f32]
     v6   Imm(4616189618054758400)                         -> x0
@@ -71,7 +71,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v32  FpCast { kind=F64ToF32, value=v31 }              -> d1 [f32]
     v33  Binop { op=fadd, lhs=v24, rhs=v32 }              -> d0 [f32]
     v34  LocalAddr(-2)                                    -> x0
-    v35  Store { addr=v34, value=v33, kind=F32 }          -> -
+    v35  Store { addr=v34, disp=0, value=v33, kind=F32 }  -> -
     v36  LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
     v37  Imm(4611686018427387904)                         -> x0
     v38  FpCast { kind=F32ToF64, value=v36 }              -> d0

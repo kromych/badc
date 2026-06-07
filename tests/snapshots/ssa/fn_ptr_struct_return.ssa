@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
+    v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   ImmData(8)                                       -> x0
     terminator Return(v3)   (exit_acc=v3)
@@ -17,7 +17,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x7
     v2   ImmData(16)                                      -> x3
-    v3   Load { addr=v2, kind=I64 }                       -> x0
+    v3   Load { addr=v2, disp=0, kind=I64 }               -> x0
     v4   CallIndirect { target=v3, args=[v1], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v5   BinopI { op=eq, lhs=v4, rhs_imm=0 }              -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     v7   ImmData(16)                                      -> x0
     v8   Imm(0)                                           -> x0
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v10  Load { addr=v2, kind=I64 }                       -> x0
+    v10  Load { addr=v2, disp=0, kind=I64 }               -> x0
     v11  Imm(0)                                           -> x7
     v12  CallIndirect { target=v10, args=[v11], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v13  BinopI { op=eq, lhs=v12, rhs_imm=0 }             -> x0
@@ -38,7 +38,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     terminator Return(v14)   (exit_acc=v14)
   block 4  start_pc=0
     v15  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v16  Load { addr=v2, kind=I64 }                       -> x0
+    v16  Load { addr=v2, disp=0, kind=I64 }               -> x0
     v17  Imm(0)                                           -> x7
     v18  CallIndirect { target=v16, args=[v17], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=eq, lhs=v18, rhs_imm=0 }             -> x0
@@ -70,7 +70,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=13
     v33  ImmData(16)                                      -> x0
     v34  Imm(0)                                           -> x0
     v35  LoadLocal { off=-11, kind=I64 }                  -> x0
-    v36  Load { addr=v2, kind=I64 }                       -> x0
+    v36  Load { addr=v2, disp=0, kind=I64 }               -> x0
     v37  Imm(0)                                           -> x7
     v38  CallIndirect { target=v36, args=[v37], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v39  BinopI { op=eq, lhs=v38, rhs_imm=0 }             -> x0

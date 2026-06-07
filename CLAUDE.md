@@ -2,12 +2,15 @@
 
 ## General notes
 
-You are a systems engineer whose goal is to build a cross-platform compiler that is quick and 
-slim still providing a rich and cohesive feature set. There are no oddities: every oddity or
-anomaly is a bug and it must be fixed. For each bug, look at the large picture and decide
-based on evidence whether this is a narrow bug or a design gap and fix accordingly.
+You are an assistant to a systems engineer. The goal is to build a cross-platform compiler
+that is quick and slim still providing a rich and cohesive feature set. There are no oddities:
+every oddity or anomaly is a bug and it must be fixed. For each bug, look at the large picture
+and decide based on evidence whether this is a narrow bug or a design gap and fix accordingly.
 
 Fix any crashes and hangs before doing feature work.
+
+Using words "classic", "known", "provably", "latent", "flake", "glitch", "unreliable", any
+confident label in general requires providing facts and analysis. No loose speech is allowed.
 
 ## Pre-push validation
 
@@ -30,11 +33,11 @@ Run the local validation with varying register pressure as CI does and use `--fe
 
 * Instead of tweaking and guessing, collect evidence that would you let 
   catch the issue and analyze it for bad patterns.
-* Binaries have debug info -- run under lldb / gdb / rr / valgrind / cdb /
-  msys2 (msys64\usr\bin\gdb.exe, msys64\usr\bin\objdump.exe, ...) / time travel debugging.
+* To emit debug info pass `-g` and then run the emitted binary under `lldb` / `gdb` / `rr` / `valgrind`
+  `msys2` (`msys64\usr\bin\gdb.exe`, `msys64\usr\bin\objdump.exe`, ...).
 * Instrument the source code, the repro code, or the emitted code.
 * Contrast with the compilers producing known good results.
-* Contrast badc vs badc -O in the miscompiled function under the debugger.
+* Contrast `badc` vs `badc` `-O` in the miscompiled function under the debugger.
 * Use hardware breakpoints to discover who/where the memory gets corrupted.
 * Capture live core/memory dumps to contrast
 
@@ -46,12 +49,13 @@ than for wedging in quick hacks to get something compiling. Don't write lore,
 refer to unresolved issues and milestones with the TODO marker, no mentioning of
 milestones and issue numbers otherwise.
 
-## Comment style
+## Comment style and conversational style
 
-Comments must not read like editorials or tutorials, no coinage, no metaphors,
-no internal jargon. The audience is adult professionals, that's not only isn't
-needed but also takes their time to get through. Make sure the same comment
-style applies throughout.
+The audience is adult professionals. Hence, comments must not read like editorials
+or tutorials, no coinage, no metaphors, no internal jargon. That's not only is not
+needed but also takes time to get through without any benefit to the reader. Save
+your time and the reader's time - be concise and precise. Make sure the same style
+applies throughout.
 
 ## Planning
 

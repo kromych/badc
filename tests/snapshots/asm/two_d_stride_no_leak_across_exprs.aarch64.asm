@@ -20,13 +20,9 @@ Disassembly of section .text:
                	sxtw	x20, w20
                	adrp	x21, <page>
                	add	x21, x21, #0xe8
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -39,32 +35,24 @@ Disassembly of section .text:
                	add	x2, x2, #0x100
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x106
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x10d
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	lsl	x2, x20, #3
-               	add	x0, x0, x2
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
                	bl	<addr>
                	cbz	x0, <addr>
-               	lsl	x1, x20, #3
-               	add	x1, x21, x1
                	ldr	x0, [x0]
-               	str	x0, [x1]
+               	str	x0, [x21, x20, lsl #3]
                	b	<addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -80,11 +68,10 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	strh	w1, [x0]
                	sub	x0, x29, #0x400
-               	add	x0, x0, #0x2
                	mov	x1, #0xb                // =11
-               	strh	w1, [x0]
+               	strh	w1, [x0, #0x2]
                	sub	x0, x29, #0x400
-               	ldrh	w0, [x0]
+               	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x7
                	b.eq	<addr>
@@ -92,30 +79,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x520
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x0                // =0
-               	sub	x17, x29, #0x510
-               	str	w0, [x17]
+               	mov	x1, #0x0                // =0
                	b	<addr>
-               	sub	x16, x29, #0x510
-               	ldrsw	x0, [x16]
+               	sxtw	x0, w1
                	cmp	x0, #0x40
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x510
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
                	b	<addr>
                	sub	x0, x29, #0x508
-               	sub	x16, x29, #0x510
-               	ldrsw	x1, [x16]
-               	lsl	x2, x1, #2
-               	add	x0, x0, x2
-               	scvtf	d0, x1
+               	sxtw	x2, w1
+               	lsl	x3, x2, #2
+               	add	x0, x0, x3
+               	scvtf	d0, x2
                	fcvt	s0, d0
-               	mov	x1, #0x3fd0000000000000 // =4598175219545276416
+               	mov	x2, #0x3fd0000000000000 // =4598175219545276416
                	fcvt	d0, s0
-               	fmov	d17, x1
+               	fmov	d17, x2
                	fmul	d0, d0, d17
                	fcvt	s0, d0
                	str	s0, [x0]
@@ -133,6 +114,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x520
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x400
+               	bl	<addr>
                	sub	x0, x29, #0x508
                	mov	x1, #0xc00000000000     // =211106232532992
                	movk	x1, #0x4058, lsl #48

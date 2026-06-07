@@ -57,14 +57,22 @@ pub(crate) enum Inst {
     /// Address of a thread-local variable in the per-target TLS
     /// block.
     TlsAddr(i64),
-    /// Load from memory. Width / signedness driven by the source
-    /// load op.
-    Load { addr: ValueId, kind: LoadKind },
-    /// Store to memory. The c5 semantics leave the stored value
+    /// Load from `addr + disp`. Width / signedness driven by the
+    /// source load op. `disp` is a byte offset folded from a constant
+    /// pointer addition (a struct field offset) into the addressing
+    /// mode; it is zero for a plain dereference.
+    Load {
+        addr: ValueId,
+        disp: i32,
+        kind: LoadKind,
+    },
+    /// Store to `addr + disp`. The c5 semantics leave the stored value
     /// in the accumulator afterward; downstream uses of this
-    /// instruction's id read that value.
+    /// instruction's id read that value. `disp` is a byte offset folded
+    /// from a constant pointer addition, zero for a plain dereference.
     Store {
         addr: ValueId,
+        disp: i32,
         value: ValueId,
         kind: StoreKind,
     },

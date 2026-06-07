@@ -69,27 +69,25 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	xorq	%rax, %rax
-               	movq	%rax, %xmm14
+               	xorq	%rcx, %rcx
+               	movq	%rcx, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
-               	leaq	-0x8(%rbp), %rcx
-               	movss	%xmm0, (%rcx,%riz)
-               	movl	%eax, -0x10(%rbp)
+               	leaq	-0x8(%rbp), %rax
+               	movss	%xmm0, (%rax,%riz)
                	jmp	<addr>
-               	movslq	-0x10(%rbp), %rax
+               	movslq	%ecx, %rax
                	cmpq	$0xa, %rax
                	jge	<addr>
                	jmp	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
-               	movl	%ecx, (%rax)
+               	movslq	%ecx, %rax
+               	movq	%rax, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	leaq	-0x8(%rbp), %rax
                	movss	(%rax,%riz), %xmm0
-               	movabsq	$0x3fb999999999999a, %rcx # imm = 0x3FB999999999999A
+               	movabsq	$0x3fb999999999999a, %rdx # imm = 0x3FB999999999999A
                	cvtss2sd	%xmm0, %xmm0
-               	movq	%rcx, %xmm15
+               	movq	%rdx, %xmm15
                	addsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movss	%xmm0, (%rax,%riz)
@@ -240,4 +238,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

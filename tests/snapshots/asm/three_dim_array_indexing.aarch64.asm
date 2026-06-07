@@ -20,13 +20,9 @@ Disassembly of section .text:
                	sxtw	x20, w20
                	adrp	x21, <page>
                	add	x21, x21, #0xf0
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -39,32 +35,24 @@ Disassembly of section .text:
                	add	x2, x2, #0x108
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x10e
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x115
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	lsl	x2, x20, #3
-               	add	x0, x0, x2
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
                	bl	<addr>
                	cbz	x0, <addr>
-               	lsl	x1, x20, #3
-               	add	x1, x21, x1
                	ldr	x0, [x0]
-               	str	x0, [x1]
+               	str	x0, [x21, x20, lsl #3]
                	b	<addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -72,16 +60,13 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0]
-               	add	x2, x0, #0x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x1]
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	add	x2, x0, #0x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x2]
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	add	x0, x0, #0x3
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x3]
                	add	x0, x1, x0
                	sxtw	x0, w0
                	ret
@@ -92,16 +77,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0x11c
                	ldrb	w1, [x0]
-               	add	x2, x0, #0x1
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x1]
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	add	x2, x0, #0x2
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x2]
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	add	x2, x0, #0x3
-               	ldrb	w2, [x2]
+               	ldrb	w2, [x0, #0x3]
                	add	x1, x1, x2
                	sxtw	x1, w1
                	cmp	x1, #0xa
@@ -113,16 +95,13 @@ Disassembly of section .text:
                	ret
                	add	x1, x0, #0x8
                	ldrb	w2, [x1]
-               	add	x3, x1, #0x1
-               	ldrb	w3, [x3]
+               	ldrb	w3, [x1, #0x1]
                	add	x2, x2, x3
                	sxtw	x2, w2
-               	add	x3, x1, #0x2
-               	ldrb	w3, [x3]
+               	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
                	sxtw	x2, w2
-               	add	x1, x1, #0x3
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
                	sxtw	x1, w1
                	cmp	x1, #0x2a
@@ -134,16 +113,13 @@ Disassembly of section .text:
                	ret
                	add	x1, x0, #0x10
                	ldrb	w2, [x1]
-               	add	x3, x1, #0x1
-               	ldrb	w3, [x3]
+               	ldrb	w3, [x1, #0x1]
                	add	x2, x2, x3
                	sxtw	x2, w2
-               	add	x3, x1, #0x2
-               	ldrb	w3, [x3]
+               	ldrb	w3, [x1, #0x2]
                	add	x2, x2, x3
                	sxtw	x2, w2
-               	add	x1, x1, #0x3
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x1, #0x3]
                	add	x1, x2, x1
                	sxtw	x1, w1
                	cmp	x1, #0x4a
@@ -166,8 +142,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0xb
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0xb]
                	mov	x17, #0xc               // =12
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -180,8 +155,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x17
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x17]
                	mov	x17, #0x18              // =24
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -194,8 +168,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0xc
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0xc]
                	ldrb	w2, [x0]
                	sub	x1, x1, x2
                	sxtw	x1, w1
@@ -206,8 +179,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x4
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x4]
                	ldrb	w0, [x0]
                	sub	x0, x1, x0
                	sxtw	x0, w0

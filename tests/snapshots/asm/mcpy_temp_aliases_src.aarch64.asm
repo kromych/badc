@@ -71,8 +71,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x8
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0x2222            // =8738
                	cmp	x0, x17
                	b.eq	<addr>
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x10
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x10]
                	mov	x17, #0x3333            // =13107
                	cmp	x0, x17
                	b.eq	<addr>
@@ -91,8 +89,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x18
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x18]
                	mov	x17, #0x4444            // =17476
                	cmp	x0, x17
                	b.eq	<addr>

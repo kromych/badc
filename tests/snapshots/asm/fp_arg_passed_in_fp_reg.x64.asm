@@ -13,12 +13,10 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	retq
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movslq	%eax, %rax
-               	movslq	%ecx, %rcx
-               	cvtsi2sd	%rax, %xmm2
-               	cvtsi2sd	%rcx, %xmm3
+               	movslq	%edi, %rdi
+               	movslq	%esi, %rsi
+               	cvtsi2sd	%rdi, %xmm2
+               	cvtsi2sd	%rsi, %xmm3
                	mulsd	%xmm3, %xmm1
                	movapd	%xmm0, %xmm14
                	movapd	%xmm2, %xmm15
@@ -101,3 +99,4 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

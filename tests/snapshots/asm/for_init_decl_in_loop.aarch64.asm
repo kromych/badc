@@ -20,13 +20,9 @@ Disassembly of section .text:
                	sxtw	x20, w20
                	adrp	x21, <page>
                	add	x21, x21, #0xe8
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
@@ -39,82 +35,60 @@ Disassembly of section .text:
                	add	x2, x2, #0x100
                	str	x2, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x8
                	adrp	x2, <page>
                	add	x2, x2, #0x106
-               	str	x2, [x0]
+               	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x10
                	adrp	x2, <page>
                	add	x2, x2, #0x10d
-               	str	x2, [x0]
+               	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	lsl	x2, x20, #3
-               	add	x0, x0, x2
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, x20, lsl #3]
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16
                	bl	<addr>
                	cbz	x0, <addr>
-               	lsl	x1, x20, #3
-               	add	x1, x21, x1
                	ldr	x0, [x0]
-               	str	x0, [x1]
+               	str	x0, [x21, x20, lsl #3]
                	b	<addr>
-               	lsl	x0, x20, #3
-               	add	x0, x21, x0
-               	ldr	x0, [x0]
+               	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x19, [sp, #0x10]
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x10]
+               	mov	x2, #0x0                // =0
+               	mov	x1, #0x1                // =1
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
+               	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x18]
+               	mov	x3, #0x0                // =0
                	b	<addr>
-               	ldursw	x0, [x29, #-0x8]
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	sxtw	x0, w2
                	ret
-               	ldursw	x0, [x29, #-0x18]
+               	sxtw	x0, w3
                	cmp	x0, #0x10
                	b.ge	<addr>
                	b	<addr>
-               	sub	x0, x29, #0x18
-               	ldrsw	x1, [x0]
-               	add	x1, x1, #0x1
-               	str	w1, [x0]
+               	sxtw	x0, w3
+               	add	x3, x0, #0x1
                	b	<addr>
-               	sub	x0, x29, #0x8
-               	ldrsw	x1, [x0]
-               	ldursw	x2, [x29, #-0x10]
+               	sxtw	x0, w2
+               	sxtw	x2, w1
                	mov	x17, #0x64              // =100
                	mul	x2, x2, x17
                	sxtw	x2, w2
-               	ldursw	x3, [x29, #-0x18]
-               	add	x2, x2, x3
+               	sxtw	x4, w3
+               	add	x2, x2, x4
                	sxtw	x2, w2
-               	add	x1, x1, x2
-               	str	w1, [x0]
+               	add	x2, x0, x2
                	b	<addr>
                	b	<addr>
                	stp	x29, x30, [sp, #-0x10]!

@@ -160,3 +160,5 @@ tests/perf/build/
 # belong under version control.
 /tests/fixtures/c/*
 !/tests/fixtures/c/*.c
+
+badc-*-rsync/

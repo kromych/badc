@@ -30,8 +30,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
-               	add	x1, x0, #0x3
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x3]
                	mov	x17, #0x20              // =32
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -43,8 +42,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x6
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x6]
                	mov	x17, #0x20              // =32
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -56,8 +54,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0xb
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0xb]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -66,8 +63,7 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0xdc
-               	add	x1, x0, #0x2
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x2]
                	mov	x17, #0x3a              // =58
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -79,8 +75,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x1, x0, #0x5
-               	ldrb	w1, [x1]
+               	ldrb	w1, [x0, #0x5]
                	mov	x17, #0x3a              // =58
                	eor	x1, x1, x17
                	mov	x17, #0xffff            // =65535
@@ -92,8 +87,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x8
-               	ldrb	w0, [x0]
+               	ldrb	w0, [x0, #0x8]
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

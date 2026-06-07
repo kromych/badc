@@ -19,16 +19,16 @@ fn ent_pc=1 n_params=4 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=I32)                            -> x0
-    v2   Imm(0)                                           -> x1
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=F64)                            -> d0
-    v4   Imm(0)                                           -> x1
-    v5   ParamRef(2, kind=I32)                            -> x1
-    v6   Imm(0)                                           -> x2
+    v4   Imm(0)                                           -> x0
+    v5   ParamRef(2, kind=I32)                            -> x6
+    v6   Imm(0)                                           -> x0
     v7   ParamRef(3, kind=F64)                            -> d1
-    v8   Imm(0)                                           -> x2
+    v8   Imm(0)                                           -> x0
     v9   LoadLocal { off=3, kind=F64 }                    -> d2
-    v10  LoadLocal { off=2, kind=I32 }                    -> x2
+    v10  LoadLocal { off=2, kind=I32 }                    -> x0
     v11  FpCast { kind=IntToFp, value=v1 }                -> d2
     v12  Binop { op=fmul, lhs=v3, rhs=v11 }               -> d3
     v13  LoadLocal { off=5, kind=F64 }                    -> d3

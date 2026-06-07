@@ -78,6 +78,7 @@ SQLITE_DEFINES = [
 FIXTURE_FLAGS: dict[str, list[str]] = {
     "crypto.c": [f"-I{REPO_ROOT}/demos/tweetnacl"],
     "sqlite.c": [f"-I{REPO_ROOT}/demos/sqlite3", *SQLITE_DEFINES],
+    "sqlite_bench.c": [f"-I{REPO_ROOT}/demos/sqlite3", *SQLITE_DEFINES],
     "compress.c": [
         f"-I{REPO_ROOT}/demos/miniz",
         # Keep only the in-memory zlib-style codec; drop the ZIP archive,
@@ -99,6 +100,7 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
     # the amalgamation's default to 1 on Linux, but badc's libc
     # bindings do not include mremap / MREMAP_MAYMOVE.
     "sqlite.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
+    "sqlite_bench.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
 }
 
 
@@ -303,10 +305,10 @@ def main() -> int:
         "crypto.c",
         "compress.c",
         "stb.c",
-        # TODO: badc miscompiles the SQLite amalgamation once a B-tree
-        # spans more than one page, so its rows fail the result check and
-        # drop out of the table; clang and tcc report normally.
         "sqlite.c",
+        # Multi-phase workload (bulk insert, aggregation, sort, index,
+        # join, subquery, update / delete; 100k + 50k rows).
+        "sqlite_bench.c",
     ]
     results: list[Result] = []
     any_fail = False

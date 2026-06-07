@@ -212,6 +212,7 @@ mod tests {
                 Inst::Imm(0),
                 Inst::Load {
                     addr: 0,
+                    disp: 0,
                     kind: LoadKind::I32,
                 },
                 Inst::Extend {
@@ -244,6 +245,7 @@ mod tests {
                 Inst::Imm(0),
                 Inst::Load {
                     addr: 0,
+                    disp: 0,
                     kind: LoadKind::I32,
                 },
                 Inst::Extend {
@@ -270,6 +272,7 @@ mod tests {
                 Inst::Imm(0),
                 Inst::Load {
                     addr: 0,
+                    disp: 0,
                     kind: LoadKind::U32,
                 },
                 Inst::Extend {

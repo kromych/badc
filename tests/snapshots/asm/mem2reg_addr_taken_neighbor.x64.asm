@@ -12,10 +12,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movq	%rdi, %rax
-               	movslq	%eax, %rax
+               	movslq	%edi, %rdi
                	xorq	%rsi, %rsi
                	movl	%esi, -0x8(%rbp)
+               	movq	%rdi, %rax
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	leaq	-0x8(%rbp), %rcx
@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movl	%edx, (%rcx)
                	movslq	%esi, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movslq	%edx, %rsi
                	jmp	<addr>
                	movslq	-0x8(%rbp), %rax

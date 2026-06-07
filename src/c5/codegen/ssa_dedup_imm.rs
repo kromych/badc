@@ -235,11 +235,13 @@ mod tests {
                 Inst::ImmData(7),
                 Inst::Load {
                     addr: 0,
+                    disp: 0,
                     kind: LoadKind::I64,
                 },
                 Inst::ImmData(7),
                 Inst::Load {
                     addr: 2,
+                    disp: 0,
                     kind: LoadKind::I64,
                 },
             ],

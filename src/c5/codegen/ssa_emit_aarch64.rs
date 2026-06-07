@@ -692,9 +692,14 @@ pub(super) fn emit_function(
     // distinct -- then `schedule_place_moves` sequentializes it and
     // breaks any cycle through a scratch register. When two ParamRef
     // values share a home (sequentially-live parameters the allocator
-    // packed into one register), the placement is not a parallel copy
-    // and the in-order per-inst emit is the correct lowering, so the
-    // batch is skipped.
+    // packed into one register) the move set is not a permutation, so
+    // the batch is skipped and each ParamRef is placed in program order.
+    // That per-inst path is safe only while no parameter's home is a
+    // later parameter's incoming register; the allocator's ParamRef
+    // self-home hint keeps it so (each integer parameter prefers its own
+    // incoming register, and those are distinct). The
+    // `param-shuffle-clobber` check in `verify_allocation` guards the
+    // invariant under the `codegen_test` feature.
     let mut param_prebatched: Vec<bool> = alloc::vec![false; func.insts.len()];
     {
         // Each integer parameter's incoming register comes from the
@@ -1189,6 +1194,40 @@ impl ScratchPool {
     }
 }
 
+/// Allocate `bytes` of stack frame. On the Windows targets a frame
+/// larger than one page is page-walked in descending order, touching
+/// each page so the guard page commits the next before the frame reaches
+/// it; a single subtract that skips the guard page faults on the first
+/// access. SysV / macOS grow the stack on demand and allocate with one
+/// subtract. `counter` is a scratch register the prologue does not need
+/// across the allocation.
+fn emit_stack_alloc(code: &mut Vec<u8>, bytes: u32, abi: super::Abi, counter: Reg) {
+    const PAGE: u32 = 4096;
+    if !abi.stack_probe || bytes < PAGE {
+        emit_sub_sp_imm(code, bytes);
+        return;
+    }
+    let n_pages = bytes >> 12;
+    let remainder = bytes & 0xfff;
+    super::aarch64::load_imm64(code, counter, n_pages as u64);
+    // loop: sub sp, sp, #PAGE; str counter, [sp]; subs counter, #1; b.ne loop
+    let loop_start = code.len();
+    emit(code, super::aarch64::enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    emit(code, super::aarch64::enc_str_imm(counter, Reg::SP, 0));
+    emit(code, super::aarch64::enc_subs_imm(counter, counter, 1));
+    let off = ((loop_start as i64) - (code.len() as i64)) / 4;
+    emit(
+        code,
+        super::aarch64::enc_b_cond(super::aarch64::Cond::Ne, off as i32),
+    );
+    if remainder != 0 {
+        emit(
+            code,
+            super::aarch64::enc_sub_imm(Reg::SP, Reg::SP, remainder),
+        );
+    }
+}
+
 /// Emit the function prologue.
 fn emit_prologue(
     code: &mut Vec<u8>,
@@ -1234,7 +1273,7 @@ fn emit_prologue(
         emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
         emit(code, enc_add_imm(Reg(29), Reg(31), 0));
         if frame.frame_bytes > 0 {
-            emit_sub_sp_imm(code, frame.frame_bytes);
+            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
         }
         emit_prologue_saved_regs(code, alloc, frame);
         return;
@@ -1275,7 +1314,7 @@ fn emit_prologue(
         emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
         emit(code, enc_add_imm(Reg(29), Reg(31), 0));
         if frame.frame_bytes > 0 {
-            emit_sub_sp_imm(code, frame.frame_bytes);
+            emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
         }
         emit_prologue_saved_regs(code, alloc, frame);
         return;
@@ -1392,7 +1431,7 @@ fn emit_prologue(
     emit(code, enc_stp_pre(Reg(29), Reg(30), Reg(31), -16));
     emit(code, enc_add_imm(Reg(29), Reg(31), 0));
     if frame.frame_bytes > 0 {
-        emit_sub_sp_imm(code, frame.frame_bytes);
+        emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
     }
     emit_prologue_saved_regs(code, alloc, frame);
 }
@@ -1664,19 +1703,25 @@ fn emit_inst(
             true
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
-        Inst::Load { addr, kind } => emit_load(
+        Inst::Load { addr, disp, kind } => emit_load(
             code,
             dst,
             *addr,
+            *disp,
             *kind,
             alloc.is_f32(v),
             alloc,
             frame,
             scratch,
         ),
-        Inst::Store { addr, value, kind } => {
-            emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
-        }
+        Inst::Store {
+            addr,
+            disp,
+            value,
+            kind,
+        } => emit_store(
+            code, dst, *addr, *disp, *value, *kind, alloc, frame, scratch,
+        ),
         Inst::LoadLocal { off, kind } => {
             emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, scratch)
         }
@@ -3471,12 +3516,18 @@ fn emit_load(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // `disp` is a byte offset folded from a constant pointer addition.
+    // ssa_index_fold only emits a displacement that is a multiple of the
+    // access width and within the scaled-immediate range, so it passes
+    // straight to the immediate-offset encoders below.
+    let disp = disp as u32;
     let addr_place = alloc
         .places
         .get(addr as usize)
@@ -3535,13 +3586,13 @@ fn emit_load(
         Place::FpReg(_) | Place::None => return false,
     };
     match kind {
-        LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, 0)),
-        LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, 0)),
-        LoadKind::U32 => emit(code, enc_ldr32_imm(rd, rn, 0)),
-        LoadKind::I16 => emit(code, enc_ldrsh_imm(rd, rn, 0)),
-        LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, 0)),
-        LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, 0)),
-        LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
+        LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, disp)),
+        LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, disp)),
+        LoadKind::U32 => emit(code, enc_ldr32_imm(rd, rn, disp)),
+        LoadKind::I16 => emit(code, enc_ldrsh_imm(rd, rn, disp)),
+        LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, disp)),
+        LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, disp)),
+        LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, disp)),
         LoadKind::F32 | LoadKind::F64 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
@@ -3947,19 +3998,6 @@ fn emit_store_indexed(
         Some(r) => r,
         None => return false,
     };
-    // The store value needs its own scratch; reuse the FP-bridge
-    // path from `emit_store_local` for the I64-store-of-FpReg shape.
-    let rv = if let StoreKind::I64 = kind
-        && let Place::FpReg(dr) = value_place
-    {
-        emit(code, super::aarch64::enc_fmov_d_to_x(Reg(16), dr));
-        Reg(16)
-    } else {
-        match materialize_int(code, value_place, Reg(16), frame) {
-            Some(r) => r,
-            None => return false,
-        }
-    };
     let expected_scale: u8 = match kind {
         StoreKind::I64 => 8,
         StoreKind::I32 => 4,
@@ -3971,12 +4009,51 @@ fn emit_store_indexed(
         bail_msg("StoreIndexed: scale doesn't match access width");
         return false;
     }
-    let word = match kind {
-        StoreKind::I64 => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
-        StoreKind::I32 => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
-        StoreKind::I16 => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
-        StoreKind::I8 => super::aarch64::enc_strb_reg(rv, rn, rm),
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+    // The store needs three registers -- base, index, value -- but only
+    // two scratch registers exist. Pick a scratch for the value that
+    // collides with neither base nor index; when a spilled base and
+    // index occupy both, fold the index into the base so the
+    // register-offset form is no longer needed and a scratch frees up.
+    let vscratch;
+    let addr_reg; // Some(addr) selects the plain `[addr]` store.
+    if scratch.primary != rn && scratch.primary != rm {
+        vscratch = scratch.primary;
+        addr_reg = None;
+    } else if scratch.secondary != rn && scratch.secondary != rm {
+        vscratch = scratch.secondary;
+        addr_reg = None;
+    } else {
+        let shift = scale.trailing_zeros();
+        emit(
+            code,
+            super::aarch64::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+        );
+        addr_reg = Some(scratch.primary);
+        vscratch = scratch.secondary;
+    }
+    // Reuse the FP-bridge path from `emit_store_local` for the
+    // I64-store-of-FpReg shape.
+    let rv = if let StoreKind::I64 = kind
+        && let Place::FpReg(dr) = value_place
+    {
+        emit(code, super::aarch64::enc_fmov_d_to_x(vscratch, dr));
+        vscratch
+    } else {
+        match materialize_int(code, value_place, vscratch, frame) {
+            Some(r) => r,
+            None => return false,
+        }
+    };
+    let word = match (kind, addr_reg) {
+        (StoreKind::I64, None) => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
+        (StoreKind::I32, None) => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
+        (StoreKind::I16, None) => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
+        (StoreKind::I8, None) => super::aarch64::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, Some(a)) => super::aarch64::enc_str_imm(rv, a, 0),
+        (StoreKind::I32, Some(a)) => super::aarch64::enc_str32_imm(rv, a, 0),
+        (StoreKind::I16, Some(a)) => super::aarch64::enc_strh_imm(rv, a, 0),
+        (StoreKind::I8, Some(a)) => super::aarch64::enc_strb_imm(rv, a, 0),
+        (StoreKind::F32 | StoreKind::F64, _) => unreachable!(),
     };
     emit(code, word);
     // c5 store-op leaves the stored value in the accumulator.
@@ -4001,12 +4078,17 @@ fn emit_store(
     code: &mut Vec<u8>,
     dst: Place,
     addr: u32,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
+    // `disp` is a width-aligned, in-range byte offset folded from a
+    // constant pointer addition; it passes straight to the immediate-
+    // offset store encoders.
+    let disp = disp as u32;
     // The c5 store ops leave the stored value in the accumulator
     // afterward, so `dst` may be a register or spill slot the
     // allocator wants the value parked in. We compute the value
@@ -4037,7 +4119,7 @@ fn emit_store(
                 Some(r) => r,
                 None => return false,
             };
-            emit(code, enc_str_s_imm(sn, rn, 0));
+            emit(code, enc_str_s_imm(sn, rn, disp));
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
@@ -4073,7 +4155,7 @@ fn emit_store(
         // V register, so narrowing in place over a pooled register
         // would destroy a value the surrounding code still reads.
         emit(code, enc_fcvt_s_d(SCRATCH_FP1, dn));
-        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, 0));
+        emit(code, enc_str_s_imm(SCRATCH_FP1, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, enc_fmov_d_to_x(scratch.primary, dn));
@@ -4090,7 +4172,7 @@ fn emit_store(
         let Some(dn) = materialize_fp(code, value_place, SCRATCH_FP0, frame) else {
             return false;
         };
-        emit(code, super::aarch64::enc_str_d_imm(dn, rn, 0));
+        emit(code, super::aarch64::enc_str_d_imm(dn, rn, disp));
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, super::aarch64::enc_fmov_d_d(rd, dn));
@@ -4117,10 +4199,10 @@ fn emit_store(
         }
     };
     match kind {
-        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, 0)),
-        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
-        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
-        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
+        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, disp)),
+        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, disp)),
+        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, disp)),
+        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, disp)),
         StoreKind::F32 | StoreKind::F64 => {
             unreachable!("FP store handled in the FP branch above")
         }
@@ -5385,6 +5467,100 @@ mod tests {
             0xd65f03c0,
             "function must end with `ret`",
         );
+    }
+
+    /// An indexed store `a[i] = v` needs three registers: base, index,
+    /// and value. AArch64 has two scratch registers, so when all three
+    /// spill, base and index take both and the value would otherwise
+    /// reuse the base register. Forcing all three operands to spill must
+    /// precompute the address (`add xN, base, index, lsl #shift`) and
+    /// store from a register distinct from the base.
+    #[test]
+    fn store_indexed_spilled_operands_precompute_address() {
+        let target = Target::MacOSAarch64;
+        // Compile for the target, not the host: `long` is 64-bit on the
+        // aarch64 target but 32-bit on a Windows host, which would change
+        // the element scale and drop the StoreIndexed.
+        let program = Compiler::with_target(
+            "void store_at(long *a, int i, long v){ a[i] = v; } int main(void){ return 0; }".into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+        // StoreIndexed is produced by the index fold, which the lowering
+        // runs after `produce_ssa_funcs`.
+        super::super::ssa_index_fold::run(&mut funcs);
+        let func = funcs
+            .into_iter()
+            .find(|f| {
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, crate::c5::ir::Inst::StoreIndexed { .. }))
+            })
+            .expect("a function with a StoreIndexed");
+        let (base, index, value, scale, kind) = func
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                crate::c5::ir::Inst::StoreIndexed {
+                    base,
+                    index,
+                    scale,
+                    value,
+                    kind,
+                } => Some((*base, *index, *value, *scale, *kind)),
+                _ => None,
+            })
+            .expect("StoreIndexed operands");
+        let mut alloc = super::super::ssa_alloc::allocate(&func, target);
+        alloc.places[base as usize] = Place::Spill(0);
+        alloc.places[index as usize] = Place::Spill(1);
+        alloc.places[value as usize] = Place::Spill(2);
+        // The frame must reserve the three slots the test forces, or the
+        // spill-offset computation underflows.
+        alloc.spill_count = alloc.spill_count.max(3);
+        let frame = Frame::for_function(&func, &alloc, target.abi());
+        let scratch = ScratchPool {
+            primary: Reg(16),
+            secondary: Reg(17),
+        };
+        let mut code = Vec::new();
+        let ok = emit_store_indexed(
+            &mut code,
+            Place::None,
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        );
+        assert!(ok, "emit_store_indexed bailed");
+        let words: Vec<u32> = code
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        // The precomputed address: `add x16, x16, x17, lsl #3` for an
+        // 8-byte element.
+        let add_word: u32 = 0x8B11_0E10;
+        assert!(
+            words.contains(&add_word),
+            "expected a precomputed-address add; got {words:08x?}",
+        );
+        // No store may use one register as both base and value.
+        for &w in &words {
+            let op = w >> 22;
+            let is_str = op == 0x3E0 || op == 0x2E0 || op == 0x3E4 || op == 0x2E4;
+            if is_str {
+                let rt = w & 0x1f;
+                let rn = (w >> 5) & 0x1f;
+                assert_ne!(rt, rn, "store reuses base x{rn} as the value register");
+            }
+        }
     }
 
     /// `return 1 + 2;` exercises the Binop + BinopI handlers

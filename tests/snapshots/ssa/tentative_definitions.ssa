@@ -5,7 +5,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x0
-    v2   Load { addr=v1, kind=I32 }                       -> x0
+    v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
     v3   BinopI { op=ne, lhs=v2, rhs_imm=3 }              -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
@@ -14,16 +14,16 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v5   ImmData(16)                                      -> x0
     v6   Imm(0)                                           -> x1
-    v7   Load { addr=v5, kind=I32 }                       -> x1
+    v7   Load { addr=v5, disp=0, kind=I32 }               -> x1
     v8   Imm(4)                                           -> x2
     v9   BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x2
-    v10  Load { addr=v9, kind=I32 }                       -> x2
+    v10  Load { addr=v5, disp=4, kind=I32 }               -> x2
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x1
     v12  BinopI { op=shl, lhs=v11, rhs_imm=32 }           -> x1
     v13  BinopI { op=shr, lhs=v12, rhs_imm=32 }           -> x1
     v14  Imm(8)                                           -> x2
-    v15  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x0
-    v16  Load { addr=v15, kind=I32 }                      -> x0
+    v15  BinopI { op=add, lhs=v5, rhs_imm=8 }             -> x2
+    v16  Load { addr=v5, disp=8, kind=I32 }               -> x0
     v17  Binop { op=add, lhs=v13, rhs=v16 }               -> x0
     v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x0
     v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x0

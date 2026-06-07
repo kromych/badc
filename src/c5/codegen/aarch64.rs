@@ -280,6 +280,16 @@ pub(super) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x8B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
+/// register. `shift` is a 6-bit amount.
+pub(super) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
+    0x8B00_0000
+        | ((rm.0 as u32) << 16)
+        | ((shift & 0x3f) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xCB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
@@ -1365,12 +1375,22 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa_drop_redundant_extend::run (aarch64)", || {
             super::ssa_drop_redundant_extend::run(&mut ssa_funcs);
         });
+        // Scaled-index addressing: fold `base + index*scale` into the
+        // load / store. Runs last so it sees the final address shape;
+        // the optimizer passes never traverse `LoadIndexed` /
+        // `StoreIndexed`, so the per-arch emit is the only later consumer.
+        super::ssa_emit_common::time_pass("ssa_index_fold::run (aarch64)", || {
+            super::ssa_index_fold::run(&mut ssa_funcs);
+        });
+        // Store-to-load and load-to-load forwarding within a block. Runs
+        // after the index fold so a struct field's store and load address
+        // are both normalised to the same `(base, disp)`. Bounded by
+        // live-range extension so it does not pin scattered re-reads in a
+        // register-starved unrolled loop.
+        super::ssa_emit_common::time_pass("ssa_store_forward::run (aarch64)", || {
+            super::ssa_store_forward::run(&mut ssa_funcs);
+        });
     }
-    // Per-function c5 cdecl audit. Gated by `BADC_C5_CDECL_AUDIT`
-    // and emits one stderr line per function classifying it as
-    // eligible for the host-ABI prologue or as requiring the c5
-    // cdecl 16-byte-cell layout.
-    super::ssa_c5_cdecl_audit::maybe_dump_audit(&ssa_funcs);
     // Upper bound on ent_pcs the lowering will reference. The
     // walker stamps `ent_pc` / `end_pc` against the ent_pc
     // space, and the dense `pc_to_native` table holds

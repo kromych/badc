@@ -9,8 +9,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v3   Imm(0)                                           -> x1
     v4   LoadLocal { off=-1, kind=I64 }                   -> x1
     v5   Imm(400)                                         -> x1
-    v6   BinopI { op=add, lhs=v2, rhs_imm=400 }           -> x0
-    v7   Load { addr=v6, kind=I32 }                       -> x0
+    v6   BinopI { op=add, lhs=v2, rhs_imm=400 }           -> x1
+    v7   Load { addr=v2, disp=400, kind=I32 }             -> x0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

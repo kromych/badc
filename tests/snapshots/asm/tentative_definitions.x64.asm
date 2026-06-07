@@ -17,13 +17,10 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	movq	%rax, %rdx
-               	addq	$0x4, %rdx
-               	movslq	(%rdx), %rdx
+               	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x8, %rax
-               	movslq	(%rax), %rax
+               	movslq	0x8(%rax), %rax
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x6, %rax
@@ -33,4 +30,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

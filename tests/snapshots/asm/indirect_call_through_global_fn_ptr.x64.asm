@@ -9,13 +9,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rdi
                	callq	*<rip>
-               	movq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	movslq	%ecx, %rcx
+               	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	addq	%rdx, %rcx
-               	movslq	%ecx, %rcx
-               	movl	%ecx, (%rax)
+               	movq	%rsi, %rax
+               	addq	%rdx, %rax
+               	movslq	%eax, %rax
+               	movl	%eax, (%rdi)
                	xorq	%rax, %rax
                	retq
                	pushq	%rbp
@@ -30,7 +29,7 @@ Disassembly of section .text:
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rbx
                	movslq	(%rax), %rsi
-               	movslq	(%rcx), %rdx
+               	movslq	%edx, %rdx
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	movq	%rax, %r11
@@ -47,4 +46,3 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

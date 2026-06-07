@@ -24,11 +24,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x20, #0x8
-               	ldr	x0, [x0]
+               	ldr	x0, [x20, #0x8]
                	bl	<addr>
-               	add	x0, x20, #0x10
-               	ldr	x0, [x0]
+               	ldr	x0, [x20, #0x10]
                	bl	<addr>
                	mov	x0, x20
                	bl	<addr>
@@ -54,10 +52,8 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, #0x0                // =0
                	str	x21, [x0]
-               	add	x2, x0, #0x8
-               	str	x1, [x2]
-               	add	x2, x0, #0x10
-               	str	x1, [x2]
+               	str	x1, [x0, #0x8]
+               	str	x1, [x0, #0x10]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
                	ldr	x22, [sp, #0x10]

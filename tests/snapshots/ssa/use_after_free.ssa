@@ -9,11 +9,11 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=-1, kind=I64 }                   -> x0
     v5   Imm(42)                                          -> x0
-    v6   Store { addr=v2, value=v5, kind=I32 }            -> -
+    v6   Store { addr=v2, disp=0, value=v5, kind=I32 }    -> -
     v7   LoadLocal { off=-1, kind=I64 }                   -> x0
     v8   CallExt { binding_idx=3, args=[v2], fp_arg_mask=0x0 } -> x0
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v10  Load { addr=v2, kind=I32 }                       -> x0
+    v10  Load { addr=v2, disp=0, kind=I32 }               -> x0
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

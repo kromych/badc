@@ -65,7 +65,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	sxtw	x1, w1
                	str	w1, [x0]
-               	ldrsw	x0, [x0]
+               	sxtw	x0, w1
                	cmp	x0, #0x31
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

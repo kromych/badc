@@ -15,21 +15,16 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	movl	$0x1, %ecx
                	movl	%ecx, (%rax)
-               	addq	$0x8, %rax
                	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x8(%rax)
                	movl	$0x2, %eax
                	movl	%eax, (%rcx)
-               	movq	%rcx, %rax
-               	addq	$0x8, %rax
-               	leaq	<rip>, %rcx
-               	movq	%rcx, (%rax)
-               	movl	$0x3, %eax
-               	movl	%eax, (%rcx)
-               	movq	%rcx, %rax
-               	addq	$0x8, %rax
+               	leaq	<rip>, %rax
+               	movq	%rax, 0x8(%rcx)
+               	movl	$0x3, %ecx
+               	movl	%ecx, (%rax)
                	xorq	%rdx, %rdx
-               	movq	%rdx, (%rax)
+               	movq	%rdx, 0x8(%rax)
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
                	jmp	<addr>
@@ -39,9 +34,7 @@ Disassembly of section .text:
                	movslq	(%rcx), %rdx
                	addq	%rdx, %rax
                	movslq	%eax, %rdx
-               	movq	%rcx, %rax
-               	addq	$0x8, %rax
-               	movq	(%rax), %rcx
+               	movq	0x8(%rcx), %rcx
                	jmp	<addr>
                	movslq	%edx, %rax
                	cmpq	$0x6, %rax
@@ -54,3 +47,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

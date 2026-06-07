@@ -175,8 +175,7 @@ Disassembly of section .text:
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %eax
+               	movl	0x4(%rax), %eax
                	andq	$0xff, %rax
                	cmpq	$0x0, %rax
                	je	<addr>
@@ -185,8 +184,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %eax
+               	movl	0x4(%rax), %eax
                	sarq	$0x8, %rax
                	andq	$0x1, %rax
                	cmpq	$0x0, %rax
@@ -196,8 +194,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %eax
+               	movl	0x4(%rax), %eax
                	sarq	$0x9, %rax
                	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
                	cmpq	$0x0, %rax
@@ -210,4 +207,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

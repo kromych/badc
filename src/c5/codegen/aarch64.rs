@@ -280,6 +280,16 @@ pub(super) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x8B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
+/// register. `shift` is a 6-bit amount.
+pub(super) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
+    0x8B00_0000
+        | ((rm.0 as u32) << 16)
+        | ((shift & 0x3f) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xCB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)

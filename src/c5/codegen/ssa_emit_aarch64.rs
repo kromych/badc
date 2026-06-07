@@ -3964,19 +3964,6 @@ fn emit_store_indexed(
         Some(r) => r,
         None => return false,
     };
-    // The store value needs its own scratch; reuse the FP-bridge
-    // path from `emit_store_local` for the I64-store-of-FpReg shape.
-    let rv = if let StoreKind::I64 = kind
-        && let Place::FpReg(dr) = value_place
-    {
-        emit(code, super::aarch64::enc_fmov_d_to_x(Reg(16), dr));
-        Reg(16)
-    } else {
-        match materialize_int(code, value_place, Reg(16), frame) {
-            Some(r) => r,
-            None => return false,
-        }
-    };
     let expected_scale: u8 = match kind {
         StoreKind::I64 => 8,
         StoreKind::I32 => 4,
@@ -3988,12 +3975,51 @@ fn emit_store_indexed(
         bail_msg("StoreIndexed: scale doesn't match access width");
         return false;
     }
-    let word = match kind {
-        StoreKind::I64 => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
-        StoreKind::I32 => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
-        StoreKind::I16 => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
-        StoreKind::I8 => super::aarch64::enc_strb_reg(rv, rn, rm),
-        StoreKind::F32 | StoreKind::F64 => unreachable!(),
+    // The store needs three registers -- base, index, value -- but only
+    // two scratch registers exist. Pick a scratch for the value that
+    // collides with neither base nor index; when a spilled base and
+    // index occupy both, fold the index into the base so the
+    // register-offset form is no longer needed and a scratch frees up.
+    let vscratch;
+    let addr_reg; // Some(addr) selects the plain `[addr]` store.
+    if scratch.primary != rn && scratch.primary != rm {
+        vscratch = scratch.primary;
+        addr_reg = None;
+    } else if scratch.secondary != rn && scratch.secondary != rm {
+        vscratch = scratch.secondary;
+        addr_reg = None;
+    } else {
+        let shift = scale.trailing_zeros();
+        emit(
+            code,
+            super::aarch64::enc_add_reg_lsl(scratch.primary, rn, rm, shift),
+        );
+        addr_reg = Some(scratch.primary);
+        vscratch = scratch.secondary;
+    }
+    // Reuse the FP-bridge path from `emit_store_local` for the
+    // I64-store-of-FpReg shape.
+    let rv = if let StoreKind::I64 = kind
+        && let Place::FpReg(dr) = value_place
+    {
+        emit(code, super::aarch64::enc_fmov_d_to_x(vscratch, dr));
+        vscratch
+    } else {
+        match materialize_int(code, value_place, vscratch, frame) {
+            Some(r) => r,
+            None => return false,
+        }
+    };
+    let word = match (kind, addr_reg) {
+        (StoreKind::I64, None) => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
+        (StoreKind::I32, None) => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
+        (StoreKind::I16, None) => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
+        (StoreKind::I8, None) => super::aarch64::enc_strb_reg(rv, rn, rm),
+        (StoreKind::I64, Some(a)) => super::aarch64::enc_str_imm(rv, a, 0),
+        (StoreKind::I32, Some(a)) => super::aarch64::enc_str32_imm(rv, a, 0),
+        (StoreKind::I16, Some(a)) => super::aarch64::enc_strh_imm(rv, a, 0),
+        (StoreKind::I8, Some(a)) => super::aarch64::enc_strb_imm(rv, a, 0),
+        (StoreKind::F32 | StoreKind::F64, _) => unreachable!(),
     };
     emit(code, word);
     // c5 store-op leaves the stored value in the accumulator.
@@ -5407,6 +5433,93 @@ mod tests {
             0xd65f03c0,
             "function must end with `ret`",
         );
+    }
+
+    /// An indexed store `a[i] = v` needs three registers: base, index,
+    /// and value. AArch64 has two scratch registers, so when all three
+    /// spill, base and index take both and the value would otherwise
+    /// reuse the base register. Forcing all three operands to spill must
+    /// precompute the address (`add xN, base, index, lsl #shift`) and
+    /// store from a register distinct from the base.
+    #[test]
+    fn store_indexed_spilled_operands_precompute_address() {
+        let target = Target::MacOSAarch64;
+        let program = Compiler::new(
+            "void store_at(long *a, int i, long v){ a[i] = v; } int main(void){ return 0; }".into(),
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target).expect("ssa");
+        // StoreIndexed is produced by the index fold, which the lowering
+        // runs after `produce_ssa_funcs`.
+        super::super::ssa_index_fold::run(&mut funcs);
+        let func = funcs
+            .into_iter()
+            .find(|f| {
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, crate::c5::ir::Inst::StoreIndexed { .. }))
+            })
+            .expect("a function with a StoreIndexed");
+        let (base, index, value, scale, kind) = func
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                crate::c5::ir::Inst::StoreIndexed {
+                    base,
+                    index,
+                    scale,
+                    value,
+                    kind,
+                } => Some((*base, *index, *value, *scale, *kind)),
+                _ => None,
+            })
+            .expect("StoreIndexed operands");
+        let mut alloc = super::super::ssa_alloc::allocate(&func, target);
+        alloc.places[base as usize] = Place::Spill(0);
+        alloc.places[index as usize] = Place::Spill(1);
+        alloc.places[value as usize] = Place::Spill(2);
+        let frame = Frame::for_function(&func, &alloc, target.abi());
+        let scratch = ScratchPool {
+            primary: Reg(16),
+            secondary: Reg(17),
+        };
+        let mut code = Vec::new();
+        let ok = emit_store_indexed(
+            &mut code,
+            Place::None,
+            base,
+            index,
+            scale,
+            value,
+            kind,
+            &alloc,
+            frame,
+            &scratch,
+        );
+        assert!(ok, "emit_store_indexed bailed");
+        let words: Vec<u32> = code
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        // The precomputed address: `add x16, x16, x17, lsl #3` for an
+        // 8-byte element.
+        let add_word: u32 = 0x8B11_0E10;
+        assert!(
+            words.contains(&add_word),
+            "expected a precomputed-address add; got {words:08x?}",
+        );
+        // No store may use one register as both base and value.
+        for &w in &words {
+            let op = w >> 22;
+            let is_str = op == 0x3E0 || op == 0x2E0 || op == 0x3E4 || op == 0x2E4;
+            if is_str {
+                let rt = w & 0x1f;
+                let rn = (w >> 5) & 0x1f;
+                assert_ne!(rt, rn, "store reuses base x{rn} as the value register");
+            }
+        }
     }
 
     /// `return 1 + 2;` exercises the Binop + BinopI handlers

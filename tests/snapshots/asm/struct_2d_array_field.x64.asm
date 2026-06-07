@@ -20,7 +20,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	xorq	%rdx, %rdx
                	jmp	<addr>
@@ -34,7 +34,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%edx, %rax
                	movq	%rax, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax
                	movslq	%ecx, %rsi
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	xorq	%rdi, %rdi
                	jmp	<addr>
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%edi, %rsi
                	movq	%rsi, %rdi
-               	addq	$0x1, %rdi
+               	incq	%rdi
                	jmp	<addr>
                	movslq	%edx, %rdx
                	movslq	%ecx, %rsi

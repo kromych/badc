@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movslq	%r12d, %r12
                	movslq	(%rbx,%r12,4), %r14
                	movq	%r15, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movslq	%eax, %r10
                	movq	%r10, 0x28(%rsp)
                	jmp	<addr>
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%r15d, %rax
                	movq	%rax, %r15
-               	addq	$0x1, %r15
+               	incq	%r15
                	jmp	<addr>
                	movslq	%r15d, %rax
                	movslq	(%rbx,%rax,4), %rax
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	shlq	$0x2, %rax
                	movq	%rbx, %rdi
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
                	movq	%rax, %r10
-               	addq	$0x1, %r10
+               	incq	%r10
                	movq	%r10, 0x28(%rsp)
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
@@ -109,13 +109,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %r15
                	movslq	%r15d, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movslq	%eax, %rdx
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
                	movslq	%r15d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rsi
                	movq	%rbx, %rdi
                	movq	%r14, %rdx

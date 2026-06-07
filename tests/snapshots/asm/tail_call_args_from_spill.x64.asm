@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
                	movq	%rdi, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movq	%rdi, %rdx
                	addq	$0x2, %rdx

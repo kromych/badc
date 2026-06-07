@@ -25,7 +25,7 @@ Disassembly of section .text:
                	addq	%rdi, %rsi
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movslq	%edx, %rdx
                	jmp	<addr>
                	xorq	%rdi, %rdi
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	cmpq	$0x2c, %rdx
                	je	<addr>
                	movq	%rdi, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movslq	%edx, %rdi
                	jmp	<addr>
                	andq	$0xff, %rax

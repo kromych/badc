@@ -60,12 +60,12 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	jmp	<addr>
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x2, %rax

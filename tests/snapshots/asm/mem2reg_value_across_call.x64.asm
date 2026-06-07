@@ -14,7 +14,7 @@ Disassembly of section .text:
                	retq
                	movq	%rdi, %rax
                	shlq	$0x1, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%r14, %rdi
                	callq	*%r11
                	addq	%rax, %r15
-               	addq	$0x1, %r14
+               	incq	%r14
                	jmp	<addr>
                	movq	%r15, %rcx
                	movq	(%rsp), %rbx

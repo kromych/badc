@@ -1082,6 +1082,21 @@ pub(super) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 5, dst, imm);
 }
 
+/// `INC r64` -- `REX.W FF /0`. The single-byte `40+rd` encoding is a
+/// REX prefix in 64-bit mode, so the `FF` form is the only one.
+pub(super) fn emit_inc_r(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 0, dst.lo()));
+}
+
+/// `DEC r64` -- `REX.W FF /1`.
+pub(super) fn emit_dec_r(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 1, dst.lo()));
+}
+
 /// `AND r64, imm32`.
 pub(super) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
     emit_alu_r_imm32(code, 4, dst, imm);

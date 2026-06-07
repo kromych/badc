@@ -68,7 +68,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
-               	addq	$0x1, %rbx
+               	incq	%rbx
                	movq	%r14, %r12
                	movq	%r15, %r14
                	movq	0x48(%rsp), %r15

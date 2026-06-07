@@ -57,19 +57,19 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq

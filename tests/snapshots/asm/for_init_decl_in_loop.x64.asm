@@ -64,7 +64,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	jmp	<addr>
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%esi, %rax
                	movq	%rax, %rsi
-               	addq	$0x1, %rsi
+               	incq	%rsi
                	jmp	<addr>
                	movslq	%edx, %rax
                	movslq	%ecx, %rdx

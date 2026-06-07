@@ -18,7 +18,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	jmp	<addr>
                	movslq	%ecx, %rax
                	leaq	(%rax,%rax,2), %rdx
@@ -27,7 +27,7 @@ Disassembly of section .text:
                	movw	%dx, (%rdi,%rax,2)
                	jmp	<addr>
                	movq	%rsi, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movslq	%eax, %rax
                	movswq	(%rdi,%rax,2), %rax
                	retq

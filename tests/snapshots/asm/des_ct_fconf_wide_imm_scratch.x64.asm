@@ -711,7 +711,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
-               	addq	$0x1, %rbx
+               	incq	%rbx
                	jmp	<addr>
                	movl	%r14d, %r14d
                	movl	%r12d, %edi

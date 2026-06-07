@@ -11,7 +11,7 @@ Disassembly of section .text:
                	callq	*<rip>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
@@ -44,14 +44,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax

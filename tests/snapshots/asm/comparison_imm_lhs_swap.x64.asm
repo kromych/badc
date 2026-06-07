@@ -65,49 +65,49 @@ Disassembly of section .text:
                	cmpq	$0x0, %rbx
                	jle	<addr>
                	movq	%r12, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0x0, %rbx
                	jl	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0xa, %rbx
                	jge	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0xa, %rbx
                	jg	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0x0, %rbx
                	jbe	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0x0, %rbx
                	jb	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0xa, %rbx
                	jae	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0xa, %rbx
                	ja	<addr>
                	movslq	%r12d, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %r12
                	jmp	<addr>
                	cmpq	$0xa, %rbx

@@ -17,7 +17,7 @@ Disassembly of section .text:
                	retq
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	retq
                	pushq	%rbp

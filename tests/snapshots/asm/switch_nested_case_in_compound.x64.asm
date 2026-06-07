@@ -73,7 +73,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	addq	$0x2, %rax
                	movslq	%eax, %rax
@@ -124,7 +124,7 @@ Disassembly of section .text:
                	jne	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	addq	$0x2, %rax
                	movslq	%eax, %rax

@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	leaq	<rip>, %rcx
                	movslq	(%rcx), %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movl	%edx, (%rcx)
                	retq
                	pushq	%rbp
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
-               	addq	$0x1, %rbx
+               	incq	%rbx
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
@@ -112,11 +112,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%r12d, %rax
                	movq	%rax, %r12
-               	addq	$0x1, %r12
+               	incq	%r12
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
-               	addq	$0x1, %rbx
+               	incq	%rbx
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax

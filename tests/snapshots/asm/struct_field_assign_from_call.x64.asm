@@ -79,7 +79,7 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	addq	$0x14, %rsi
                	movslq	0x10(%rbx), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rdx
                	movl	$0x10, %r10d
                	movq	%r10, 0x30(%rsp)
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	movq	%rbx, %rsi
                	addq	$0x24, %rsi
                	movslq	0x20(%rbx), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rdx
                	movq	%r12, %r9
                	movq	0x30(%rsp), %rcx

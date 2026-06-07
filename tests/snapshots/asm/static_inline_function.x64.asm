@@ -12,7 +12,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	leaq	(%rdi,%rdi,2), %rax
                	movslq	%eax, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	retq
                	pushq	%rbp
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leaq	(%rax,%rax,2), %rax
                	movslq	%eax, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	leaq	(%rax,%rax,2), %rax
                	movslq	%eax, %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	cmpq	$-0x2, %rax
                	je	<addr>

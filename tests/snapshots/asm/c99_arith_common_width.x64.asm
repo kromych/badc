@@ -60,7 +60,7 @@ Disassembly of section .text:
                	subq	$0xd0, %rsp
                	movq	%rbx, (%rsp)
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, %eax
                	jmp	<addr>
                	movl	%eax, %eax
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
-               	subq	$0x1, %rax
+               	decq	%rax
                	movl	%eax, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax

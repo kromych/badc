@@ -300,7 +300,7 @@ Disassembly of section .text:
                	movl	(%rdx), %edx
                	sarq	$0x8, %rdx
                	andq	$0xff, %rdx
-               	addq	$0x1, %rdx
+               	incq	%rdx
                	movslq	%edx, %rdx
                	andq	$0xff, %rdx
                	shlq	$0x8, %rdx

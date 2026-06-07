@@ -15,7 +15,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x5, %eax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	addq	$0x10, %rsp
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	movl	$0x1, %eax
                	movl	$0x5, %ecx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movslq	%ecx, %rcx
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax

@@ -17,8 +17,8 @@ Disassembly of section .text:
                	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
-               	addq	$0x1, %rdi
-               	addq	$0x1, %rsi
+               	incq	%rdi
+               	incq	%rsi
                	jmp	<addr>
                	movzbq	(%rdi), %rax
                	cmpq	$0x0, %rax

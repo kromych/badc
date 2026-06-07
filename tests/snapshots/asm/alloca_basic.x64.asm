@@ -81,7 +81,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	movslq	-0x18(%rbp), %rax
@@ -302,7 +302,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x10(%rbp), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, -0x10(%rbp)
                	jmp	<addr>
                	movl	$0x8, %eax
@@ -366,7 +366,7 @@ Disassembly of section .text:
                	jge	<addr>
                	jmp	<addr>
                	movslq	-0x18(%rbp), %rax
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, -0x18(%rbp)
                	jmp	<addr>
                	movq	-0x8(%rbp), %rax

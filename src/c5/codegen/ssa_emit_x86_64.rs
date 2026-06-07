@@ -4394,6 +4394,33 @@ fn emit_binop_imm(
             super::x86_64::emit_ror_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
+        // A step of one encodes as `inc` / `dec` (three bytes) rather
+        // than `add` / `sub` with an immediate (seven). The flags differ
+        // -- `inc` / `dec` leave the carry flag unchanged -- but the
+        // result register is identical and no consumer reads the carry
+        // of a `BinopI` result.
+        BinOp::Add if rhs_imm == 1 || rhs_imm == -1 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            if rhs_imm == 1 {
+                super::x86_64::emit_inc_r(code, rd);
+            } else {
+                super::x86_64::emit_dec_r(code, rd);
+            }
+            true
+        }
+        BinOp::Sub if rhs_imm == 1 || rhs_imm == -1 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            if rhs_imm == 1 {
+                super::x86_64::emit_dec_r(code, rd);
+            } else {
+                super::x86_64::emit_inc_r(code, rd);
+            }
+            true
+        }
         BinOp::Add if imm_fits_i32 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);

@@ -60,7 +60,7 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0xff, %eax
                	xorq	%rdx, %rdx
-               	addq	$0x1, %rax
+               	incq	%rax
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
                	cmpq	$0x0, %rcx
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0xffff, %eax           # imm = 0xFFFF
                	xorq	%rdx, %rdx
-               	addq	$0x1, %rax
+               	incq	%rax
                	movq	%rax, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	cmpq	$0x0, %rcx
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	xorq	%rdx, %rdx
-               	addq	$0x1, %rax
+               	incq	%rax
                	movl	%eax, %ecx
                	cmpq	$0x0, %rcx
                	jne	<addr>
@@ -237,7 +237,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	xorq	%rdx, %rdx
                	movzbq	(%rax), %rcx
-               	addq	$0x1, %rcx
+               	incq	%rcx
                	movb	%cl, (%rax)
                	movzbq	(%rax), %rax
                	cmpq	$0x0, %rax

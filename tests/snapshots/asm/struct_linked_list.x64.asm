@@ -23,7 +23,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
-               	addq	$0x1, %rbx
+               	incq	%rbx
                	movq	%rcx, %r12
                	jmp	<addr>
                	movl	$0x10, %edi

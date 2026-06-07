@@ -21,7 +21,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%r8d, %rcx
                	movq	%rcx, %r8
-               	addq	$0x1, %r8
+               	incq	%r8
                	jmp	<addr>
                	movslq	%esi, %rcx
                	movslq	%r8d, %rsi

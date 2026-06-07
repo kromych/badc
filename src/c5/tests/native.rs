@@ -395,6 +395,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),
+    ("cast_fn_ptr_call.c", 0),
     ("paren_comma_side_effect.c", 0),
     ("for_init_decl_in_loop.c", 0),
     ("int_times_double_into_local.c", 0),
@@ -707,14 +708,20 @@ fn original_c4_compiles_and_runs_hello_natively() {
     // Native counterpart of `tests::programs::original_c4_compiles_and_runs_hello`.
     // The native build of c4.c reads its first user argv entry as the
     // source file to compile-and-run; we hand it the absolute path to
-    // hello.c and let c4.c (running natively) parse + execute it. The
-    // expected output is "Hello 123" with exit 0.
+    // the c4-subset self-host fixture and let c4.c (running natively)
+    // parse + execute it. The expected output is "Hello 123" with
+    // exit 0.
     //
     // Unlike the VM-side test, the native binary's argv[0] is set by
     // `Command::new` to the binary path -- so we only need to pass
-    // hello.c's absolute path; c4.c does `--argc; ++argv;` itself.
-    let outcome =
-        build_and_run_fixture_with_args("c4.c", [concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")]);
+    // the fixture's absolute path; c4.c does `--argc; ++argv;` itself.
+    let outcome = build_and_run_fixture_with_args(
+        "c4.c",
+        [concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/c/c4_selfhost_hello.c"
+        )],
+    );
     assert!(
         matches!(outcome, RunOutcome::Exit(0)),
         "expected clean exit, got {outcome:?}"

@@ -1160,6 +1160,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),
+    ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
     ("param_incoming_reg_clobber.c", 0),
     ("indexed_load_store.c", 0),
@@ -1280,15 +1281,19 @@ fn fixture_parity_native_optimized() {
 #[test]
 fn original_c4_compiles_and_runs_hello_jit() {
     // c4.c reads its first user argv entry as the source file to
-    // compile-and-run; we hand it hello.c via JIT argv and expect
-    // the resulting c4-VM run to print "Hello 123" and exit 0.
+    // compile-and-run; we hand it the c4-subset self-host fixture
+    // via JIT argv and expect the resulting c4-VM run to print
+    // "Hello 123" and exit 0.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");
     let src = std::fs::read_to_string(&path).expect("read c4.c");
-    let hello = concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c");
+    let hello = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/c/c4_selfhost_hello.c"
+    );
     let exit = jit_exit(&src, &["c4", hello]);
     assert_eq!(exit, 0, "c4 self-host JIT exited {exit}");
 }
@@ -1305,7 +1310,10 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
     path.push("c");
     path.push("c4.c");
     let src = std::fs::read_to_string(&path).expect("read c4.c");
-    let hello = concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c");
+    let hello = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/c/c4_selfhost_hello.c"
+    );
     let exit = jit_exit_native_optimized(&src, &["c4", hello]);
     assert_eq!(
         exit, 0,

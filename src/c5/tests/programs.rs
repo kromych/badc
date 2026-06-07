@@ -27,6 +27,12 @@ fn compound_literal_block() {
 }
 
 #[test]
+fn cast_fn_ptr_call() {
+    // C99 6.5.4 cast to an abstract function-pointer type.
+    assert_eq!(run_fixture("cast_fn_ptr_call.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }
@@ -992,12 +998,19 @@ int main() { return 0; }
 #[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
-    // runs under badc, compiles hello.c, and runs the resulting program
-    // -- which prints "Hello 123" then exits 0. We only check the exit
-    // code; the printed output goes to the real stdout.
+    // runs under badc, compiles the c4-subset self-host fixture, and
+    // runs the resulting program -- which prints "Hello 123" then exits
+    // 0. We only check the exit code; the printed output goes to the
+    // real stdout.
     let exit = super::run_fixture_with_args(
         "c4.c",
-        ["c4.c", concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")],
+        [
+            "c4.c",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/c/c4_selfhost_hello.c"
+            ),
+        ],
     );
     assert_eq!(exit, 0);
 }

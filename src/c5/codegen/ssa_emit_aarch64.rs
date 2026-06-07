@@ -3229,6 +3229,14 @@ fn emit_call_indirect(
                 emit(code, enc_ldr_imm(scratch.primary, Reg(31), src_off));
                 emit(code, enc_str_imm(scratch.primary, Reg(31), off));
             }
+            // This path plans with the scalar `plan_call_args`, so
+            // aggregate placements never occur here.
+            super::ArgPlacement::StructRegs { .. }
+            | super::ArgPlacement::StructByRefReg(_)
+            | super::ArgPlacement::StructByRefStack(_)
+            | super::ArgPlacement::StructStack { .. } => {
+                unreachable!("aggregate arg placement on the scalar indirect path")
+            }
         }
     }
     emit(code, enc_blr(target_reg));

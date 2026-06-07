@@ -5478,8 +5478,12 @@ mod tests {
     #[test]
     fn store_indexed_spilled_operands_precompute_address() {
         let target = Target::MacOSAarch64;
-        let program = Compiler::new(
+        // Compile for the target, not the host: `long` is 64-bit on the
+        // aarch64 target but 32-bit on a Windows host, which would change
+        // the element scale and drop the StoreIndexed.
+        let program = Compiler::with_target(
             "void store_at(long *a, int i, long v){ a[i] = v; } int main(void){ return 0; }".into(),
+            target,
         )
         .compile()
         .expect("compile");
@@ -5514,6 +5518,9 @@ mod tests {
         alloc.places[base as usize] = Place::Spill(0);
         alloc.places[index as usize] = Place::Spill(1);
         alloc.places[value as usize] = Place::Spill(2);
+        // The frame must reserve the three slots the test forces, or the
+        // spill-offset computation underflows.
+        alloc.spill_count = alloc.spill_count.max(3);
         let frame = Frame::for_function(&func, &alloc, target.abi());
         let scratch = ScratchPool {
             primary: Reg(16),

@@ -6,31 +6,58 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](#native-compilation)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](#native-compilation)
 
-`badc` (other name ideas were `betsy` and `badseed`) is a rather
-small compiler of a pretty large chunk of the C language as defined in
-the C99 standard. It used to be a bad one when the projects just started out
-and the name stuck. It supports separate translation units and has a small
-linker inside it as well.
+`badc`is a rather small cross-platform compiler of the C language as
+defined in the C99 standard, plus some C11 and later. `badc` used to be a
+bad one for quite some time when the projects just started out, and
+the name stuck.
 
-Its small footprint and embedded headers (which
-you can override) give a fun one-executable experience. Its codebase
-of moderate size can be a good pedagogical material. It lowers through
-an SSA intermediate representation and a graph-coloring register
-allocator, but stops short of the exquisite optimization passes a
-production toolchain runs. All told, to stay slim, it's unlikely to surpass
-the ability of multi-gigabyte compiler suites to squeeze the last drop
-of perf from the machine, and that's fine
+Its small footprint and embedded headers (which you can override) give
+a fun one-executable experience. Its codebase of moderate size can be
+a good pedagogical material. It lowers through an SSA intermediate
+representation and a graph-coloring register allocator, but doesn't go for
+the exquisite optimization passes a titan toolchain like clang gcc or msvc
+run. All told, to stay slim, it's unlikely to surpass the ability of
+multi-gigabyte compiler suites to squeeze the last drop of perf from the
+machine, and that's fine.
 
-`badc` produces real native binaries (macOs Mach-O, Linux ELF, or
+A fun extension is that `badc` can automatically add the header(s)
+for the standard library so the bare `hello.c` with
+
+```c
+int main() {
+    puts("Hello");
+    return 0;
+}
+```
+
+works:
+
+```console
+info: auto-including <stdio.h> for undeclared `puts`
+info: wrote file hello for target `macos-aarch64`
+```
+
+`badc` is able to produce the debug information so that the binaries it generates
+can be debugged and performance can be profiled.
+
+`badc` optimizes when you specify `-O` and can produce code that's faster
+than `clang -O0`, especially on ARM64. To get an idea of the codegen
+quality, take a look at `./tests/snapshots` with assembly and SSA snapshots
+of the test fixtures.
+
+`badc` produces real native binaries (macOS Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
 Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
 (can be omitted). Can also JIT into the machine code and recognize being
-used as `#!` so that C source code becomes a script.
+used as `#!` so that C source code becomes a script. It supports
+separate translation units and has a small linker inside it as well.
 
 There are various demo's under [`demos`](./demos/):
 
 * Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
-* GUI demos for macOS, Linux and Windows (`gui_hello`),
+* `gui_hello` - GUI demos for macOS, Linux and Windows,
+* `wdm_driver`, `nt_hello`, `nt_loader` - examples of the Windows native (NT) executable, Windows driver,
+* `efi_hello` - a UEFI binary,
 * Maze builder and solver - TBD,
 * `sqlite3` - the most famous embedded database,
 * `miniz` - compression, CRC32, integers, bit twiddling,
@@ -56,7 +83,7 @@ enough divergence from the original to call the dialect **c5**. Due to
 that facetious naming the source tree spells that out as the `c5` module
 and `C5Error` type.
 
-The original `c4.c` compiler ships as a test fixture and self-hosts:
+The 4-function `c4.c` compiler ships as a test fixture and self-hosts:
 
 ```sh
 badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
@@ -266,10 +293,8 @@ forcing you to pull in everything they name.
 
 #### Source-driven build flags via `#pragma`
 
-c5 follows a "source picks, compiler honours" pattern for
-build-time choices that historically lived on the build
-driver's command line. The same shape covers dylib bindings,
-exports, alignment, the entry-point name, and the Windows
+`badc` uses `#pragma`'s to lighten the command line. One can specify
+dylib bindings, exports, alignment, the entry-point name, and the Windows
 subsystem -- every knob lives next to the code it configures
 so the source carries enough context to build with a bare
 `badc <file>`.

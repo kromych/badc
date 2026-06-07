@@ -1356,9 +1356,9 @@ fn post_write_native(out: &std::path::Path, target: Target) {
             #[cfg(not(target_os = "macos"))]
             {
                 let _ = out;
-                eprint_diagnostic!(
+                eprint_diagnostic(
                     "info: produced a Mach-O on a non-macOS host; copy to macOS \
-                     and `codesign --sign - <path>` before running."
+                     and `codesign --sign - <path>` before running.",
                 );
             }
         }

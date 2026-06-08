@@ -284,7 +284,25 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+    if func.param_aggs.iter().all(Option::is_none) {
+        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
+    }
+    let aggs: Vec<Option<super::ArgAgg>> = func
+        .param_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &func.agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect();
+    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -1407,6 +1425,22 @@ fn emit_prologue(
                     }
                     Some(super::ArgPlacement::IntReg(r)) => {
                         emit(code, enc_str_pre(Reg(r), Reg(31), -16))
+                    }
+                    // Aggregate parameter passed in registers: reserve
+                    // the 16-byte cell and store each eightbyte into it
+                    // (eightbyte k at offset 8k), so the body reads the
+                    // struct value from the cell's address.
+                    Some(super::ArgPlacement::StructRegs { regs, n }) => {
+                        emit_sub_sp_imm(code, 16);
+                        for (k, cr) in regs.iter().take(n as usize).enumerate() {
+                            let off = (k as u32) * 8;
+                            if cr.is_fp {
+                                emit(code, enc_fmov_d_to_x(Reg(16), cr.reg));
+                                emit(code, enc_str_imm(Reg(16), Reg(31), off));
+                            } else {
+                                emit(code, enc_str_imm(Reg(cr.reg), Reg(31), off));
+                            }
+                        }
                     }
                     // No register source (stack-passed or out of range):
                     // the overflow restripe above already filled the

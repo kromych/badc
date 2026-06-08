@@ -1,3 +1,4 @@
+pointer_arithmetic_scaling.c:4: warning: pointer assigned to integer in return (declared=int, returned=int*)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=1

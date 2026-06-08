@@ -379,6 +379,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("ir_translation_if.c", 2),
     ("ir_translation_while.c", 0),
     ("type_warning_int_to_ptr.c", 0),
+    ("type_warning_return.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),

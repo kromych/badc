@@ -468,6 +468,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("sizeof_basic.c", 0),
     ("sizeof_expr.c", 0),
     ("type_warning_int_to_ptr.c", 0),
+    ("type_warning_return.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     // c5-side vprintf -- variadic walking happens in c5 source

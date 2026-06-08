@@ -1,3 +1,6 @@
+thread_local_per_thread.c:28: warning: integer assigned to pointer in return (declared=int*, returned=int)
+thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int)
+thread_local_per_thread.c:31: warning: integer assigned to pointer in return (declared=int*, returned=int)
 thread_local_per_thread.c:24: warning: unused parameter `arg`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=thread_main

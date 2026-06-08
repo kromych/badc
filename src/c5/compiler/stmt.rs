@@ -727,6 +727,7 @@ impl Compiler {
             self.consume(b';', "semicolon expected after continue")?;
             self.ast_emit_continue();
         } else if self.lex.tk == Token::Return {
+            let line = self.lex.line;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
@@ -739,10 +740,9 @@ impl Compiler {
                     // Reject here rather than silently dropping
                     // the value -- gcc and clang both diagnose this
                     // at the strict level.
-                    return Err(self.compile_err(
-                        "`return` with a value in a function returning `void` \
-                         (C99 6.8.6.4p1)",
-                    ));
+                    return Err(
+                        self.compile_err("`return` with a value in a function returning `void`")
+                    );
                 }
                 if returns_struct {
                     // Push the hidden out-pointer (loaded from
@@ -764,6 +764,18 @@ impl Compiler {
                              struct-returning function",
                         ));
                     }
+                    // C99 6.8.6.4p3: the returned value is converted as
+                    // if by assignment. Diagnose a return of an
+                    // incompatible struct type, matching the assignment
+                    // path.
+                    if let Some(reason) = Self::type_warning(ret_ty, self.ty, false) {
+                        let want = super::types::format_type(ret_ty, &self.structs);
+                        let got = super::types::format_type(self.ty, &self.structs);
+                        self.warn_at(
+                            line,
+                            format!("{reason} in return (declared={want}, returned={got})"),
+                        );
+                    }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
                     // `Stmt::Return(Some(_))` so the AST-driven
@@ -775,13 +787,27 @@ impl Compiler {
                     return_value = self.ast_acc;
                 } else {
                     self.parse_full_expr()?;
-                    // C99 6.8.6.4p3: the value is converted to the
-                    // function's return type as if by assignment.
+                    // C99 6.8.6.4p3 + 6.5.16.1: the value is converted
+                    // to the return type as if by assignment. Diagnose
+                    // the same incompatible pointer / integer cases the
+                    // assignment path flags, before the conversion
+                    // rewrites `self.ty`.
+                    let rhs_is_zero = self.last_emit_is_zero();
+                    let rhs_is_untyped = self.last_emit_was_indirect_call();
+                    if let Some(reason) =
+                        Self::type_warning_with_flags(ret_ty, self.ty, rhs_is_zero, rhs_is_untyped)
+                    {
+                        let want = super::types::format_type(ret_ty, &self.structs);
+                        let got = super::types::format_type(self.ty, &self.structs);
+                        self.warn_at(
+                            line,
+                            format!("{reason} in return (declared={want}, returned={got})"),
+                        );
+                    }
                     // Reuse `convert_assign_rhs` so an `int`-typed
-                    // `return` from a `double`-returning function
-                    // lifts through the int-to-float cast rather
-                    // than landing the integer's bit pattern in
-                    // the FP slot.
+                    // `return` from a `double`-returning function lifts
+                    // through the int-to-float cast rather than landing
+                    // the integer's bit pattern in the FP slot.
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
                 }
@@ -792,6 +818,14 @@ impl Compiler {
                 // value, matching the synthetic function-end Lev
                 // in run_compile.
                 self.emit_imm(0);
+            } else {
+                // Bare `return;` in a function returning non-void.
+                // C99 leaves the returned value indeterminate (6.9.1p12
+                // -- undefined behaviour if the caller uses it); C23
+                // 6.8.6.4 and every current toolchain reject it. Error.
+                return Err(
+                    self.compile_err("`return` with no value in a function returning non-void")
+                );
             }
             self.emit_dead_stores_and_flush();
             self.ast_emit_return(return_value);

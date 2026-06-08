@@ -33,6 +33,27 @@ fn source_with_only_a_global_has_no_main() {
 }
 
 #[test]
+fn bare_return_in_non_void_function_is_rejected() {
+    // C23 6.8.6.4 + current toolchains: `return;` with no value in a
+    // function returning non-void. C99 leaves the value indeterminate
+    // (6.9.1p12).
+    expect_compile_error(
+        "int f(int x) { if (x) return x; return; } int main(void) { return f(0); }",
+        "`return` with no value in a function returning non-void",
+    );
+}
+
+#[test]
+fn bare_return_in_void_function_is_allowed() {
+    // The converse stays legal: `return;` in a `void` function.
+    Compiler::new(
+        "void g(int x) { if (x) return; } int main(void) { g(1); return 0; }".to_string(),
+    )
+    .compile()
+    .expect("bare return in a void function must compile");
+}
+
+#[test]
 fn missing_semicolon_after_statement() {
     expect_compile_error(
         "int main() { int a; a = 1 return a; }",

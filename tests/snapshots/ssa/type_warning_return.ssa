@@ -1,0 +1,73 @@
+type_warning_return.c:17: warning: pointer assigned to integer in return (declared=int, returned=int*)
+type_warning_return.c:21: warning: integer assigned to pointer in return (declared=int*, returned=int)
+type_warning_return.c:25: warning: incompatible struct types in return (declared=struct A, returned=struct B)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=ret_ptr_as_int
+fn ent_pc=0 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ImmData(8)                                       -> x0
+    v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
+    terminator Return(v2)   (exit_acc=v2)
+; --- SSA dump (ok=true) ent_pc=1 ---
+; name=ret_int_as_ptr
+fn ent_pc=1 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x0
+    v2   Imm(0)                                           -> x1
+    v3   LoadLocal { off=2, kind=I32 }                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=2 ---
+; name=ret_wrong_struct
+fn ent_pc=2 n_params=2 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   LocalAddr(-1)                                    -> x0
+    v2   LoadLocal { off=3, kind=I64 }                    -> x1
+    v3   Mcpy { dst=v1, src=v2, size=4 }                  -> x0
+    v4   LoadLocal { off=2, kind=I64 }                    -> x0
+    v5   LocalAddr(-1)                                    -> x1
+    v6   Mcpy { dst=v4, src=v5, size=4 }                  -> x1
+    terminator Return(v4)   (exit_acc=v4)
+; --- SSA dump (ok=true) ent_pc=3 ---
+; name=ret_null
+fn ent_pc=3 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=4 ---
+; name=ret_ok
+fn ent_pc=4 n_params=1 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x0
+    v2   Imm(0)                                           -> x1
+    v3   LoadLocal { off=2, kind=I32 }                    -> x1
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=5 ---
+; name=main
+fn ent_pc=5 n_params=0 variadic=false locals=0
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    terminator Return(v1)   (exit_acc=v1)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)

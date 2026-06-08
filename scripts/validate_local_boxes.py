@@ -12,7 +12,7 @@ Each lane:
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release --lib`.
-  4. Run demos sqlite3 / lua / miniz / stb / tweetnacl smoke).
+  4. Run the demos sqlite3 / lua / miniz / monocypher / stb / tweetnacl.
 
 Usage (one `--box` flag per remote lane):
 
@@ -45,6 +45,8 @@ GATING_DEMOS = (
     "demos/sqlite3/smoke.py",
     "demos/lua/smoke.py",
     "demos/miniz/smoke.py",
+    "demos/monocypher/smoke.py",
+    "demos/stb/smoke.py",
     "demos/tweetnacl/smoke.py",
 )
 
@@ -159,8 +161,22 @@ def sync_windows(box: Box, github_token: str) -> int:
     if tar.returncode != 0:
         sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")
         return tar.returncode
+    # The tarball must land where the extraction reads it. Windows
+    # OpenSSH scp resolves a bare `/tmp/...` target against the SFTP root
+    # (typically the user's home drive), not `C:\tmp`, so create `C:\tmp`
+    # and scp to the explicit `C:/tmp/...` path the extraction uses --
+    # otherwise the extraction silently runs against a stale tarball from
+    # an earlier run.
+    mkdir = subprocess.run(
+        ["ssh", box.host, 'cmd /c "mkdir C:\\tmp 2>NUL & exit /b 0"'],
+        capture_output=True,
+        text=True,
+    )
+    if mkdir.returncode != 0:
+        sys.stdout.write(f"[{box.short}] mkdir C:\\tmp failed: {mkdir.stderr}\n")
+        return mkdir.returncode
     scp = subprocess.run(
-        ["scp", str(archive), f"{box.host}:/tmp/badc-tree.tar.gz"],
+        ["scp", str(archive), f"{box.host}:C:/tmp/badc-tree.tar.gz"],
         capture_output=True,
         text=True,
     )

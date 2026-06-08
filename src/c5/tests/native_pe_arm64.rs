@@ -489,6 +489,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("hex_float_literal.c", 0),
     ("bool_normalize_c99.c", 0),
     ("compound_literal_block.c", 0),
+    ("struct_arg_in_registers.c", 0),
     ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
     ("param_incoming_reg_clobber.c", 0),

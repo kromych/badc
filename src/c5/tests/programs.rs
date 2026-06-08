@@ -33,6 +33,13 @@ fn cast_fn_ptr_call() {
 }
 
 #[test]
+fn struct_arg_in_registers() {
+    // C99 6.5.2.2 + AAPCS64 6.8.2: small integer aggregates passed by
+    // value in argument registers, with by-value copy semantics.
+    assert_eq!(run_fixture("struct_arg_in_registers.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }

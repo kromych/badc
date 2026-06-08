@@ -1757,6 +1757,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call(
             code,
@@ -1772,6 +1773,8 @@ fn emit_inst(
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::CallExt {
             binding_idx,
@@ -1799,6 +1802,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call_indirect(
             code,
@@ -1813,6 +1817,8 @@ fn emit_inst(
             abi,
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::Mcpy {
             dst: d,
@@ -2923,6 +2929,35 @@ fn target_for_ext(abi: super::Abi) -> Target {
 /// pass to resolve. Result lands in x0; the SSA emit moves it to
 /// the inst's `dst` if needed.
 #[allow(clippy::too_many_arguments)]
+/// Build the per-argument aggregate classification slice the
+/// struct-aware planner consumes: `arg_aggs[k] = Some(i)` resolves
+/// to `agg_descs[i]` classified for `abi`. Returns an empty vector
+/// when no argument is an aggregate (the scalar fast path).
+fn build_arg_aggs(
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
+) -> Vec<Option<super::ArgAgg>> {
+    if arg_aggs.iter().all(Option::is_none) {
+        return Vec::new();
+    }
+    arg_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -2937,7 +2972,10 @@ fn emit_call(
     callee_is_variadic: bool,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     if callee_is_variadic
         && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
     {
@@ -2966,7 +3004,7 @@ fn emit_call(
         //    callee spills both banks into its general / vector register
         //    save area; `va_start` records the offsets and `va_arg` walks
         //    the areas then the overflow stack.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        let plan = super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
@@ -3000,7 +3038,7 @@ fn emit_call(
     // register placement, since a floating-point constant rides an
     // integer register as its `Imm` bit pattern. Feeding the mask to
     // the planner routes the FP args to d0..d7 instead of x0..x7.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -3098,7 +3136,10 @@ fn emit_call_indirect(
     abi: super::Abi,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let target_place = alloc
         .places
         .get(target as usize)
@@ -3139,10 +3180,14 @@ fn emit_call_indirect(
     if target_r.0 != target_reg.0 {
         emit_mov_reg(code, target_reg, target_r);
     }
-    if callee_variadic
-        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    if (callee_variadic
+        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
+        || !aggs.is_empty()
     {
-        // Host variadic ABI through a function pointer: the named
+        // Host ABI through a function pointer, taken for a host
+        // variadic callee or any call passing an aggregate by value
+        // (aggregates are placed by `marshal_args`, which the
+        // c5-stack push path below does not handle): the named
         // arguments follow AAPCS64 (int / FP bank) and the variadic tail
         // rides the host stack at 8-byte stride (macOS,
         // `variadic_on_stack`), the integer register bank then the
@@ -3152,7 +3197,7 @@ fn emit_call_indirect(
         // target pointer is already captured in `target_reg` (a
         // non-arg-passing scratch), so `marshal_args` will not clobber
         // it. `blr` through the captured register.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        let plan = super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
@@ -3210,7 +3255,7 @@ fn emit_call_indirect(
     // overflow (args
     // past 8) stays on the c5 stack at `[sp + i*16]`, which the
     // callee prologue's overflow restripe loop also reads from.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -5295,6 +5340,78 @@ fn marshal_args(
                     }
                 }
             }
+        }
+    }
+
+    // Aggregate arguments, run last so the scalar register moves above
+    // have already consumed their sources. The struct's address is
+    // materialised into the scratch register (outside the argument
+    // bank) so loading the eightbytes into x0..x7 / d0..d7 cannot
+    // clobber the base while later eightbytes are still pending.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        match placement {
+            super::ArgPlacement::StructRegs { regs, n } => {
+                let ap = arg_place(i);
+                let src = match materialize_int_shifted(
+                    code,
+                    ap,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                if src.0 != scratch.primary.0 {
+                    emit_mov_reg(code, scratch.primary, src);
+                }
+                for (k, cr) in regs.iter().take(n as usize).enumerate() {
+                    let off = (k as u32) * 8;
+                    if cr.is_fp {
+                        emit(code, enc_ldr_d_imm(cr.reg, scratch.primary, off));
+                    } else {
+                        emit(code, enc_ldr_imm(Reg(cr.reg), scratch.primary, off));
+                    }
+                }
+            }
+            super::ArgPlacement::StructStack { off, size } => {
+                let ap = arg_place(i);
+                let src = match materialize_int_shifted(
+                    code,
+                    ap,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                if src.0 != scratch.primary.0 {
+                    emit_mov_reg(code, scratch.primary, src);
+                }
+                // Copy `size` bytes from [scratch.primary] to
+                // [sp + off] in 8-byte words plus a sub-word tail.
+                let mut copied = 0u32;
+                while copied + 8 <= size {
+                    emit(code, enc_ldr_imm(scratch.secondary, scratch.primary, copied));
+                    emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
+                    copied += 8;
+                }
+                while copied < size {
+                    emit(code, enc_ldrb_imm(scratch.secondary, scratch.primary, copied));
+                    emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
+                    copied += 1;
+                }
+            }
+            super::ArgPlacement::StructByRefReg(_)
+            | super::ArgPlacement::StructByRefStack(_) => {
+                // Not produced for AAPCS64 in this phase: >16-byte
+                // aggregates keep the existing address-passing
+                // convention (untagged scalar pointer argument).
+                bail_msg("aarch64 marshal: by-reference aggregate arg not yet emitted");
+                return false;
+            }
+            _ => {}
         }
     }
 

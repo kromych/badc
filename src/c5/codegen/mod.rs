@@ -384,19 +384,28 @@ pub(super) fn plan_call_args_aggs(
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
                     let need_fp = classes.iter().filter(|c| **c == RegClass::Sse).count();
                     if int_idx + need_int <= int_max && fp_idx + need_fp <= 8 {
-                        let mut regs = [ClassReg { reg: 0, is_fp: false }; 4];
+                        let mut regs = [ClassReg {
+                            reg: 0,
+                            is_fp: false,
+                        }; 4];
                         let mut n = 0u8;
                         for c in classes {
                             regs[n as usize] = match c {
                                 RegClass::Integer => {
                                     let r = abi.int_arg_regs[int_idx];
                                     int_idx += 1;
-                                    ClassReg { reg: r, is_fp: false }
+                                    ClassReg {
+                                        reg: r,
+                                        is_fp: false,
+                                    }
                                 }
                                 RegClass::Sse => {
                                     let r = fp_idx as u8;
                                     fp_idx += 1;
-                                    ClassReg { reg: r, is_fp: true }
+                                    ClassReg {
+                                        reg: r,
+                                        is_fp: true,
+                                    }
                                 }
                             };
                             n += 1;

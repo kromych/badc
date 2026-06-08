@@ -193,10 +193,11 @@ pub(crate) enum Inst {
         /// `Some(i)` when the callee returns the aggregate
         /// `agg_descs[i]` by value; `None` for scalar / void.
         ret_agg: Option<u32>,
-        /// Address of the caller-allocated result temporary an
-        /// aggregate return materialises into. `NO_VALUE` unless
-        /// `ret_agg` is set.
-        ret_slot: ValueId,
+        /// Negative frame slot of the caller-allocated result
+        /// temporary an aggregate return materialises into. A frame
+        /// slot rather than a `ValueId` so it survives value
+        /// renumbering. `0` unless `ret_agg` is set.
+        ret_slot_local: i64,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -222,8 +223,8 @@ pub(crate) enum Inst {
         arg_aggs: Vec<Option<u32>>,
         /// See [`Self::Call::ret_agg`].
         ret_agg: Option<u32>,
-        /// See [`Self::Call::ret_slot`].
-        ret_slot: ValueId,
+        /// See [`Self::Call::ret_slot_local`].
+        ret_slot_local: i64,
     },
     /// External library call.
     CallExt {
@@ -584,4 +585,10 @@ pub(crate) struct FunctionSsa {
     /// `agg_descs[i]` by value through the host ABI; `None` for a
     /// scalar / void return.
     pub ret_agg: Option<u32>,
+    /// Negative frame slot holding the caller-supplied indirect-result
+    /// address (AAPCS64 x8) for a function returning an aggregate
+    /// larger than 16 bytes. The prologue stores x8 here; the callee
+    /// writes the result through it. `0` when the function does not
+    /// return through x8.
+    pub indirect_result_slot: i64,
 }

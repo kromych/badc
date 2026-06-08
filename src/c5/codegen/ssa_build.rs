@@ -159,6 +159,7 @@ impl SsaBuilder {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            indirect_result_slot: 0,
         };
         let mut b = Self {
             func,
@@ -308,6 +309,39 @@ impl SsaBuilder {
     pub(crate) fn set_param_aggs(&mut self, param_aggs: Vec<Option<u32>>, local_slots: Vec<i64>) {
         self.func.param_aggs = param_aggs;
         self.func.param_local_slots = local_slots;
+    }
+
+    /// Record that this function returns `agg_descs[idx]` by value
+    /// through the host ABI (registers or x8).
+    pub(crate) fn set_ret_agg(&mut self, idx: u32) {
+        self.func.ret_agg = Some(idx);
+    }
+
+    /// Record the body-local slot holding the incoming x8 indirect-
+    /// result pointer for a function returning an aggregate larger
+    /// than 16 bytes.
+    pub(crate) fn set_indirect_result_slot(&mut self, slot: i64) {
+        self.func.indirect_result_slot = slot;
+    }
+
+    /// Mark the call instruction whose result is `v` as returning the
+    /// aggregate `agg_descs[ret_agg]` into the result temporary at
+    /// frame slot `ret_slot_local`.
+    pub(crate) fn set_call_ret_agg(&mut self, v: ValueId, ret_agg: u32, ret_slot_local: i64) {
+        if let Inst::Call {
+            ret_agg: ra,
+            ret_slot_local: rs,
+            ..
+        }
+        | Inst::CallIndirect {
+            ret_agg: ra,
+            ret_slot_local: rs,
+            ..
+        } = &mut self.func.insts[v as usize]
+        {
+            *ra = Some(ret_agg);
+            *rs = ret_slot_local;
+        }
     }
 
     /// Attach the per-argument aggregate map to the call instruction
@@ -788,7 +822,7 @@ impl SsaBuilder {
             fp_arg_mask,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
-            ret_slot: crate::c5::ir::NO_VALUE,
+            ret_slot_local: 0,
         })
     }
 
@@ -813,7 +847,7 @@ impl SsaBuilder {
             fp_arg_mask,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
-            ret_slot: crate::c5::ir::NO_VALUE,
+            ret_slot_local: 0,
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -839,7 +873,7 @@ impl SsaBuilder {
             fp_arg_mask,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
-            ret_slot: crate::c5::ir::NO_VALUE,
+            ret_slot_local: 0,
         })
     }
 
@@ -873,6 +907,22 @@ impl SsaBuilder {
     pub(crate) fn alloc_synthetic_local(&mut self) -> i64 {
         self.func.locals += 1;
         -self.func.locals
+    }
+
+    /// Reserve `ceil(size/8)` contiguous 8-byte slots and return the
+    /// base (most-negative) slot, whose address is the lowest of the
+    /// group. A whole-struct `Mcpy` from that address covers the
+    /// reserved bytes. Used for an aggregate result temporary.
+    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64) -> i64 {
+        let nslots = (size + 7) / 8;
+        let mut base = 0;
+        for k in 0..nslots {
+            let s = self.alloc_synthetic_local();
+            if k == nslots - 1 {
+                base = s;
+            }
+        }
+        base
     }
 
     /// `Inst::CallExt` -- libc / external call. libc body may

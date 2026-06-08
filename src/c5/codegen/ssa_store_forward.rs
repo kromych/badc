@@ -386,6 +386,7 @@ mod tests {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            indirect_result_slot: 0,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

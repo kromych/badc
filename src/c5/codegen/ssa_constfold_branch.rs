@@ -83,6 +83,7 @@ mod tests {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            indirect_result_slot: 0,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

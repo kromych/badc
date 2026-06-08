@@ -48,6 +48,14 @@ fn struct_arg_two_eightbyte() {
 }
 
 #[test]
+fn struct_arg_by_stack() {
+    // System V AMD64 3.2.3: an aggregate larger than two eightbytes is
+    // MEMORY class, passed inline on the caller's outgoing stack; the
+    // callee copies it from the incoming stack into its own local.
+    assert_eq!(run_fixture("struct_arg_by_stack.c"), 0);
+}
+
+#[test]
 fn struct_return_by_value() {
     // C99 6.8.6.4 + AAPCS64 6.9: integer aggregate returns in x0/x1
     // (<= 16 bytes) or through x8 (> 16 bytes).

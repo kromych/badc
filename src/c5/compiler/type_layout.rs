@@ -342,10 +342,18 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
         return None;
     }
     if matches!(target, Target::WindowsX64) {
+        // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
+        // value in a register; larger ones go by implicit reference,
+        // which keeps the by-address convention.
         if !matches!(size, 1 | 2 | 4 | 8) {
             return None;
         }
-    } else if size > 16 {
+    } else if size > 16 && !matches!(target, Target::LinuxX64) {
+        // AArch64 (AAPCS64) passes a larger aggregate by reference; the
+        // c5 by-address convention already matches that on the wire, so
+        // it is not tagged. System V x86_64 passes it inline on the
+        // stack (MEMORY class), which the marshal / prologue handle, so
+        // LinuxX64 is admitted at any size.
         return None;
     }
     let align = (structs[id].align.max(1)) as u32;

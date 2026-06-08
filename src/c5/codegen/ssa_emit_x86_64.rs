@@ -1366,6 +1366,48 @@ fn marshal_args(
         }
     }
 
+    // Aggregate arguments passed on the outgoing stack (System V AMD64
+    // MEMORY class, > 16 bytes): copy the struct inline to [rsp + off].
+    // The destination is memory and never serves as a move source, but
+    // the struct's base address sits in an argument register that the
+    // register-move phase below overwrites, so this copy runs first
+    // while the base is still live (mirroring the scalar Stack arm).
+    // The address rides SCRATCH_R10, the per-word temp SCRATCH_R13;
+    // both lie outside the allocator pools.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructStack { off, size } = placement {
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                SCRATCH_R10,
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!(
+                        "{site}: by-stack aggregate base not in int reg / spill"
+                    ));
+                    return false;
+                }
+            };
+            if src.0 != SCRATCH_R10.0 {
+                emit_mov_rr(code, SCRATCH_R10, src);
+            }
+            let words = size / 8;
+            for w in 0..words {
+                let o = (w * 8) as i32;
+                emit_mov_r_mem(code, SCRATCH_R13, SCRATCH_R10, o);
+                emit_mov_mem_r(code, Reg::RSP, off as i32 + o, SCRATCH_R13);
+            }
+            for b in (words * 8)..size {
+                let o = b as i32;
+                super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R13, SCRATCH_R10, o);
+                super::x86_64::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R13);
+            }
+        }
+    }
+
     // FP arguments. A value already held in an xmm register may sit
     // in another FP argument's target xmm, so the xmm-to-xmm moves
     // form a parallel copy that a naive sequential emit would clobber
@@ -2250,6 +2292,69 @@ fn emit_prologue(
         super::x86_64::emit_mov_mem_r(code, Reg::RSP, off, Reg(r));
     }
     emit_struct_param_scatter(code, func, frame, abi);
+    emit_struct_stack_param_copy(code, func, frame, abi);
+}
+
+/// Copy each aggregate parameter the host ABI passes inline on the
+/// stack (System V AMD64 MEMORY class, size > 16) into its parser-
+/// reserved body local. The caller placed the struct in its outgoing
+/// argument area, which sits above the return address at callee entry;
+/// after the c5 cdecl entry spill it is reachable at
+/// `[rbp + 16 + overflow_bytes + n_reg*16 + off]`, where `off` is the
+/// planner's byte offset of the parameter in the outgoing area. The
+/// dead reg cell `param_reg_stack_split` reserves for the struct keeps
+/// the slot->cell map contiguous; the body reads the struct from the
+/// synthetic body local this copy fills. Runs after the frame is set
+/// up, so the addresses are rbp-relative and SCRATCH_R10 is free.
+fn emit_struct_stack_param_copy(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    if !placements
+        .iter()
+        .any(|p| matches!(p, super::ArgPlacement::StructStack { .. }))
+    {
+        return;
+    }
+    let (n_reg, n_stack) = param_reg_stack_split(func, abi);
+    // The scalar-overflow restripe reads incoming stack arguments at a
+    // fixed 8-byte stride, which is wrong once a by-stack aggregate
+    // occupies aligned(size) ahead of the scalar overflow. Until the
+    // restripe is made offset-driven, reject the combination rather than
+    // silently miscompile the overflowing scalar parameters.
+    assert!(
+        n_stack == 0,
+        "by-stack aggregate parameter combined with scalar stack overflow \
+         is not yet supported"
+    );
+    let base = 16 + (n_reg as i64) * 16;
+    for (i, &placement) in placements.iter().enumerate() {
+        let super::ArgPlacement::StructStack { off, size } = placement else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        let src_off = base + off as i64;
+        let dst_off = local_slot_off(slot, func, frame, abi);
+        let words = (size / 8) as i64;
+        for w in 0..words {
+            let o = w * 8;
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
+            emit_mov_mem_r(code, Reg::RBP, (dst_off + o) as i32, SCRATCH_R10);
+        }
+        for b in (words * 8)..(size as i64) {
+            super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
+            super::x86_64::emit_mov_mem8_r(code, Reg::RBP, (dst_off + b) as i32, SCRATCH_R10);
+        }
+    }
 }
 
 /// Store each register-passed aggregate parameter's incoming argument

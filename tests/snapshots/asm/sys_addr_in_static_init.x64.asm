@@ -130,12 +130,10 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdx, (%rsp)
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rdx, 0x20(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -151,12 +149,10 @@ Disassembly of section .text:
                	pushq	%r11
                	retq
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdx, (%rsp)
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rdx, 0x20(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -187,10 +183,9 @@ Disassembly of section .text:
                	pushq	%r11
                	retq
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -204,4 +199,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

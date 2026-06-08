@@ -387,26 +387,16 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
 /// lowered (the debug assertion fires).
 fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
     let placements = param_placements(func, abi);
+    // The count of register-passed (non-stack) placements and the count
+    // of stack-passed ones. The entry-spill prologue fills each c5 cdecl
+    // cell by its own placement, so the two need not form a contiguous
+    // register prefix and stack suffix; a by-value aggregate consuming no
+    // argument register (System V MEMORY class) or a Win64 aggregate
+    // overflowing past the positional registers may interleave them.
     let n_reg = placements
         .iter()
         .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
         .count();
-    // An interleaved register / stack placement -- the integer bank
-    // exhausted before a trailing floating-point parameter -- does not
-    // fit the contiguous-prefix c5 cdecl cell layout. Fail in every
-    // build rather than emit a prologue that reads parameters from the
-    // wrong cells; the case is unreachable for the parameter lists the
-    // demos and fixtures exercise. TODO: support a non-prefix cell
-    // layout for this shape.
-    assert!(
-        placements[..n_reg]
-            .iter()
-            .all(|p| !matches!(p, super::ArgPlacement::Stack(_)))
-            && placements[n_reg..]
-                .iter()
-                .all(|p| matches!(p, super::ArgPlacement::Stack(_))),
-        "interleaved register / stack parameter placement is not yet supported"
-    );
     (n_reg, placements.len() - n_reg)
 }
 
@@ -2147,44 +2137,52 @@ fn emit_prologue(
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R10);
-        let (elidable, n_reg, n_stack) = param_elidable_mask(func, alloc, abi);
+        let (elidable, _n_reg, _n_stack) = param_elidable_mask(func, alloc, abi);
         let placements = param_placements(func, abi);
-        if n_stack > 0 {
-            let overflow_bytes = (n_stack as u32) * 16;
-            emit_sub_rsp_imm32(code, overflow_bytes);
-            for i in 0..n_stack {
-                let host_off = (overflow_bytes as i32) + (abi.shadow_space as i32) + (i as i32) * 8;
-                emit_mov_r_mem(code, Reg::RAX, Reg::RSP, host_off);
-                emit_mov_mem_r(code, Reg::RSP, (i as i32) * 16, Reg::RAX);
-            }
-        }
-        for i in (0..n_reg).rev() {
-            emit_sub_rsp_imm32(code, 16);
-            // The cell at [rsp + 0] holds the value the body reads
-            // through `LoadLocal { off: i+2 }`. When mem2reg has
-            // promoted the parameter into a register (no LocalAddr,
-            // no live LoadLocal) the cell sits unobserved and the
-            // mov store is dead per C99 6.2.4p2; skip emitting it.
-            // The stack space is still reserved so the surviving
-            // non-elidable parameters keep their fixed offsets.
-            if elidable.get(i).copied().unwrap_or(false) {
-                continue;
-            }
-            // Source the incoming value from the parameter's argument
-            // register per the plan: an integer / pointer parameter from
-            // its integer register (`plan.IntReg`, not `int_arg_regs[i]`
-            // -- an FP parameter earlier in the list consumes an xmm
-            // register and does not shift the integer bank), a floating-
-            // point parameter (always a `double` here -- a `float`
-            // parameter's positive cell is unobserved and elided above)
-            // from its xmm register through a single `movsd`.
+        // One contiguous c5 cdecl cell block, `n_params` 16-byte cells.
+        // Parameter `i` reads its value through `LoadLocal { off: i+2 }`
+        // from cell `[rsp + 16*i]` here (equivalently `[rbp + 16*(i+1)]`
+        // after the frame is established). The incoming argument area --
+        // the caller's outgoing stack, including any shadow space --
+        // begins at `[rsp + cells]`; a stack-passed parameter sits at the
+        // planner's byte offset within it. Filling each cell by its own
+        // placement (rather than as a contiguous register prefix plus a
+        // contiguous stack suffix) lets a register-passed parameter and a
+        // stack-passed one interleave, which happens when a by-value
+        // aggregate that consumes no argument register sits between
+        // register parameters (System V MEMORY class), or when a Win64
+        // aggregate overflows past the four positional registers.
+        let cells = frame.param_spill_bytes;
+        debug_assert_eq!(cells, (func.n_params as u32) * 16);
+        emit_sub_rsp_imm32(code, cells);
+        for i in 0..func.n_params {
+            let cell = (i as i32) * 16;
             match placements.get(i).copied() {
-                Some(super::ArgPlacement::FpReg(x)) => {
-                    emit_movsd_mem_xmm(code, Reg::RSP, 0, Reg(x))
+                // A register parameter whose home cell is unobserved
+                // (mem2reg promoted it, no LocalAddr / live LoadLocal)
+                // has a dead store per C99 6.2.4p2; the cell stays
+                // reserved so the other parameters keep their offsets.
+                Some(super::ArgPlacement::IntReg(r)) => {
+                    if !elidable.get(i).copied().unwrap_or(false) {
+                        emit_mov_mem_r(code, Reg::RSP, cell, Reg(r));
+                    }
                 }
-                Some(super::ArgPlacement::IntReg(r)) => emit_mov_mem_r(code, Reg::RSP, 0, Reg(r)),
-                // Stack-passed or out-of-range: the overflow restripe
-                // above already filled the cell; no register store.
+                Some(super::ArgPlacement::FpReg(x)) => {
+                    if !elidable.get(i).copied().unwrap_or(false) {
+                        emit_movsd_mem_xmm(code, Reg::RSP, cell, Reg(x));
+                    }
+                }
+                // Stack-overflow scalar: restripe from the incoming stack
+                // into the cell. `off` already includes any shadow space.
+                Some(super::ArgPlacement::Stack(off)) => {
+                    let src = (cells as i32) + off as i32;
+                    emit_mov_r_mem(code, Reg::RAX, Reg::RSP, src);
+                    emit_mov_mem_r(code, Reg::RSP, cell, Reg::RAX);
+                }
+                // Aggregate parameters keep a dead cell; their value is
+                // placed later from the argument registers
+                // (`emit_struct_param_scatter`) or copied from the
+                // incoming stack (`emit_struct_stack_param_copy`).
                 _ => {}
             }
         }
@@ -2296,16 +2294,17 @@ fn emit_prologue(
 }
 
 /// Copy each aggregate parameter the host ABI passes inline on the
-/// stack (System V AMD64 MEMORY class, size > 16) into its parser-
-/// reserved body local. The caller placed the struct in its outgoing
-/// argument area, which sits above the return address at callee entry;
-/// after the c5 cdecl entry spill it is reachable at
-/// `[rbp + 16 + overflow_bytes + n_reg*16 + off]`, where `off` is the
-/// planner's byte offset of the parameter in the outgoing area. The
-/// dead reg cell `param_reg_stack_split` reserves for the struct keeps
-/// the slot->cell map contiguous; the body reads the struct from the
-/// synthetic body local this copy fills. Runs after the frame is set
-/// up, so the addresses are rbp-relative and SCRATCH_R10 is free.
+/// stack (System V AMD64 MEMORY class with size > 16, or a Win64
+/// aggregate that overflows past the four positional registers) into its
+/// parser-reserved body local. The caller placed the struct in its
+/// outgoing argument area, which sits above the return address at callee
+/// entry; after the c5 cdecl entry spill (`n_params` 16-byte cells) it is
+/// reachable at `[rbp + 16 + n_params*16 + off]`, where `off` is the
+/// planner's byte offset of the parameter in the outgoing area. The dead
+/// cell the entry spill reserves for the aggregate keeps the slot->cell
+/// map positional; the body reads the struct from the synthetic body
+/// local this copy fills. Runs after the frame is set up, so the
+/// addresses are rbp-relative and SCRATCH_R10 is free.
 fn emit_struct_stack_param_copy(
     code: &mut Vec<u8>,
     func: &FunctionSsa,
@@ -2322,18 +2321,7 @@ fn emit_struct_stack_param_copy(
     {
         return;
     }
-    let (n_reg, n_stack) = param_reg_stack_split(func, abi);
-    // The scalar-overflow restripe reads incoming stack arguments at a
-    // fixed 8-byte stride, which is wrong once a by-stack aggregate
-    // occupies aligned(size) ahead of the scalar overflow. Until the
-    // restripe is made offset-driven, reject the combination rather than
-    // silently miscompile the overflowing scalar parameters.
-    assert!(
-        n_stack == 0,
-        "by-stack aggregate parameter combined with scalar stack overflow \
-         is not yet supported"
-    );
-    let base = 16 + (n_reg as i64) * 16;
+    let base = 16 + (func.n_params as i64) * 16;
     for (i, &placement) in placements.iter().enumerate() {
         let super::ArgPlacement::StructStack { off, size } = placement else {
             continue;

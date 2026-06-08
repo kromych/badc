@@ -2461,22 +2461,27 @@ mod tests {
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // `mov [rsp], <reg>` encodings (4 bytes each):
-        //   4C 89 0C 24 = r9   4C 89 04 24 = r8
-        //   48 89 14 24 = rdx  48 89 0C 24 = rcx
+        // Each parameter spills into its positional c5 cdecl cell at
+        // `[rsp + 16*i]`, so the four `mov [rsp+disp], <reg>` stores carry
+        // the parameter's displacement (param 0 at disp 0, the rest at
+        // disp8). Encodings:
+        //   rcx -> [rsp+0x00]: 48 89 0C 24
+        //   rdx -> [rsp+0x10]: 48 89 54 24 10
+        //   r8  -> [rsp+0x20]: 4C 89 44 24 20
+        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
             "WinMain prologue must spill r9 (= nShowCmd) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x4C, 0x89, 0x04, 0x24]),
+            contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
             "WinMain prologue must spill r8 (= lpCmdLine) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x14, 0x24]),
+            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
             "WinMain prologue must spill rdx (= hPrevInstance) into the c5 frame; got {:02X?}",
             prologue
         );
@@ -2506,6 +2511,13 @@ mod tests {
         let entry = build.entry_offset;
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
+        // Positional c5 cdecl cells: argc (rcx) at [rsp+0x00], argv
+        // (rdx) at [rsp+0x10]. r8 / r9 are not parameters, so no cell2 /
+        // cell3 store appears.
+        //   rcx -> [rsp+0x00]: 48 89 0C 24
+        //   rdx -> [rsp+0x10]: 48 89 54 24 10
+        //   r8  -> [rsp+0x20]: 4C 89 44 24 20  (absent)
+        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
             contains(&[0x48, 0x89, 0x0C, 0x24]),
@@ -2513,17 +2525,17 @@ mod tests {
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x14, 0x24]),
+            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
             "console main must spill rdx (= argv) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x04, 0x24]),
+            !contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
             "console main must NOT spill r8 (function has only 2 params); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            !contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
             "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
             prologue
         );

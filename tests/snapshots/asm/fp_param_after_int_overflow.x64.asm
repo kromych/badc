@@ -10,21 +10,15 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	popq	%r10
-               	subq	$0x40, %rsp
-               	movq	0x40(%rsp), %rax
-               	movq	%rax, (%rsp)
-               	movq	0x48(%rsp), %rax
-               	movq	%rax, 0x10(%rsp)
-               	movq	0x50(%rsp), %rax
-               	movq	%rax, 0x20(%rsp)
-               	movq	0x58(%rsp), %rax
-               	movq	%rax, 0x30(%rsp)
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
+               	subq	$0xa0, %rsp
+               	movq	0xa0(%rsp), %rax
+               	movq	%rax, 0x60(%rsp)
+               	movq	0xa8(%rsp), %rax
+               	movq	%rax, 0x70(%rsp)
+               	movq	0xb0(%rsp), %rax
+               	movq	%rax, 0x80(%rsp)
+               	movq	0xb8(%rsp), %rax
+               	movq	%rax, 0x90(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -149,4 +143,3 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

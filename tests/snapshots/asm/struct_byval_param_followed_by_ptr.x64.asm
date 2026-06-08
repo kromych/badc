@@ -56,9 +56,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	popq	%r10
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -172,3 +170,4 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -10,9 +10,7 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	callq	*<rip>
                	popq	%r10
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -283,4 +281,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

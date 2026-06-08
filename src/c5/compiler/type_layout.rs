@@ -322,11 +322,7 @@ pub(crate) fn flatten_struct_fields(
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
     if !matches!(
         target,
-        Target::MacOSAarch64
-            | Target::LinuxAarch64
-            | Target::WindowsAarch64
-            | Target::LinuxX64
-            | Target::WindowsX64
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64
     ) {
         return None;
     }
@@ -338,20 +334,10 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
         return None;
     }
     let size = structs[id].size as u32;
-    if size == 0 {
-        return None;
-    }
-    if matches!(target, Target::WindowsX64) {
-        // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
-        // value in a single register; every other size is passed by
-        // implicit reference, which keeps the by-address convention.
-        if !matches!(size, 1 | 2 | 4 | 8) {
-            return None;
-        }
-    } else if size > 16 {
+    if size == 0 || size > 16 {
         // AArch64 (AAPCS64) and System V x86_64 cap the register path at
-        // 16 bytes here (System V's > 16-byte by-stack path is a
-        // separate item).
+        // 16 bytes here (System V's > 16-byte by-stack path and Win64
+        // are separate items).
         return None;
     }
     let align = (structs[id].align.max(1)) as u32;
@@ -403,7 +389,7 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
         target,
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
-    if !aarch64 && !matches!(target, Target::LinuxX64 | Target::WindowsX64) {
+    if !aarch64 && !matches!(target, Target::LinuxX64) {
         return StructReturnAbi::OutPtr;
     }
     let id = struct_id_of(ty);
@@ -412,12 +398,6 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     }
     let size = structs[id].size as u32;
     if size == 0 {
-        return StructReturnAbi::OutPtr;
-    }
-    // Win64: a 1-, 2-, 4-, or 8-byte aggregate is returned in rax; every
-    // other size goes through a hidden result pointer, which the c5
-    // out-pointer convention already matches.
-    if matches!(target, Target::WindowsX64) && !matches!(size, 1 | 2 | 4 | 8) {
         return StructReturnAbi::OutPtr;
     }
     let align = (structs[id].align.max(1)) as u32;

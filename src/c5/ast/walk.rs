@@ -74,6 +74,7 @@ pub(crate) fn walk_function(
     param_local_slots: &[i64],
     returns_struct: bool,
     return_struct_size: i64,
+    return_ty: i64,
     alloca_top_slot: i64,
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
@@ -100,17 +101,43 @@ pub(crate) fn walk_function(
     // reserve the per-frame arena and store the running top into
     // the named local slot.
     b.alloca_init(alloca_top_slot);
+    // C99 6.8.6.4 + AAPCS64 6.9: classify the return convention. An
+    // integer aggregate of at most 16 bytes returns in x0/x1; a larger
+    // one returns through the caller-supplied x8 indirect-result
+    // register. Both carry no hidden argument, so their parameters
+    // start at slot 2. Every other aggregate keeps the c5 out-pointer
+    // convention (hidden pointer at slot 2, parameters start at 3).
+    use crate::c5::compiler::StructReturnAbi;
+    let ret_abi = crate::c5::compiler::struct_return_abi(structs, target, return_ty);
+    let ret_outptr = matches!(ret_abi, StructReturnAbi::OutPtr);
+    let ret_in_regs = matches!(ret_abi, StructReturnAbi::Regs(_));
+    let ret_indirect = matches!(ret_abi, StructReturnAbi::Indirect(_));
+    if let StructReturnAbi::Regs(desc) | StructReturnAbi::Indirect(desc) = &ret_abi {
+        let idx = b.intern_agg_desc(desc.clone());
+        b.set_ret_agg(idx);
+    }
+    // A function returning > 16 bytes saves the incoming x8 result
+    // pointer into a dedicated local for the codegen prologue; the
+    // `return` lowering writes the value through it.
+    let indirect_result_slot: i64 = if ret_indirect {
+        let slot = b.alloc_synthetic_local();
+        b.set_indirect_result_slot(slot);
+        slot
+    } else {
+        0
+    };
     // C99 6.5.2.2 + the host ABI (AAPCS64 6.8.2): a small aggregate
     // parameter arrives in argument registers rather than by the
     // caller's address. Classify each by-value struct parameter; a
     // tagged parameter gets no SSA entry-copy below -- the callee
     // prologue (native) and `run_func` (VM) write the incoming bytes
     // straight into the parser-reserved body local recorded in
-    // `param_local_slots[i]`. Variadic and struct-returning callees
-    // keep the c5 by-address shape (the hidden out-pointer shifts
-    // every parameter cell), so they are excluded.
+    // `param_local_slots[i]`. Variadic and out-pointer-returning
+    // callees keep the c5 by-address shape (the hidden out-pointer
+    // shifts every parameter cell), so they are excluded; host-ABI
+    // returns (registers / x8) leave the parameter slots unshifted.
     let mut param_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-    if !is_variadic && !returns_struct {
+    if !is_variadic && !ret_outptr {
         param_aggs = alloc::vec![None; param_tys.len()];
         for (i, &pty) in param_tys.iter().enumerate() {
             if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
@@ -139,7 +166,7 @@ pub(crate) fn walk_function(
     // args). The parser's symbol-table assignment uses the same
     // base, so this index matches the `val` the parser stored
     // for each declared param.
-    let arg_slot_base: i64 = if returns_struct { 3 } else { 2 };
+    let arg_slot_base: i64 = if ret_outptr { 3 } else { 2 };
     // C99 6.2.5p10 + the host ABI (System V AMD64 3.2.3 / AAPCS64
     // 6.4.1): a floating-point scalar parameter passed in an FP
     // argument register. Record the per-parameter FP mask so the
@@ -151,7 +178,7 @@ pub(crate) fn walk_function(
     // keep the c5 cdecl shape (their args ride the c5 stack / a
     // hidden out-pointer shifts every cell), so they are excluded
     // here exactly as they are from the seed loop below.
-    if !is_variadic && !returns_struct {
+    if !is_variadic && !ret_outptr {
         for (i, &pty) in param_tys.iter().enumerate() {
             let stripped = pty & !(1i64 << 30);
             let is_pointer = pty & (1i64 << 30) != 0;
@@ -206,7 +233,7 @@ pub(crate) fn walk_function(
     // place can land on any caller-saved reg, including a host
     // arg reg) and any reordering would let those writes clobber
     // the incoming argument before its `ParamRef` materialised.
-    if !is_variadic && !returns_struct {
+    if !is_variadic && !ret_outptr {
         let int_arg_regs_count = target.abi().int_arg_regs.len();
         for i in 0..param_tys.len().min(int_arg_regs_count) {
             let pty = param_tys[i];
@@ -316,7 +343,7 @@ pub(crate) fn walk_function(
         let is_float = stripped == crate::c5::token::Ty::Float as i64;
         if is_float {
             let dst = b.local_addr(local_slot);
-            if !is_variadic && !returns_struct && param_in_fp_reg(i) {
+            if !is_variadic && !ret_outptr && param_in_fp_reg(i) {
                 // The argument arrives at single precision in an FP
                 // argument register (C99 6.2.5p10). Seed an FP
                 // `ParamRef { F32 }` (the s-register view) and store it
@@ -357,6 +384,9 @@ pub(crate) fn walk_function(
         label_blocks: alloc::vec::Vec::new(),
         returns_struct,
         return_struct_size,
+        ret_in_regs,
+        ret_indirect,
+        indirect_result_slot,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -413,13 +443,25 @@ struct Walker<'a> {
     /// both sides see the same block.
     label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
     /// True when the function's declared return type is a struct
-    /// value. `return s;` lowers as: load the hidden out-pointer
-    /// from `slot 2`, Mcpy `return_struct_size` bytes from `s`'s
-    /// address into it, then return the out-pointer.
+    /// value returned through the c5 out-pointer convention. `return
+    /// s;` loads the hidden out-pointer from `slot 2`, Mcpy
+    /// `return_struct_size` bytes from `s`'s address into it, then
+    /// returns the out-pointer. False for host-ABI returns.
     returns_struct: bool,
-    /// Byte size of the struct return type when `returns_struct`
-    /// is true. Zero otherwise.
+    /// Byte size of the struct return type when the function returns
+    /// a struct by any convention. Zero otherwise.
     return_struct_size: i64,
+    /// AAPCS64 register return (aggregate <= 16 bytes): `return s;`
+    /// yields `s`'s address; the codegen scatters the eightbytes into
+    /// x0/x1.
+    ret_in_regs: bool,
+    /// AAPCS64 indirect return (aggregate > 16 bytes via x8): `return
+    /// s;` copies the value through the saved x8 pointer in
+    /// `indirect_result_slot`, then returns that pointer.
+    ret_indirect: bool,
+    /// Body-local slot holding the saved x8 indirect-result pointer
+    /// when `ret_indirect` is true; zero otherwise.
+    indirect_result_slot: i64,
 }
 
 impl<'a> Walker<'a> {
@@ -568,14 +610,24 @@ impl<'a> Walker<'a> {
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => {
+                if self.ret_in_regs || self.ret_indirect {
+                    // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
+                    // yield the struct's address. The codegen scatters
+                    // the eightbytes into the result registers (<= 16
+                    // bytes) or copies the value through the x8 result
+                    // pointer (> 16 bytes); the VM copies it into the
+                    // caller's result temp.
+                    let v = self.walk_expr_rvalue(b, *e)?;
+                    b.return_(v);
+                    return Ok(true);
+                }
                 if self.returns_struct {
-                    // C99 6.8.6.4 + the c5 ABI: a struct-returning
-                    // callee receives the caller's result-temp
-                    // address in `slot 2`. `return s;` copies
-                    // `sizeof(struct T)` bytes from `s`'s address
-                    // into that out-pointer and returns the
-                    // out-pointer so the call site has a stable
-                    // value to chain into the surrounding
+                    // C99 6.8.6.4 + the c5 out-pointer convention: the
+                    // callee receives the caller's result-temp address
+                    // in `slot 2`. `return s;` copies `sizeof(struct
+                    // T)` bytes from `s`'s address into that
+                    // out-pointer and returns it so the call site has a
+                    // stable value to chain into the surrounding
                     // assignment / Mcpy.
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = self.walk_expr_rvalue(b, *e)?;
@@ -1645,14 +1697,20 @@ impl<'a> Walker<'a> {
                 }
             }
             Expr::Call { callee, args, ty } => {
-                // Struct-returning c5-internal callee: allocate
-                // a result temp on this frame, prepend its
-                // address as the hidden out-pointer arg 0, run
-                // the call, and return the temp's address as
-                // the expression's value (the c5 ABI's
-                // address-as-value rule for struct rvalues).
+                // Out-pointer-returning c5-internal callee: allocate a
+                // result temp on this frame, prepend its address as the
+                // hidden out-pointer arg 0, run the call, and return the
+                // temp's address as the expression's value (the c5 ABI's
+                // address-as-value rule for struct rvalues). Host-ABI
+                // returns (registers / x8) carry no hidden argument and
+                // fall through to the normal call path below, which
+                // tags the call's `ret_agg` / `ret_slot`.
                 if is_struct_ty(*ty)
                     && struct_ptr_depth(*ty) == 0
+                    && matches!(
+                        crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                        crate::c5::compiler::StructReturnAbi::OutPtr
+                    )
                     && let Expr::Ident {
                         sym, class, val, ..
                     } = self.ast.expr(*callee)
@@ -1937,6 +1995,21 @@ impl<'a> Walker<'a> {
                         // from there and FP-classes the value.
                         let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
+                        // Host-ABI aggregate return (AAPCS64 6.9):
+                        // reserve the result temp before the call. Its
+                        // frame slot rides on the call instruction, so it
+                        // survives value renumbering and needs no SSA
+                        // operand.
+                        let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                        {
+                            let ridx = b.intern_agg_desc(desc.clone());
+                            let slot = b.alloc_synthetic_struct(desc.size as i64);
+                            Some((ridx, slot))
+                        } else {
+                            None
+                        };
                         let call = if target_pc == 0 {
                             b.call_extern(*sym, arg_vals, fixed_args, fp_return, call_fp_arg_mask)
                         } else {
@@ -1950,6 +2023,15 @@ impl<'a> Walker<'a> {
                         };
                         if !arg_aggs.is_empty() {
                             b.set_call_arg_aggs(call, arg_aggs);
+                        }
+                        // Tag the call's `ret_agg` / `ret_slot` and yield
+                        // the result temp's address. The codegen reads
+                        // the eightbytes from x0/x1 (<= 16 bytes) or has
+                        // the callee write through x8 (> 16 bytes); the
+                        // VM copies the returned struct into the temp.
+                        if let Some((ridx, slot)) = ret_temp {
+                            b.set_call_ret_agg(call, ridx, slot);
+                            return Ok(b.local_addr(slot));
                         }
                         // A `float`-returning callee yields a single-
                         // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
@@ -3216,6 +3298,7 @@ mod tests {
             false,
             0,
             0,
+            0,
         )
         .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
@@ -3278,6 +3361,7 @@ mod tests {
             &[],
             &[],
             false,
+            0,
             0,
             0,
         )
@@ -3352,6 +3436,7 @@ mod tests {
             false,
             0,
             0,
+            0,
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -3416,6 +3501,7 @@ mod tests {
             false,
             0,
             0,
+            0,
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -3458,6 +3544,7 @@ mod tests {
             &[],
             &[],
             false,
+            0,
             0,
             0,
         )

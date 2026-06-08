@@ -675,6 +675,7 @@ impl Compiler {
         param_local_slots: alloc::vec::Vec<i64>,
         returns_struct: bool,
         return_struct_size: i64,
+        return_ty: i64,
         alloca_top_slot: i64,
     ) {
         // Reserve one PC unit so end_pc > ent_pc holds for every
@@ -696,6 +697,7 @@ impl Compiler {
             param_local_slots,
             returns_struct,
             return_struct_size,
+            return_ty,
             alloca_top_slot,
         };
         self.pending_is_inline = false;

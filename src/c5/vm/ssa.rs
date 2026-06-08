@@ -679,6 +679,31 @@ fn run_func<H: Host>(
     result
 }
 
+/// Materialise a call's result. For a host-ABI aggregate return,
+/// `ret` is the callee's struct address (in its just-released frame,
+/// bytes intact); copy the aggregate into the caller's result temp at
+/// `ret_slot` and yield the temp's address. A scalar return passes
+/// `ret` through unchanged.
+fn finish_agg_return(
+    frame: &Frame<'_>,
+    mem: &mut Memory,
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    ret: i64,
+) -> Result<i64, C5Error> {
+    let Some(ai) = ret_agg else {
+        return Ok(ret);
+    };
+    let size = frame.func.agg_descs[ai as usize].size as usize;
+    let dst = frame.slot_addr(ret_slot_local).ok_or_else(|| {
+        C5Error::Runtime(format!(
+            "vm_ssa: aggregate return: slot {ret_slot_local} out of range"
+        ))
+    })?;
+    mem.copy_within(dst, ret as usize, size)?;
+    Ok(dst as i64)
+}
+
 fn run_inst<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
@@ -875,7 +900,11 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::Call {
-            target_pc, args, ..
+            target_pc,
+            args,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => {
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
@@ -885,10 +914,16 @@ fn run_inst<H: Host>(
                 arg_vals.push(frame.regs[a as usize]);
             }
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
-            frame.regs[v as usize] = ret;
+            frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
-        Inst::CallIndirect { target, args, .. } => {
+        Inst::CallIndirect {
+            target,
+            args,
+            ret_agg,
+            ret_slot_local,
+            ..
+        } => {
             let raw = frame.regs[*target as usize];
             // Code pointers may be tagged two ways: SSA-VM bit 62
             // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
@@ -915,7 +950,7 @@ fn run_inst<H: Host>(
                 arg_vals.push(frame.regs[a as usize]);
             }
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
-            frame.regs[v as usize] = ret;
+            frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
         Inst::CallExt {

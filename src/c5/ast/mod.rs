@@ -472,6 +472,9 @@ pub(crate) struct FinishedFunction {
     /// Byte size of the returned struct when `returns_struct`
     /// is true. Zero otherwise.
     pub return_struct_size: i64,
+    /// Declared return type tag. The walker classifies the host-ABI
+    /// return convention (registers / x8 / out-pointer) from it.
+    pub return_ty: i64,
     /// `slot` operand for the function's `Inst::AllocaInit`. Non-
     /// zero when the body contains an `alloca` call: codegen
     /// reserves a per-frame arena and uses this local slot for

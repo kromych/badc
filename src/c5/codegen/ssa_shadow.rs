@@ -38,6 +38,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
             &f.param_local_slots,
             f.returns_struct,
             f.return_struct_size,
+            f.return_ty,
             f.alloca_top_slot,
         )
         .map_err(|e| {

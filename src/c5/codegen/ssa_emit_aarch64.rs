@@ -1465,6 +1465,13 @@ fn emit_prologue(
     }
     emit_prologue_saved_regs(code, alloc, frame);
     emit_struct_param_scatter(code, func, abi, frame);
+    if func.indirect_result_slot != 0 {
+        // AAPCS64 6.9: save the caller-supplied x8 indirect-result
+        // pointer into its body local; `return s;` writes the
+        // aggregate result through it.
+        emit_local_addr(code, Place::IntReg(16), func.indirect_result_slot, frame);
+        emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+    }
 }
 
 /// Store each register-passed aggregate parameter's incoming argument
@@ -1836,6 +1843,8 @@ fn emit_inst(
             fp_return,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call(
             code,
@@ -1853,6 +1862,8 @@ fn emit_inst(
             *fp_arg_mask,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
         ),
         Inst::CallExt {
             binding_idx,
@@ -1881,6 +1892,8 @@ fn emit_inst(
             fp_return,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call_indirect(
             code,
@@ -1897,6 +1910,8 @@ fn emit_inst(
             *fp_arg_mask,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
         ),
         Inst::Mcpy {
             dst: d,
@@ -3052,6 +3067,8 @@ fn emit_call(
     fp_arg_mask: u32,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
 ) -> bool {
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     if callee_is_variadic
@@ -3124,6 +3141,7 @@ fn emit_call(
     if !marshal_args(code, &plan, args, alloc, scratch, frame) {
         return false;
     }
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     // Branch placeholder + fixup. The pool path's apply_fixups
     // resolves `target_ent_pc` -> `pc_to_native` once
     // the map is final.
@@ -3136,12 +3154,64 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // Move the return value into the call's dst Place. The
-    // c5-internal convention returns every value (including an f64
-    // bit pattern) in x0; `move_call_result` reinterprets it into
-    // the FP register file when `fp_return`.
-    move_call_result(code, dst, frame, fp_return);
+    finish_call_result(
+        code,
+        ret_agg,
+        ret_slot_off,
+        agg_descs,
+        dst,
+        frame,
+        scratch,
+        fp_return,
+    );
     true
+}
+
+/// Before a call returning an aggregate larger than 16 bytes, point
+/// the AAPCS64 x8 indirect-result register at the caller's result
+/// temp. Runs after `marshal_args` so the argument registers are
+/// already set; the slot address is recomputed from fp.
+fn setup_indirect_result(
+    code: &mut Vec<u8>,
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
+    agg_descs: &[super::super::ir::AggDesc],
+    frame: Frame,
+) {
+    if let Some(ai) = ret_agg
+        && agg_descs[ai as usize].size > 16
+    {
+        emit_local_addr(code, Place::IntReg(8), ret_slot_off, frame);
+    }
+}
+
+/// Materialise a call's result. An aggregate of at most 16 bytes
+/// arrives in x0/x1 and is stored into the result temp; a larger one
+/// was written through x8 by the callee, so nothing remains. A scalar
+/// return uses the standard register bridge.
+#[allow(clippy::too_many_arguments)]
+fn finish_call_result(
+    code: &mut Vec<u8>,
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
+    agg_descs: &[super::super::ir::AggDesc],
+    dst: Place,
+    frame: Frame,
+    scratch: &ScratchPool,
+    fp_return: bool,
+) {
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        if size <= 16 {
+            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
+            if size > 8 {
+                emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
+            }
+        }
+        return;
+    }
+    move_call_result(code, dst, frame, fp_return);
 }
 
 /// Common return-value bridge shared by `emit_call` and
@@ -3217,6 +3287,8 @@ fn emit_call_indirect(
     fp_arg_mask: u32,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
 ) -> bool {
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let target_place = alloc
@@ -3284,11 +3356,21 @@ fn emit_call_indirect(
         if !marshal_args(code, &plan, args, alloc, scratch, frame) {
             return false;
         }
+        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
         emit(code, enc_blr(target_reg));
         if plan.scratch_bytes > 0 {
             emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        move_call_result(code, dst, frame, fp_return);
+        finish_call_result(
+            code,
+            ret_agg,
+            ret_slot_off,
+            agg_descs,
+            dst,
+            frame,
+            scratch,
+            fp_return,
+        );
         return true;
     }
     // Indirect calls keep the c5-stack push shape regardless of
@@ -5552,15 +5634,54 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
 ) {
-    // Move the return value into x0. c5's calling convention
-    // ferries every return value (including f64 bit patterns)
-    // through the int return register, matching the pool path's
-    // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
-    // `fmov x, d`; int values flow through the standard
-    // materialise + mov. NO_VALUE marks an implicit return with
-    // no live accumulator -- harmless because c5 calls never
-    // read the result of a void-returning function.
-    if value != super::super::ir::NO_VALUE {
+    // Host-ABI aggregate return (AAPCS64 6.9). `value` is the
+    // struct's address. An aggregate of at most 16 bytes returns its
+    // eightbytes in x0/x1; a larger one is copied through the caller-
+    // supplied x8 pointer (saved to `indirect_result_slot` by the
+    // prologue) and that pointer is returned in x0.
+    if let Some(ai) = func.ret_agg {
+        let size = func.agg_descs[ai as usize].size;
+        let place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let saddr = materialize_int(code, place, scratch.primary, frame).unwrap_or(scratch.primary);
+        if saddr.0 != scratch.primary.0 {
+            emit_mov_reg(code, scratch.primary, saddr);
+        }
+        let base = scratch.primary;
+        if size <= 16 {
+            if size > 8 {
+                emit(code, enc_ldr_imm(Reg(1), base, 8));
+            }
+            emit(code, enc_ldr_imm(Reg(0), base, 0));
+        } else {
+            let dst = scratch.secondary;
+            emit_local_addr(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+            emit(code, enc_ldr_imm(dst, dst, 0));
+            let mut copied = 0u32;
+            while copied + 8 <= size {
+                emit(code, enc_ldr_imm(Reg(0), base, copied));
+                emit(code, enc_str_imm(Reg(0), dst, copied));
+                copied += 8;
+            }
+            while copied < size {
+                emit(code, enc_ldrb_imm(Reg(0), base, copied));
+                emit(code, enc_strb_imm(Reg(0), dst, copied));
+                copied += 1;
+            }
+            emit_mov_reg(code, Reg(0), dst);
+        }
+    } else if value != super::super::ir::NO_VALUE {
+        // Move the return value into x0. c5's calling convention
+        // ferries every return value (including f64 bit patterns)
+        // through the int return register, matching the pool path's
+        // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
+        // `fmov x, d`; int values flow through the standard
+        // materialise + mov. NO_VALUE marks an implicit return with
+        // no live accumulator -- harmless because c5 calls never
+        // read the result of a void-returning function.
         let place = alloc
             .places
             .get(value as usize)

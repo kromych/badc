@@ -660,8 +660,6 @@ impl Compiler {
                     self.current_func_return_ty = return_ty;
                     self.current_func_returns_void = self.symbols[id_idx].returns_void;
                     self.current_function_name = self.symbols[id_idx].name.clone();
-                    let returns_struct =
-                        is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
 
                     // c5 callers push args right-to-left (cdecl-style), so
                     // the i'th declared param ends up at `[bp + 16*(i+1)]`,
@@ -670,13 +668,21 @@ impl Compiler {
                     // Variadic args follow after the last declared, at
                     // val = N+2, N+3, ... -- which is what stdarg.h walks.
                     //
-                    // Functions returning a struct value get a hidden
-                    // out-pointer at val=2 (the caller pre-allocates a
-                    // result temp and pushes its address as the first
-                    // arg); declared params start at val=3 in that
-                    // case. Variadic + struct-return aren't useful
-                    // together so we don't bother optimising for it.
-                    let param_base = if returns_struct { 3 } else { 2 };
+                    // A function returning a struct value through the c5
+                    // out-pointer convention gets a hidden out-pointer at
+                    // val=2 (the caller pre-allocates a result temp and
+                    // pushes its address as the first arg); declared params
+                    // start at val=3. Host-ABI returns (AAPCS64 registers
+                    // or x8) carry no hidden argument, so their params start
+                    // at val=2 like any other function.
+                    let param_base = if matches!(
+                        super::struct_return_abi(&self.structs, self.target, return_ty),
+                        super::StructReturnAbi::OutPtr
+                    ) {
+                        3
+                    } else {
+                        2
+                    };
                     for (i, &idx) in params.indices.iter().enumerate() {
                         self.symbols[idx].val = (i as i64) + param_base;
                     }
@@ -903,6 +909,7 @@ impl Compiler {
                         param_local_slots,
                         returns_struct_finish,
                         return_struct_size_finish,
+                        ret_ty_for_finish,
                         alloca_top_slot_finish,
                     );
                     self.current_function_name.clear();

@@ -352,3 +352,61 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
         fields,
     })
 }
+
+/// How a function returns a value of its declared return type.
+#[derive(Clone)]
+pub(crate) enum StructReturnAbi {
+    /// Scalar / void / pointer return -- not a by-value aggregate.
+    NotStruct,
+    /// c5 by-address convention: the caller passes a result-temp
+    /// pointer as a hidden argument and the callee writes through it.
+    /// Used on non-host targets and for aggregates the host-ABI path
+    /// does not yet cover (floating-point / mixed members).
+    OutPtr,
+    /// AAPCS64 6.9: an aggregate of at most 16 bytes returned in the
+    /// general-purpose result registers (x0, x1).
+    Regs(AggDesc),
+    /// AAPCS64 6.9: an aggregate larger than 16 bytes returned through
+    /// the caller-supplied indirect-result register x8.
+    Indirect(AggDesc),
+}
+
+/// Classify a function's return-value convention from its declared
+/// return type. Integer-class AArch64 aggregates use the host ABI
+/// (registers or x8); every other aggregate keeps the c5 out-pointer
+/// convention. See [`host_abi_agg_desc`] for the argument-side gate.
+pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) -> StructReturnAbi {
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return StructReturnAbi::NotStruct;
+    }
+    if !matches!(target, Target::MacOSAarch64 | Target::LinuxAarch64) {
+        return StructReturnAbi::OutPtr;
+    }
+    let id = struct_id_of(ty);
+    if id >= structs.len() {
+        return StructReturnAbi::OutPtr;
+    }
+    let size = structs[id].size as u32;
+    if size == 0 {
+        return StructReturnAbi::OutPtr;
+    }
+    let align = (structs[id].align.max(1)) as u32;
+    let mut fields = Vec::new();
+    flatten_struct_fields(structs, target, id, 0, &mut fields);
+    // Integer-class only; floating-point / homogeneous-FP aggregates
+    // keep the out-pointer convention until the host-ABI FP-bank
+    // return path lands. TODO: HFA / mixed int+FP returns.
+    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+        return StructReturnAbi::OutPtr;
+    }
+    let desc = AggDesc {
+        size,
+        align,
+        fields,
+    };
+    if size <= 16 {
+        StructReturnAbi::Regs(desc)
+    } else {
+        StructReturnAbi::Indirect(desc)
+    }
+}

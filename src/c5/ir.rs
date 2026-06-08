@@ -571,6 +571,15 @@ pub(crate) struct FunctionSsa {
     /// aggregate passed by value (described by `agg_descs[i]`).
     /// Empty / all-`None` for functions with no struct parameters.
     pub param_aggs: Vec<Option<u32>>,
+    /// Per declared parameter: the negative frame slot the parser
+    /// reserved for a struct-by-value parameter's body-visible
+    /// storage, or 0 when the parameter has no dedicated local.
+    /// A register-passed aggregate parameter has no SSA entry-copy;
+    /// the callee prologue (native) and `run_func` (VM) write the
+    /// argument's bytes directly into this slot. Parallel to the
+    /// declared parameter list; empty for SSA built outside the
+    /// walker.
+    pub param_local_slots: Vec<i64>,
     /// `Some(i)` when this function returns the aggregate
     /// `agg_descs[i]` by value through the host ABI; `None` for a
     /// scalar / void return.

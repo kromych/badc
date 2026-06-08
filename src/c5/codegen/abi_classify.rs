@@ -269,7 +269,10 @@ mod tests {
             ff(8, 8, ScalarKind::Int),
             ff(16, 8, ScalarKind::Int),
         ];
-        assert_eq!(classify_aggregate(24, 8, &f, sysv(), false), AggClass::ByStack);
+        assert_eq!(
+            classify_aggregate(24, 8, &f, sysv(), false),
+            AggClass::ByStack
+        );
         assert_eq!(
             classify_aggregate(24, 8, &f, sysv(), true),
             AggClass::ReturnIndirect
@@ -328,7 +331,10 @@ mod tests {
             ff(8, 8, ScalarKind::Int),
             ff(16, 8, ScalarKind::Int),
         ];
-        assert_eq!(classify_aggregate(24, 8, &f, aapcs(), false), AggClass::ByRef);
+        assert_eq!(
+            classify_aggregate(24, 8, &f, aapcs(), false),
+            AggClass::ByRef
+        );
         assert_eq!(
             classify_aggregate(24, 8, &f, aapcs(), true),
             AggClass::ReturnIndirect
@@ -338,9 +344,11 @@ mod tests {
     #[test]
     fn aapcs_five_floats_not_hfa() {
         // 5 members exceeds the HFA limit of 4 -> 20B -> by ref / indirect.
-        let f: alloc::vec::Vec<FlatField> =
-            (0..5).map(|i| ff(i * 4, 4, ScalarKind::F32)).collect();
-        assert_eq!(classify_aggregate(20, 4, &f, aapcs(), false), AggClass::ByRef);
+        let f: alloc::vec::Vec<FlatField> = (0..5).map(|i| ff(i * 4, 4, ScalarKind::F32)).collect();
+        assert_eq!(
+            classify_aggregate(20, 4, &f, aapcs(), false),
+            AggClass::ByRef
+        );
     }
 
     // ---- Win64 ----
@@ -359,7 +367,10 @@ mod tests {
         // Win64 has no HFA: a 16-byte struct goes by reference
         // (argument) / hidden pointer (return) even if all-FP.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
-        assert_eq!(classify_aggregate(16, 8, &f, win64(), false), AggClass::ByRef);
+        assert_eq!(
+            classify_aggregate(16, 8, &f, win64(), false),
+            AggClass::ByRef
+        );
         assert_eq!(
             classify_aggregate(16, 8, &f, win64(), true),
             AggClass::ReturnIndirect
@@ -369,6 +380,9 @@ mod tests {
     #[test]
     fn win64_size3_by_ref() {
         let f = [ff(0, 1, ScalarKind::Int), ff(1, 2, ScalarKind::Int)];
-        assert_eq!(classify_aggregate(3, 1, &f, win64(), false), AggClass::ByRef);
+        assert_eq!(
+            classify_aggregate(3, 1, &f, win64(), false),
+            AggClass::ByRef
+        );
     }
 }

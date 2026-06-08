@@ -384,6 +384,7 @@ mod tests {
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             insts,
             blocks: alloc::vec![Block {

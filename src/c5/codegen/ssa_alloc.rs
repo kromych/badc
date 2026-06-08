@@ -672,10 +672,8 @@ fn verify_allocation(
                         used[*cond as usize] = true;
                     }
                 }
-                Terminator::Return(v) => {
-                    if (*v as usize) < used.len() {
-                        used[*v as usize] = true;
-                    }
+                Terminator::Return(v) if (*v as usize) < used.len() => {
+                    used[*v as usize] = true;
                 }
                 _ => {}
             }
@@ -2310,6 +2308,7 @@ int main(void) { return 0; }
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             insts,
             blocks,

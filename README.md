@@ -46,7 +46,9 @@ can be debugged and/or their performance can be profiled (use `-g`).
 `badc` optimizes when you specify `-O` and can produce code that's faster
 than `clang -O0`, especially on ARM64. To get an idea of the codegen
 quality, take a look at `./tests/snapshots` with assembly and SSA snapshots
-of the test fixtures.
+of the test fixtures. The optimized binary is supported on any modern ARM64
+processor, and on x86_64 processors not older than Intel Hasswell and AMD Zen
+(circa 2013, the optimizer uses FMA3 instructions).
 
 `badc` produces real native binaries (macOS Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64), Linux
@@ -237,16 +239,18 @@ which case the shebang line picks the mode (`#!/usr/bin/env badc
 
 Five targets, cross-compile from any host to any of them:
 
-| `--target=`               | format        | dylibs                              |
-|---------------------------|---------------|-------------------------------------|
-| `macos-aarch64` (default) | Mach-O        | `/usr/lib/libSystem.B.dylib`        |
-| `linux-aarch64`           | ELF           | `libc.so.6`, `libdl.so.2`           |
-| `linux-x64`               | ELF           | same                                |
-| `windows-x64`             | PE32+         | `msvcrt.dll`, `kernel32.dll`        |
-| `windows-arm64`           | PE32+         | same                                |
+| `--target=`     | format        |
+|-----------------|---------------|
+| `macos-aarch64` | Mach-O        |
+| `linux-aarch64` | ELF           |
+| `linux-x64`     | ELF           |
+| `windows-x64`   | PE32+         |
+| `windows-arm64` | PE32+         |
 
 ```sh
-badc tests/fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
+# Running on the macOS host:
+
+badc tests/fixtures/c/c4.c -o c4-native
 ./c4-native hello.c
 
 badc --target=linux-aarch64 tests/fixtures/c/c4.c -o c4-arm
@@ -258,13 +262,6 @@ wine c4.exe hello.c
 
 The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
 or under WINE on Linux (x86_64, ARM64).
-
-What the native backend executes faithfully: every fixture in
-`tests/fixtures/c/` that runs under the VM and isn't a deliberate
-safety-net check. The Mach-O, ELF, and PE paths are mirrored
-test-for-test. What native mode doesn't have: the VM's runtime
-safety net (`--track-pointers`, code-vs-data separation checks).
-Use `--interp` if you want those.
 
 ### Multiple translation units
 
@@ -287,7 +284,7 @@ for the name table, and `.rela.text` carrying the relocations
 the linker applies once each unit's final position is known.
 The target is pinned at `-c` time, and the objects are also
 linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
-symbol index. The `linker` cargo feature -- on by default --
+symbol index. The `linker` cargo feature (on by default)
 gates the entire pipeline; library consumers that don't need
 multi-TU artifacts can opt out via
 `default-features = false, features = ["std"]` to keep the
@@ -309,14 +306,13 @@ integer + float arithmetic surface, structs / unions / bitfields
 anonymous struct/union members, `#pragma pack(N)`, ...) on the
 host platform's data model (LP64 on macOS / Linux, LLP64 on
 Windows). The doc enumerates rejected idioms, divergent
-behaviour, and the c5-only extensions (`#pragma dylib` /
+behavior, and the c5-only extensions (`#pragma dylib` /
 `binding` / `export` / `entrypoint` / `subsystem`,
-`#pragma once`, the SSA interpreter, the in-process JIT).
+the SSA interpreter, the in-process JIT).
 
-One implementation choice worth flagging up front: **bare `char`
-is unsigned** on every target (a 1-byte zero-extending load),
-matching the AArch64 platform-ABI default. Use `signed char`
-where the sign matters; gcc and clang differ on this per host
+Note that that **bare `char` is unsigned** on every target
+(a 1-byte zero-extending load), matching the AArch64 platform-ABI default.
+Use `signed char` where the sign matters; gcc and clang differ on this per host
 architecture, so portable code that walks bytes by sign already
 spells `signed char` explicitly.
 
@@ -337,10 +333,9 @@ with user identifiers:
     __linux__                            // Linux targets only
 ```
 
-The MSVC mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
+The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
 / `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
-and is opted into per translation unit with
-`-include msvc_compat.h`.
+and is opted into per translation unit with `-include msvc_compat.h`.
 
 ### Headers and bindings
 

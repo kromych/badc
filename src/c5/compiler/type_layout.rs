@@ -382,7 +382,8 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
         return StructReturnAbi::NotStruct;
     }
-    if !matches!(target, Target::MacOSAarch64 | Target::LinuxAarch64) {
+    let aarch64 = matches!(target, Target::MacOSAarch64 | Target::LinuxAarch64);
+    if !aarch64 && !matches!(target, Target::LinuxX64) {
         return StructReturnAbi::OutPtr;
     }
     let id = struct_id_of(ty);
@@ -408,8 +409,17 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
         fields,
     };
     if size <= 16 {
+        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx.
         StructReturnAbi::Regs(desc)
-    } else {
+    } else if aarch64 {
+        // AAPCS64: > 16 bytes returns through the x8 indirect-result
+        // register.
         StructReturnAbi::Indirect(desc)
+    } else {
+        // System V AMD64 MEMORY class: the caller passes a hidden
+        // result pointer as the first integer argument and the callee
+        // returns it -- the c5 out-pointer convention already matches,
+        // so keep it.
+        StructReturnAbi::OutPtr
     }
 }

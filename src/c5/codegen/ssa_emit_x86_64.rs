@@ -2595,6 +2595,8 @@ fn emit_inst(
             fp_return,
             fp_arg_mask,
             arg_aggs,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call(
             code,
@@ -2611,6 +2613,9 @@ fn emit_inst(
             *fp_arg_mask,
             arg_aggs,
             &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::CallExt {
             binding_idx,
@@ -4786,6 +4791,9 @@ fn emit_call(
     fp_arg_mask: u32,
     arg_aggs: &[Option<u32>],
     agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &FunctionSsa,
 ) -> bool {
     if callee_is_variadic && abi.position_indexed_args {
         // Win64 host variadic ABI (Microsoft x64 calling convention):
@@ -4933,6 +4941,19 @@ fn emit_call(
     super::x86_64::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
+    // aggregate arrives in rax:rdx; store it into the caller's result
+    // temp. (> 16-byte returns keep the out-pointer convention and
+    // never set `ret_agg`.)
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+        if size > 8 {
+            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        }
+        return true;
     }
     // c5 internal call return convention: an integer / pointer
     // result lives in rax; a floating-point result lives in xmm0
@@ -6128,6 +6149,50 @@ fn emit_return(
     } else {
         Place::None
     };
+    // Host-ABI aggregate return (System V AMD64 3.2.3): `value` is the
+    // struct's address. A <= 16-byte integer aggregate returns its
+    // eightbytes in rax:rdx (x86_64 has no x8 indirect-result path --
+    // the > 16-byte case keeps the out-pointer convention, so `ret_agg`
+    // is only ever set here for the register case). Stage the address
+    // through rcx (caller-saved, untouched by the callee-saved restore)
+    // before the restore, then load the eightbytes after it.
+    if let Some(ai) = func.ret_agg {
+        let size = func.agg_descs[ai as usize].size;
+        match return_place {
+            Place::IntReg(r) => {
+                if r != Reg::RCX.0 {
+                    emit_mov_rr(code, Reg::RCX, Reg(r));
+                }
+            }
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+            }
+            _ => {}
+        }
+        for (i, &r) in alloc.gpr_used.iter().enumerate() {
+            super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, (i as i32) * 8);
+        }
+        emit_mov_r_mem(code, Reg::RAX, Reg::RCX, 0);
+        if size > 8 {
+            emit_mov_r_mem(code, Reg::RDX, Reg::RCX, 8);
+        }
+        if is_full_leaf(func, frame, alloc, abi) {
+            emit_ret(code);
+            return;
+        }
+        if frame.frame_bytes > 0 {
+            emit_add_rsp_imm32(code, frame.frame_bytes);
+        }
+        emit_pop_r(code, Reg::RBP);
+        if frame.param_spill_bytes > 0 {
+            emit_pop_r(code, Reg::R11);
+            emit_add_rsp_imm32(code, frame.param_spill_bytes);
+            emit_push_r(code, Reg::R11);
+        }
+        emit_ret(code);
+        return;
+    }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
     // value's register file is set by its producing instruction, so a
     // spilled FP result is still delivered through xmm0 rather than

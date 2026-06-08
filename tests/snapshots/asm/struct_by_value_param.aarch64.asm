@@ -77,8 +77,7 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x8
-               	mov	x16, x0
-               	ldr	x0, [x16]
+               	ldr	x0, [x0]
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0xa

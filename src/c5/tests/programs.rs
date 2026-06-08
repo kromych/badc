@@ -40,6 +40,14 @@ fn struct_arg_in_registers() {
 }
 
 #[test]
+fn struct_arg_two_eightbyte() {
+    // AAPCS64 6.8.2: two two-eightbyte aggregates in one call -- one
+    // aggregate's load must not clobber the other's pending base
+    // register.
+    assert_eq!(run_fixture("struct_arg_two_eightbyte.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }

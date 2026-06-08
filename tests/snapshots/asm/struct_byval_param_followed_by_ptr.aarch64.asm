@@ -120,9 +120,8 @@ Disassembly of section .text:
                	adrp	x20, <page>
                	add	x20, x20, #0x120
                	mov	x3, x20
-               	mov	x16, x1
-               	ldr	x1, [x16]
-               	ldr	x2, [x16, #0x8]
+               	ldr	x2, [x1, #0x8]
+               	ldr	x1, [x1]
                	bl	<addr>
                	mov	x21, x0
                	sxtw	x0, w21

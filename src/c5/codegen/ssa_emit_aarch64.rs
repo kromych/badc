@@ -5385,13 +5385,36 @@ fn marshal_args(
         }
     }
 
+    // Integer-register placements plus aggregate base addresses are
+    // one parallel register move. A scalar `IntReg` arg moves
+    // src->target; a `StructRegs` arg positions its base address into
+    // its own first eightbyte register `regs[0]`, from which the
+    // eightbytes load below (the base register is overwritten by its
+    // own eightbyte last). Routing the base through that per-aggregate
+    // register -- never a shared scratch -- keeps one aggregate's load
+    // from clobbering another aggregate's still-pending base, which a
+    // naive sequential scheme does when two aggregates' register
+    // ranges overlap. `schedule_int_reg_moves` breaks cycles via
+    // scratch.primary.
     let mut int_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::IntReg(r) = placement
-            && let Place::IntReg(s) = arg_place(i)
-            && s != r
-        {
-            int_moves.push((s, r));
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != r
+                {
+                    int_moves.push((s, r));
+                }
+            }
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+                let dst = regs[0].reg;
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != dst
+                {
+                    int_moves.push((s, dst));
+                }
+            }
+            _ => {}
         }
     }
     schedule_int_reg_moves(code, &mut int_moves, scratch.primary);
@@ -5423,36 +5446,52 @@ fn marshal_args(
         }
     }
 
-    // Aggregate arguments, run last so the scalar register moves above
-    // have already consumed their sources. The struct's address is
-    // materialised into the scratch register (outside the argument
-    // bank) so loading the eightbytes into x0..x7 / d0..d7 cannot
-    // clobber the base while later eightbytes are still pending.
+    // Aggregate bases that were not already register-resident (spill /
+    // computed) materialise into the aggregate's first eightbyte
+    // register, the same destination the move loop used for the
+    // register-resident case.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement
+            && n > 0
+            && !matches!(arg_place(i), Place::IntReg(_))
+        {
+            let dst = regs[0].reg;
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                Reg(dst),
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(rr) => rr,
+                None => return false,
+            };
+            if src.0 != dst {
+                emit_mov_reg(code, Reg(dst), src);
+            }
+        }
+    }
+
+    // Load each aggregate's eightbytes from the base now in `regs[0]`.
+    // The high eightbytes load first; `regs[0]` (the base) is read
+    // last, overwritten by its own eightbyte. Integer-only here
+    // (homogeneous floating-point aggregates are excluded upstream),
+    // so every eightbyte register is general-purpose.
     for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
             super::ArgPlacement::StructRegs { regs, n } => {
-                let ap = arg_place(i);
-                let src = match materialize_int_shifted(
-                    code,
-                    ap,
-                    scratch.primary,
-                    frame,
-                    plan.scratch_bytes,
-                ) {
-                    Some(r) => r,
-                    None => return false,
-                };
-                if src.0 != scratch.primary.0 {
-                    emit_mov_reg(code, scratch.primary, src);
+                debug_assert!(
+                    !regs.iter().take(n as usize).any(|c| c.is_fp),
+                    "aarch64 marshal: floating-point aggregate eightbyte not supported"
+                );
+                let base = regs[0].reg;
+                for k in (1..n as usize).rev() {
+                    emit(
+                        code,
+                        enc_ldr_imm(Reg(regs[k].reg), Reg(base), (k as u32) * 8),
+                    );
                 }
-                for (k, cr) in regs.iter().take(n as usize).enumerate() {
-                    let off = (k as u32) * 8;
-                    if cr.is_fp {
-                        emit(code, enc_ldr_d_imm(cr.reg, scratch.primary, off));
-                    } else {
-                        emit(code, enc_ldr_imm(Reg(cr.reg), scratch.primary, off));
-                    }
-                }
+                emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
             }
             super::ArgPlacement::StructStack { off, size } => {
                 let ap = arg_place(i);

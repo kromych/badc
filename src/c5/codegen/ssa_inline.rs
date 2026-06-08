@@ -54,6 +54,17 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
         say("variadic");
         return false;
     }
+    // Host-ABI aggregate metadata does not survive a splice: a struct
+    // parameter has no entry copy in the IR (the callee prologue
+    // scatters its argument registers into a body local, which the
+    // splice cannot reproduce), and a host-ABI struct call in the body
+    // carries `agg_descs` indices that are valid only against this
+    // function's own table. `agg_descs` is non-empty whenever either
+    // is present, so reject such callees outright.
+    if !func.agg_descs.is_empty() {
+        say("host-ABI aggregate metadata");
+        return false;
+    }
     // Multi-block callees are supported when exactly one block
     // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
     // FallThrough) drive intra-callee control flow; the splice
@@ -682,6 +693,8 @@ fn splice_multi_block(
         // instruction references a callee-side index.
         agg_descs: original.agg_descs,
         param_aggs: original.param_aggs,
+
+        param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
     };
 }

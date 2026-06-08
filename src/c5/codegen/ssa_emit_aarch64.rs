@@ -1427,20 +1427,16 @@ fn emit_prologue(
                         emit(code, enc_str_pre(Reg(r), Reg(31), -16))
                     }
                     // Aggregate parameter passed in registers: reserve
-                    // the 16-byte cell and store each eightbyte into it
-                    // (eightbyte k at offset 8k), so the body reads the
-                    // struct value from the cell's address.
-                    Some(super::ArgPlacement::StructRegs { regs, n }) => {
+                    // its 16-byte cell here but leave the incoming
+                    // argument registers untouched. The body reads the
+                    // aggregate from a parser-reserved body local, not
+                    // from this cell; `emit_struct_param_scatter` (run
+                    // after the frame is established) stores the
+                    // argument registers straight into that local. The
+                    // cell is reserved only so the surrounding
+                    // `LocalAddr` slot offsets stay stable.
+                    Some(super::ArgPlacement::StructRegs { .. }) => {
                         emit_sub_sp_imm(code, 16);
-                        for (k, cr) in regs.iter().take(n as usize).enumerate() {
-                            let off = (k as u32) * 8;
-                            if cr.is_fp {
-                                emit(code, enc_fmov_d_to_x(Reg(16), cr.reg));
-                                emit(code, enc_str_imm(Reg(16), Reg(31), off));
-                            } else {
-                                emit(code, enc_str_imm(Reg(cr.reg), Reg(31), off));
-                            }
-                        }
                     }
                     // No register source (stack-passed or out of range):
                     // the overflow restripe above already filled the
@@ -1468,6 +1464,54 @@ fn emit_prologue(
         emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
     }
     emit_prologue_saved_regs(code, alloc, frame);
+    emit_struct_param_scatter(code, func, abi, frame);
+}
+
+/// Store each register-passed aggregate parameter's incoming argument
+/// registers into its parser-reserved body local. Runs after the
+/// frame is established (fp set, frame allocated, callee saves done)
+/// so the body local's fp-relative address is valid; the argument
+/// registers (x0..x7 / d0..d7) still hold the caller-supplied values
+/// at this point, as nothing between the entry and here clobbers
+/// them. The body reads the aggregate from this local, so the entry
+/// 16-byte argument cell stays unused (the walker emits no entry copy
+/// for a tagged aggregate parameter).
+fn emit_struct_param_scatter(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    frame: Frame,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    for (i, agg) in func.param_aggs.iter().enumerate() {
+        if agg.is_none() {
+            continue;
+        }
+        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        // Materialise the body local's address into scratch.primary,
+        // then store each eightbyte at offset 8k from it. scratch
+        // (x16/x17) is never an argument register, so the source
+        // registers in `regs` are untouched.
+        emit_local_addr(code, Place::IntReg(16), slot, frame);
+        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+            let off = (k as u32) * 8;
+            if cr.is_fp {
+                emit(code, enc_fmov_d_to_x(Reg(17), cr.reg));
+                emit(code, enc_str_imm(Reg(17), Reg(16), off));
+            } else {
+                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), off));
+            }
+        }
+    }
 }
 
 /// Save the allocator-reported callee-saved GPRs + FP regs at the
@@ -3038,7 +3082,8 @@ fn emit_call(
         //    callee spills both banks into its general / vector register
         //    save area; `va_start` records the offsets and `va_arg` walks
         //    the areas then the overflow stack.
-        let plan = super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
@@ -3231,7 +3276,8 @@ fn emit_call_indirect(
         // target pointer is already captured in `target_reg` (a
         // non-arg-passing scratch), so `marshal_args` will not clobber
         // it. `blr` through the captured register.
-        let plan = super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
@@ -5427,18 +5473,23 @@ fn marshal_args(
                 // [sp + off] in 8-byte words plus a sub-word tail.
                 let mut copied = 0u32;
                 while copied + 8 <= size {
-                    emit(code, enc_ldr_imm(scratch.secondary, scratch.primary, copied));
+                    emit(
+                        code,
+                        enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                    );
                     emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
                     copied += 8;
                 }
                 while copied < size {
-                    emit(code, enc_ldrb_imm(scratch.secondary, scratch.primary, copied));
+                    emit(
+                        code,
+                        enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
+                    );
                     emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
                     copied += 1;
                 }
             }
-            super::ArgPlacement::StructByRefReg(_)
-            | super::ArgPlacement::StructByRefStack(_) => {
+            super::ArgPlacement::StructByRefReg(_) | super::ArgPlacement::StructByRefStack(_) => {
                 // Not produced for AAPCS64 in this phase: >16-byte
                 // aggregates keep the existing address-passing
                 // convention (untagged scalar pointer argument).

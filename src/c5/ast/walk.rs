@@ -100,6 +100,29 @@ pub(crate) fn walk_function(
     // reserve the per-frame arena and store the running top into
     // the named local slot.
     b.alloca_init(alloca_top_slot);
+    // C99 6.5.2.2 + the host ABI (AAPCS64 6.8.2): a small aggregate
+    // parameter arrives in argument registers rather than by the
+    // caller's address. Classify each by-value struct parameter; a
+    // tagged parameter gets no SSA entry-copy below -- the callee
+    // prologue (native) and `run_func` (VM) write the incoming bytes
+    // straight into the parser-reserved body local recorded in
+    // `param_local_slots[i]`. Variadic and struct-returning callees
+    // keep the c5 by-address shape (the hidden out-pointer shifts
+    // every parameter cell), so they are excluded.
+    let mut param_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+    if !is_variadic && !returns_struct {
+        param_aggs = alloc::vec![None; param_tys.len()];
+        for (i, &pty) in param_tys.iter().enumerate() {
+            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
+                let idx = b.intern_agg_desc(desc);
+                param_aggs[i] = Some(idx);
+            }
+        }
+    }
+    let has_struct_params = param_aggs.iter().any(Option::is_some);
+    if has_struct_params {
+        b.set_param_aggs(param_aggs.clone(), param_local_slots.to_vec());
+    }
     // C99 6.5.2.2 + the c5 calling convention: for each
     // struct-by-value parameter, the caller passes the
     // source's address in slot `i + base` (base = 2, or 3
@@ -270,6 +293,13 @@ pub(crate) fn walk_function(
         let is_struct_value =
             stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
         if is_struct_value {
+            // Host-ABI register-passed parameter: no entry copy. The
+            // backend scatters the incoming argument registers (native)
+            // or copies the argument bytes (VM) straight into this
+            // body local.
+            if param_aggs.get(i).copied().flatten().is_some() {
+                continue;
+            }
             let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
             if id >= structs.len() {
                 continue;
@@ -1874,6 +1904,32 @@ impl<'a> Walker<'a> {
                         } else {
                             eff_fp_arg_mask
                         };
+                        // Host-ABI struct arguments (AAPCS64 6.8.2): tag
+                        // each by-value aggregate argument with its
+                        // layout so the caller marshals it into argument
+                        // registers and the callee reads it from the
+                        // matching body local. The callee, being
+                        // non-struct-returning (the struct-return early
+                        // branch above handles that case), classifies its
+                        // parameters the same way. Inert on ABIs / sizes
+                        // the classifier declines (`host_abi_agg_desc`
+                        // returns `None`).
+                        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                        {
+                            let params = &self.symbols[*sym as usize].params;
+                            for i in 0..arg_vals.len().min(params.len()) {
+                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                    self.structs,
+                                    self.target,
+                                    params[i],
+                                ) {
+                                    if arg_aggs.is_empty() {
+                                        arg_aggs = alloc::vec![None; arg_vals.len()];
+                                    }
+                                    arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                                }
+                            }
+                        }
                         // C99 6.2.5p10: a call to a function whose
                         // return type is a floating-point scalar
                         // yields its value in the FP return register.
@@ -1892,6 +1948,9 @@ impl<'a> Walker<'a> {
                                 call_fp_arg_mask,
                             )
                         };
+                        if !arg_aggs.is_empty() {
+                            b.set_call_arg_aggs(call, arg_aggs);
+                        }
                         // A `float`-returning callee yields a single-
                         // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
                         if is_float_ty(*ty) {

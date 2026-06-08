@@ -30,6 +30,7 @@ mod run_compile;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
+pub(crate) use type_layout::host_abi_agg_desc;
 pub(crate) mod types;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2

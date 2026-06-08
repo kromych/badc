@@ -594,6 +594,18 @@ fn run_func<H: Host>(
     let frame_bytes = (locals + n_params) * 8;
     let stack_base = mem.alloc_frame(frame_bytes)?;
     for (i, &v) in args.iter().enumerate() {
+        // Host-ABI register-passed aggregate parameter: `v` is the
+        // source struct's address. The callee body reads the aggregate
+        // from a parser-reserved body local (no entry copy in the SSA),
+        // so copy `size` bytes there directly -- the native prologue's
+        // register scatter, in interpreter terms.
+        if let Some(Some(idx)) = func.param_aggs.get(i).copied() {
+            let size = func.agg_descs[idx as usize].size as usize;
+            let slot = func.param_local_slots[i];
+            let dst = (stack_base as i64 + (locals as i64 + slot) * 8) as usize;
+            mem.copy_within(dst, v as usize, size)?;
+            continue;
+        }
         let addr = stack_base + (locals + i) * 8;
         mem.write_bytes(addr, &v.to_le_bytes())?;
     }

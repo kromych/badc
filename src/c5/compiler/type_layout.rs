@@ -10,7 +10,9 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use super::super::codegen::Target;
 use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::StructDef;
@@ -181,51 +183,6 @@ impl Compiler {
         }
     }
 
-    /// Flatten an aggregate's leaf scalar fields into `out` as
-    /// `(offset, size, kind)` triples relative to `base_off`,
-    /// recursing through nested struct / union values and expanding
-    /// array fields to one entry per element. Union members overlap
-    /// at the same offsets, which is what the host-ABI classifier
-    /// needs (an eightbyte covering any integer member is INTEGER).
-    /// Bitfields and pointers flatten to `Int`; scalar `float` /
-    /// `double` to `F32` / `F64`. Used by the walker to build the
-    /// `AggDesc` the host-ABI argument / return classifier consumes.
-    #[allow(dead_code)] // consumed by the walker's host-ABI struct path
-    pub(crate) fn flatten_fields(&self, struct_id: usize, base_off: u32, out: &mut Vec<FlatField>) {
-        let sd = &self.structs[struct_id];
-        for f in &sd.fields {
-            let elem_ty = f.ty;
-            let elem_size = self.size_of_type(elem_ty) as u32;
-            let count = if f.array_size > 0 {
-                f.array_size as u32
-            } else {
-                1
-            };
-            for i in 0..count {
-                let off = base_off + f.offset as u32 + i * elem_size;
-                if is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0 {
-                    self.flatten_fields(struct_id_of(elem_ty), off, out);
-                } else {
-                    let bare = elem_ty & !UNSIGNED_BIT;
-                    let kind = if is_pointer_ty(elem_ty) {
-                        ScalarKind::Int
-                    } else if bare == Ty::Float as i64 {
-                        ScalarKind::F32
-                    } else if bare == Ty::Double as i64 {
-                        ScalarKind::F64
-                    } else {
-                        ScalarKind::Int
-                    };
-                    out.push(FlatField {
-                        offset: off,
-                        size: elem_size,
-                        kind,
-                    });
-                }
-            }
-        }
-    }
-
     /// Natural alignment (in bytes) for a value of the given `ty`.
     /// Mirrors the C alignment rule: the value lives on a boundary
     /// equal to its size for scalars (`char` = 1, `int` = 4,
@@ -278,4 +235,120 @@ impl Compiler {
             1
         }
     }
+}
+
+/// Byte width of a non-struct scalar / pointer `ty`, used when
+/// flattening an aggregate's array fields into per-element leaves.
+/// Mirrors the scalar cases of [`Compiler::size_of_type`]; the
+/// `long` width follows the target data model (LP64 vs LLP64).
+fn flat_scalar_size(ty: i64, target: Target) -> u32 {
+    if is_pointer_ty(ty) {
+        return 8;
+    }
+    let bare = ty & !UNSIGNED_BIT;
+    if bare == Ty::Bool as i64 || bare == Ty::Char as i64 {
+        1
+    } else if bare == Ty::Short as i64 {
+        2
+    } else if bare == Ty::Int as i64 || bare == Ty::Float as i64 {
+        4
+    } else if bare == Ty::Long as i64 {
+        if target.is_windows() { 4 } else { 8 }
+    } else {
+        8
+    }
+}
+
+/// Flatten an aggregate's leaf scalar fields into `out` as
+/// `(offset, size, kind)` triples relative to `base_off`, recursing
+/// through nested struct / union values and expanding array fields to
+/// one entry per element. Union members overlap at the same offsets,
+/// which is what the host-ABI classifier needs (an eightbyte covering
+/// any integer member is INTEGER). Bitfields and pointers flatten to
+/// `Int`; scalar `float` / `double` to `F32` / `F64`. Free function so
+/// the AST walker (which holds only `&[StructDef]`, not a `Compiler`)
+/// can build the `AggDesc` the host-ABI classifier consumes.
+pub(crate) fn flatten_struct_fields(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+    base_off: u32,
+    out: &mut Vec<FlatField>,
+) {
+    let sd = &structs[struct_id];
+    for f in &sd.fields {
+        let elem_ty = f.ty;
+        let is_struct_value = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let elem_size = if is_struct_value {
+            structs[struct_id_of(elem_ty)].size as u32
+        } else {
+            flat_scalar_size(elem_ty, target)
+        };
+        let count = if f.array_size > 0 {
+            f.array_size as u32
+        } else {
+            1
+        };
+        for i in 0..count {
+            let off = base_off + f.offset as u32 + i * elem_size;
+            if is_struct_value {
+                flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
+            } else {
+                let bare = elem_ty & !UNSIGNED_BIT;
+                let kind = if is_pointer_ty(elem_ty) {
+                    ScalarKind::Int
+                } else if bare == Ty::Float as i64 {
+                    ScalarKind::F32
+                } else if bare == Ty::Double as i64 {
+                    ScalarKind::F64
+                } else {
+                    ScalarKind::Int
+                };
+                out.push(FlatField {
+                    offset: off,
+                    size: elem_size,
+                    kind,
+                });
+            }
+        }
+    }
+}
+
+/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`,
+/// or `None` when `ty` is not a by-value struct the current phase
+/// routes through the host ABI. Phase 1 covers AArch64 aggregates of
+/// at most 16 bytes (AAPCS64 register / HFA classes); every other
+/// case keeps the existing c5 by-address convention.
+pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
+    if !matches!(target, Target::MacOSAarch64 | Target::LinuxAarch64) {
+        return None;
+    }
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return None;
+    }
+    let id = struct_id_of(ty);
+    if id >= structs.len() {
+        return None;
+    }
+    let size = structs[id].size as u32;
+    if size == 0 || size > 16 {
+        return None;
+    }
+    let align = (structs[id].align.max(1)) as u32;
+    let mut fields = Vec::new();
+    flatten_struct_fields(structs, target, id, 0, &mut fields);
+    // Phase 1 routes only integer-class aggregates through the host
+    // ABI. A homogeneous floating-point aggregate (AAPCS64 HFA) would
+    // consume the FP argument bank and shift the placement of any
+    // following floating-point scalar parameter; until the callee /
+    // caller FP-bank accounting handles that, such aggregates keep the
+    // by-address convention. TODO: HFA / mixed int+FP aggregates.
+    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+        return None;
+    }
+    Some(AggDesc {
+        size,
+        align,
+        fields,
+    })
 }

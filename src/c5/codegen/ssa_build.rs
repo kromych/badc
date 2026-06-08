@@ -157,6 +157,7 @@ impl SsaBuilder {
             param_fp_mask: 0,
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
         };
         let mut b = Self {
@@ -290,6 +291,35 @@ impl SsaBuilder {
     /// [`FunctionSsa::param_fp_mask`].
     pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
         self.func.param_fp_mask = mask;
+    }
+
+    /// Intern an aggregate layout into the function's `agg_descs`,
+    /// returning its index for a call's `arg_aggs` or the function's
+    /// `param_aggs`.
+    pub(crate) fn intern_agg_desc(&mut self, desc: crate::c5::ir::AggDesc) -> u32 {
+        let idx = self.func.agg_descs.len() as u32;
+        self.func.agg_descs.push(desc);
+        idx
+    }
+
+    /// Record the per-parameter aggregate map and the matching
+    /// body-local slots (host-ABI struct parameters). Both vectors
+    /// are parallel to the declared parameter list.
+    pub(crate) fn set_param_aggs(&mut self, param_aggs: Vec<Option<u32>>, local_slots: Vec<i64>) {
+        self.func.param_aggs = param_aggs;
+        self.func.param_local_slots = local_slots;
+    }
+
+    /// Attach the per-argument aggregate map to the call instruction
+    /// whose result is `v` (its index in `insts`). The metadata
+    /// travels with the instruction through the optimizer.
+    pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { arg_aggs: a, .. } | Inst::CallIndirect { arg_aggs: a, .. } => {
+                *a = arg_aggs;
+            }
+            _ => {}
+        }
     }
 
     /// True when value `v` was previously marked single-precision.

@@ -48,6 +48,13 @@ fn struct_arg_two_eightbyte() {
 }
 
 #[test]
+fn struct_return_by_value() {
+    // C99 6.8.6.4 + AAPCS64 6.9: integer aggregate returns in x0/x1
+    // (<= 16 bytes) or through x8 (> 16 bytes).
+    assert_eq!(run_fixture("struct_return_by_value.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }

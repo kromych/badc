@@ -397,6 +397,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_block.c", 0),
     ("struct_arg_in_registers.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
+    ("struct_return_by_value.c", 0),
     ("cast_fn_ptr_call.c", 0),
     ("paren_comma_side_effect.c", 0),
     ("for_init_decl_in_loop.c", 0),

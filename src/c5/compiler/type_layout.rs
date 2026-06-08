@@ -322,7 +322,11 @@ pub(crate) fn flatten_struct_fields(
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
     if !matches!(
         target,
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 | Target::LinuxX64
+        Target::MacOSAarch64
+            | Target::LinuxAarch64
+            | Target::WindowsAarch64
+            | Target::LinuxX64
+            | Target::WindowsX64
     ) {
         return None;
     }
@@ -334,10 +338,14 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
         return None;
     }
     let size = structs[id].size as u32;
-    if size == 0 || size > 16 {
-        // AArch64 (AAPCS64) and System V x86_64 cap the register path at
-        // 16 bytes here (System V's > 16-byte by-stack path and Win64
-        // are separate items).
+    if size == 0 {
+        return None;
+    }
+    if matches!(target, Target::WindowsX64) {
+        if !matches!(size, 1 | 2 | 4 | 8) {
+            return None;
+        }
+    } else if size > 16 {
         return None;
     }
     let align = (structs[id].align.max(1)) as u32;

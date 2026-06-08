@@ -379,6 +379,35 @@ pub(super) fn plan_call_args_aggs(
         // fixed arguments the walker tagged.
         if let Some(Some(agg)) = aggs.get(i) {
             let aligned = (agg.size + 7) & !7;
+            // Win64 (Microsoft x64) places arguments positionally: each
+            // argument, including an aggregate, occupies the single
+            // register slot for its position rather than a separate
+            // integer / SSE bank. The host-ABI path tags only
+            // {1,2,4,8}-byte aggregates here, each one GPR; place it at
+            // `int_arg_regs[i]` so it lines up with the scalar
+            // positional placement above, then overflow to the stack.
+            if abi.position_indexed_args {
+                let placement = if i < int_max {
+                    let mut regs = [ClassReg {
+                        reg: 0,
+                        is_fp: false,
+                    }; 4];
+                    regs[0] = ClassReg {
+                        reg: abi.int_arg_regs[i],
+                        is_fp: false,
+                    };
+                    ArgPlacement::StructRegs { regs, n: 1 }
+                } else {
+                    let off = stack_used;
+                    stack_used += aligned;
+                    ArgPlacement::StructStack {
+                        off,
+                        size: agg.size,
+                    }
+                };
+                placements.push(placement);
+                continue;
+            }
             let placement = match &agg.class {
                 AggClass::Regs(classes) => {
                     let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();

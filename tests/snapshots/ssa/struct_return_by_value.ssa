@@ -48,17 +48,14 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-1)                                    -> x0
-    v2   LoadLocal { off=2, kind=I64 }                    -> x1
-    v3   Mcpy { dst=v1, src=v2, size=8 }                  -> x0
-    v4   LocalAddr(-1)                                    -> x0
-    v5   Load { addr=v4, disp=0, kind=I32 }               -> x0
-    v6   LocalAddr(-1)                                    -> x1
-    v7   BinopI { op=add, lhs=v6, rhs_imm=4 }             -> x2
-    v8   Load { addr=v6, disp=4, kind=I32 }               -> x1
-    v9   Binop { op=add, lhs=v5, rhs=v8 }                 -> x0
-    v10  BinopI { op=shl, lhs=v9, rhs_imm=32 }            -> x0
-    v11  BinopI { op=shr, lhs=v10, rhs_imm=32 }           -> x0
-    terminator Return(v11)   (exit_acc=v11)
+    v2   Load { addr=v1, disp=0, kind=I32 }               -> x0
+    v3   LocalAddr(-1)                                    -> x1
+    v4   BinopI { op=add, lhs=v3, rhs_imm=4 }             -> x2
+    v5   Load { addr=v3, disp=4, kind=I32 }               -> x1
+    v6   Binop { op=add, lhs=v2, rhs=v5 }                 -> x0
+    v7   BinopI { op=shl, lhs=v6, rhs_imm=32 }            -> x0
+    v8   BinopI { op=shr, lhs=v7, rhs_imm=32 }            -> x0
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=sum_big
 fn ent_pc=3 n_params=1 variadic=false locals=3

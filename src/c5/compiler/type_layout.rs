@@ -320,7 +320,10 @@ pub(crate) fn flatten_struct_fields(
 /// at most 16 bytes (AAPCS64 register / HFA classes); every other
 /// case keeps the existing c5 by-address convention.
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
-    if !matches!(target, Target::MacOSAarch64 | Target::LinuxAarch64) {
+    if !matches!(
+        target,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64
+    ) {
         return None;
     }
     if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {

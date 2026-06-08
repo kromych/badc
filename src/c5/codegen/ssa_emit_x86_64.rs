@@ -354,7 +354,25 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if func.is_variadic || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+    if func.param_aggs.iter().all(Option::is_none) {
+        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
+    }
+    let aggs: Vec<Option<super::ArgAgg>> = func
+        .param_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &func.agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect();
+    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -1290,6 +1308,33 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 ///   * Spill sources for `IntReg` placements then materialise
 ///     directly into the target arg register
 ///     (`materialize_int_shifted` writes its load into the dst).
+/// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
+/// struct-aware planner consumes; empty when the call passes no
+/// aggregate by value.
+fn build_arg_aggs(
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
+) -> Vec<Option<super::ArgAgg>> {
+    if arg_aggs.iter().all(Option::is_none) {
+        return Vec::new();
+    }
+    arg_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect()
+}
+
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
@@ -1371,13 +1416,33 @@ fn marshal_args(
         }
     }
 
+    // Integer-register placements plus aggregate base addresses are one
+    // parallel register move (System V AMD64 3.2.3). A scalar `IntReg`
+    // arg moves src->target; a `StructRegs` arg positions its base
+    // address into its own first eightbyte register `regs[0]`, from
+    // which the eightbytes load below (the base register is overwritten
+    // by its own eightbyte last). Routing the base through that per-
+    // aggregate register -- never a shared scratch -- keeps one
+    // aggregate's load from clobbering another's still-pending base.
     let mut int_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::IntReg(r) = placement
-            && let Place::IntReg(s) = arg_place(i)
-            && s != r
-        {
-            int_moves.push((s, r));
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != r
+                {
+                    int_moves.push((s, r));
+                }
+            }
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+                let dst = regs[0].reg;
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != dst
+                {
+                    int_moves.push((s, dst));
+                }
+            }
+            _ => {}
         }
     }
     schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
@@ -1414,6 +1479,55 @@ fn marshal_args(
                     super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg(s));
                 }
             }
+        }
+    }
+
+    // Aggregate bases not already register-resident (spill / computed)
+    // materialise into the aggregate's first eightbyte register, the
+    // same destination the move loop used for the register-resident
+    // case.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement
+            && n > 0
+            && !matches!(arg_place(i), Place::IntReg(_))
+        {
+            let dst = regs[0].reg;
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                Reg(dst),
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!(
+                        "{site}: aggregate base not in int reg / spill"
+                    ));
+                    return false;
+                }
+            };
+            if src.0 != dst {
+                emit_mov_rr(code, Reg(dst), src);
+            }
+        }
+    }
+
+    // Load each aggregate's eightbytes from the base now in `regs[0]`.
+    // High eightbytes first; `regs[0]` (the base) is read last,
+    // overwritten by its own eightbyte. Integer-only (homogeneous
+    // floating-point aggregates excluded upstream).
+    for &placement in plan.placements.iter() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement {
+            debug_assert!(
+                !regs.iter().take(n as usize).any(|c| c.is_fp),
+                "x86_64 marshal: floating-point aggregate eightbyte not supported"
+            );
+            let base = regs[0].reg;
+            for k in (1..n as usize).rev() {
+                emit_mov_r_mem(code, Reg(regs[k].reg), Reg(base), (k as i32) * 8);
+            }
+            emit_mov_r_mem(code, Reg(base), Reg(base), 0);
         }
     }
 
@@ -2135,6 +2249,46 @@ fn emit_prologue(
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_mem_r(code, Reg::RSP, off, Reg(r));
     }
+    emit_struct_param_scatter(code, func, frame, abi);
+}
+
+/// Store each register-passed aggregate parameter's incoming argument
+/// registers into its parser-reserved body local (System V AMD64
+/// 3.2.3). Runs after the frame is established; the argument registers
+/// still hold the caller-supplied values, since nothing between entry
+/// and here clobbers them. The body reads the aggregate from this
+/// local, so the entry argument cell stays unused.
+fn emit_struct_param_scatter(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    for (i, agg) in func.param_aggs.iter().enumerate() {
+        if agg.is_none() {
+            continue;
+        }
+        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        debug_assert!(
+            !regs.iter().take(*n as usize).any(|c| c.is_fp),
+            "x86_64 scatter: floating-point aggregate eightbyte not supported"
+        );
+        let base = local_slot_off(slot, func, frame, abi);
+        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+            let off = (base + (k as i64) * 8) as i32;
+            super::x86_64::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+        }
+    }
 }
 
 /// Return the x86_64 condition code to use for `Jcc` when the
@@ -2440,6 +2594,7 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call(
             code,
@@ -2454,6 +2609,8 @@ fn emit_inst(
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::CallExt {
             binding_idx,
@@ -4627,6 +4784,8 @@ fn emit_call(
     callee_is_variadic: bool,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     if callee_is_variadic && abi.position_indexed_args {
         // Win64 host variadic ABI (Microsoft x64 calling convention):
@@ -4754,7 +4913,8 @@ fn emit_call(
     // argument types (set by the walker) rather than register
     // placement, since a floating-point constant rides an integer
     // register as its `Imm` bit pattern.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }

@@ -93,6 +93,13 @@ fn designator_override_and_braced_string() {
 }
 
 #[test]
+fn multidim_array_init() {
+    // N-dimensional array initializers pad each nesting level to its
+    // sub-array span, with inner designators and inferred outer dim.
+    assert_eq!(run_fixture("multidim_array_init.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

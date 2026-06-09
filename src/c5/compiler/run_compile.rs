@@ -1227,7 +1227,7 @@ impl Compiler {
                             }
                             continue;
                         }
-                        self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                        self.pending.init_inner_dims = self.inner_dims_of(id_idx);
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
@@ -1407,7 +1407,7 @@ impl Compiler {
                                         "array `_Thread_local` initialisers are not supported",
                                     ));
                                 }
-                                self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                                self.pending.init_inner_dims = self.inner_dims_of(id_idx);
                                 self.pending.init_target_array_size = array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {

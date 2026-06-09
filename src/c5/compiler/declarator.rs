@@ -347,10 +347,27 @@ impl Compiler {
             // never propagates into a computed stride; the
             // post-init fixup in `run_compile` overwrites it with
             // the real count once the initializer has been parsed.
-            let inner_dim: i64 = if dims.len() >= 2 {
-                dims[1]
-            } else if array_size < 0 && !dims.is_empty() {
-                dims[0]
+            // Unified dimension list, outermost first. For a deferred
+            // outer dim (`array_size < 0`), `dims` holds only the
+            // trailing inner dims, so prepend the `0` placeholder; an
+            // explicit shape already carries every dimension. The
+            // post-init fixup in `run_compile` overwrites `dims[0] == 0`
+            // with the real outer count once the initializer is parsed.
+            let full_dims: alloc::vec::Vec<i64> = if array_size < 0 && !dims.is_empty() {
+                let mut v = alloc::vec::Vec::with_capacity(dims.len() + 1);
+                v.push(0);
+                v.extend(dims);
+                v
+            } else {
+                dims
+            };
+            // `inner_array_size` is the second overall dimension (the
+            // immediate inner row width), used by the 2D-init padding
+            // path. `seed_multi_dim_strides` only reads `dims[k+1..]`
+            // for stride[k], so the placeholder zero never enters a
+            // computed stride.
+            let inner_dim: i64 = if full_dims.len() >= 2 {
+                full_dims[1]
             } else {
                 0
             };
@@ -363,13 +380,8 @@ impl Compiler {
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
                 self.symbols[idx].inner_array_size = inner_dim;
-                self.symbols[idx].array_dims = if dims.len() >= 2 {
-                    dims
-                } else if array_size < 0 && !dims.is_empty() {
-                    let mut v = alloc::vec::Vec::with_capacity(dims.len() + 1);
-                    v.push(0);
-                    v.extend(dims);
-                    v
+                self.symbols[idx].array_dims = if full_dims.len() >= 2 {
+                    full_dims
                 } else {
                     alloc::vec::Vec::new()
                 };

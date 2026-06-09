@@ -319,15 +319,17 @@ pub(in crate::c5::compiler) struct Pending {
     pub end_of_expr_stride: i64,
     pub end_of_expr_strides_tail: Vec<i64>,
 
-    /// Per-row element count for the next 2D-array initializer.
-    /// Set by callers of `collect_array_initializer` when the
-    /// declarator has a `[N][M]` shape so a nested `{ ... }`
-    /// row that lists fewer than M values can be zero-padded to
-    /// keep subsequent rows on the right stride. Zero means
-    /// "flatten without padding" (1D arrays, struct-array
-    /// initializers that own their layout). The collector
-    /// reads-and-clears this on entry.
-    pub init_inner_dim: i64,
+    /// Inner dimensions (below the outermost) for the next
+    /// `collect_array_initializer` call, outermost first. Set by
+    /// callers from the declarator's `array_dims[1..]` so a nested
+    /// `{ ... }` at each level can be zero-padded to the element count
+    /// its sub-array spans (the product of the dimensions below it),
+    /// keeping every level on the right stride for N-dim arrays. Empty
+    /// means "flatten without padding" (1D arrays, struct-array
+    /// initializers that own their layout). The collector reads-and-
+    /// clears this on entry and reinstates the tail before recursing
+    /// into a nested brace.
+    pub init_inner_dims: alloc::vec::Vec<i64>,
 
     /// Target array bound for the next `collect_array_initializer`
     /// call. Set by callers that know the declarator's `[N]` so
@@ -476,7 +478,7 @@ impl Default for Pending {
             index_strides_tail: Vec::new(),
             end_of_expr_stride: 0,
             end_of_expr_strides_tail: Vec::new(),
-            init_inner_dim: 0,
+            init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
             typedef_fn_proto: None,

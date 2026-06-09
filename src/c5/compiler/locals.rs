@@ -295,7 +295,7 @@ impl Compiler {
                     }
                     return Ok(());
                 }
-                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 let elements = self.collect_array_initializer(ty)?;
                 let final_size = elements.len() as i64;
                 self.symbols[loc_idx].array_size = final_size;
@@ -311,7 +311,7 @@ impl Compiler {
                 }
                 self.write_array_init_into_data(off, ty, &elements);
             } else if array_size > 0 {
-                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
@@ -438,7 +438,7 @@ impl Compiler {
                 // identical to before this fix when no runtime
                 // expressions are present.
             }
-            self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+            self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
@@ -592,7 +592,7 @@ impl Compiler {
                     )?;
                     return Ok(());
                 }
-                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = declared_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let init_count = elements.len();
@@ -668,7 +668,7 @@ impl Compiler {
         self.pending_local_init_ast = None;
         self.pending_local_aggregate_ast = None;
         self.pending_local_runtime_elements.clear();
-        self.pending.init_inner_dim = 0;
+        self.pending.init_inner_dims = alloc::vec::Vec::new();
 
         let value_ty;
         let final_array_size;
@@ -824,6 +824,19 @@ impl Compiler {
         } else {
             self.slots_of_type(ty)
         }
+    }
+
+    /// Inner dimensions (below the outermost) of array symbol `idx`,
+    /// for the multi-dim initializer padding path. Empty for scalar /
+    /// 1D arrays. The outermost dimension is dropped because the
+    /// initializer fills it positionally; the remaining dims size each
+    /// nested brace's sub-array.
+    pub(super) fn inner_dims_of(&self, idx: usize) -> alloc::vec::Vec<i64> {
+        self.symbols[idx]
+            .array_dims
+            .get(1..)
+            .map(|s| s.to_vec())
+            .unwrap_or_default()
     }
 
     /// True when reading symbol `idx` by value yields a runtime

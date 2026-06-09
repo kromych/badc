@@ -193,7 +193,11 @@ impl Compiler {
         // shift into the previous row's tail and `xs[i][j]` reads
         // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
-        let inner_dim = core::mem::take(&mut self.pending.init_inner_dim);
+        let inner_dims = core::mem::take(&mut self.pending.init_inner_dims);
+        // Scalars each nested brace at this level spans: the product of
+        // the dimensions below it. The empty product is 1, which is
+        // also the designator scale for the innermost (scalar) level.
+        let child_span: usize = inner_dims.iter().map(|&d| d as usize).product();
         let target_size = core::mem::take(&mut self.pending.init_target_array_size);
         // C99 6.7.8p14: a string-literal initializer for a character
         // array may be enclosed in braces (`char x[] = {"abc"}`).
@@ -321,17 +325,26 @@ impl Compiler {
                     return Err(self.compile_err("`=` expected after `[N]` designator"));
                 }
                 self.next()?;
-                cursor = n as usize;
+                // A designator names the N-th sub-array at this level,
+                // which spans `child_span` scalars (1 at the innermost
+                // level).
+                cursor = n as usize * child_span.max(1);
             }
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
-            // dimension, so we flatten the rows by recursing and
-            // concatenating element vectors. When `inner_dim > 0`
-            // the caller has told us the row width, so a short
-            // inner list gets padded with zero-valued elements
-            // before the next row starts.
+            // dimension, so the rows are flattened by recursing and
+            // concatenating element vectors. The nested list is padded
+            // to `child_span` (the scalar count its sub-array spans) so
+            // a short list keeps subsequent sub-arrays on the right
+            // stride; the recursion receives the dimensions below the
+            // current level.
             if self.lex.tk == '{' {
                 let before = cursor;
+                self.pending.init_inner_dims = if inner_dims.is_empty() {
+                    alloc::vec::Vec::new()
+                } else {
+                    inner_dims[1..].to_vec()
+                };
                 let inner = self.collect_array_initializer(elem_ty)?;
                 let written = inner.len();
                 if elements.len() < before + written {
@@ -341,14 +354,12 @@ impl Compiler {
                     elements[before + i] = entry;
                 }
                 cursor = before + written;
-                if inner_dim > 0 {
-                    let pad = (inner_dim as usize).saturating_sub(written);
-                    if pad > 0 {
-                        if elements.len() < cursor + pad {
-                            elements.resize(cursor + pad, (0, InitElemReloc::None));
-                        }
-                        cursor += pad;
+                if child_span > written {
+                    let pad = child_span - written;
+                    if elements.len() < cursor + pad {
+                        elements.resize(cursor + pad, (0, InitElemReloc::None));
                     }
+                    cursor += pad;
                 }
                 if self.lex.tk == ',' {
                     self.next()?;

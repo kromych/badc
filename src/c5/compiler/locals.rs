@@ -165,6 +165,12 @@ impl Compiler {
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
+                // Block scope with static storage (C99 6.2.4p3): the
+                // symbol carries `Glo` class for its `.data` slot but
+                // must be unbound at function exit so a file-scope
+                // object of the same name reappears. The `Loc`-gated
+                // cleanup would skip it, so mark it for restore.
+                self.symbols[loc_idx].is_scope_static = true;
                 self.allocate_static_local(loc_idx, ty, array_size)?;
                 self.ast_emit_static_local_decl(loc_idx as u32);
             } else {

@@ -637,6 +637,7 @@ impl Compiler {
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
+        sym.is_scope_static = false;
     }
 
     // ---- AST helpers ----

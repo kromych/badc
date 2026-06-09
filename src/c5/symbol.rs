@@ -175,6 +175,14 @@ pub(crate) struct Symbol {
     /// waiting to resolve.
     pub is_extern_decl: bool,
 
+    /// True for a block-scope `static` local that shadowed an outer
+    /// binding (a file-scope object of the same name). The local is
+    /// promoted to `Glo` class for its data-segment storage but keeps
+    /// block scope (C99 6.2.1, 6.2.4p3), so the function-exit cleanup
+    /// must restore the shadowed outer binding even though the
+    /// symbol's class is no longer `Loc`. Cleared on restore.
+    pub is_scope_static: bool,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's

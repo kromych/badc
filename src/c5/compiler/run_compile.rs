@@ -1138,7 +1138,11 @@ impl Compiler {
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
-                        if sym.class == Token::Loc as i64 {
+                        // Block-scope locals (`Loc`) and `static` locals
+                        // (promoted to `Glo` but block-scoped) both unbind
+                        // at function exit so a file-scope object of the
+                        // same name reappears.
+                        if sym.class == Token::Loc as i64 || sym.is_scope_static {
                             Self::restore_shadowed_symbol(sym);
                         }
                     }

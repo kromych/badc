@@ -485,6 +485,15 @@ fn vsnprintf_underscore_alias_resolves_to_libc() {
 }
 
 #[test]
+fn static_local_shadows_same_named_global() {
+    // C99 6.2.1 + 6.2.4p3: a block-scope `static` local has its own
+    // static storage and block scope; a same-named file-scope object
+    // is a distinct object. The local must not share the global's
+    // storage and the global reappears after the function returns.
+    assert_eq!(run_fixture("static_local_shadows_global.c"), 0);
+}
+
+#[test]
 fn float_argument_to_variadic_is_promoted_to_double() {
     // C99 6.5.2.2p6-7: a `float` passed to a variadic function is
     // promoted to `double`. The fixture self-checks `%g` of a float

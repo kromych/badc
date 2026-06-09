@@ -56,6 +56,16 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn struct_multi_byval() {
+    // C99 6.5.2.2: several aggregates of mixed size passed by value in
+    // one call, interleaved with scalars, plus aggregate returns. The
+    // aggregates consume argument registers and push later scalars onto
+    // the host stack, so the ParamRef seed must track the per-ABI
+    // register/stack split rather than parameter position.
+    assert_eq!(run_fixture("struct_multi_byval.c"), 0);
+}
+
+#[test]
 fn struct_return_by_value() {
     // C99 6.8.6.4 + AAPCS64 6.9: integer aggregate returns in x0/x1
     // (<= 16 bytes) or through x8 (> 16 bytes).

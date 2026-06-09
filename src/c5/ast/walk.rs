@@ -137,10 +137,27 @@ pub(crate) fn walk_function(
     // shifts every parameter cell), so they are excluded; host-ABI
     // returns (registers / x8) leave the parameter slots unshifted.
     let mut param_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+    // Parallel per-parameter aggregate classification, consumed below by
+    // the argument-register planner so the `ParamRef` seed loop knows
+    // which scalar parameters an aggregate pushed past the argument
+    // registers onto the host stack.
+    let mut param_arg_aggs: alloc::vec::Vec<Option<crate::c5::codegen::ArgAgg>> =
+        alloc::vec::Vec::new();
     if !is_variadic && !ret_outptr {
         param_aggs = alloc::vec![None; param_tys.len()];
+        param_arg_aggs = alloc::vec![None; param_tys.len()];
         for (i, &pty) in param_tys.iter().enumerate() {
             if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
+                param_arg_aggs[i] = Some(crate::c5::codegen::ArgAgg {
+                    class: crate::c5::codegen::abi_classify::classify_aggregate(
+                        desc.size,
+                        desc.align,
+                        &desc.fields,
+                        target.abi(),
+                        false,
+                    ),
+                    size: desc.size,
+                });
                 let idx = b.intern_agg_desc(desc);
                 param_aggs[i] = Some(idx);
             }
@@ -206,8 +223,12 @@ pub(crate) fn walk_function(
     // floating-point parameter is seeded with an FP `ParamRef` only
     // when the plan placed it in an FP register; one that overflowed to
     // the host stack reads its c5 cdecl cell instead.
-    let param_plan =
-        super::super::codegen::plan_param_regs(param_tys.len(), b.param_fp_mask(), target.abi());
+    let param_plan = super::super::codegen::plan_param_regs_aggs(
+        param_tys.len(),
+        b.param_fp_mask(),
+        target.abi(),
+        &param_arg_aggs,
+    );
     let param_in_fp_reg = |i: usize| -> bool {
         matches!(
             param_plan.placements.get(i),
@@ -234,8 +255,7 @@ pub(crate) fn walk_function(
     // arg reg) and any reordering would let those writes clobber
     // the incoming argument before its `ParamRef` materialised.
     if !is_variadic && !ret_outptr {
-        let int_arg_regs_count = target.abi().int_arg_regs.len();
-        for i in 0..param_tys.len().min(int_arg_regs_count) {
+        for i in 0..param_tys.len() {
             let pty = param_tys[i];
             let local_slot = param_local_slots[i];
             if local_slot < 0 {
@@ -270,6 +290,19 @@ pub(crate) fn walk_function(
                 continue;
             }
             if is_float {
+                continue;
+            }
+            // Seed an integer `ParamRef` only when the planner placed this
+            // parameter in an integer argument register. An aggregate
+            // earlier in the list can consume several registers (or one
+            // by-reference pointer register), pushing a later scalar that
+            // would fit by position onto the host stack; such a parameter
+            // has no incoming register and reads its c5 cdecl cell, which
+            // the prologue restripes from the incoming stack.
+            if !matches!(
+                param_plan.placements.get(i),
+                Some(super::super::codegen::ArgPlacement::IntReg(_))
+            ) {
                 continue;
             }
             // Pointer-typed parameters carry the pointer marker

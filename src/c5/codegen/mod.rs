@@ -345,6 +345,7 @@ pub(super) fn plan_call_args(
 /// [`abi_classify::classify_aggregate`]; `size` is the aggregate's
 /// byte size (needed for the stack reservation when it is passed by
 /// memory or by an implicit-reference copy).
+#[derive(Clone)]
 #[allow(dead_code)] // constructed by the per-arch emit's struct path
 pub(crate) struct ArgAgg {
     pub class: abi_classify::AggClass,

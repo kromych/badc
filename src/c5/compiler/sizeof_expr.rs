@@ -105,9 +105,7 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_constant_int()?;
                 if n <= 0 {
-                    return Err(
-                        self.compile_err(format!("array dimension must be positive (got {n})"))
-                    );
+                    return Err(self.compile_err("array dimension in sizeof must be positive"));
                 }
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("close bracket expected in sizeof array type"));

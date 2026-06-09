@@ -549,6 +549,32 @@ impl Compiler {
         // C99 6.6 admits unary `-` on a numeric literal as a
         // constant expression -- the float case has to flip the
         // IEEE-754 sign bit rather than negate an integer value.
+        // Unary `+` on a numeric literal is the identity (C99 6.5.3.3p2);
+        // mirror the unary-minus route below but leave the value
+        // unchanged. Without this a `+0.7` array element falls through
+        // to the integer path and stores 0.
+        if self.lex.tk == Token::AddOp && self.lex.peek_after_whitespace_starts_digit() {
+            let snap = self.lex.snapshot();
+            self.next()?; // consume `+`
+            if self.lex.tk == Token::FloatNum {
+                let bits = self.lex.ival;
+                self.next()?;
+                if self.tk_is_float_arith_op() {
+                    let folded = self.parse_const_float_add_from(f64::from_bits(bits as u64))?;
+                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                }
+                return Ok((bits, InitElemReloc::Float64Bits));
+            }
+            if self.lex.tk == Token::Num {
+                self.lex.restore(snap);
+                let v = self.parse_constant_int()?;
+                return Ok((v, InitElemReloc::None));
+            }
+            return Err(self.compile_err(format!(
+                "expected numeric literal after `+` in initializer (got {})",
+                super::super::token::describe(self.lex.tk)
+            )));
+        }
         if self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit() {
             let snap = self.lex.snapshot();
             self.next()?; // consume `-`

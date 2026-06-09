@@ -718,7 +718,19 @@ impl Compiler {
                     // when it lowers a call to this name, so any
                     // call placed before the body sees the post-body
                     // ent_pc once parsing reaches here.
-                    self.symbols[id_idx].val = ent_pc as i64;
+                    //
+                    // When a parameter shares the function's name (C99
+                    // 6.2.1: the parameter shadows the function inside
+                    // the body), the live binding at `id_idx` is the
+                    // parameter, holding its stack slot. Write the entry
+                    // pc onto the shadowed function binding (`h_val`),
+                    // which the function-exit cleanup restores, so the
+                    // parameter's slot survives the body.
+                    if params.indices.contains(&id_idx) {
+                        self.symbols[id_idx].h_val = ent_pc as i64;
+                    } else {
+                        self.symbols[id_idx].val = ent_pc as i64;
+                    }
                     self.symbols[id_idx].defined_here = true;
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now

@@ -381,6 +381,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("line_directive.c", 0),
     ("float_global_init.c", 0),
     ("func_name_array.c", 0),
+    ("unary_plus_init_and_param_shadow.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

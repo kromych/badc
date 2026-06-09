@@ -125,6 +125,13 @@ fn func_name_array() {
 }
 
 #[test]
+fn unary_plus_init_and_param_shadow() {
+    // Unary `+` in a constant initializer is identity; a parameter
+    // shadows a same-named function.
+    assert_eq!(run_fixture("unary_plus_init_and_param_shadow.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

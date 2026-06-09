@@ -1,5 +1,5 @@
 
-type_warning_arity.x64:	file format elf64-x86-64
+inline_arg_count_mismatch.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -17,16 +17,25 @@ Disassembly of section .text:
                	retq
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%rbx, (%rsp)
-               	movl	$0x1, %ebx
-               	movq	%rbx, %rdi
+               	movl	$0x2, %edi
+               	movl	$0x3, %esi
                	callq	<addr>
-               	xorq	%rax, %rax
-               	movq	%rax, %rcx
+               	movq	%rax, %rbx
+               	movl	$0x7, %edi
+               	callq	<addr>
+               	movslq	%ebx, %rax
+               	cmpq	$0x5, %rax
+               	jne	<addr>
+               	xorq	%rcx, %rcx
+               	jmp	<addr>
+               	movl	$0x1, %ecx
+               	jmp	<addr>
                	movq	(%rsp), %rbx
                	movq	%rcx, %rax
-               	addq	$0x10, %rsp
+               	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

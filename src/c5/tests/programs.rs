@@ -181,6 +181,13 @@ fn empty_macro_arg_and_string_rows() {
 }
 
 #[test]
+fn inline_arg_count_mismatch() {
+    // A call passing fewer arguments than the callee has parameters is
+    // not inlined, so the optimized IR stays well-formed.
+    assert_eq!(run_fixture("inline_arg_count_mismatch.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

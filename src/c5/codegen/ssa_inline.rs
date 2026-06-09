@@ -730,7 +730,16 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
             let inlined = match inst {
                 Inst::Call {
                     target_pc, args, ..
-                } => callees.get(target_pc).map(|c| (*c, args)),
+                } => callees
+                    .get(target_pc)
+                    // A call passing fewer arguments than the callee has
+                    // parameters (an argument-count mismatch, e.g. via a
+                    // macro) would leave a callee `ParamRef` with no
+                    // matching argument; inlining it resolves that ref to
+                    // NO_VALUE. Leave such a call un-inlined so the IR
+                    // stays well-formed.
+                    .filter(|c| args.len() >= c.n_params)
+                    .map(|c| (*c, args)),
                 _ => None,
             };
             // Multi-block callees: handled by `splice_multi_block`
@@ -884,6 +893,8 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && c.blocks.len() > 1
+                    // Same argument-count guard as the single-block path.
+                    && args.len() >= c.n_params
                 {
                     hit = Some((b_idx, pc, *c, args.clone()));
                     break 'find;

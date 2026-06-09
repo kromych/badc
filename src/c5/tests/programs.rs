@@ -139,6 +139,13 @@ fn fn_ptr_multi_deref() {
 }
 
 #[test]
+fn stringize_whitespace() {
+    // `#` collapses inter-token white space and preserves it inside
+    // literals.
+    assert_eq!(run_fixture("stringize_whitespace.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

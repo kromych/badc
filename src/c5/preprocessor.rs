@@ -2473,6 +2473,73 @@ fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
     }
 }
 
+/// Build the `#`-stringized form of a macro argument (C99 6.10.3.2):
+/// the spelling is wrapped in `"`, leading and trailing white space is
+/// deleted, and each internal white-space run between tokens becomes a
+/// single space. White space inside a character constant or string
+/// literal is preserved, and a `\` or `"` that occurs inside such a
+/// literal is escaped; a `\` outside any literal is copied verbatim.
+fn stringize_arg(arg: &str) -> String {
+    let bytes = arg.as_bytes();
+    let mut out = String::with_capacity(arg.len() + 2);
+    out.push('"');
+    let mut in_str = false;
+    let mut in_char = false;
+    let mut pending_space = false;
+    let mut wrote_any = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        let in_lit = in_str || in_char;
+        if !in_lit && matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0c) {
+            if wrote_any {
+                pending_space = true;
+            }
+            i += 1;
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+            pending_space = false;
+        }
+        if in_lit && c == b'\\' && i + 1 < bytes.len() {
+            // Escape sequence inside a literal: escape the backslash,
+            // then copy the escaped char (re-escaping a quote or
+            // backslash). The escaped char never toggles literal state.
+            out.push_str("\\\\");
+            match bytes[i + 1] {
+                b'"' => out.push_str("\\\""),
+                b'\\' => out.push_str("\\\\"),
+                n => out.push(n as char),
+            }
+            i += 2;
+            wrote_any = true;
+            continue;
+        }
+        match c {
+            b'"' => {
+                out.push_str("\\\"");
+                if !in_char {
+                    in_str = !in_str;
+                }
+            }
+            b'\'' => {
+                out.push('\'');
+                if !in_str {
+                    in_char = !in_char;
+                }
+            }
+            // A backslash outside any literal is not escaped (C99 only
+            // escapes those within character / string literals).
+            _ => out.push(c as char),
+        }
+        wrote_any = true;
+        i += 1;
+    }
+    out.push('"');
+    out
+}
+
 fn is_ident(s: &str) -> bool {
     let mut bytes = s.bytes();
     let Some(first) = bytes.next() else {
@@ -3599,15 +3666,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
                     None
                 };
                 if let Some(arg) = arg_text {
-                    out.push('"');
-                    for byte in arg.bytes() {
-                        match byte {
-                            b'"' => out.push_str("\\\""),
-                            b'\\' => out.push_str("\\\\"),
-                            _ => out.push(byte as char),
-                        }
-                    }
-                    out.push('"');
+                    out.push_str(&stringize_arg(arg));
                     i = j;
                     continue;
                 }

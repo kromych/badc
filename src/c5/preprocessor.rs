@@ -1048,6 +1048,13 @@ impl Preprocessor {
         let mut i = 0;
         while i < bytes.len() {
             let c = bytes[i];
+            // Skip a string / char literal's encoding prefix so the `L`
+            // of `L"..."` isn't collected as a macro identifier (C99
+            // 6.4.5 / 6.4.4.4); the literal body falls to the quote arm.
+            if let Some(plen) = literal_prefix_len(bytes, i) {
+                i += plen;
+                continue;
+            }
             if c.is_ascii_alphabetic() || c == b'_' {
                 let start = i;
                 i += 1;
@@ -1094,6 +1101,17 @@ impl Preprocessor {
         let mut i = 0;
         while i < bytes.len() {
             let c = bytes[i];
+            // A string / char literal may carry an encoding prefix
+            // (`L`, `u`, `U`, `u8`) that is part of the literal token,
+            // not an identifier (C99 6.4.5 / 6.4.4.4). Detect it before
+            // the identifier scan so a macro parameter named `L`/`u`/`U`
+            // doesn't capture the prefix of an adjacent wide / UTF
+            // literal. The literal body is copied verbatim below.
+            if let Some(plen) = literal_prefix_len(bytes, i) {
+                out.push_str(&line[i..i + plen]);
+                i += plen;
+                continue;
+            }
             if c.is_ascii_alphabetic() || c == b'_' {
                 let start = i;
                 i += 1;
@@ -2391,6 +2409,30 @@ fn unfold_line_continuations(source: &str) -> String {
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the
 /// dylib `name`.
+/// If `bytes[at..]` begins with a string- or char-literal encoding
+/// prefix (`L`, `u`, `U`, or `u8`) immediately followed by a `"` or
+/// `'` quote, return the prefix length (1 or 2). The quote itself is
+/// not included. C99 6.4.5 (string literals) and 6.4.4.4 (character
+/// constants) make the prefix part of the literal token; the
+/// preprocessor must not treat it as an identifier.
+fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
+    let c = *bytes.get(at)?;
+    let quote = |b: u8| b == b'"' || b == b'\'';
+    match c {
+        b'L' | b'U' if bytes.get(at + 1).is_some_and(|&n| quote(n)) => Some(1),
+        b'u' => {
+            if bytes.get(at + 1) == Some(&b'8') && bytes.get(at + 2).is_some_and(|&n| n == b'"') {
+                Some(2)
+            } else if bytes.get(at + 1).is_some_and(|&n| quote(n)) {
+                Some(1)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 fn is_ident(s: &str) -> bool {
     let mut bytes = s.bytes();
     let Some(first) = bytes.next() else {
@@ -3511,6 +3553,14 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
             }
             out.push('#');
             i += 1;
+        } else if let Some(plen) = literal_prefix_len(bytes, i) {
+            // An `L`/`u`/`U`/`u8` prefix belongs to the following string
+            // or char literal (C99 6.4.5 / 6.4.4.4); emit it verbatim so
+            // a parameter named `L`/`u`/`U` doesn't capture it. The
+            // literal body is copied by the `"`/`'` arm on the next
+            // iteration.
+            out.push_str(&def.body[i..i + plen]);
+            i += plen;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
@@ -3527,24 +3577,30 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
                 }
             }
         } else if c == b'"' || c == b'\'' {
-            // Pass literals through unchanged so identifier-like
-            // bytes inside don't get substituted.
+            // Pass literals through unchanged so identifier-like bytes
+            // inside don't get substituted. Copy the byte range as a
+            // UTF-8 slice rather than byte by byte so a multibyte
+            // sequence isn't re-encoded per byte (`as char` widening).
             let quote = c;
-            out.push(c as char);
+            let lit_start = i;
             i += 1;
             while i < bytes.len() && bytes[i] != quote {
                 if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    out.push(bytes[i] as char);
-                    out.push(bytes[i + 1] as char);
                     i += 2;
                 } else {
-                    out.push(bytes[i] as char);
                     i += 1;
                 }
             }
             if i < bytes.len() {
-                out.push(quote as char);
                 i += 1;
+            }
+            match core::str::from_utf8(&bytes[lit_start..i]) {
+                Ok(s) => out.push_str(s),
+                Err(_) => {
+                    for &b in &bytes[lit_start..i] {
+                        out.push(b as char);
+                    }
+                }
             }
         } else {
             out.push(c as char);

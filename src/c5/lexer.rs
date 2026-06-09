@@ -240,6 +240,13 @@ pub(crate) struct Lexer {
     /// decimal constant with no `u` suffix stays signed.
     pub int_is_decimal: bool,
 
+    /// `true` when the most recent `'"'` string-literal token came from
+    /// a wide (`L"..."`) literal. `wchar_t` is `int` (4 bytes), so the
+    /// bytes already in `self.data` hold one 4-byte code point per
+    /// element; the initializer and expression parsers read this to
+    /// size the element stride (C99 6.4.5).
+    pub str_is_wide: bool,
+
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
     /// reads it via [`Self::current_pack`] and clamps each field's
@@ -374,6 +381,7 @@ impl Lexer {
             int_suffix_long: 0,
             int_suffix_unsigned: false,
             int_is_decimal: true,
+            str_is_wide: false,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -554,6 +562,35 @@ impl Lexer {
                             }
                             val = acc;
                         }
+                        b'u' | b'U' => {
+                            // Universal character name (C99 6.4.3):
+                            // `\u` takes exactly four hex digits, `\U`
+                            // exactly eight, naming a Unicode code point.
+                            let digits = if esc == b'u' { 4 } else { 8 };
+                            let mut acc: i64 = 0;
+                            let mut count = 0;
+                            while count < digits && self.pos < self.src.len() {
+                                let h = self.src[self.pos];
+                                let d = match h {
+                                    b'0'..=b'9' => (h - b'0') as i64,
+                                    b'a'..=b'f' => 10 + (h - b'a') as i64,
+                                    b'A'..=b'F' => 10 + (h - b'A') as i64,
+                                    _ => break,
+                                };
+                                acc = (acc << 4) | d;
+                                self.pos += 1;
+                                count += 1;
+                            }
+                            if count != digits {
+                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                    &format!(
+                                        "{}: \\{} needs {} hex digits",
+                                        self.line, esc as char, digits
+                                    ),
+                                )));
+                            }
+                            val = acc;
+                        }
                         b'0'..=b'7' => {
                             let mut acc: i64 = (esc - b'0') as i64;
                             let mut count = 1;
@@ -625,6 +662,7 @@ impl Lexer {
             data.push(0);
             self.ival = start_data;
             self.tk = Tok('"' as i64);
+            self.str_is_wide = true;
             return Ok(());
         }
     }
@@ -1337,6 +1375,7 @@ impl Lexer {
                     // trailing NUL once all the parts have been read.
                     self.ival = start_data;
                     self.tk = Tok('"' as i64);
+                    self.str_is_wide = false;
                 } else {
                     self.tk = Tok(Token::Num as i64);
                 }

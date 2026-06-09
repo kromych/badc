@@ -146,6 +146,13 @@ fn stringize_whitespace() {
 }
 
 #[test]
+fn kr_old_style_def() {
+    // Old-style parameter declarations between `)` and the body refine
+    // the parameter types.
+    assert_eq!(run_fixture("kr_old_style_def.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

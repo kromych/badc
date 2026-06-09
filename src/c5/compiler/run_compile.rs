@@ -513,7 +513,7 @@ impl Compiler {
                     // `parse_decl_base_type` per param and clears
                     // the side channel as part of its reset.
                     let ret_was_long_double = self.pending.base_was_long_double;
-                    let params = if let Some(pp) = preconsumed_params {
+                    let mut params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
                         self.next()?;
@@ -665,6 +665,46 @@ impl Compiler {
                             self.symbols[id_idx].name
                         )));
                     }
+                    // C99 6.9.1: an old-style (K&R) definition lists the
+                    // parameter names in the declarator and gives their
+                    // types in declarations between the `)` and the
+                    // body; unlisted parameters keep the default int.
+                    // Each declaration names one or more of the
+                    // parameters already bound by parse_function_params,
+                    // so update those symbols' types in place.
+                    while self.lex.tk != '{' && self.lex.tk != 0 && self.lex_is_type_start() {
+                        let base = self.parse_decl_base_type()?;
+                        while self.lex.tk != ';' && self.lex.tk != 0 {
+                            let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
+                            if decl_idx != usize::MAX {
+                                // An array parameter is adjusted to a
+                                // pointer to the element type (6.7.5.3p7).
+                                if decl_arr != 0 {
+                                    decl_ty += Ty::Ptr as i64;
+                                }
+                                if let Some(pos) =
+                                    params.indices.iter().position(|&pi| pi == decl_idx)
+                                {
+                                    self.symbols[decl_idx].type_ = decl_ty;
+                                    params.types[pos] = decl_ty;
+                                } else {
+                                    return Err(self.compile_err(
+                                        "old-style parameter declaration names a non-parameter",
+                                    ));
+                                }
+                            }
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                            }
+                        }
+                        if self.lex.tk == ';' {
+                            self.next()?;
+                        }
+                    }
+                    // Re-record the signature now that old-style
+                    // declarations may have refined the parameter types.
+                    self.symbols[id_idx].params = params.types.clone();
+
                     if self.lex.tk != '{' {
                         return Err(self.compile_err("bad function definition"));
                     }

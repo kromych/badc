@@ -756,6 +756,39 @@ impl Compiler {
     /// returned in source order with their resolved field offset
     /// + size. Designators advance the running positional index
     /// to "the field after the named one".
+    /// Number of scalar initializer positions a struct consumes in a
+    /// brace-elided (flat) list (C99 6.7.8p20). A scalar / pointer /
+    /// bitfield field is one; an array of N elements is N times the
+    /// element type's count; a nested struct recurses; an anonymous
+    /// union contributes its first member's count only (its
+    /// alternatives share one positional slot).
+    pub(super) fn struct_flat_init_slots(&self, struct_id: usize) -> usize {
+        let fields = self.structs[struct_id].fields.clone();
+        let mut total = 0usize;
+        let mut i = 0;
+        while i < fields.len() {
+            let f = &fields[i];
+            let elem = if is_struct_ty(f.ty) && struct_ptr_depth(f.ty) == 0 {
+                self.struct_flat_init_slots(struct_id_of(f.ty))
+            } else {
+                1
+            };
+            total += if f.array_size > 0 {
+                (f.array_size as usize) * elem
+            } else {
+                elem
+            };
+            let group = f.anon_union_group;
+            i += 1;
+            if group != 0 {
+                while i < fields.len() && fields[i].anon_union_group == group {
+                    i += 1;
+                }
+            }
+        }
+        total
+    }
+
     pub(super) fn collect_struct_initializer(
         &mut self,
         struct_id: usize,
@@ -765,8 +798,26 @@ impl Compiler {
             return Err(self.compile_err("struct initializer must start with `{{`"));
         }
         self.next()?;
+        self.fill_struct_fields(struct_id, var_offset, true)?;
+        self.next()?; // consume `}`
+        Ok(())
+    }
+
+    /// Fill the fields of a struct from the current brace-list position.
+    /// With `braced` true the caller has already consumed the opening
+    /// `{` and consumes the matching `}` after this returns; the loop
+    /// runs until that `}`. With `braced` false (C99 6.7.8p20 brace
+    /// elision) there is no enclosing `{ }`: the loop returns as soon as
+    /// every field is filled, leaving the remaining initializers for the
+    /// surrounding aggregate's next sub-object.
+    pub(super) fn fill_struct_fields(
+        &mut self,
+        struct_id: usize,
+        var_offset: i64,
+        braced: bool,
+    ) -> Result<(), C5Error> {
         let mut pos: usize = 0;
-        while self.lex.tk != '}' {
+        while self.lex.tk != '}' && (braced || pos < self.structs[struct_id].fields.len()) {
             // Designator?
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
@@ -1025,7 +1076,6 @@ impl Compiler {
                 self.next()?;
             }
         }
-        self.next()?; // consume `}`
         Ok(())
     }
 

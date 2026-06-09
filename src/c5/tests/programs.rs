@@ -56,6 +56,13 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn array_of_struct_brace_elision() {
+    // C99 6.7.8p20: a flat value list fills an array of structs with the
+    // per-element braces elided; the length follows from the slot count.
+    assert_eq!(run_fixture("array_of_struct_brace_elision.c"), 0);
+}
+
+#[test]
 fn anon_union_init() {
     // C11 6.7.2.1p13: an anonymous union is one positional slot in a
     // brace initializer; an anonymous struct contributes one per member.

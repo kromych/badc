@@ -757,6 +757,82 @@ impl Lexer {
         count
     }
 
+    /// Count top-level comma-separated items in a brace list, starting
+    /// just past the outer `{`. Used to size a brace-elided array of
+    /// structs (C99 6.7.8p20): the number of items divided by the per-
+    /// element initializer slot count gives the array length. Returns
+    /// the item count (0 for an empty `{ }`). Trailing commas do not
+    /// inflate the count.
+    pub fn count_top_level_items_in_array(&self) -> usize {
+        let bytes = &self.src;
+        let mut p = self.pos;
+        let mut depth: i32 = 1;
+        let mut items: usize = 0;
+        // True once the current top-level item has seen content; a
+        // trailing comma before `}` leaves it false, so no phantom item.
+        let mut cur_has_content = false;
+        while p < bytes.len() && depth > 0 {
+            let c = bytes[p];
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'*' {
+                p += 2;
+                while p + 1 < bytes.len() && !(bytes[p] == b'*' && bytes[p + 1] == b'/') {
+                    p += 1;
+                }
+                p = (p + 2).min(bytes.len());
+                continue;
+            }
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'/' {
+                while p < bytes.len() && bytes[p] != b'\n' {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'"' || c == b'\'' {
+                let q = c;
+                p += 1;
+                while p < bytes.len() && bytes[p] != q {
+                    if bytes[p] == b'\\' && p + 1 < bytes.len() {
+                        p += 2;
+                    } else {
+                        p += 1;
+                    }
+                }
+                if p < bytes.len() {
+                    p += 1;
+                }
+                cur_has_content = true;
+                continue;
+            }
+            if c == b'{' || c == b'[' || c == b'(' {
+                depth += 1;
+                cur_has_content = true;
+                p += 1;
+                continue;
+            }
+            if c == b'}' || c == b']' || c == b')' {
+                depth -= 1;
+                p += 1;
+                continue;
+            }
+            if c == b',' && depth == 1 {
+                if cur_has_content {
+                    items += 1;
+                    cur_has_content = false;
+                }
+                p += 1;
+                continue;
+            }
+            if !c.is_ascii_whitespace() {
+                cur_has_content = true;
+            }
+            p += 1;
+        }
+        if cur_has_content {
+            items += 1;
+        }
+        items
+    }
+
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.

@@ -1147,7 +1147,19 @@ impl Compiler {
                                     self.compile_err("array initializer must start with `{{`")
                                 );
                             }
-                            let count = self.lex.count_top_level_groups_in_array() as i64;
+                            let sid = struct_id_of(ty);
+                            // C99 6.7.8p20 brace elision: when no element
+                            // carries its own braces, the flat value list
+                            // fills consecutive struct elements, each
+                            // consuming the struct's scalar slot count.
+                            let groups = self.lex.count_top_level_groups_in_array();
+                            let count = if groups > 0 {
+                                groups as i64
+                            } else {
+                                let items = self.lex.count_top_level_items_in_array();
+                                let slots = self.struct_flat_init_slots(sid).max(1);
+                                items.div_ceil(slots) as i64
+                            };
                             self.next()?;
                             self.align_data_to_8();
                             let off = self.data.len() as i64;
@@ -1155,7 +1167,6 @@ impl Compiler {
                             for _ in 0..(count * elem_size as i64) {
                                 self.data.push(0);
                             }
-                            let sid = struct_id_of(ty);
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
                                 // C99 6.7.8p7 array designator on a
@@ -1191,8 +1202,11 @@ impl Compiler {
                                 if self.lex.tk == '{' {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
-                                    return Err(self
-                                        .compile_err("struct array element must be a brace list"));
+                                    // Brace-elided element: fill the
+                                    // struct's fields from the flat list
+                                    // until it is full, leaving the rest
+                                    // for the next element.
+                                    self.fill_struct_fields(sid, here, false)?;
                                 }
                                 i += 1;
                                 if self.lex.tk == ',' {

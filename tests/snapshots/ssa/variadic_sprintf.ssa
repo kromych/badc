@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
     v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x1
     v31  LoadIndexed { base=v27, index=v1, scale=8, kind=I64 } -> x6
-    v32  CallExt { binding_idx=98, args=[v14, v31], fp_arg_mask=0x0 } -> x0
+    v32  CallExt { binding_idx=100, args=[v14, v31], fp_arg_mask=0x0 } -> x0
     v33  Imm(0)                                           -> x1
     v34  LoadLocal { off=-4, kind=I64 }                   -> x1
     terminator Bz { cond=v32, target=b4, fall=b3 }   (exit_acc=v32)
@@ -66,7 +66,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(64)                                          -> x7
-    v2   CallExt { binding_idx=42, args=[v1], fp_arg_mask=0x0 } -> x3
+    v2   CallExt { binding_idx=44, args=[v1], fp_arg_mask=0x0 } -> x3
     v3   Imm(0)                                           -> x0
     v4   LoadLocal { off=-1, kind=I64 }                   -> x0
     v5   ImmData(52)                                      -> x6
@@ -86,7 +86,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     v15  LoadLocal { off=-1, kind=I64 }                   -> x0
     v16  ImmData(64)                                      -> x6
     v17  Imm(11)                                          -> x2
-    v18  CallExt { binding_idx=75, args=[v2, v16, v17], fp_arg_mask=0x0 } -> x0
+    v18  CallExt { binding_idx=77, args=[v2, v16, v17], fp_arg_mask=0x0 } -> x0
     v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x0
     terminator Bz { cond=v19, target=b4, fall=b3 }   (exit_acc=v19)
   block 3  start_pc=0
@@ -94,7 +94,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=8
     terminator Return(v20)   (exit_acc=v20)
   block 4  start_pc=0
     v21  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v22  CallExt { binding_idx=45, args=[v2], fp_arg_mask=0x0 } -> x0
+    v22  CallExt { binding_idx=47, args=[v2], fp_arg_mask=0x0 } -> x0
     v23  Imm(0)                                           -> x0
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---

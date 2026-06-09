@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
     v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x1
     v31  LoadIndexed { base=v27, index=v1, scale=8, kind=I64 } -> x6
-    v32  CallExt { binding_idx=42, args=[v14, v31], fp_arg_mask=0x0 } -> x0
+    v32  CallExt { binding_idx=44, args=[v14, v31], fp_arg_mask=0x0 } -> x0
     v33  Imm(0)                                           -> x1
     v34  LoadLocal { off=-4, kind=I64 }                   -> x1
     terminator Bz { cond=v32, target=b4, fall=b3 }   (exit_acc=v32)
@@ -68,7 +68,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v1   Imm(4611686018427387904)                         -> x3
     v2   Imm(1)                                           -> x0
     v3   FpCast { kind=IntToFp, value=v2 }                -> d0
-    v4   CallExt { binding_idx=48, args=[v1, v3], fp_arg_mask=0x3 } -> x0
+    v4   CallExt { binding_idx=50, args=[v1, v3], fp_arg_mask=0x3 } -> x0
     v5   Binop { op=fne, lhs=v4, rhs=v1 }                 -> x0
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
@@ -78,7 +78,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v7   Imm(4611686018427387904)                         -> x7
     v8   Imm(2)                                           -> x0
     v9   FpCast { kind=IntToFp, value=v8 }                -> d0
-    v10  CallExt { binding_idx=48, args=[v7, v9], fp_arg_mask=0x3 } -> x0
+    v10  CallExt { binding_idx=50, args=[v7, v9], fp_arg_mask=0x3 } -> x0
     v11  Imm(4616189618054758400)                         -> x1
     v12  Binop { op=fne, lhs=v10, rhs=v11 }               -> x0
     terminator Bz { cond=v12, target=b4, fall=b3 }   (exit_acc=v12)
@@ -89,7 +89,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v14  Imm(4611686018427387904)                         -> x7
     v15  Imm(3)                                           -> x0
     v16  FpCast { kind=IntToFp, value=v15 }               -> d0
-    v17  CallExt { binding_idx=48, args=[v14, v16], fp_arg_mask=0x3 } -> x0
+    v17  CallExt { binding_idx=50, args=[v14, v16], fp_arg_mask=0x3 } -> x0
     v18  Imm(4620693217682128896)                         -> x1
     v19  Binop { op=fne, lhs=v17, rhs=v18 }               -> x0
     terminator Bz { cond=v19, target=b6, fall=b5 }   (exit_acc=v19)
@@ -100,7 +100,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v21  Imm(4611686018427387904)                         -> x7
     v22  Imm(4)                                           -> x0
     v23  FpCast { kind=IntToFp, value=v22 }               -> d0
-    v24  CallExt { binding_idx=48, args=[v21, v23], fp_arg_mask=0x3 } -> x0
+    v24  CallExt { binding_idx=50, args=[v21, v23], fp_arg_mask=0x3 } -> x0
     v25  Imm(4625196817309499392)                         -> x1
     v26  Binop { op=fne, lhs=v24, rhs=v25 }               -> x0
     terminator Bz { cond=v26, target=b8, fall=b7 }   (exit_acc=v26)
@@ -113,7 +113,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v30  Imm(4611686018427387904)                         -> x7
     v31  LoadLocal { off=-1, kind=I32 }                   -> x1
     v32  FpCast { kind=IntToFp, value=v28 }               -> d0
-    v33  CallExt { binding_idx=48, args=[v30, v32], fp_arg_mask=0x3 } -> x0
+    v33  CallExt { binding_idx=50, args=[v30, v32], fp_arg_mask=0x3 } -> x0
     v34  Imm(4616189618054758400)                         -> x1
     v35  Binop { op=fne, lhs=v33, rhs=v34 }               -> x0
     terminator Bz { cond=v35, target=b10, fall=b9 }   (exit_acc=v35)
@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v39  Imm(4611686018427387904)                         -> x7
     v40  LoadLocal { off=-1, kind=I32 }                   -> x1
     v41  FpCast { kind=IntToFp, value=v37 }               -> d0
-    v42  CallExt { binding_idx=48, args=[v39, v41], fp_arg_mask=0x3 } -> x0
+    v42  CallExt { binding_idx=50, args=[v39, v41], fp_arg_mask=0x3 } -> x0
     v43  Imm(4620693217682128896)                         -> x1
     v44  Binop { op=fne, lhs=v42, rhs=v43 }               -> x0
     terminator Bz { cond=v44, target=b12, fall=b11 }   (exit_acc=v44)
@@ -137,7 +137,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=3
     v46  Imm(4611686018427387904)                         -> x7
     v47  Imm(2)                                           -> x0
     v48  FpCast { kind=IntToFp, value=v47 }               -> d0
-    v49  CallExt { binding_idx=48, args=[v46, v48], fp_arg_mask=0x3 } -> x0
+    v49  CallExt { binding_idx=50, args=[v46, v48], fp_arg_mask=0x3 } -> x0
     v50  Imm(4616189618054758400)                         -> x1
     v51  Binop { op=fne, lhs=v49, rhs=v50 }               -> x0
     terminator Bz { cond=v51, target=b14, fall=b13 }   (exit_acc=v51)

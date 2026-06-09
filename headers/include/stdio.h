@@ -66,6 +66,15 @@
 struct __c5_FILE { char __opaque[256]; };
 typedef struct __c5_FILE FILE;
 
+// C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
+// `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
+// through the bound libc routines and never inspect the bytes. The
+// buffer is sized for the widest host layout (glibc's `fpos_t` is 16
+// bytes; macOS and Windows use 8) and the union member forces the
+// 8-byte alignment the libc fields expect.
+struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
+typedef struct __c5_fpos_t fpos_t;
+
 // Standard streams. These are real libc globals exported by the
 // platform's C runtime. c5 has no GOT-style data-symbol
 // trampoline, so reading `extern FILE *stdout;` directly would
@@ -112,6 +121,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
 #pragma binding(libc::ftell,     "_ftell")
+#pragma binding(libc::fgetpos,   "_fgetpos")
+#pragma binding(libc::fsetpos,   "_fsetpos")
 #pragma binding(libc::rewind,    "_rewind")
 #pragma binding(libc::fflush,    "_fflush")
 #pragma binding(libc::feof,      "_feof")
@@ -173,6 +184,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
 #pragma binding(libc::ftell,     "ftell")
+#pragma binding(libc::fgetpos,   "fgetpos")
+#pragma binding(libc::fsetpos,   "fsetpos")
 #pragma binding(libc::rewind,    "rewind")
 #pragma binding(libc::fflush,    "fflush")
 #pragma binding(libc::feof,      "feof")
@@ -250,6 +263,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::perror,    "perror")
 #pragma binding(msvcrt::fseek,     "fseek")
 #pragma binding(msvcrt::ftell,     "ftell")
+#pragma binding(msvcrt::fgetpos,   "fgetpos")
+#pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
 #pragma binding(msvcrt::fflush,    "fflush")
 #pragma binding(msvcrt::feof,      "feof")
@@ -414,6 +429,8 @@ int puts(char *s);
 int perror(char *s);
 int fseek(FILE *stream, int offset, int whence);
 int ftell(FILE *stream);
+int fgetpos(FILE *stream, fpos_t *pos);
+int fsetpos(FILE *stream, const fpos_t *pos);
 int rewind(FILE *stream);
 int fflush(FILE *stream);
 int feof(FILE *stream);

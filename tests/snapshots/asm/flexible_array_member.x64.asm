@@ -1,0 +1,71 @@
+
+flexible_array_member.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x60, %rsp
+               	jmp	<addr>
+               	movl	$0x1, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	jmp	<addr>
+               	movl	$0x2, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	leaq	-0x50(%rbp), %rax
+               	movl	$0x2, %ecx
+               	movl	%ecx, (%rax)
+               	movl	$0x1, %edx
+               	movb	%dl, 0x4(%rax)
+               	movl	$0x9, %edx
+               	movb	%dl, 0x7(%rax)
+               	movslq	%ecx, %rcx
+               	cmpq	$0x2, %rcx
+               	je	<addr>
+               	movl	$0x3, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	movzbq	0x4(%rax), %rcx
+               	xorq	$0x1, %rcx
+               	movl	%ecx, %ecx
+               	cmpq	$0x0, %rcx
+               	je	<addr>
+               	movl	$0x4, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	movzbq	0x7(%rax), %rcx
+               	xorq	$0x9, %rcx
+               	movl	%ecx, %ecx
+               	cmpq	$0x0, %rcx
+               	je	<addr>
+               	movl	$0x5, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	movq	%rax, %rcx
+               	addq	$0x4, %rcx
+               	movq	%rax, %r10
+               	movq	%rcx, %rax
+               	subq	%r10, %rax
+               	cmpq	$0x4, %rax
+               	je	<addr>
+               	movl	$0x6, %eax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq
+               	xorq	%rax, %rax
+               	addq	$0x60, %rsp
+               	popq	%rbp
+               	retq

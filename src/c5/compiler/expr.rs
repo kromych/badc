@@ -2825,21 +2825,28 @@ impl Compiler {
                     // address-as-value rule as a local array.
                     let field_is_struct_value =
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-                    if field.array_size > 0 {
+                    if field.array_size != 0 {
                         self.ty += Ty::Ptr as i64;
-                        // Stash the array's element count so an
-                        // enclosing sizeof can recover the real
-                        // size; otherwise `sizeof(s.field)` for a
-                        // `T field[N]` returns 8 (decayed pointer)
-                        // instead of `N * sizeof(T)`.
-                        self.pending.last_array_decay_size = field.array_size;
-                        // N-dim-array decay: mirror the Id-path so
-                        // `s.xs[i][j][k]` scales each level by its
-                        // row stride and only the innermost
-                        // subscript decays to a scalar.
-                        let dims = field.array_dims.clone();
-                        let elem_size = self.size_of_type(field.ty) as i64;
-                        self.seed_multi_dim_strides(&dims, elem_size);
+                        if field.array_size > 0 {
+                            // Stash the array's element count so an
+                            // enclosing sizeof can recover the real
+                            // size; otherwise `sizeof(s.field)` for a
+                            // `T field[N]` returns 8 (decayed pointer)
+                            // instead of `N * sizeof(T)`.
+                            self.pending.last_array_decay_size = field.array_size;
+                            // N-dim-array decay: mirror the Id-path so
+                            // `s.xs[i][j][k]` scales each level by its
+                            // row stride and only the innermost
+                            // subscript decays to a scalar.
+                            let dims = field.array_dims.clone();
+                            let elem_size = self.size_of_type(field.ty) as i64;
+                            self.seed_multi_dim_strides(&dims, elem_size);
+                        }
+                        // A flexible array member (`array_size == -1`,
+                        // C99 6.7.2.1p16) decays to a pointer-to-element
+                        // at the field offset; its element count is
+                        // unknown, so no sizeof recovery or multi-dim
+                        // stride seeding applies.
                     } else if !field_is_struct_value {
                         self.mark_emit_scalar_load();
                         // Function-pointer field: re-seed the fn-ptr

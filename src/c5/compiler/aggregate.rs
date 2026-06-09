@@ -574,6 +574,12 @@ impl Compiler {
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
+                    } else if field_array_size < 0 {
+                        // Flexible array member (`T v[]`, C99
+                        // 6.7.2.1p16): contributes no storage to the
+                        // struct size (it may still raise the struct's
+                        // alignment via `field_align` below).
+                        0
                     } else {
                         elem_size
                     };

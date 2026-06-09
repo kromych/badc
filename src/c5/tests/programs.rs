@@ -72,6 +72,13 @@ fn local_aggregate_runtime_init() {
 }
 
 #[test]
+fn flexible_array_member() {
+    // A flexible array member contributes no storage but decays to a
+    // pointer-to-element at the field offset for `p->v[i]`.
+    assert_eq!(run_fixture("flexible_array_member.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

@@ -414,6 +414,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_return_type.c", 0),
     ("fn_returning_fn_ptr.c", 0),
     ("duff_switch_into_loop.c", 0),
+    ("empty_macro_arg_and_string_rows.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

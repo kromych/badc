@@ -174,6 +174,13 @@ fn duff_switch_into_loop() {
 }
 
 #[test]
+fn empty_macro_arg_and_string_rows() {
+    // `q()` passes one empty argument; a string fills a row of a
+    // multi-dimensional char array.
+    assert_eq!(run_fixture("empty_macro_arg_and_string_rows.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

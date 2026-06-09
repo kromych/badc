@@ -2890,9 +2890,13 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
             b')' => {
                 depth -= 1;
                 if depth == 0 {
-                    if !current.is_empty() || !args.is_empty() {
-                        args.push(current.trim().to_string());
-                    }
+                    // The closing paren ends the final argument. C99
+                    // 6.10.3p4: `m()` is a single empty argument, so a
+                    // one-parameter macro substitutes its parameter with
+                    // nothing rather than leaving the parameter name to
+                    // be rescanned. A zero-parameter macro ignores the
+                    // spare empty argument at expansion.
+                    args.push(current.trim().to_string());
                     return Some((args, i + 1));
                 }
                 current.push(')');

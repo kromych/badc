@@ -215,12 +215,17 @@ impl Compiler {
             // speculative peek leaves no orphaned literal behind.
             let data_snap = self.data.len();
             self.next()?;
-            // Only a character array (narrow string) or a `wchar_t`
-            // array (wide string) takes a brace-wrapped string. A
-            // pointer array such as `char *names[] = {"a", "b"}` has a
-            // string as its first element and must stay a brace list.
+            // Only a one-dimensional character array (narrow string) or
+            // `wchar_t` array (wide string) takes a brace-wrapped
+            // string. A pointer array (`char *names[] = {"a", "b"}`) or
+            // a multi-dimensional char array (`char c[2][6] = {"a",
+            // "b"}`, one string per row) has a string as its first
+            // element and must stay a brace list.
             let is_char_array = (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64;
-            if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
+            if inner_dims.is_empty()
+                && self.lex.tk == '"'
+                && (self.lex.str_is_wide || is_char_array)
+            {
                 brace_wrapped = true;
             } else {
                 self.lex.restore(snap);
@@ -363,6 +368,46 @@ impl Compiler {
                     }
                     cursor += pad;
                 }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
+            }
+            // A string literal initializing a row of a multi-dimensional
+            // char array fills that row (C99 6.7.8p14): its bytes, then a
+            // NUL if the row has room, padded to the row width. The child
+            // is a one-dimensional char array exactly when `inner_dims`
+            // has a single entry. A one-dimensional char array took the
+            // brace-wrap / bare-string paths above instead.
+            if self.lex.tk == '"'
+                && !self.lex.str_is_wide
+                && inner_dims.len() == 1
+                && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64
+            {
+                let row = inner_dims[0] as usize;
+                let start_addr = self.lex.ival as usize;
+                self.next()?;
+                while self.lex.tk == '"' {
+                    self.next()?;
+                }
+                let avail = self.data.len() - start_addr;
+                let before = cursor;
+                if elements.len() < before + row {
+                    elements.resize(before + row, (0, InitElemReloc::None));
+                }
+                for k in 0..row {
+                    let b = if k < avail {
+                        self.data[start_addr + k] as i64
+                    } else {
+                        0
+                    };
+                    elements[before + k] = (b, InitElemReloc::None);
+                }
+                // The string's bytes were appended to the data segment by
+                // the lexer; they are copied into `elements` now, so drop
+                // them to avoid an orphaned literal.
+                self.data.truncate(start_addr);
+                cursor = before + row;
                 if self.lex.tk == ',' {
                     self.next()?;
                 }

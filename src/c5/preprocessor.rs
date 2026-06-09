@@ -1324,23 +1324,31 @@ impl Preprocessor {
                 // Copy string and character literals verbatim so
                 // identifier-looking bytes inside them aren't
                 // substituted, and so a quoted quote (`'"'` /
-                // `"\"")` doesn't open the *other* literal kind.
+                // `"\"")` doesn't open the *other* literal kind. Copy
+                // the byte range as a UTF-8 slice rather than byte by
+                // byte: a per-byte `as char` push would re-encode each
+                // byte of a multibyte sequence (`L'a'` -> two chars ->
+                // four bytes), corrupting non-ASCII literal contents.
                 let quote = c;
-                out.push(quote as char);
+                let lit_start = i;
                 i += 1;
                 while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        out.push(bytes[i] as char);
-                        out.push(bytes[i + 1] as char);
                         i += 2;
                     } else {
-                        out.push(bytes[i] as char);
                         i += 1;
                     }
                 }
                 if i < bytes.len() {
-                    out.push(quote as char);
-                    i += 1;
+                    i += 1; // consume the closing quote
+                }
+                match core::str::from_utf8(&bytes[lit_start..i]) {
+                    Ok(s) => out.push_str(s),
+                    Err(_) => {
+                        for &b in &bytes[lit_start..i] {
+                            out.push(b as char);
+                        }
+                    }
                 }
             } else {
                 out.push(c as char);
@@ -2321,22 +2329,28 @@ fn strip_c_comments(source: &str) -> String {
         }
         if c == b'"' || c == b'\'' {
             // Pass-through quoted literal so `"//"` etc. survive.
+            // Copy the byte range as a UTF-8 slice so a multibyte
+            // sequence is not re-encoded byte by byte.
             let quote = c;
-            out.push(c as char);
+            let lit_start = i;
             i += 1;
             while i < bytes.len() && bytes[i] != quote {
                 if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    out.push(bytes[i] as char);
-                    out.push(bytes[i + 1] as char);
                     i += 2;
                 } else {
-                    out.push(bytes[i] as char);
                     i += 1;
                 }
             }
             if i < bytes.len() {
-                out.push(quote as char);
                 i += 1;
+            }
+            match core::str::from_utf8(&bytes[lit_start..i]) {
+                Ok(s) => out.push_str(s),
+                Err(_) => {
+                    for &b in &bytes[lit_start..i] {
+                        out.push(b as char);
+                    }
+                }
             }
             continue;
         }
@@ -2733,23 +2747,28 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
             }
             b'"' | b'\'' => {
                 // Copy the whole literal (including escapes) so commas
-                // / parens inside don't perturb the depth counter.
+                // / parens inside don't perturb the depth counter. Use a
+                // UTF-8 slice so a multibyte sequence stays intact.
                 let quote = c;
-                current.push(c as char);
+                let lit_start = i;
                 i += 1;
                 while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        current.push(bytes[i] as char);
-                        current.push(bytes[i + 1] as char);
                         i += 2;
                     } else {
-                        current.push(bytes[i] as char);
                         i += 1;
                     }
                 }
                 if i < bytes.len() {
-                    current.push(quote as char);
                     i += 1;
+                }
+                match core::str::from_utf8(&bytes[lit_start..i]) {
+                    Ok(s) => current.push_str(s),
+                    Err(_) => {
+                        for &b in &bytes[lit_start..i] {
+                            current.push(b as char);
+                        }
+                    }
                 }
             }
             _ => {

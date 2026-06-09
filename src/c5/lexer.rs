@@ -40,6 +40,35 @@ enum PackDirective {
     Pop,
 }
 
+/// Decode one UTF-8 code point from the front of `bytes`, returning
+/// `(code_point, byte_length)`. A malformed lead or truncated sequence
+/// falls back to the single byte interpreted as Latin-1, so the lexer
+/// always advances.
+fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
+    let b0 = bytes[0];
+    let (mut cp, len) = if b0 & 0x80 == 0 {
+        return (b0 as u32, 1);
+    } else if b0 & 0xE0 == 0xC0 {
+        ((b0 & 0x1F) as u32, 2)
+    } else if b0 & 0xF0 == 0xE0 {
+        ((b0 & 0x0F) as u32, 3)
+    } else if b0 & 0xF8 == 0xF0 {
+        ((b0 & 0x07) as u32, 4)
+    } else {
+        return (b0 as u32, 1);
+    };
+    let mut i = 1;
+    while i < len && i < bytes.len() && bytes[i] & 0xC0 == 0x80 {
+        cp = (cp << 6) | (bytes[i] & 0x3F) as u32;
+        i += 1;
+    }
+    if i < len {
+        // Truncated sequence: fall back to the lead byte.
+        return (b0 as u32, 1);
+    }
+    (cp, len)
+}
+
 /// One parsed GNU-style line marker (`# N "file" [flags]`) or
 /// C99 `#line N "file"` directive. The `#` prefix is already
 /// stripped by the lexer's `#`-line handler, so we see the
@@ -467,8 +496,19 @@ impl Lexer {
         let mut char_value: i64 = 0;
         loop {
             while self.pos < self.src.len() && self.src[self.pos] != quote {
-                let mut val = self.src[self.pos] as i64;
-                self.pos += 1;
+                // A wide literal's elements are Unicode code points
+                // (C99 6.4.4.4 / 6.4.5): decode the UTF-8 source bytes
+                // so `L'a'` is U+00E1 = 225, not the trailing byte of
+                // its two-byte encoding. ASCII passes through unchanged.
+                let mut val = if self.src[self.pos] < 0x80 {
+                    let b = self.src[self.pos] as i64;
+                    self.pos += 1;
+                    b
+                } else {
+                    let (cp, len) = decode_utf8(&self.src[self.pos..]);
+                    self.pos += len;
+                    cp as i64
+                };
                 if val == b'\\' as i64 {
                     if self.pos >= self.src.len() {
                         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -532,8 +572,12 @@ impl Lexer {
                     }
                 }
                 if quote == b'"' {
+                    // `wchar_t` is `int` (stddef.h), so a wide string
+                    // stores one 4-byte code point per element.
                     data.push(val as u8);
                     data.push((val >> 8) as u8);
+                    data.push((val >> 16) as u8);
+                    data.push((val >> 24) as u8);
                 } else {
                     char_value = val;
                 }
@@ -574,6 +618,9 @@ impl Lexer {
             }
             self.pos = saved_pos;
             self.line = saved_line;
+            // 4-byte (`wchar_t`) NUL terminator.
+            data.push(0);
+            data.push(0);
             data.push(0);
             data.push(0);
             self.ival = start_data;
@@ -1910,23 +1957,23 @@ mod tests {
     }
 
     #[test]
-    fn wide_string_literal_emits_two_bytes_per_char() {
-        // `L"AB"` -- two ASCII chars, encoded as 16-bit LE
-        // (0x41 0x00, 0x42 0x00) plus a 16-bit nul terminator.
+    fn wide_string_literal_emits_four_bytes_per_char() {
+        // `L"AB"` -- `wchar_t` is `int`, so each code point is a 4-byte
+        // LE value (0x41 0 0 0, 0x42 0 0 0) plus a 4-byte nul.
         assert_eq!(
             lex_string_literal(r#"L"AB""#),
-            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
         );
     }
 
     #[test]
     fn wide_string_literal_absorbs_adjacent_wide_chunks() {
-        // The lexer concatenates adjacent `L"..."` literals into
-        // one token so the 16-bit terminator lands at the end of
-        // the merged payload, not between chunks.
+        // The lexer concatenates adjacent `L"..."` literals into one
+        // token so the 4-byte terminator lands at the end of the merged
+        // payload, not between chunks.
         assert_eq!(
             lex_string_literal(r#"L"A" L"B""#),
-            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
         );
     }
 
@@ -1935,11 +1982,19 @@ mod tests {
         // `\n` -> 0x0A, `\\` -> 0x5C, `\x41` -> 0x41.
         assert_eq!(
             lex_string_literal(r#"L"\n\\""#),
-            vec![0x0A, 0x00, 0x5C, 0x00, 0x00, 0x00]
+            vec![0x0A, 0, 0, 0, 0x5C, 0, 0, 0, 0, 0, 0, 0]
         );
         assert_eq!(
             lex_string_literal(r#"L"\x41""#),
-            vec![0x41, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn wide_char_literal_decodes_utf8_code_point() {
+        // `L'a'` (U+00E1, UTF-8 0xC3 0xA1) is the code point 225, not
+        // the trailing byte of its encoding.
+        assert_eq!(lex_char_literal("L'\u{00e1}'"), 0x00E1);
+        assert_eq!(lex_char_literal("L'A'"), 0x41);
     }
 }

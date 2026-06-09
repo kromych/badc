@@ -56,6 +56,14 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn wide_char_utf8() {
+    // A multibyte UTF-8 code point decodes to its scalar value in a
+    // wide char constant and survives the preprocessor in a narrow
+    // string literal.
+    assert_eq!(run_fixture("wide_char_utf8.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

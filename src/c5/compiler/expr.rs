@@ -833,6 +833,16 @@ impl Compiler {
                         self.emit_lea(result_temp_off);
                     }
                     self.ty = result_ty;
+                    // A callee whose return type is itself a function
+                    // pointer (`int (*f())()`) leaves a fn-pointer
+                    // rvalue, so a following unary `*` is the C99
+                    // 6.3.2.1p4 decay no-op. The lineage is recorded on
+                    // the function symbol by the declarator.
+                    if self.symbols[id_idx].class == Token::Fun as i64
+                        && self.symbols[id_idx].fn_ptr_indirection > 0
+                    {
+                        self.pending.fn_ptr_chain_depth = 0;
+                    }
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
                 let val = self.symbols[id_idx].val;

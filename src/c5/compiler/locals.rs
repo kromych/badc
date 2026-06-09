@@ -36,13 +36,27 @@ use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, stru
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
-        while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
+        let mut saw_specifier = false;
+        while self.lex.tk == Token::Extern
+            || self.lex.tk == Token::Static
+            || self.lex.tk == Token::FuncSpec
+            || self.lex.tk == Token::TypeQual
+        {
             if self.lex.tk == Token::Static {
                 is_static = true;
             }
+            saw_specifier = true;
             self.next()?;
         }
-        let lbt = self.parse_decl_base_type()?;
+        // C89 / K&R implicit int (`register n = ...;`): a declaration
+        // that carries a storage-class or qualifier but no type names an
+        // int object. Only applies after an explicit specifier so a
+        // mistyped type name still surfaces as an error.
+        let lbt = if !self.lex_is_type_start() && saw_specifier {
+            Ty::Int as i64
+        } else {
+            self.parse_decl_base_type()?
+        };
         // Function-prototype declaration at function-body scope
         // (C99 6.7.1 paragraph 3 allows `extern` declarations at
         // any scope): `extern T (*) name (args);` where `(*)` is

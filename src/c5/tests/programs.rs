@@ -167,6 +167,13 @@ fn fn_returning_fn_ptr() {
 }
 
 #[test]
+fn duff_switch_into_loop() {
+    // Duff's device: case labels inside a loop nested in the switch,
+    // plus K&R parameters and C89 implicit-int locals.
+    assert_eq!(run_fixture("duff_switch_into_loop.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

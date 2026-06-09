@@ -9,31 +9,31 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
     v5   LoadLocal { off=-1, kind=I32 }                   -> x1
-    terminator Jmp(b5)   (exit_acc=v1)
+    v6   BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x1
+    terminator Bnz { cond=v6, target=b2, fall=b5 }   (exit_acc=v6)
   block 1  start_pc=0
-    v6   Phi { incoming=[b2:v8, b3:v10, b4:v12], kind=I64 } -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v7   Phi { incoming=[b2:v9, b3:v11, b4:v13], kind=I64 } -> x0
+    v8   Extend { value=v7, kind=I32 }                    -> x0
+    terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v8   Imm(10)                                          -> x0
-    v9   Imm(0)                                           -> x1
-    terminator Jmp(b1)   (exit_acc=v8)
+    v9   Imm(10)                                          -> x0
+    v10  Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v9)
   block 3  start_pc=0
-    v10  Imm(20)                                          -> x0
-    v11  Imm(0)                                           -> x1
-    terminator Jmp(b1)   (exit_acc=v10)
+    v11  Imm(20)                                          -> x0
+    v12  Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v11)
   block 4  start_pc=0
-    v12  Imm(100)                                         -> x0
-    v13  Imm(0)                                           -> x1
-    terminator Jmp(b1)   (exit_acc=v12)
+    v13  Imm(100)                                         -> x0
+    v14  Imm(0)                                           -> x1
+    terminator Jmp(b1)   (exit_acc=v13)
   block 5  start_pc=0
-    v14  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x1
-    terminator Bnz { cond=v14, target=b2, fall=b6 }   (exit_acc=v14)
-  block 6  start_pc=0
     v15  BinopI { op=eq, lhs=v1, rhs_imm=2 }              -> x0
-    terminator Bnz { cond=v15, target=b3, fall=b7 }   (exit_acc=v15)
-  block 7  start_pc=0
+    terminator Bnz { cond=v15, target=b3, fall=b6 }   (exit_acc=v15)
+  block 6  start_pc=0
     terminator Jmp(b4)
+  block 7  start_pc=0
+    terminator Jmp(b2)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

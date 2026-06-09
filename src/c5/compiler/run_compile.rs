@@ -672,8 +672,29 @@ impl Compiler {
                     // Each declaration names one or more of the
                     // parameters already bound by parse_function_params,
                     // so update those symbols' types in place.
-                    while self.lex.tk != '{' && self.lex.tk != 0 && self.lex_is_type_start() {
-                        let base = self.parse_decl_base_type()?;
+                    while self.lex.tk != '{' && self.lex.tk != 0 {
+                        // A parameter declaration may lead with storage-
+                        // class specifiers (`register short *p;`) and may
+                        // omit the type, in which case it is int (C99
+                        // 6.9.1 / 6.7.2p2). Stop when the next token is
+                        // neither a specifier nor a type nor a parameter
+                        // name -- that is the function body.
+                        let mut saw_specifier = false;
+                        while self.lex.tk == Token::FuncSpec
+                            || self.lex.tk == Token::Static
+                            || self.lex.tk == Token::Extern
+                            || self.lex.tk == Token::TypeQual
+                        {
+                            self.next()?;
+                            saw_specifier = true;
+                        }
+                        let base = if self.lex_is_type_start() {
+                            self.parse_decl_base_type()?
+                        } else if saw_specifier || self.lex.tk == Token::Id {
+                            Ty::Int as i64
+                        } else {
+                            break;
+                        };
                         while self.lex.tk != ';' && self.lex.tk != 0 {
                             let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
                             if decl_idx != usize::MAX {

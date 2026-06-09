@@ -11,6 +11,8 @@ Disassembly of section .text:
                	ldr	x16, [x16, #0xc0]
                	blr	x16
                	sxtw	x0, w0
+               	cmp	x0, #0x1
+               	b.eq	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ret
@@ -25,12 +27,11 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #32
                	movk	x0, #0xffff, lsl #48
                	ret
-               	cmp	x0, #0x1
-               	b.eq	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
                	cmp	x0, #0x3
                	b.eq	<addr>
+               	b	<addr>
                	b	<addr>
                	sxtw	x0, w1
                	add	x0, x0, #0x64

@@ -415,6 +415,7 @@ pub(crate) fn walk_function(
         target,
         loop_ctx: alloc::vec::Vec::new(),
         label_blocks: alloc::vec::Vec::new(),
+        switch_dispatch: alloc::vec::Vec::new(),
         returns_struct,
         return_struct_size,
         ret_in_regs,
@@ -475,6 +476,19 @@ struct Walker<'a> {
     /// a Goto's forward reference or the matching Labeled stmt --
     /// both sides see the same block.
     label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
+    /// Per enclosing `switch` (innermost last): the block reserved for
+    /// each `case` value and for `default`. A `case` / `default` marker
+    /// reached while walking the switch body jumps to its block, so the
+    /// dispatcher can target it wherever it sits -- including inside a
+    /// loop nested in the switch (C99 6.8.4.2 admits a case label at any
+    /// depth; the loop's back edge re-enters the body at its first case
+    /// block). The blocks are allocated once by the case-collection pass
+    /// before the dispatcher emits.
+    #[allow(clippy::type_complexity)]
+    switch_dispatch: alloc::vec::Vec<(
+        alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        Option<super::super::ir::BlockId>,
+    )>,
     /// True when the function's declared return type is a struct
     /// value returned through the c5 out-pointer convention. `return
     /// s;` loads the hidden out-pointer from `slot 2`, Mcpy
@@ -907,296 +921,78 @@ impl<'a> Walker<'a> {
             Stmt::Switch { disc, body } => {
                 let disc_val = self.walk_expr_rvalue(b, *disc)?;
                 let body_id = *body;
-
-                // Flatten the body's top-level items into a list
-                // for partitioning. A Compound's items become the
-                // list directly; a singleton stmt becomes a one-
-                // element list.
-                let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(body_id) {
-                    Stmt::Compound(its) => its.clone(),
-                    _ => alloc::vec![super::BlockItem::Stmt(body_id)],
-                };
-
-                // Partition the items into (labels, stmts)
-                // tuples. `labels` is empty for the pre-first-
-                // case fall-in region (C99 6.8.4.2: reachable
-                // only by goto-into-switch; the walker still
-                // emits a block so outer goto has a target),
-                // or a list of `Some(val)` (Case markers) and
-                // `None` (Default marker) entries when one or
-                // more case labels share the body that follows.
-                // C99 6.8.4.2: a Case / Default marker labels
-                // the following statement, so a chain like
-                // `case 'a': case 'b': case 'c': body;` puts
-                // three labels on the same body. The parser
-                // builds those as nested `Stmt::Case`s on the
-                // body field; peel them off so the dispatcher
-                // emits one comparison per label that all
-                // branch to the same case block.
-                #[allow(clippy::type_complexity)]
-                let mut partitions: alloc::vec::Vec<(
-                    alloc::vec::Vec<Option<i64>>,
-                    alloc::vec::Vec<super::BlockItem>,
-                )> = alloc::vec::Vec::new();
-                // C99 6.8.1: a `goto`-target label that wraps a
-                // Case / Default marker resolves to the same
-                // statement as the marker. The peel loop records
-                // every such label id keyed by the partition it
-                // ends up in; after the partitions' SSA blocks
-                // are allocated below we register
-                // `label_id -> block` so a downstream
-                // `Stmt::Goto(label)` lands on the case block
-                // instead of an orphan block that
-                // `block_for_label` would otherwise materialise.
-                let mut peeled_label_partition: alloc::vec::Vec<(
-                    super::super::ast::LabelId,
-                    usize,
-                )> = alloc::vec::Vec::new();
-                let mut current_labels: alloc::vec::Vec<Option<i64>> = alloc::vec::Vec::new();
-                let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
-                let mut pending_goto_labels: alloc::vec::Vec<super::super::ast::LabelId> =
-                    alloc::vec::Vec::new();
-                let flush =
-                    |partitions: &mut alloc::vec::Vec<(
-                        alloc::vec::Vec<Option<i64>>,
-                        alloc::vec::Vec<super::BlockItem>,
-                    )>,
-                     current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                     current: &mut alloc::vec::Vec<super::BlockItem>| {
-                        if !current.is_empty() || !current_labels.is_empty() {
-                            partitions
-                                .push((core::mem::take(current_labels), core::mem::take(current)));
-                        }
-                    };
-                // Process a slice of switch-body items into the
-                // partitions / current accumulator pair. Recurses
-                // into any Compound whose body contains a case or
-                // default marker so a Duff's-device shape like
-                // `case A: { int x; ...; case B: body; }` partitions
-                // the same way as `case A: ...; case B: body;` --
-                // C99 6.8.4.2p4 scopes case labels to the nearest
-                // enclosing switch regardless of nesting depth.
-                // Locals are slot-allocated at function-prologue
-                // time, so inlining a compound's items preserves
-                // execution semantics; the Decl statements still
-                // run their initialisers at the per-partition
-                // position they sit at.
-                fn partition_items(
-                    walker: &Walker,
-                    items: &[super::BlockItem],
-                    partitions: &mut alloc::vec::Vec<(
-                        alloc::vec::Vec<Option<i64>>,
-                        alloc::vec::Vec<super::BlockItem>,
-                    )>,
-                    peeled_label_partition: &mut alloc::vec::Vec<(
-                        super::super::ast::LabelId,
-                        usize,
-                    )>,
-                    current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                    current: &mut alloc::vec::Vec<super::BlockItem>,
-                    pending_goto_labels: &mut alloc::vec::Vec<super::super::ast::LabelId>,
-                ) {
-                    let do_flush =
-                        |partitions: &mut alloc::vec::Vec<(
-                            alloc::vec::Vec<Option<i64>>,
-                            alloc::vec::Vec<super::BlockItem>,
-                        )>,
-                         current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                         current: &mut alloc::vec::Vec<super::BlockItem>| {
-                            if !current.is_empty() || !current_labels.is_empty() {
-                                partitions.push((
-                                    core::mem::take(current_labels),
-                                    core::mem::take(current),
-                                ));
-                            }
-                        };
-                    for item in items {
-                        if let super::BlockItem::Stmt(s) = item {
-                            let mut s_id = *s;
-                            let mut saw_marker = false;
-                            loop {
-                                match walker.ast.stmt(s_id) {
-                                    Stmt::Case { val, body } => {
-                                        if !saw_marker {
-                                            do_flush(partitions, current_labels, current);
-                                            saw_marker = true;
-                                        }
-                                        current_labels.push(Some(*val));
-                                        s_id = *body;
-                                    }
-                                    Stmt::Default { body } => {
-                                        if !saw_marker {
-                                            do_flush(partitions, current_labels, current);
-                                            saw_marker = true;
-                                        }
-                                        current_labels.push(None);
-                                        s_id = *body;
-                                    }
-                                    Stmt::Labeled { label, body } => {
-                                        let inner = walker.ast.stmt(*body);
-                                        if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. })
-                                        {
-                                            pending_goto_labels.push(*label);
-                                            s_id = *body;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    _ => break,
-                                }
-                            }
-                            if saw_marker {
-                                let target_idx = partitions.len();
-                                for lab in pending_goto_labels.drain(..) {
-                                    peeled_label_partition.push((lab, target_idx));
-                                }
-                                // C99 6.8.4.2p4: case labels scope
-                                // to the nearest enclosing switch
-                                // regardless of nesting depth. When
-                                // a case body is itself a Compound,
-                                // descend so any case labels at the
-                                // next depth still become partition
-                                // boundaries (the Duff's-device
-                                // `case A: { ... case B: ... }`
-                                // shape).
-                                if let Stmt::Compound(inner_items) = walker.ast.stmt(s_id) {
-                                    let inner_items_owned = inner_items.clone();
-                                    partition_items(
-                                        walker,
-                                        &inner_items_owned,
-                                        partitions,
-                                        peeled_label_partition,
-                                        current_labels,
-                                        current,
-                                        pending_goto_labels,
-                                    );
-                                } else {
-                                    current.push(super::BlockItem::Stmt(s_id));
-                                }
-                                continue;
-                            }
-                        }
-                        // A non-case-marked Compound at this level
-                        // may still embed a case label at an inner
-                        // depth (Duff's device with the case sitting
-                        // inside a plain `{}` block, no enclosing
-                        // case marker). Descend so those labels still
-                        // partition correctly; if no case is reached,
-                        // the recursion no-ops and the items end up
-                        // pushed in order into the current partition.
-                        if let super::BlockItem::Stmt(s) = item
-                            && let Stmt::Compound(inner_items) = walker.ast.stmt(*s)
-                        {
-                            let inner_items_owned = inner_items.clone();
-                            partition_items(
-                                walker,
-                                &inner_items_owned,
-                                partitions,
-                                peeled_label_partition,
-                                current_labels,
-                                current,
-                                pending_goto_labels,
-                            );
-                            continue;
-                        }
-                        current.push(*item);
-                    }
-                }
-                partition_items(
-                    self,
-                    &items,
-                    &mut partitions,
-                    &mut peeled_label_partition,
-                    &mut current_labels,
-                    &mut current,
-                    &mut pending_goto_labels,
-                );
-                flush(&mut partitions, &mut current_labels, &mut current);
-
                 let after_blk = b.new_block();
-                let blocks: alloc::vec::Vec<super::super::ir::BlockId> =
-                    (0..partitions.len()).map(|_| b.new_block()).collect();
-                for (label, idx) in &peeled_label_partition {
-                    if idx < &blocks.len() {
-                        self.label_blocks.push((*label, blocks[*idx]));
-                    }
-                }
-                let default_idx = partitions
-                    .iter()
-                    .position(|(lbls, _)| lbls.iter().any(|l| l.is_none()));
 
-                // Dispatcher chain: for each Case label across
-                // all partitions, cmp disc against its val and
-                // branch to the matching case block when equal;
-                // fall through to the next comparison otherwise.
-                // After the chain, jmp to default (if present)
-                // or to after_blk.
-                let mut next_dispatcher_blk = b.new_block();
-                b.jmp(next_dispatcher_blk);
-                for (i, (labels, _)) in partitions.iter().enumerate() {
-                    for val in labels.iter().flatten() {
-                        b.switch_to(next_dispatcher_blk);
-                        let eq = b.binop_imm(BinOp::Eq, disc_val, *val);
-                        let next = b.new_block();
-                        b.branch_nonzero(eq, blocks[i], next);
-                        next_dispatcher_blk = next;
-                    }
-                }
-                b.switch_to(next_dispatcher_blk);
-                let final_target = match default_idx {
-                    Some(idx) => blocks[idx],
-                    None => after_blk,
-                };
-                b.jmp(final_target);
+                // Reserve a block for every case value and for default
+                // (C99 6.8.4.2: case labels at any depth scope to the
+                // nearest switch). The body walk below jumps to these
+                // blocks at each marker, so a marker inside a nested
+                // loop is still reachable from the dispatcher.
+                let mut cases: alloc::vec::Vec<(i64, super::super::ir::BlockId)> =
+                    alloc::vec::Vec::new();
+                let mut default_blk: Option<super::super::ir::BlockId> = None;
+                self.collect_switch_cases(b, body_id, &mut cases, &mut default_blk);
 
-                // Push loop_ctx for break. Continue is invalid
-                // inside a bare switch; propagate the outer
-                // loop's continue target so nested switch-in-loop
-                // works.
+                // Dispatcher: compare the discriminant against each case
+                // value and branch to its block when equal; fall to the
+                // default block (or past the switch) otherwise.
+                for (val, blk) in &cases {
+                    let eq = b.binop_imm(BinOp::Eq, disc_val, *val);
+                    let next = b.new_block();
+                    b.branch_nonzero(eq, *blk, next);
+                    b.switch_to(next);
+                }
+                b.jmp(default_blk.unwrap_or(after_blk));
+
+                // Walk the body linearly. The opening block is reachable
+                // only by a goto into the switch ahead of the first case
+                // (C99 6.8.1); the dispatcher never targets it.
+                let fallin = b.new_block();
+                b.switch_to(fallin);
+
+                // `break` leaves the switch; `continue` is invalid in a
+                // bare switch, so propagate the enclosing loop's target.
                 let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
                 self.loop_ctx.push((after_blk, prev_continue));
-
-                // Walk each partition's stmts into its block;
-                // fallthrough lands on the next partition's
-                // block (or after_blk for the last partition).
-                // C99 6.8.1: a `Stmt::Labeled` is reachable via
-                // its label even when the textually preceding
-                // stmt terminated, so the partition keeps walking
-                // past a terminator to give every embedded label
-                // its block. The terminator flag still suppresses
-                // an implicit fallthrough at the partition's tail
-                // when the last walked statement closed the block
-                // itself (Goto / Return / Break / Continue).
-                let n = partitions.len();
-                for (i, (_, stmts)) in partitions.into_iter().enumerate() {
-                    b.switch_to(blocks[i]);
-                    let mut terminated = false;
-                    for item in stmts {
-                        let super::BlockItem::Stmt(s) = item else {
-                            continue;
-                        };
-                        if terminated && !matches!(self.ast.stmt(s), Stmt::Labeled { .. }) {
-                            continue;
-                        }
-                        terminated = self.walk_stmt(b, s)?;
-                    }
-                    if !terminated {
-                        let next_block = if i + 1 < n { blocks[i + 1] } else { after_blk };
-                        b.jmp(next_block);
-                    }
-                }
-
+                self.switch_dispatch.push((cases, default_blk));
+                let terminated = self.walk_stmt(b, body_id)?;
+                self.switch_dispatch.pop();
                 self.loop_ctx.pop();
+                if !terminated {
+                    b.jmp(after_blk);
+                }
                 b.switch_to(after_blk);
                 Ok(false)
             }
-            // Case / Default markers normally get consumed by the
-            // enclosing Switch's partition pass. If a stray one
-            // reaches the walker (e.g. inside a non-switch
-            // Compound -- which would be a parser bug), treat it
-            // as a transparent wrapper around its body.
-            Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
+            // A case / default marker inside the active switch jumps to
+            // the block the case-collection pass reserved for it, so the
+            // dispatcher can target it and a preceding statement falls
+            // through into it. Outside any switch (a parser bug) it is a
+            // transparent wrapper around its body.
+            Stmt::Case { val, body } => {
+                let val = *val;
                 let body_id = *body;
+                let blk = self
+                    .switch_dispatch
+                    .last()
+                    .and_then(|d| d.0.iter().find(|(v, _)| *v == val).map(|&(_, b)| b));
+                if let Some(blk) = blk {
+                    if b.is_block_open() {
+                        b.jmp(blk);
+                    }
+                    b.switch_to(blk);
+                }
+                self.walk_stmt(b, body_id)
+            }
+            Stmt::Default { body } => {
+                let body_id = *body;
+                let blk = self.switch_dispatch.last().and_then(|d| d.1);
+                if let Some(blk) = blk {
+                    if b.is_block_open() {
+                        b.jmp(blk);
+                    }
+                    b.switch_to(blk);
+                }
                 self.walk_stmt(b, body_id)
             }
             Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
@@ -1339,6 +1135,64 @@ impl<'a> Walker<'a> {
         let blk = b.new_block();
         self.label_blocks.push((label, blk));
         blk
+    }
+
+    /// Reserve a block for every `case` value and for `default` in a
+    /// switch body, descending into nested statements but not into a
+    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
+    /// duplicate case value keeps the first block; the parser already
+    /// rejects duplicates.
+    fn collect_switch_cases(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        stmt_id: super::super::ast::StmtId,
+        cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        default_blk: &mut Option<super::super::ir::BlockId>,
+    ) {
+        match self.ast.stmt(stmt_id) {
+            Stmt::Case { val, body } => {
+                let val = *val;
+                let body = *body;
+                if !cases.iter().any(|(v, _)| *v == val) {
+                    let blk = b.new_block();
+                    cases.push((val, blk));
+                }
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            Stmt::Default { body } => {
+                let body = *body;
+                if default_blk.is_none() {
+                    *default_blk = Some(b.new_block());
+                }
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            Stmt::Compound(items) => {
+                let items = items.clone();
+                for item in items {
+                    if let super::BlockItem::Stmt(s) = item {
+                        self.collect_switch_cases(b, s, cases, default_blk);
+                    }
+                }
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                let then_s = *then_s;
+                let else_s = *else_s;
+                self.collect_switch_cases(b, then_s, cases, default_blk);
+                if let Some(e) = else_s {
+                    self.collect_switch_cases(b, e, cases, default_blk);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::DoWhile { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Labeled { body, .. } => {
+                let body = *body;
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            // A nested switch owns its own case labels; every other
+            // statement carries none.
+            _ => {}
+        }
     }
 
     /// Walk an expression in rvalue position. Returns the

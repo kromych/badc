@@ -61,6 +61,8 @@ Disassembly of section .text:
                	movq	%rbx, (%rsp)
                	xorq	%rbx, %rbx
                	movl	$0x2, %eax
+               	cmpq	$0x1, %rax
+               	je	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x7, %rax
@@ -82,12 +84,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	orq	$0x4000, %rbx           # imm = 0x4000
                	jmp	<addr>
-               	cmpq	$0x1, %rax
-               	je	<addr>
                	cmpq	$0x2, %rax
                	je	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rbx
@@ -112,6 +113,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rbx, %rbx
                	movl	$0x1, %eax
+               	cmpq	$0x1, %rax
+               	je	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x106b, %rax           # imm = 0x106B
@@ -133,12 +136,11 @@ Disassembly of section .text:
                	jmp	<addr>
                	orq	$0x4000, %rbx           # imm = 0x4000
                	jmp	<addr>
-               	cmpq	$0x1, %rax
-               	je	<addr>
                	cmpq	$0x2, %rax
                	je	<addr>
                	cmpq	$0x3, %rax
                	je	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
                	movq	%rax, %rbx
@@ -170,3 +172,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

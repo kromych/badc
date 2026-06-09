@@ -474,6 +474,41 @@ fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
 }
 
 #[test]
+fn wdm_driver_demo_builds_as_native_subsystem_pe() {
+    // The WDM driver skeleton carries `#pragma subsystem(driver)`
+    // (an alias for the native subsystem) and `#pragma
+    // entrypoint(DriverEntry)`. The PE optional-header Subsystem must
+    // be IMAGE_SUBSYSTEM_NATIVE (1) for both Windows targets; the
+    // kernel's PE loader refuses a CUI/GUI subsystem.
+    //
+    // TODO: the image still imports `msvcrt!exit` through the
+    // auto-linked runtime `__c5_exit`, which is unreachable from the
+    // custom entry and unsatisfiable in kernel mode; this asserts
+    // only the subsystem until the dead-import strip lands.
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("demos");
+    path.push("wdm_driver");
+    path.push("wdm_driver.c");
+    let src = std::fs::read_to_string(&path).expect("read wdm_driver.c");
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .expect("compile wdm_driver.c");
+        let pe = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect("emit driver PE");
+        let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
+        // Subsystem sits at optional-header offset 68 in PE32+.
+        let subsystem =
+            u16::from_le_bytes(pe[pe_off + 24 + 68..pe_off + 24 + 70].try_into().unwrap());
+        assert_eq!(
+            subsystem, 1,
+            "{target:?}: wdm_driver must be IMAGE_SUBSYSTEM_NATIVE"
+        );
+    }
+}
+
+#[test]
 fn cross_tu_call_into_secondary_dylib_keeps_routing() {
     // Cross-TU import routing through the native merge. The parser
     // records each `#pragma binding` import against its `#pragma

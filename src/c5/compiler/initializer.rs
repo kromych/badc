@@ -1425,7 +1425,27 @@ impl Compiler {
     pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
         self.emit_lea(local_val);
         self.ast_psh();
+        // C99 6.7.8p11: a scalar initializer is a single expression,
+        // optionally enclosed in braces (`int x = { 42 };`, `char *p =
+        // { "s" };`). Strip a single brace wrapper here so the scalar
+        // path matches the file-scope handler in `parse_global_initializer`.
+        let braced = self.lex.tk == '{';
+        if braced {
+            self.next()?; // consume `{`
+        }
         self.expr(Token::Assign as i64)?;
+        if braced {
+            // A trailing `,` before `}` is allowed in C99.
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+            if self.lex.tk != '}' {
+                return Err(self.compile_err(
+                    "scalar initializer wrapped in `{ ... }` must hold a single value",
+                ));
+            }
+            self.next()?; // consume `}`
+        }
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
         // destination with an integer-typed initializer (a

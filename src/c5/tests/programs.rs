@@ -542,6 +542,16 @@ fn const_expr_cast_narrows_to_target_width() {
 }
 
 #[test]
+fn scalar_initializer_may_be_brace_enclosed() {
+    // C99 6.7.8p11: a scalar initializer is a single expression,
+    // optionally brace-enclosed, at block scope (function-body top and
+    // nested blocks) and for static locals, not only at file scope. The
+    // fixture self-checks braced integer / pointer / non-constant /
+    // trailing-comma / static-local / nested-block forms.
+    assert_eq!(run_fixture("scalar_brace_initializer.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

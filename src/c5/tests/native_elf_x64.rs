@@ -391,6 +391,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("empty_macro_arg_and_string_rows.c", 0),
     ("inline_arg_count_mismatch.c", 0),
     ("block_scope_extern.c", 0),
+    ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

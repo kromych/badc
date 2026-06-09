@@ -181,6 +181,13 @@ fn empty_macro_arg_and_string_rows() {
 }
 
 #[test]
+fn extern_incomplete_struct_completion() {
+    // An `extern` of an incomplete struct reserves no storage; the
+    // completed definition allocates without overlapping later globals.
+    assert_eq!(run_fixture("extern_incomplete_struct_completion.c"), 0);
+}
+
+#[test]
 fn block_scope_extern() {
     // A block-scope `extern` declaration refers to the file-scope
     // object, allocating no local and not shadowing it.

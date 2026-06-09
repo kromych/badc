@@ -1161,6 +1161,27 @@ impl Compiler {
                     }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+                    // `extern struct S s;` while `struct S` is still
+                    // incomplete cannot reserve storage (its size is
+                    // unknown), and C99 6.9.2 makes it a pure declaration
+                    // anyway. Record an undefined external reference; the
+                    // defining declaration that follows the struct's
+                    // completion allocates the bytes. Without this the
+                    // permissive single-TU fallback below would reserve a
+                    // wrong-sized slot and the next global would overlap.
+                    if was_extern_only_decl
+                        && is_struct_ty(ty)
+                        && struct_ptr_depth(ty) == 0
+                        && self.structs[struct_id_of(ty)].fields.is_empty()
+                    {
+                        self.symbols[id_idx].is_extern_decl = true;
+                        self.symbols[id_idx].defined_here = false;
+                        self.symbols[id_idx].type_ = ty;
+                        if self.lex.tk == ',' {
+                            self.next()?;
+                        }
+                        continue;
+                    }
                     if was_extern_only_decl {
                         self.symbols[id_idx].is_extern_decl = true;
                     } else {

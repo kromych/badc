@@ -47,12 +47,17 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
-      # autocorrect; keep them out at the gate.
+      # autocorrect; keep them out at the gate. A fixture that exercises
+      # the lexer / preprocessor UTF-8 decode paths must carry the raw
+      # multibyte bytes in source (an escape sequence would bypass the
+      # code under test), so it is excluded here, matching the allowlist
+      # in scripts/git-hooks/pre-push.
       - name: ASCII-only sources
         run: |
           if grep -rPn '[^\x00-\x7F]' \
               --include='*.md' --include='*.rs' --include='*.c' \
               --include='*.toml' --include='*.yml' \
+              --exclude='wide_char_utf8.c' \
               --exclude-dir=target --exclude-dir=.git . ; then
             echo
             echo "::error::Non-ASCII characters found above."

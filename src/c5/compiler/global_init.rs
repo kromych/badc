@@ -376,7 +376,16 @@ impl Compiler {
                 || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?))
         {
             let bits = self.parse_const_float_expr()?;
-            let value = bits.to_bits() as i64;
+            // A `float` slot is 4 bytes: narrow the f64 constant to
+            // the f32 pattern, otherwise the low 4 bytes of the f64
+            // bits (zero for many values) land in the slot. `double`
+            // keeps the full 8-byte pattern.
+            let value = self.to_storage_bits(
+                bits.to_bits() as i64,
+                super::initializer::InitElemReloc::Float64Bits,
+                var_ty,
+            );
+            let size = self.size_of_type(var_ty);
             let bytes = value.to_le_bytes();
             let segment = if is_thread_local {
                 &mut self.tls_data
@@ -384,10 +393,10 @@ impl Compiler {
                 &mut self.data
             };
             let off = var_offset as usize;
-            debug_assert!(off + 8 <= segment.len());
-            segment[off..off + 8].copy_from_slice(&bytes);
+            debug_assert!(off + size <= segment.len());
+            segment[off..off + size].copy_from_slice(&bytes[..size]);
             if is_thread_local {
-                let end = off + 8;
+                let end = off + size;
                 if end > self.tls_init_size {
                     self.tls_init_size = end;
                 }
@@ -403,12 +412,21 @@ impl Compiler {
 
         // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
         // floating object is converted to the floating value; storing
-        // the integer's bit pattern would leave a denormal. Mirror the
-        // float-literal path above, which stores the f64 bit pattern.
+        // the integer's bit pattern would leave a denormal. Narrow to
+        // the slot's width (f32 for `float`, f64 for `double`).
         let value = if var_is_float {
-            (value as f64).to_bits() as i64
+            self.to_storage_bits(
+                (value as f64).to_bits() as i64,
+                super::initializer::InitElemReloc::Float64Bits,
+                var_ty,
+            )
         } else {
             value
+        };
+        let write_size = if var_is_float {
+            self.size_of_type(var_ty)
+        } else {
+            8
         };
 
         let bytes = value.to_le_bytes();
@@ -421,8 +439,8 @@ impl Compiler {
         // Both segments preallocated 8 zero bytes for this
         // variable; we overwrite the slot with the
         // initializer's bytes.
-        debug_assert!(off + 8 <= segment.len());
-        segment[off..off + 8].copy_from_slice(&bytes);
+        debug_assert!(off + write_size <= segment.len());
+        segment[off..off + write_size].copy_from_slice(&bytes[..write_size]);
 
         if is_thread_local {
             // Move the .tdata/.tbss boundary so this slot is

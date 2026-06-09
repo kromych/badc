@@ -113,6 +113,18 @@ fn line_directive() {
 }
 
 #[test]
+fn float_global_init() {
+    // A `float` global stores the f32 pattern, not the f64 low bytes.
+    assert_eq!(run_fixture("float_global_init.c"), 0);
+}
+
+#[test]
+fn func_name_array() {
+    // `sizeof(__func__)` is the array length, not a decayed pointer.
+    assert_eq!(run_fixture("func_name_array.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

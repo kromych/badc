@@ -104,17 +104,19 @@ impl Compiler {
 
     /// Convert an initializer element's `(value, reloc)` to the
     /// bit pattern that should land in the data segment for an
-    /// element of type `elem_ty`. c5 models every FP slot as
-    /// `f64` bits in an 8-byte slot (sizeof(float) returns 8),
-    /// so:
-    ///   * `Float64Bits` value -- already f64 bits, pass through.
+    /// element of type `elem_ty`:
+    ///   * `Float64Bits` value in a `double` element -- pass through.
+    ///   * `Float64Bits` value in a `float` element -- narrow to the
+    ///     f32 pattern (in the low 32 bits) so a 4-byte load reads the
+    ///     right value.
     ///   * Plain integer constant in a float/double element --
-    ///     convert int -> f64 bits so e.g.
-    ///     `static float a[] = { 1 }` ends up as the bit pattern
-    ///     of `1.0`, not `0x0000000000000001`.
+    ///     convert int -> the floating bit pattern so e.g.
+    ///     `static float a[] = { 1 }` ends up as the bits of `1.0f`,
+    ///     not `0x0000000000000001`.
     /// Non-FP elem types and FP values destined for pointer
-    /// slots (Data / Code relocs) pass through unchanged.
-    fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
+    /// slots (Data / Code relocs) pass through unchanged. Callers
+    /// write `size_of_type(elem_ty)` low bytes of the result.
+    pub(super) fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
         let stripped = elem_ty & !UNSIGNED_BIT;
         let is_float = stripped == Ty::Float as i64;
         let is_double = stripped == Ty::Double as i64;

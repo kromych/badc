@@ -252,6 +252,11 @@ impl Compiler {
             self.emit_data_imm(offset);
             self.next()?;
             self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+            // `__func__` is a `char[]` of length strlen + 1 (C99
+            // 6.4.2.2); surface that to an enclosing `sizeof` the same
+            // way a decayed array does, so `sizeof(__func__)` is the
+            // array size, not the decayed pointer's.
+            self.pending.last_array_decay_size = fn_name.len() as i64 + 1;
             // Dual-emit the decayed `char *` value so the walker
             // sees the address on `ast_acc` (identical shape to a
             // plain string literal -- the same `Expr::StrLit`

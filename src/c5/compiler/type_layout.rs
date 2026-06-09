@@ -405,7 +405,8 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
         target,
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
     );
-    if !aarch64 && !matches!(target, Target::LinuxX64) {
+    let win64 = matches!(target, Target::WindowsX64);
+    if !aarch64 && !matches!(target, Target::LinuxX64 | Target::WindowsX64) {
         return StructReturnAbi::OutPtr;
     }
     let id = struct_id_of(ty);
@@ -430,8 +431,19 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
         align,
         fields,
     };
-    if size <= 16 {
-        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx; Win64 rax.
+    if win64 {
+        // Win64: a 1-, 2-, 4-, or 8-byte aggregate returns by value in
+        // rax; any other size returns through a caller-allocated buffer
+        // whose pointer is the hidden first integer argument (rcx),
+        // returned in rax -- the c5 out-pointer convention already
+        // matches that, so keep it.
+        if matches!(size, 1 | 2 | 4 | 8) {
+            StructReturnAbi::Regs(desc)
+        } else {
+            StructReturnAbi::OutPtr
+        }
+    } else if size <= 16 {
+        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx.
         StructReturnAbi::Regs(desc)
     } else if aarch64 {
         // AAPCS64: > 16 bytes returns through the x8 indirect-result

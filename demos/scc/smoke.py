@@ -42,14 +42,19 @@ EXE_SUFFIX = ".exe" if WIN else ""
 # hand-rolled badc fixture suite.
 EXECUTE_SUBDIR = Path("tests") / "cc" / "execute"
 
-# Lower bound on the pass count. Today's badc compiles + runs 227
-# of the 275 execute tests at both `-q -O0` and `-q -O` on macOS
-# aarch64; the Linux x86_64 lane historically drops one extra
-# test at -O (the parameter-shadow `0120-funpar.c` shape) which
-# is tracked separately. Set the gate at the cross-platform
-# minimum so a lane-specific regression doesn't gate the others;
-# raise it as each remaining C99 gap closes.
-BASELINE = 235
+# Lower bound on the pass count. badc compiles + runs 267 of the 275
+# execute tests on macOS aarch64, 266 on both Linux x86_64 and Linux
+# aarch64, and 262 on Windows x86_64, at both `-q -O0` and `-q -O`. The
+# gate sits just below the Windows figure (the cross-platform minimum)
+# so a lane-specific difference does not gate the others. The remaining failures are large design gaps --
+# Duff's device (case labels inside a loop body), a function returning a
+# function pointer reached through a pointer, the ISO 6.10.3.5 macro
+# example, and a data-segment relocation to an imported function -- plus
+# two that are not badc gaps: `0147-intern_cpp.c` uses scc's own
+# `__SCC__` macro, and `0193-incomplete.c` references an undefined
+# symbol that gcc and clang also fail to link. Raise the gate as each
+# remaining gap closes.
+BASELINE = 260
 
 
 def resolve_badc() -> Path:

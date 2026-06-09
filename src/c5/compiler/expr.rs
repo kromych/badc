@@ -787,11 +787,30 @@ impl Compiler {
                     // Struct-returning calls skip the AST build for
                     // now; the hidden out-pointer doesn't fit the
                     // canonical `Call { callee, args, ty }` shape.
+                    // For a direct (Fun / Sys) call the symbol's `type_`
+                    // is the return type. For a call through a
+                    // function-pointer variable (Loc / Glo) `type_` is
+                    // the pointer's type, which encodes the return type
+                    // plus one pointer level for the fn-pointer; the
+                    // result type is that minus one level (`int (*)()` ->
+                    // int, `struct S *(*)()` -> struct S *). A variable
+                    // that is not a fn-pointer falls back to int.
+                    let is_var_call = self.symbols[id_idx].class == Token::Loc as i64
+                        || self.symbols[id_idx].class == Token::Glo as i64;
+                    let result_ty = if is_var_call {
+                        let vt = self.symbols[id_idx].type_;
+                        if self.symbols[id_idx].fn_ptr_indirection > 0 && is_pointer_ty(vt) {
+                            vt - Ty::Ptr as i64
+                        } else {
+                            Ty::Int as i64
+                        }
+                    } else {
+                        callee_ret_ty
+                    };
                     if !callee_returns_struct {
                         let callee_ty = self.symbols[id_idx].type_;
                         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-                        let return_ty = callee_ret_ty;
-                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
                     } else {
                         // Struct-returning callee: dual-emit a
                         // `Expr::Call { ty: <struct> }` so the
@@ -802,8 +821,7 @@ impl Compiler {
                         // c5 ABI's address-as-value rule).
                         let callee_ty = self.symbols[id_idx].type_;
                         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-                        let return_ty = callee_ret_ty;
-                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
                     }
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,
@@ -814,22 +832,7 @@ impl Compiler {
                     if callee_returns_struct {
                         self.emit_lea(result_temp_off);
                     }
-                    // For direct calls (Jsr/JsrExt) the symbol's `type_`
-                    // is the declared return type. For indirect calls
-                    // through a variable (Jsri), `type_` is the *variable*
-                    // type (e.g. `int *` for a function pointer), not the
-                    // return type -- the dialect has no place to record
-                    // a function pointer's return type. Default to `int`
-                    // for the result; the actual register value carries
-                    // the full 8-byte return regardless of the tag, so
-                    // assigning to a wider lvalue still preserves bits.
-                    self.ty = if self.symbols[id_idx].class == Token::Loc as i64
-                        || self.symbols[id_idx].class == Token::Glo as i64
-                    {
-                        Ty::Int as i64
-                    } else {
-                        self.symbols[id_idx].type_
-                    };
+                    self.ty = result_ty;
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
                 let val = self.symbols[id_idx].val;
@@ -1729,6 +1732,19 @@ impl Compiler {
                     }
                 }
                 self.next()?;
+                // The function-pointer type encodes the callee's return
+                // type plus one pointer level for the fn-pointer itself,
+                // so the call result type is `fp_ty - 1` pointer level
+                // (`int (*)()` -> int, `struct S *(*)()` -> struct S *).
+                // Capture it before the argument parse below overwrites
+                // `self.ty`. A non-pointer here is not a valid callee;
+                // fall back to int.
+                let callee_fp_ty = self.ty;
+                let indirect_ret_ty = if is_pointer_ty(callee_fp_ty) {
+                    callee_fp_ty - Ty::Ptr as i64
+                } else {
+                    Ty::Int as i64
+                };
                 // Spill the FP into a fresh local temp through the
                 // store-local path. The plain "address-of-local
                 // then store" shape can't express this without
@@ -1765,11 +1781,11 @@ impl Compiler {
                 self.pending.last_emit_was_indirect_call = true;
                 self.ast_acc = None;
                 let _ = fp_temp;
-                // The dialect can't declare the return type of a
-                // function pointer, so default to `int`. The actual
-                // register value carries the full 8-byte return
-                // regardless of the tag.
-                self.ty = Ty::Int as i64;
+                // Result type recovered from the function-pointer's type
+                // above. The register carries the full 8-byte return
+                // regardless; the tag lets a following `->` / `[` / `*`
+                // see the right pointer level.
+                self.ty = indirect_ret_ty;
                 // Drop the AST vstack pushes the call's emit
                 // sequence leaked, mirror of the direct-call
                 // truncation.

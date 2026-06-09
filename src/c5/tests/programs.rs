@@ -153,6 +153,13 @@ fn kr_old_style_def() {
 }
 
 #[test]
+fn fn_ptr_return_type() {
+    // A call through a function pointer yields the callee's return
+    // type, so a following `->` / `[` sees the right shape.
+    assert_eq!(run_fixture("fn_ptr_return_type.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

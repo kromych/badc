@@ -99,17 +99,21 @@ impl Compiler {
         }
     }
 
-    /// True when `e` is a direct call to a `_Noreturn` function.
+    /// True when `e` does not return to its continuation: a direct call
+    /// to a `_Noreturn` function, or `__builtin_trap()`.
     fn expr_is_noreturn_call(&self, e: ExprId) -> bool {
-        let Expr::Call { callee, .. } = self.ast.expr(e) else {
-            return false;
-        };
-        let Expr::Ident { sym, .. } = self.ast.expr(*callee) else {
-            return false;
-        };
-        self.symbols
-            .get(*sym as usize)
-            .is_some_and(|s| s.is_noreturn)
+        match self.ast.expr(e) {
+            Expr::Call { callee, .. } => {
+                let Expr::Ident { sym, .. } = self.ast.expr(*callee) else {
+                    return false;
+                };
+                self.symbols
+                    .get(*sym as usize)
+                    .is_some_and(|s| s.is_noreturn)
+            }
+            Expr::Intrinsic { kind, .. } => *kind == crate::c5::op::Intrinsic::Trap as i64,
+            _ => false,
+        }
     }
 
     /// True when `e` is a non-zero integer constant -- an always-taken

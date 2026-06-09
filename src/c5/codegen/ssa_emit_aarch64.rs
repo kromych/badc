@@ -2852,6 +2852,12 @@ fn emit_intrinsic(
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
         I::Fma | I::Fmaf => false,
+        I::Trap => {
+            // `brk #0` (0xD4200000) raises a breakpoint / illegal-state
+            // exception. Execution does not continue past it.
+            emit(code, 0xD420_0000u32);
+            true
+        }
     }
 }
 

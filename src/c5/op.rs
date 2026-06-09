@@ -81,6 +81,12 @@ pub enum Intrinsic {
     /// `fmaf(x, y, z)` -- the single-precision partner of [`Fma`]; the
     /// operands and result are `float`.
     Fmaf = 9,
+    /// `__builtin_trap()` -- execute an architecture trap instruction
+    /// (`ud2` on x86_64, `brk #0` on AArch64) that raises an illegal-
+    /// instruction / breakpoint exception. Takes no argument, produces
+    /// no value, and does not return to its caller. The VM aborts the
+    /// process.
+    Trap = 10,
 }
 
 impl Intrinsic {
@@ -95,6 +101,7 @@ impl Intrinsic {
             7 => Some(Intrinsic::VaCopy),
             8 => Some(Intrinsic::Fma),
             9 => Some(Intrinsic::Fmaf),
+            10 => Some(Intrinsic::Trap),
             _ => None,
         }
     }

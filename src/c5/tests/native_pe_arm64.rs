@@ -492,6 +492,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_block.c", 0),
     ("struct_arg_in_registers.c", 0),
     ("struct_arg_by_stack.c", 0),
+    ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),
     ("struct_arg_two_eightbyte.c", 0),
     ("struct_return_by_value.c", 0),

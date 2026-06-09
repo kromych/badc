@@ -1868,6 +1868,7 @@ impl Preprocessor {
             "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
             "fma" => super::op::Intrinsic::Fma as i64,
             "fmaf" => super::op::Intrinsic::Fmaf as i64,
+            "__builtin_trap" => super::op::Intrinsic::Trap as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,

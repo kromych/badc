@@ -5924,6 +5924,13 @@ fn emit_intrinsic(
             bail_msg("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic");
             false
         }
+        I::Trap => {
+            // `ud2` (0F 0B) raises #UD (illegal instruction). Execution
+            // does not continue past it.
+            code.push(0x0F);
+            code.push(0x0B);
+            true
+        }
     }
 }
 

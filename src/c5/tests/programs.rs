@@ -56,6 +56,14 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn builtin_trap() {
+    // __builtin_trap() does not return; a function whose fall-through
+    // path ends in it satisfies the non-void return requirement. The
+    // trap path is not taken at run time.
+    assert_eq!(run_fixture("builtin_trap.c"), 0);
+}
+
+#[test]
 fn struct_multi_byval() {
     // C99 6.5.2.2: several aggregates of mixed size passed by value in
     // one call, interleaved with scalars, plus aggregate returns. The

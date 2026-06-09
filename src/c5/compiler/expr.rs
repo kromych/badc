@@ -270,7 +270,9 @@ impl Compiler {
                 // with the operand layout each lowering expects.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
-                    if self.lex.tk == ')' {
+                    // `__builtin_trap()` is the only nullary intrinsic;
+                    // every other one needs at least one argument.
+                    if self.lex.tk == ')' && intrinsic_id != crate::c5::op::Intrinsic::Trap as i64 {
                         return Err(self
                             .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
                     }
@@ -283,9 +285,12 @@ impl Compiler {
                     let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
                     let fma_id = crate::c5::op::Intrinsic::Fma as i64;
                     let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
+                    let trap_id = crate::c5::op::Intrinsic::Trap as i64;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
-                    if intrinsic_id == fma_id || intrinsic_id == fmaf_id {
+                    if intrinsic_id == trap_id {
+                        // __builtin_trap() -- no arguments.
+                    } else if intrinsic_id == fma_id || intrinsic_id == fmaf_id {
                         // fma(x, y, z) / fmaf(x, y, z) -- C99 7.12.13.1.
                         // Three FP arguments, each cast to the result
                         // precision so the fused node sees uniform-width
@@ -451,6 +456,7 @@ impl Compiler {
                         || intrinsic_id == va_start_id
                         || intrinsic_id == va_end_id
                         || intrinsic_id == va_copy_id
+                        || intrinsic_id == trap_id
                     {
                         self.ty = Ty::Int as i64;
                     } else if intrinsic_id == va_arg_id {

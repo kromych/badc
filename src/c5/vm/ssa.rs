@@ -1495,6 +1495,10 @@ fn run_intrinsic(
         Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
+        // `__builtin_trap()` raises an illegal-instruction exception on
+        // the native targets; the interpreter cannot continue past it,
+        // so it surfaces as a runtime failure.
+        Intrinsic::Trap => Err(C5Error::Runtime("__builtin_trap".to_string())),
     }
 }
 

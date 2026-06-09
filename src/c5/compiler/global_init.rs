@@ -287,6 +287,33 @@ impl Compiler {
             }
             let target_idx = self.lex.curr_id_idx;
             let target_class = self.symbols[target_idx].class;
+            // `&func` (C99 6.3.2.1p4): the address-of operator on a
+            // function designator yields the same function-pointer
+            // value as the bare name, so route it through the same
+            // CodeReloc path as `static int (*fp)() = func;`.
+            if target_class == Token::Fun as i64 || target_class == Token::Sys as i64 {
+                if is_thread_local {
+                    return Err(self.compile_err_at(
+                        line,
+                        "function-pointer initializer for `_Thread_local` not supported",
+                    ));
+                }
+                let mut sym_idx = target_idx;
+                if target_class == Token::Sys as i64 {
+                    sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
+                }
+                self.symbols[sym_idx].was_referenced = true;
+                let ent_pc = self.symbols[sym_idx].val;
+                self.next()?;
+                let bytes = (ent_pc as u64).to_le_bytes();
+                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: var_offset as u64,
+                    target_ent_pc: ent_pc as u64,
+                });
+                self.code_reloc_sym_idx.push(sym_idx);
+                return Ok(());
+            }
             if target_class != Token::Glo as i64 {
                 return Err(self.compile_err_at(
                     line,

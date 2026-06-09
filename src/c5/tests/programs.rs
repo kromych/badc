@@ -485,6 +485,14 @@ fn vsnprintf_underscore_alias_resolves_to_libc() {
 }
 
 #[test]
+fn function_pointer_global_initialized_with_address_of() {
+    // C99 6.3.2.1p4: `&func` is the same function-pointer value as the
+    // bare name. A scalar global initialized `= &func` must work like
+    // `= func`.
+    assert_eq!(run_fixture("funcptr_global_addressof_init.c"), 0);
+}
+
+#[test]
 fn static_local_shadows_same_named_global() {
     // C99 6.2.1 + 6.2.4p3: a block-scope `static` local has its own
     // static storage and block scope; a same-named file-scope object

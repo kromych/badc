@@ -56,6 +56,13 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn const_member_address_init() {
+    // C99 6.6: a static initializer may be the constant address of a
+    // global's member, array member, or indexed element's member.
+    assert_eq!(run_fixture("const_member_address_init.c"), 0);
+}
+
+#[test]
 fn array_of_struct_brace_elision() {
     // C99 6.7.8p20: a flat value list fills an array of structs with the
     // per-element braces elided; the length follows from the slot count.

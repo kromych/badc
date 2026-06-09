@@ -1,0 +1,35 @@
+
+const_member_address_init.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	movq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
+               	callq	<addr>
+               	movq	%rax, %rdi
+               	callq	*<rip>
+               	leaq	<rip>, %rax
+               	movq	0x20(%rax), %rcx
+               	movq	%rax, %rdx
+               	addq	$0x10, %rdx
+               	cmpq	%rdx, %rcx
+               	je	<addr>
+               	movl	$0x1, %eax
+               	retq
+               	movq	0x38(%rax), %rcx
+               	movq	%rax, %rdx
+               	addq	$0x28, %rdx
+               	cmpq	%rdx, %rcx
+               	je	<addr>
+               	movl	$0x2, %eax
+               	retq
+               	movq	0x38(%rax), %rcx
+               	addq	$0x28, %rax
+               	cmpq	%rax, %rcx
+               	je	<addr>
+               	movl	$0x3, %eax
+               	retq
+               	xorq	%rax, %rax
+               	retq
+               	addb	%al, 0x41(%rdx)

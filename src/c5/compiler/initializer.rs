@@ -338,7 +338,95 @@ impl Compiler {
     ///     `Code` reloc; if it's a `Token::Num`-class symbol
     ///     (enum value, `#define`d constant), use its `val`
     ///   * `0` is special -- a NULL pointer / zero scalar, no reloc.
+    /// Parse a static initializer leaf that is a constant address of a
+    /// global object's sub-object: `&g.field`, `g.array_field`,
+    /// `&arr[i].field`, or the parenthesised `(&buf[i])->field` form a
+    /// `#define`d stream macro expands to. Returns `(byte offset into
+    /// the global's data, owning Glo symbol index)` for a `Data`
+    /// relocation, or `None` (with the lexer restored) when the leaf is
+    /// not this shape. Consumed grammar:
+    ///
+    ///   addr   := ('&' | '(')* Glo postfix*
+    ///   postfix := '[' const ']' | '.' field | '->' field | ')'
+    ///
+    /// The leading `&` / `(` and a balancing `)` are skipped; the byte
+    /// offset accumulates the array-index strides and field offsets.
+    fn parse_const_address(&mut self) -> Result<Option<(i64, usize)>, C5Error> {
+        let snap = self.lex.snapshot();
+        while self.lex.tk == Token::AndOp || self.lex.tk == '(' {
+            self.next()?;
+        }
+        if self.lex.tk != Token::Id {
+            self.lex.restore(snap);
+            return Ok(None);
+        }
+        let sym_idx = self.lex.curr_id_idx;
+        if self.symbols[sym_idx].class != Token::Glo as i64 {
+            self.lex.restore(snap);
+            return Ok(None);
+        }
+        let mut off = self.symbols[sym_idx].val;
+        let mut cur_ty = self.symbols[sym_idx].type_;
+        // Stride for the next `[index]`: one element of the current
+        // array. For the base symbol that is the element type's size.
+        let mut elem_stride = self.size_of_type(cur_ty) as i64;
+        self.next()?; // consume the identifier
+        loop {
+            if self.lex.tk == Token::Brak {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                if self.lex.tk != ']' {
+                    self.lex.restore(snap);
+                    return Ok(None);
+                }
+                self.next()?;
+                off += n * elem_stride;
+            } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
+                self.next()?;
+                if self.lex.tk != Token::Id
+                    || !(is_struct_ty(cur_ty) && struct_ptr_depth(cur_ty) == 0)
+                {
+                    self.lex.restore(snap);
+                    return Ok(None);
+                }
+                let fname = self.symbols[self.lex.curr_id_idx].name.clone();
+                let sid = struct_id_of(cur_ty);
+                let Some(fpos) = self.structs[sid]
+                    .fields
+                    .iter()
+                    .position(|f| f.name == fname)
+                else {
+                    self.lex.restore(snap);
+                    return Ok(None);
+                };
+                let field = self.structs[sid].fields[fpos].clone();
+                off += field.offset as i64;
+                cur_ty = field.ty;
+                elem_stride = self.size_of_type(field.ty) as i64;
+                self.next()?;
+            } else if self.lex.tk == ')' {
+                self.next()?;
+            } else {
+                break;
+            }
+        }
+        Ok(Some((off, sym_idx)))
+    }
+
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
+        // A constant address of a global's sub-object: `&g.field`,
+        // `g.array_field`, `(&buf[i])->field`. Takes priority over the
+        // integer / `&global` leaves below, which only handle a whole
+        // symbol with no member or index chain.
+        if self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(' {
+            let snap = self.lex.snapshot();
+            if let Some((off, sym_idx)) = self.parse_const_address()?
+                && (self.lex.tk == ',' || self.lex.tk == '}')
+            {
+                return Ok((off, InitElemReloc::Data(Some(sym_idx))));
+            }
+            self.lex.restore(snap);
+        }
         // Float literal -- store the f64 bit pattern. The element
         // type drives the runtime interpretation; the on-disk
         // image is just bytes.

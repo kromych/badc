@@ -552,6 +552,18 @@ fn scalar_initializer_may_be_brace_enclosed() {
 }
 
 #[test]
+fn brace_elided_struct_member_array_init() {
+    // C99 6.7.8p20: a struct member that is an array of structs accepts
+    // a flat initializer list with each element's braces elided. The
+    // fixture self-checks brace-elided elements (each consuming one
+    // struct's fields, including a partially-braced nested array member)
+    // and zero-fill of an omitted trailing element. Previously a
+    // brace-elided element was written as a single struct-width scalar,
+    // overflowing the initializer byte writer (panic).
+    assert_eq!(run_fixture("brace_elided_struct_array_init.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

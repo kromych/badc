@@ -1233,17 +1233,22 @@ impl Compiler {
                         )));
                     }
                     let here = field_base + idx * elem_size;
-                    // C99 6.7.8p20: an array-of-struct field accepts
-                    // a nested brace-enclosed initializer for each
-                    // element. Route the inner `{ ... }` through the
-                    // struct collector so the per-field offsets are
-                    // honoured; scalar element types fall through to
-                    // the constant-value path.
-                    if elem_is_struct && self.lex.tk == '{' {
-                        self.collect_struct_initializer(
-                            elem_sid.expect("elem_is_struct implies a struct id"),
-                            here as i64,
-                        )?;
+                    // C99 6.7.8p20: an array-of-struct field accepts a
+                    // nested brace-enclosed initializer for each element,
+                    // and the element's braces may be elided. A `{ ... }`
+                    // element routes through the struct collector; a
+                    // brace-elided element consumes exactly that element's
+                    // fields from the flat list via `fill_struct_fields`.
+                    // Scalar element types fall through to the constant-
+                    // value path. (Without the elided-element branch a
+                    // flat list wrote a single scalar with the struct's
+                    // byte width, overflowing `write_init_bytes`.)
+                    if let Some(sid) = elem_sid {
+                        if self.lex.tk == '{' {
+                            self.collect_struct_initializer(sid, here as i64)?;
+                        } else {
+                            self.fill_struct_fields(sid, here as i64, false)?;
+                        }
                     } else {
                         let (value, reloc) = self.parse_constant_init_value()?;
                         self.write_init_value(here, elem_size, value, reloc, field.ty);

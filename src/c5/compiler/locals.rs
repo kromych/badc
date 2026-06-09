@@ -31,7 +31,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -826,13 +826,32 @@ impl Compiler {
         }
     }
 
+    /// True when reading symbol `idx` by value yields a runtime
+    /// result rather than a constant. A file-scope (Glo) scalar or
+    /// pointer object's stored value is not a constant expression
+    /// (C99 6.6), so an aggregate initializer element that reads it
+    /// needs the per-element runtime store path. Global arrays and
+    /// functions decay to a constant address and stay constant; a
+    /// preceding `&` (address-of) is also constant and is excluded by
+    /// the caller. A whole-struct value read is left on the constant
+    /// path because the runtime initializer doesn't lower nested
+    /// struct copies yet.
+    fn glo_value_read_is_runtime(&self, idx: usize) -> bool {
+        let s = &self.symbols[idx];
+        if s.class != Token::Glo as i64 || s.array_size > 0 {
+            return false;
+        }
+        !(is_struct_ty(s.type_) && struct_ptr_depth(s.type_) == 0)
+    }
+
     /// Pre-scan an array initializer's brace list (current token
     /// must be `{`) and return `(element_count, needs_runtime)`.
     /// The count is the number of top-level (comma-separated)
     /// elements, used by the deferred-size `T xs[] = {...}` path.
     /// The runtime flag is true when any element involves a
-    /// non-constant value -- a Loc-class identifier, an indexed
-    /// read, a member access, or a function call.
+    /// non-constant value -- a Loc-class identifier, a file-scope
+    /// scalar read by value, an indexed read, a member access, or a
+    /// function call.
     pub(super) fn scan_array_init(&mut self) -> Result<(i64, bool), C5Error> {
         debug_assert!(self.lex.tk == '{');
         let snap = self.lex.snapshot();
@@ -842,6 +861,9 @@ impl Compiler {
         let mut count: i64 = 0;
         // Detect an empty list (`{}`) -- 0 elements rather than 1.
         let mut saw_any = false;
+        // Whether the previously scanned token was a unary/binary `&`;
+        // a global read in `&global` is a constant address.
+        let mut prev_was_amp = false;
         while depth > 0 && self.lex.tk != 0 {
             if self.lex.tk == '{' {
                 depth += 1;
@@ -858,12 +880,16 @@ impl Compiler {
                     count += 1;
                 }
                 saw_any = false;
+                prev_was_amp = false;
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
                 saw_any = true;
                 let class = self.symbols[self.lex.curr_id_idx].class;
                 if class == Token::Loc as i64 {
+                    needs_runtime = true;
+                }
+                if !prev_was_amp && self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -875,6 +901,7 @@ impl Compiler {
             } else {
                 saw_any = true;
             }
+            prev_was_amp = self.lex.tk == Token::AndOp;
             self.next()?;
         }
         self.lex.restore(snap);
@@ -1094,6 +1121,46 @@ impl Compiler {
                 return Err(self.compile_err("non-constant bitfield initializer not yet supported"));
             }
             if field.array_size > 0 {
+                // A char-array field initialized by a string literal
+                // (C99 6.7.8p14): emit a constant per-byte store for the
+                // literal's characters, then zero-fill the remainder
+                // (the NUL terminator is part of the fill when the array
+                // has room). Mirrors the constant-staging branch in
+                // `fill_struct_fields`, but as runtime store elements so
+                // it composes with non-constant sibling fields.
+                if self.lex.tk == '"'
+                    && !self.lex.str_is_wide
+                    && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                {
+                    let start_addr = self.lex.ival as usize;
+                    self.next()?;
+                    while self.lex.tk == '"' {
+                        self.next()?;
+                    }
+                    self.data.push(0); // ensure NUL terminator
+                    let max = field.array_size as usize;
+                    let base = extra_offset + field.offset as i64;
+                    for k in 0..max {
+                        let b = if start_addr + k < self.data.len() {
+                            self.data[start_addr + k] as i64
+                        } else {
+                            0
+                        };
+                        let value = self.ast_emit_int_lit(b, Ty::Char as i64);
+                        self.pending_local_runtime_elements.push(
+                            super::super::ast::RuntimeInitElement {
+                                offset: base + k as i64,
+                                value,
+                                ty: Ty::Char as i64,
+                            },
+                        );
+                    }
+                    pos = field_idx + 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    continue;
+                }
                 return Err(
                     self.compile_err("non-constant array-field initializer not yet supported")
                 );
@@ -1164,6 +1231,9 @@ impl Compiler {
         // Multiple chained designators (`.outer.inner = ...`,
         // `[5][2] = ...`) are skipped in order.
         let mut at_entry_start = true;
+        // Whether the previously scanned token was `&` (address-of):
+        // a global read in `&global` is a constant address.
+        let mut prev_was_amp = false;
         while depth > 0 && self.lex.tk != 0 {
             // Designator skip works at any depth: nested
             // `.inner = { .x = ... }` carries its own
@@ -1199,6 +1269,7 @@ impl Compiler {
                     self.next()?; // `=`
                 }
                 at_entry_start = false;
+                prev_was_amp = false;
                 continue;
             }
             if self.lex.tk == '{' {
@@ -1214,11 +1285,15 @@ impl Compiler {
                 // entry (positional or designator). At any
                 // depth.
                 at_entry_start = true;
+                prev_was_amp = false;
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
                 let class = self.symbols[self.lex.curr_id_idx].class;
                 if class == Token::Loc as i64 {
+                    needs_runtime = true;
+                }
+                if !prev_was_amp && self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -1233,6 +1308,7 @@ impl Compiler {
             } else {
                 at_entry_start = false;
             }
+            prev_was_amp = self.lex.tk == Token::AndOp;
             self.next()?;
         }
         self.lex.restore(snap);

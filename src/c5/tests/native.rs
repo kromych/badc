@@ -398,6 +398,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("struct_arg_in_registers.c", 0),
     ("struct_arg_by_stack.c", 0),
     ("wide_char_utf8.c", 0),
+    ("local_aggregate_runtime_init.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

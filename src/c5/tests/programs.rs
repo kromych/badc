@@ -86,6 +86,13 @@ fn sizeof_array_type_and_binding() {
 }
 
 #[test]
+fn designator_override_and_braced_string() {
+    // A duplicate designator re-initializes the whole subobject; a
+    // character array accepts a brace-wrapped string literal.
+    assert_eq!(run_fixture("designator_override_and_braced_string.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

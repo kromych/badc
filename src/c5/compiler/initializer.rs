@@ -168,6 +168,19 @@ impl Compiler {
     ///     data-segment offset and a `needs_reloc = true` flag so
     ///     the native writers can emit the right rebase entry;
     ///     integer constants are left as-is.
+    /// Consume the closing `}` (and an optional trailing comma) of a
+    /// brace-wrapped string-literal array initializer (`{"abc"}`).
+    fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
+        if self.lex.tk == ',' {
+            self.next()?;
+        }
+        if self.lex.tk != '}' {
+            return Err(self.compile_err("`}` expected after brace-wrapped string initializer"));
+        }
+        self.next()?;
+        Ok(())
+    }
+
     pub(super) fn collect_array_initializer(
         &mut self,
         elem_ty: i64,
@@ -182,6 +195,32 @@ impl Compiler {
         // inner brace doesn't inherit it.
         let inner_dim = core::mem::take(&mut self.pending.init_inner_dim);
         let target_size = core::mem::take(&mut self.pending.init_target_array_size);
+        // C99 6.7.8p14: a string-literal initializer for a character
+        // array may be enclosed in braces (`char x[] = {"abc"}`).
+        // Unwrap a single brace whose first token is a string literal so
+        // the string paths below see the literal directly; the closing
+        // `}` is consumed before each returns. A non-string brace list
+        // is left untouched (the speculative `{` is restored).
+        let mut brace_wrapped = false;
+        if self.lex.tk == '{' {
+            let snap = self.lex.snapshot();
+            // Lexing the inner string token appends its bytes to the
+            // data segment; restore the data length too so the
+            // speculative peek leaves no orphaned literal behind.
+            let data_snap = self.data.len();
+            self.next()?;
+            // Only a character array (narrow string) or a `wchar_t`
+            // array (wide string) takes a brace-wrapped string. A
+            // pointer array such as `char *names[] = {"a", "b"}` has a
+            // string as its first element and must stay a brace list.
+            let is_char_array = (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64;
+            if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
+                brace_wrapped = true;
+            } else {
+                self.lex.restore(snap);
+                self.data.truncate(data_snap);
+            }
+        }
         if self.lex.tk == '"' && self.lex.str_is_wide {
             // C99 6.4.5 / 6.7.8p14: a wide string literal initializes a
             // `wchar_t`-shaped array. `wchar_t` is `int` (4 bytes), and
@@ -216,6 +255,9 @@ impl Compiler {
                     (v, InitElemReloc::None)
                 })
                 .collect();
+            if brace_wrapped {
+                self.expect_close_brace_after_wrapped_string()?;
+            }
             return Ok(elems);
         }
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
@@ -239,6 +281,9 @@ impl Compiler {
                 .iter()
                 .map(|&b| (b as i64, InitElemReloc::None))
                 .collect();
+            if brace_wrapped {
+                self.expect_close_brace_after_wrapped_string()?;
+            }
             return Ok(elems);
         }
         if self.lex.tk != '{' {
@@ -1052,6 +1097,16 @@ impl Compiler {
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
+                // C99 6.7.8p21: a brace-enclosed initializer for the
+                // array member initializes every element; positions not
+                // named by a designator -- and any value left by an
+                // overridden duplicate initializer (6.7.8p19) -- are set
+                // to zero. Clear the member's region before applying the
+                // listed values.
+                let region = elem_size * field.array_size as usize;
+                for b in &mut self.data[field_base..field_base + region] {
+                    *b = 0;
+                }
                 let elem_is_struct = is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
                 let elem_sid = if elem_is_struct {
                     Some(struct_id_of(field.ty))

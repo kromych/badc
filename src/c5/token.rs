@@ -283,6 +283,13 @@ pub(crate) enum Token {
     /// flag the function symbol for the SSA inliner, which
     /// bypasses the body-size cap for inline-marked callees.
     Inline,
+    /// `_Noreturn` / `noreturn` (C11 6.7.4). Tracked distinctly so
+    /// the parser can flag the function symbol; the reachability
+    /// analysis treats a call to a `_Noreturn` function as not
+    /// reaching its continuation, which suppresses the
+    /// fall-off-the-end diagnostic on a caller whose last statement
+    /// is such a call.
+    Noreturn,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is

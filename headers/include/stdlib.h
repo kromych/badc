@@ -183,8 +183,11 @@ double strtof(char *s, char **endp);
 long double strtold(char *s, char **endp);
 #endif
 int abs(int x);
-int abort();
-int exit(int status);
+// C99 7.20.4: abort / exit / _Exit do not return to the caller.
+// `_Noreturn` lets the reachability analysis treat a call as not
+// reaching its continuation.
+_Noreturn int abort();
+_Noreturn int exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 int setenv(char *name, char *value, int overwrite);

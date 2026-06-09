@@ -536,6 +536,12 @@ pub struct Compiler {
     /// declarator only.
     pending_is_inline: bool,
 
+    /// True when the most recent decl-spec parse consumed a
+    /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
+    /// commit time onto `Symbol::is_noreturn` and reset after, so it
+    /// scopes to the immediately following declarator only.
+    pending_noreturn: bool,
+
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
     /// entry.
@@ -1083,6 +1089,7 @@ impl Compiler {
             max_loc_offs: 0,
             uses_alloca_in_current_fn: false,
             pending_is_inline: false,
+            pending_noreturn: false,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

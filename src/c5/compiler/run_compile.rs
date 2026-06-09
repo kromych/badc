@@ -75,6 +75,9 @@ impl Compiler {
             let mut static_seen = false;
             let mut extern_seen = false;
             let mut m = decl_base::IntModifiers::default();
+            // `_Noreturn` scopes to this declaration; clear the carrier
+            // so it cannot leak onto the next one.
+            self.pending_noreturn = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -94,6 +97,9 @@ impl Compiler {
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
+                    }
+                    if self.lex.tk == Token::Noreturn {
+                        self.pending_noreturn = true;
                     }
                     self.next()?;
                 } else {
@@ -519,6 +525,18 @@ impl Compiler {
                     // both prototypes and bodied definitions.
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
+                    // C11 6.7.4: `_Noreturn` on any declaration of the
+                    // function marks the symbol so the reachability
+                    // analysis treats a call to it as not reaching its
+                    // continuation. The standard non-returning library
+                    // functions carry `_Noreturn` in the bundled
+                    // headers, so a name reused without that declaration
+                    // is not flagged. The flag is sticky -- a later
+                    // plain redeclaration of an already-`_Noreturn`
+                    // function keeps it.
+                    if self.pending_noreturn {
+                        self.symbols[id_idx].is_noreturn = true;
+                    }
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
                     // accumulator before the trailing return, and so a
@@ -901,6 +919,10 @@ impl Compiler {
                         0
                     };
 
+                    // C99 6.9.1p12: a value-returning function must not
+                    // reach its closing brace without a `return value;`.
+                    // Run before `ast_finish_function` moves the body AST.
+                    self.check_non_void_fall_off()?;
                     self.ast_finish_function(
                         ent_pc,
                         n_params,

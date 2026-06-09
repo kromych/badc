@@ -202,7 +202,7 @@ int execvp(char *file, char **argv);
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.
-int _exit(int status);
+_Noreturn int _exit(int status);
 int fchmod(int fd, int mode);
 int fchown(int fd, int uid, int gid);
 int utimes(char *path, char *times);

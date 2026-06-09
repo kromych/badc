@@ -20,6 +20,14 @@ pub(crate) struct Symbol {
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
 
+    /// True for a function declared `_Noreturn` / `noreturn` (C11
+    /// 6.7.4) or one of the built-in non-returning library functions
+    /// (`exit`, `abort`, ...). The reachability analysis treats a call
+    /// to such a function as not reaching its continuation, so a
+    /// caller whose last statement is the call does not fall off its
+    /// end.
+    pub is_noreturn: bool,
+
     /// Set on a `Token::Glo` symbol declared with the
     /// `_Thread_local` storage class (C11). Drives the TLS
     /// lowering paths in the per-target writers: ELF .tdata /

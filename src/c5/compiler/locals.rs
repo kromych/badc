@@ -36,6 +36,7 @@ use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, stru
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
+        let mut is_extern = false;
         let mut saw_specifier = false;
         while self.lex.tk == Token::Extern
             || self.lex.tk == Token::Static
@@ -44,6 +45,9 @@ impl Compiler {
         {
             if self.lex.tk == Token::Static {
                 is_static = true;
+            }
+            if self.lex.tk == Token::Extern {
+                is_extern = true;
             }
             saw_specifier = true;
             self.next()?;
@@ -132,6 +136,26 @@ impl Compiler {
                 array_size = typedef_dim;
             }
             self.ty = ty;
+            // C99 6.2.2p4: a block-scope `extern` declaration of an
+            // object has external linkage and refers to the file-scope
+            // object of the same name; it allocates no local storage and
+            // does not shadow the outer binding. Leave an existing
+            // file-scope (Glo) or function binding intact; otherwise
+            // record an undefined external reference the linker resolves.
+            if is_extern {
+                if self.symbols[loc_idx].class != Token::Glo as i64
+                    && self.symbols[loc_idx].class != Token::Fun as i64
+                {
+                    self.symbols[loc_idx].class = Token::Glo as i64;
+                    self.symbols[loc_idx].type_ = ty;
+                    self.symbols[loc_idx].is_extern_decl = true;
+                }
+                if self.lex.tk == ',' {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(self.compile_err("duplicate local definition"));
             }

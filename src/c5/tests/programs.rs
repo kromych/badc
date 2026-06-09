@@ -181,6 +181,13 @@ fn empty_macro_arg_and_string_rows() {
 }
 
 #[test]
+fn block_scope_extern() {
+    // A block-scope `extern` declaration refers to the file-scope
+    // object, allocating no local and not shadowing it.
+    assert_eq!(run_fixture("block_scope_extern.c"), 0);
+}
+
+#[test]
 fn inline_arg_count_mismatch() {
     // A call passing fewer arguments than the callee has parameters is
     // not inlined, so the optimized IR stays well-formed.

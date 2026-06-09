@@ -485,6 +485,15 @@ fn vsnprintf_underscore_alias_resolves_to_libc() {
 }
 
 #[test]
+fn float_argument_to_variadic_is_promoted_to_double() {
+    // C99 6.5.2.2p6-7: a `float` passed to a variadic function is
+    // promoted to `double`. The fixture self-checks `%g` of a float
+    // variable, a float cast, and a float mixed with other arguments
+    // via snprintf.
+    assert_eq!(run_fixture("float_variadic_promotion.c"), 0);
+}
+
+#[test]
 fn pointer_to_array_arithmetic_scales_by_array_size() {
     // C99 6.5.6p8: arithmetic on a pointer-to-array `T (*p)[N]` steps
     // by `sizeof(T[N])`, not `sizeof(T)`. The fixture self-checks

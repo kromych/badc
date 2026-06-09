@@ -1,0 +1,206 @@
+
+float_variadic_promotion.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	ldr	x0, [sp]
+               	add	x1, sp, #0x8
+               	bl	<addr>
+               	adrp	x16, <page>
+               	ldr	x16, [x16, #0xc0]
+               	blr	x16
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	fsub	d1, d0, d1
+               	mov	x0, #0x0                // =0
+               	scvtf	d0, x0
+               	fcmp	d1, d0
+               	cset	x0, mi
+               	cbz	x0, <addr>
+               	fneg	d1, d1
+               	b	<addr>
+               	mov	x0, #0xa9fc             // =43516
+               	movk	x0, #0xd2f1, lsl #16
+               	movk	x0, #0x624d, lsl #32
+               	movk	x0, #0x3f50, lsl #48
+               	fmov	d17, x0
+               	fcmp	d1, d17
+               	cset	x0, mi
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	b	<addr>
+               	sub	sp, sp, #0xc0
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
+               	str	x2, [sp, #0x10]
+               	str	x3, [sp, #0x18]
+               	str	x4, [sp, #0x20]
+               	str	x5, [sp, #0x28]
+               	str	x6, [sp, #0x30]
+               	str	x7, [sp, #0x38]
+               	str	d0, [sp, #0x40]
+               	str	d1, [sp, #0x50]
+               	str	d2, [sp, #0x60]
+               	str	d3, [sp, #0x70]
+               	str	d4, [sp, #0x80]
+               	str	d5, [sp, #0x90]
+               	str	d6, [sp, #0xa0]
+               	str	d7, [sp, #0xb0]
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x40
+               	str	x19, [sp]
+               	sub	x0, x29, #0x20
+               	add	x1, x29, #0x10
+               	mov	x16, x0
+               	add	x17, x29, #0xd0
+               	str	x17, [x16]
+               	add	x17, x29, #0x50
+               	str	x17, [x16, #0x8]
+               	add	x17, x29, #0xd0
+               	str	x17, [x16, #0x10]
+               	mov	x17, #0xffc8            // =65480
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	str	w17, [x16, #0x18]
+               	mov	x17, #0xff80            // =65408
+               	movk	x17, #0xffff, lsl #16
+               	movk	x17, #0xffff, lsl #32
+               	movk	x17, #0xffff, lsl #48
+               	str	w17, [x16, #0x1c]
+               	mov	x1, #0x0                // =0
+               	scvtf	d0, x1
+               	b	<addr>
+               	sxtw	x0, w1
+               	ldursw	x2, [x29, #0x10]
+               	cmp	x0, x2
+               	b.ge	<addr>
+               	b	<addr>
+               	sxtw	x0, w1
+               	add	x1, x0, #0x1
+               	b	<addr>
+               	sub	x0, x29, #0x20
+               	mov	x17, x0
+               	str	x9, [sp, #-0x10]!
+               	ldrsw	x16, [x17, #0x1c]
+               	cmp	x16, #0x0
+               	b.ge	<addr>
+               	ldr	x9, [x17, #0x10]
+               	add	x9, x9, x16
+               	add	x16, x16, #0x10
+               	str	w16, [x17, #0x1c]
+               	mov	x16, x9
+               	b	<addr>
+               	ldr	x16, [x17]
+               	add	x9, x16, #0x8
+               	str	x9, [x17]
+               	ldr	x9, [sp], #0x10
+               	mov	x0, x16
+               	ldr	d1, [x0]
+               	fadd	d0, d0, d1
+               	b	<addr>
+               	sub	x0, x29, #0x20
+               	ldr	x19, [sp]
+               	add	sp, sp, #0x40
+               	ldp	x29, x30, [sp], #0x10
+               	add	sp, sp, #0xc0
+               	ret
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x50
+               	str	x20, [sp]
+               	mov	x20, #0xe148            // =57672
+               	movk	x20, #0x147a, lsl #16
+               	movk	x20, #0x47ae, lsl #32
+               	movk	x20, #0x4051, lsl #48
+               	fmov	d16, x20
+               	fcvt	s0, d16
+               	sub	x0, x29, #0x8
+               	str	s0, [x0]
+               	mov	x0, #0x3ff8000000000000 // =4609434218613702656
+               	fmov	d16, x0
+               	fcvt	s0, d16
+               	sub	x0, x29, #0x10
+               	str	s0, [x0]
+               	mov	x0, #0x1                // =1
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	fcvt	d0, s0
+               	bl	<addr>
+               	fmov	d1, x20
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x1                // =1
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x1                // =1
+               	mov	x20, #0x4004000000000000 // =4612811918334230528
+               	fmov	d16, x20
+               	fcvt	s0, d16
+               	fcvt	d0, s0
+               	bl	<addr>
+               	fmov	d1, x20
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x2                // =2
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x2                // =2
+               	sub	x16, x29, #0x8
+               	ldr	s0, [x16]
+               	fcvt	d0, s0
+               	sub	x16, x29, #0x10
+               	ldr	s1, [x16]
+               	fcvt	d1, s1
+               	bl	<addr>
+               	mov	x0, #0xe148             // =57672
+               	movk	x0, #0x147a, lsl #16
+               	movk	x0, #0xa7ae, lsl #32
+               	movk	x0, #0x4051, lsl #48
+               	fmov	d1, x0
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x3                // =3
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x3                // =3
+               	mov	x1, #0xa                // =10
+               	scvtf	d0, x1
+               	sub	x16, x29, #0x8
+               	ldr	s1, [x16]
+               	fcvt	d1, s1
+               	sub	x16, x29, #0x10
+               	ldr	s2, [x16]
+               	fcvt	d2, s2
+               	bl	<addr>
+               	mov	x0, #0xe148             // =57672
+               	movk	x0, #0x147a, lsl #16
+               	movk	x0, #0x27ae, lsl #32
+               	movk	x0, #0x4054, lsl #48
+               	fmov	d1, x0
+               	bl	<addr>
+               	cmp	x0, #0x0
+               	b.ne	<addr>
+               	mov	x0, #0x4                // =4
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x50
+               	ldp	x29, x30, [sp], #0x10
+               	ret

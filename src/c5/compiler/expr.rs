@@ -39,8 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
-    is_struct_ty, is_unsigned_ty, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_float_ty, is_floating_scalar,
+    is_pointer_ty, is_struct_ty, is_unsigned_ty, struct_id_of, struct_ptr_depth,
+    usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -630,16 +631,30 @@ impl Compiler {
                             // lands in the GPR-arg register and libm
                             // reads garbage out of the FP register.
                             self.convert_assign_rhs(want);
-                        } else if !expected_params.is_empty() && !is_variadic {
-                            self.warn_at(
-                                arg_line,
-                                format!(
-                                    "too many arguments to `{}` (expected {}, got at least {})",
-                                    fn_name_for_warn,
-                                    expected_params.len(),
-                                    nargs + 1,
-                                ),
-                            );
+                        } else {
+                            if !expected_params.is_empty() && !is_variadic {
+                                self.warn_at(
+                                    arg_line,
+                                    format!(
+                                        "too many arguments to `{}` (expected {}, got at least {})",
+                                        fn_name_for_warn,
+                                        expected_params.len(),
+                                        nargs + 1,
+                                    ),
+                                );
+                            }
+                            // C99 6.5.2.2p6-7: arguments beyond the
+                            // declared parameters (the variadic tail, or
+                            // any argument to a function with no
+                            // prototype) undergo the default argument
+                            // promotions. A `float` is promoted to
+                            // `double` so it reaches the FP-arg register
+                            // as the 8-byte value the callee reads;
+                            // `char` / `short` already ride the int
+                            // accumulator.
+                            if is_float_ty(self.ty) {
+                                self.convert_assign_rhs(Ty::Double as i64);
+                            }
                         }
 
                         // Refuse passing a struct by value to a

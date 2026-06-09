@@ -179,6 +179,28 @@ same declarator in cast position -- `(int(*)(int))p` -- is
 accepted and calls through correctly, as does its use in
 typedef / parameter / struct-field declarators.
 
+### Function-pointer return through a function-pointer variable, severity 5
+
+A function whose return type is itself a function pointer is
+called correctly when the callee is a named function:
+`int (*f(void))(int)` then `(*f())(3)`, `f()(3)`, or
+`int (*q)(int) = f();  q(3);` all work. The unhandled shape is
+calling such a function *through a function-pointer variable*:
+
+```c
+int (*(*p)(int))(int) = f;   /* p: ptr to fn returning fn-ptr */
+(*p)(0)(3);                  /* indirect call returns fn-ptr   */
+```
+
+c5 records a function pointer's indirection as a single scalar
+(`Symbol::fn_ptr_indirection`) on the flat type, so the variable
+`p` and the type `int (**)(int)` (pointer-to-pointer-to-int-fn)
+collapse to the same encoding. The indirect-call path derives the
+result type by removing one pointer level, which drops the return
+type's own function-pointer level and narrows the returned 64-bit
+pointer. TODO: track the return type's pointer/function shape
+distinctly from the variable's own indirection.
+
 ## Rejected modern features (rare in C99 source)
 
 `register` / `auto` are accepted as no-ops. `inline` /

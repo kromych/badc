@@ -17,5 +17,9 @@ int main(void) {
     // Call the returned function pointer without an explicit deref.
     if (pick(1)(10, 6) != 4) return 2;
     if (pick(0) != 0) return 3;
+    // Store the returned function pointer in an explicit fn-pointer
+    // variable, then call through it.
+    int (*q)(int, int) = pick(1);
+    if (q(9, 2) != 7) return 4;
     return 0;
 }

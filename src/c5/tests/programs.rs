@@ -531,6 +531,17 @@ fn typedef_at_function_body_top_level() {
 }
 
 #[test]
+fn const_expr_cast_narrows_to_target_width() {
+    // C99 6.3.1.3: a cast to an integer type in a constant expression
+    // narrows to the target width and re-interprets by signedness, so
+    // `(int)UINT_MAX` folds to -1. The fixture self-checks signed
+    // sign-extension, unsigned truncation, `_Bool`, an 8-byte target,
+    // and runtime/compile-time agreement, all via array-dimension and
+    // enum constant expressions.
+    assert_eq!(run_fixture("const_expr_cast_narrowing.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

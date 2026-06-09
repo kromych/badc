@@ -66,6 +66,31 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
+/// Apply a C99 6.3.1.3 integer conversion to a constant value:
+/// narrow to `bytes` width and re-interpret by the target's
+/// signedness. `_Bool` maps any nonzero value to 1 (6.3.1.2). An
+/// 8-byte target keeps the full `i64` (pointers and `long long`
+/// included). Used by the constant-expression evaluator so a cast
+/// like `(int)UINT_MAX` folds to `-1` at parse time rather than
+/// retaining the un-narrowed operand.
+pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i64) -> i64 {
+    if is_bool {
+        return (v != 0) as i64;
+    }
+    if bytes >= 8 {
+        return v;
+    }
+    let bits = (bytes * 8) as u32;
+    let mask: i64 = ((1u64 << bits) - 1) as i64;
+    let truncated = v & mask;
+    if unsigned {
+        truncated
+    } else {
+        let sign_bit: i64 = 1i64 << (bits - 1);
+        (truncated ^ sign_bit).wrapping_sub(sign_bit)
+    }
+}
+
 /// Drop the unsigned bit. Use to recover the bare band-encoded type
 /// before consulting a helper that classifies by band. Most of the
 /// helpers in this module call this at their entry; outside callers

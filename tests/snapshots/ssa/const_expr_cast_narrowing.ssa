@@ -1,0 +1,43 @@
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=main
+fn ent_pc=0 n_params=0 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v1)
+  block 1  start_pc=0
+    v2   Imm(1)                                           -> x0
+    terminator Return(v2)   (exit_acc=v2)
+  block 2  start_pc=0
+    v3   Imm(0)                                           -> x0
+    terminator Jmp(b4)   (exit_acc=v3)
+  block 3  start_pc=0
+    v4   Imm(2)                                           -> x0
+    terminator Return(v4)   (exit_acc=v4)
+  block 4  start_pc=0
+    v5   Imm(4294967295)                                  -> x0
+    v6   Imm(0)                                           -> x1
+    v7   LoadLocal { off=-1, kind=U32 }                   -> x1
+    v8   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x0
+    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x0
+    v10  BinopI { op=ne, lhs=v9, rhs_imm=-1 }             -> x0
+    terminator Bz { cond=v10, target=b6, fall=b5 }   (exit_acc=v10)
+  block 5  start_pc=0
+    v11  Imm(3)                                           -> x0
+    terminator Return(v11)   (exit_acc=v11)
+  block 6  start_pc=0
+    v12  Imm(0)                                           -> x0
+    terminator Return(v12)   (exit_acc=v12)
+; --- SSA dump (ok=true) ent_pc=0 ---
+; name=__c5_exit
+fn ent_pc=0 n_params=1 variadic=false locals=1
+  spill_count=0 gpr_used=[] fp_used=[]
+  block 0  start_pc=0
+    v0   AllocaInit(0)                                    -> -
+    v1   ParamRef(0, kind=I32)                            -> x7
+    v2   Imm(0)                                           -> x0
+    v3   LoadLocal { off=2, kind=I32 }                    -> x0
+    v4   CallExt { binding_idx=0, args=[v1], fp_arg_mask=0x0 } -> x0
+    v5   Imm(0)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)

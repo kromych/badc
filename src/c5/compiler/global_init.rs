@@ -75,6 +75,17 @@ impl Compiler {
                 // skip handles abstract function-pointer declarators
                 // (`(SYSCALL)`, `(int (*)(int))`, etc.) without us
                 // having to model the declarator grammar twice.
+                //
+                // TODO: discarding the cast type drops the C99 6.3.1.3
+                // width narrowing for a narrowing integer cast that is a
+                // sub-operand of a file-scope scalar initializer (e.g.
+                // `int a = ((int)UINT_MAX == -1);` folds the comparison
+                // on the un-narrowed operand). The final store narrows to
+                // the variable's type, so a top-level cast is unaffected;
+                // only mid-expression casts diverge. The fix is to route
+                // scalar global initializers through the const_expr.rs
+                // evaluator (which applies the narrowing) rather than this
+                // local mini-grammar.
                 let mut depth: i64 = 1;
                 while depth > 0 && self.lex.tk != 0 {
                     if self.lex.tk == '(' {

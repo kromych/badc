@@ -32,7 +32,10 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_floating_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{
+    is_floating_ty, is_struct_ty, is_unsigned_ty, narrow_const_int, strip_unsigned, struct_id_of,
+    struct_ptr_depth,
+};
 
 /// Compile-time arithmetic value of a constant expression. Integer
 /// literals, identifier-bound integer constants, sizeof, and the
@@ -632,7 +635,19 @@ impl Compiler {
                 return Ok(if is_floating_ty(target_ty) {
                     ConstVal::Float(v.as_float())
                 } else {
-                    ConstVal::Int(v.as_int())
+                    // C99 6.3.1.3: a cast to an integer type narrows
+                    // the operand to the target width and re-interprets
+                    // it by the target's signedness, so `(int)UINT_MAX`
+                    // folds to -1 rather than 0xFFFFFFFF. Pointer
+                    // targets are 8 bytes and keep the full value.
+                    let bytes = self.size_of_type(target_ty);
+                    let is_bool = strip_unsigned(target_ty) == Ty::Bool as i64;
+                    ConstVal::Int(narrow_const_int(
+                        bytes,
+                        is_unsigned_ty(target_ty),
+                        is_bool,
+                        v.as_int(),
+                    ))
                 });
             }
             let v = self.parse_const_expr_cond_val()?;

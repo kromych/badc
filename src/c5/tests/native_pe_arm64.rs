@@ -503,6 +503,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("float_global_init.c", 0),
     ("func_name_array.c", 0),
     ("unary_plus_init_and_param_shadow.c", 0),
+    ("fn_ptr_multi_deref.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

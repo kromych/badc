@@ -863,6 +863,11 @@ impl Compiler {
                 // `load_ident_rvalue` for `Token::Fun` emits the
                 // matching `imm_code(val)`.
                 self.ast_emit_ident(id_idx as u32, self.ty);
+                // The value is already a function pointer; a following
+                // unary `*` is the C99 6.3.2.1p4 decay no-op at every
+                // level (`(****g)(...)` calls `g`). Depth 0 marks "at
+                // the fn-ptr level" for the `*` handler.
+                self.pending.fn_ptr_chain_depth = 0;
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
                 // Bare libc reference -- `fp = readlink;`. There
                 // is no compile-time GOT/IAT address to fold in,
@@ -891,6 +896,9 @@ impl Compiler {
                 // (static-init, assign, call-arg) see the address
                 // producer on `ast_acc`.
                 self.ast_emit_ident(tr_idx as u32, self.ty);
+                // Same fn-pointer decay as the `Token::Fun` branch: a
+                // following unary `*` is a no-op.
+                self.pending.fn_ptr_chain_depth = 0;
             } else {
                 let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
                 if identifier_is_local {

@@ -831,11 +831,16 @@ impl Preprocessor {
                             let name = trimmed
                                 .strip_prefix('<')
                                 .and_then(|s| s.strip_suffix('>'))
+                                .map(|n| (n, false))
                                 .or_else(|| {
-                                    trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                                    trimmed
+                                        .strip_prefix('"')
+                                        .and_then(|s| s.strip_suffix('"'))
+                                        .map(|n| (n, true))
                                 });
-                            if let Some(n) = name {
-                                let included = self.process_include(n.trim(), line_no, filename)?;
+                            if let Some((n, quoted)) = name {
+                                let included =
+                                    self.process_include(n.trim(), line_no, filename, quoted)?;
                                 out.push_str(&included);
                                 out.push_str(&format_line_marker(source_line + 1, &current_file));
                                 source_line += 1;
@@ -852,9 +857,9 @@ impl Preprocessor {
                             ));
                         }
                     }
-                    Directive::Include(name) => {
+                    Directive::Include { name, quoted } => {
                         if active {
-                            let included = self.process_include(name, line_no, filename)?;
+                            let included = self.process_include(name, line_no, filename, quoted)?;
                             out.push_str(&included);
                             // Closing marker uses `source_line + 1`
                             // (NOT `line_no + 1`) and `current_file`
@@ -2140,15 +2145,8 @@ impl Preprocessor {
         name: &str,
         line_no: usize,
         filename: &str,
+        quoted: bool,
     ) -> Result<String, C5Error> {
-        if self.pragma_once_files.contains(name) {
-            if self.show_includes {
-                let depth = self.include_stack.len() + 1;
-                self.include_trace
-                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
-            }
-            return Ok(String::new());
-        }
         // Resolution order:
         //   1. Filesystem search paths added via `add_search_path`
         //      (= the CLI's `-I` flag plus any built-in defaults).
@@ -2163,11 +2161,25 @@ impl Preprocessor {
         //      isn't a hard failure; the user sees the warning
         //      and can decide whether the missing surface
         //      matters.
+        // A quoted include (`#include "header"`) searches the
+        // directory of the including file before the system search
+        // paths (C99 6.10.2p2); an angle include skips that step.
+        // `filename` carries the including file's path (the top-level
+        // source path, or the resolved path threaded through a nested
+        // include), so its parent directory is the search base.
+        let source_dir = if quoted {
+            include_parent_dir(filename)
+        } else {
+            None
+        };
         // The result is owned `String` because filesystem-loaded
         // bodies don't have static lifetime; the embedded path
-        // copies its `&'static str` into one to share the type.
-        let resolved: Option<String> = self.find_include(name);
-        let Some(content) = resolved else {
+        // copies its `&'static str` into one to share the type. The
+        // second element is the path the body resolved to, threaded
+        // as the new file's name so a nested quoted include resolves
+        // against the right directory.
+        let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
+        let Some((content, resolved_path)) = resolved else {
             // Missing header. Push a warning into the same list
             // the parser uses; the caller drains it through to
             // `Program::warnings` after the compile finishes.
@@ -2182,6 +2194,18 @@ impl Preprocessor {
             }
             return Ok(String::new());
         };
+        // `#pragma once` dedups by the resolved path (file identity),
+        // not the include spelling, so two different spellings that
+        // name the same file are still included once. The handler in
+        // `process_named` records the same `resolved_path`.
+        if self.pragma_once_files.contains(&resolved_path) {
+            if self.show_includes {
+                let depth = self.include_stack.len() + 1;
+                self.include_trace
+                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
+            }
+            return Ok(String::new());
+        }
         if self.show_includes {
             let depth = self.include_stack.len() + 1;
             self.include_trace
@@ -2196,28 +2220,47 @@ impl Preprocessor {
             )));
         }
         self.include_stack.push(name.to_string());
-        let result = self.process_named(&content, name);
+        let result = self.process_named(&content, &resolved_path);
         self.include_stack.pop();
         result
     }
 
-    /// Look `name` up in the search-path chain and the embedded
-    /// registry. See `process_include` for the resolution order.
-    fn find_include(&self, name: &str) -> Option<String> {
+    /// Look `name` up and return its body plus the path it resolved
+    /// to. `source_dir` is `Some` only for a quoted include; when set
+    /// it is searched first (C99 6.10.2p2). Then the configured search
+    /// paths (`-I` plus built-in defaults), then the embedded
+    /// registry. The resolved path is the filesystem candidate that
+    /// matched, or `name` for an embedded header.
+    fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<(String, String)> {
         #[cfg(feature = "std")]
-        for path in &self.search_paths {
-            let candidate = if path.is_empty() {
-                name.to_string()
-            } else if path.ends_with('/') || path.ends_with('\\') {
-                format!("{path}{name}")
-            } else {
-                format!("{path}/{name}")
+        {
+            let join = |dir: &str| -> String {
+                if dir.is_empty() {
+                    name.to_string()
+                } else if dir.ends_with('/') || dir.ends_with('\\') {
+                    format!("{dir}{name}")
+                } else {
+                    format!("{dir}/{name}")
+                }
             };
-            if let Ok(body) = std::fs::read_to_string(&candidate) {
-                return Some(body);
+            // A name with its own directory component or an absolute
+            // path is taken as-is; otherwise probe the source
+            // directory (quoted only) then the search paths.
+            if let Some(dir) = source_dir {
+                let candidate = join(dir);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
+            }
+            for path in &self.search_paths {
+                let candidate = join(path);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
             }
         }
-        embedded_header(name).map(|s| s.to_string())
+        let _ = source_dir;
+        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
 
     /// `#pragma binding(dylib::local_name, "real_symbol")` -- record
@@ -2593,7 +2636,14 @@ enum Directive<'a> {
     Elif(&'a str),
     Endif,
     Pragma(&'a str),
-    Include(&'a str),
+    /// `#include "header"` (`quoted = true`) or `#include <header>`
+    /// (`quoted = false`). A quoted include searches the directory of
+    /// the including file before the system search paths (C99
+    /// 6.10.2p2-3); an angle include searches only the system paths.
+    Include {
+        name: &'a str,
+        quoted: bool,
+    },
     /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
     /// is optional -- bare `#line N` keeps the current file and
     /// just retargets the line counter.
@@ -2803,13 +2853,20 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
         // Strip the `<...>` or `"..."` wrapping when the operand
-        // is already in one of the two literal forms.
-        if let Some(name) = trimmed
-            .strip_prefix('<')
-            .and_then(|s| s.strip_suffix('>'))
-            .or_else(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
-        {
-            return Directive::Include(name.trim());
+        // is already in one of the two literal forms, recording which
+        // form so the handler can apply the quoted-include source-dir
+        // search.
+        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return Directive::Include {
+                name: name.trim(),
+                quoted: false,
+            };
+        }
+        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            return Directive::Include {
+                name: name.trim(),
+                quoted: true,
+            };
         }
         // C99 6.10.2p4: `#include <pp-tokens>` -- when the operand
         // isn't already a `<...>` or `"..."` literal, the
@@ -2850,6 +2907,16 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         }
     }
     Directive::Other
+}
+
+/// Parent directory of an include path, or `None` when the path has
+/// no directory component (a bare name, the embedded-header label, or
+/// the synthetic `<force-include>` / top-level labels). Handles both
+/// `/` and `\` separators. Used to resolve a quoted include against
+/// the including file's directory.
+fn include_parent_dir(filename: &str) -> Option<alloc::string::String> {
+    let cut = filename.rfind(['/', '\\'])?;
+    Some(filename[..cut].to_string())
 }
 
 /// Split off the leading identifier in `s`, returning `(ident,

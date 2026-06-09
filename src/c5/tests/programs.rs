@@ -520,6 +520,17 @@ fn pointer_to_array_arithmetic_scales_by_array_size() {
 }
 
 #[test]
+fn typedef_at_function_body_top_level() {
+    // C99 6.7.7 + 6.2.1: a `typedef` is a declaration valid at the
+    // function-body top level (before or after a statement), with block
+    // scope. The fixture self-checks a body-top `typedef enum`, a
+    // typedef after a statement, and that a function-scope typedef does
+    // not leak to file scope nor shadow a same-named file-scope object
+    // outside the function.
+    assert_eq!(run_fixture("typedef_in_function_body.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

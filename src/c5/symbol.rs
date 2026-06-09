@@ -183,6 +183,13 @@ pub(crate) struct Symbol {
     /// symbol's class is no longer `Loc`. Cleared on restore.
     pub is_scope_static: bool,
 
+    /// True for a `typedef` declared at the function-body top level
+    /// (C99 6.7.7, 6.2.1: block scope). The name binds to `Typedef`
+    /// class for the function body but must not leak to file scope,
+    /// so the function-exit cleanup restores the shadowed outer
+    /// binding even though the class is not `Loc`. Cleared on restore.
+    pub is_scope_typedef: bool,
+
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an
     /// address-of, or a decay. Set by the expression parser's

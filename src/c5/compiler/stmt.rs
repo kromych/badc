@@ -213,14 +213,18 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse a `typedef` at block scope. Same shape as the file-
-    /// scope handler in run_compile, just routed here so block-
-    /// local typedefs (e.g. `typedef void(*LOGFUNC_t)(...)` inside
-    /// a switch case) bind without bouncing through the
-    /// declaration parser.
-    fn parse_block_typedef(
+    /// Parse a `typedef` declaration at function/block scope (C99
+    /// 6.7.7, 6.2.1), routed here so block-local typedefs (e.g.
+    /// `typedef void(*LOGFUNC_t)(...)` inside a switch case) bind
+    /// without bouncing through the file-scope declaration parser.
+    /// `block_symbols == Some` records the prior binding for an
+    /// enclosing `parse_block_stmt` to restore on block exit;
+    /// `block_symbols == None` (function-body top level) shadows the
+    /// prior binding and marks `is_scope_typedef` so the function-exit
+    /// cleanup restores it.
+    pub(super) fn parse_block_typedef(
         &mut self,
-        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+        mut block_symbols: Option<&mut Vec<(usize, i64, i64, i64)>>,
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
@@ -248,12 +252,17 @@ impl Compiler {
             } else {
                 (ty, fn_ptr_indirection, None)
             };
-            block_symbols.push((
-                id_idx,
-                self.symbols[id_idx].class,
-                self.symbols[id_idx].type_,
-                self.symbols[id_idx].val,
-            ));
+            if let Some(bs) = block_symbols.as_deref_mut() {
+                bs.push((
+                    id_idx,
+                    self.symbols[id_idx].class,
+                    self.symbols[id_idx].type_,
+                    self.symbols[id_idx].val,
+                ));
+            } else {
+                self.shadow_symbol(id_idx);
+                self.symbols[id_idx].is_scope_typedef = true;
+            }
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
@@ -455,7 +464,7 @@ impl Compiler {
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk == Token::Typedef {
-                self.parse_block_typedef(&mut block_symbols)?;
+                self.parse_block_typedef(Some(&mut block_symbols))?;
             } else if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.

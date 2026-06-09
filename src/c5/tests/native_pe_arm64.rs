@@ -499,6 +499,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
+    ("line_directive.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

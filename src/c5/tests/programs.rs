@@ -106,6 +106,13 @@ fn macro_paste_stringize_unexpanded() {
 }
 
 #[test]
+fn line_directive() {
+    // `#line` retargets `__LINE__`, expands its operand, and reaches
+    // `#if` conditions.
+    assert_eq!(run_fixture("line_directive.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

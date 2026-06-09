@@ -706,7 +706,7 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::If(expr) => {
-                        let taken = active && self.eval_condition(expr, line_no)?;
+                        let taken = active && self.eval_condition(expr, source_line)?;
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -755,7 +755,7 @@ impl Preprocessor {
                             .unwrap_or(false);
                         let eligible = parent_active && !any_taken_so_far;
                         let cond = if eligible {
-                            self.eval_condition(expr, line_no)?
+                            self.eval_condition(expr, source_line)?
                         } else {
                             false
                         };
@@ -907,6 +907,41 @@ impl Preprocessor {
                             continue;
                         }
                     }
+                    Directive::LineMacro(args) => {
+                        if active {
+                            // C99 6.10.4: macro-expand the operand, then
+                            // reparse as `#line N ["file"]`. A result
+                            // that still doesn't lead with a digit
+                            // sequence is malformed; warn and skip.
+                            let expanded = self.substitute(args, filename, line_no);
+                            let trimmed = expanded.trim();
+                            let mut split = trimmed.splitn(2, char::is_whitespace);
+                            if let Some(num) = split.next()
+                                && let Ok(line) = num.parse::<usize>()
+                            {
+                                if let Some(f) = split.next().and_then(|tail| {
+                                    let t = tail.trim();
+                                    t.strip_prefix('"')
+                                        .and_then(|s| s.strip_suffix('"'))
+                                        .map(|s| s.to_string())
+                                }) {
+                                    current_file = f;
+                                }
+                                out.push_str(&format_line_marker(line, &current_file));
+                                source_line = line;
+                                idx_iter += 1;
+                                continue;
+                            }
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!(
+                                    "#line `{args}` expands to `{trimmed}`, \
+                                     which is not a line number"
+                                ),
+                            ));
+                        }
+                    }
                     Directive::Error(message) => {
                         // C99 sec 6.10.5: `#error` produces a compile-time
                         // diagnostic. The text after the directive name,
@@ -987,7 +1022,10 @@ impl Preprocessor {
                     buffer.push_str(lines[idx + consumed]);
                     consumed += 1;
                 }
-                out.push_str(&self.substitute(&buffer, filename, line_no));
+                // `__LINE__` reflects the presumed line (`source_line`),
+                // which a `#line` directive can retarget (C99 6.10.4);
+                // absent any `#line`, it equals the physical line.
+                out.push_str(&self.substitute(&buffer, filename, source_line));
                 out.push('\n');
                 // Preserve source line numbering by emitting a blank
                 // line for each extra source line we joined into the
@@ -1412,7 +1450,7 @@ impl Preprocessor {
     /// argument and lose the original name. Returns a fully
     /// macro-substituted string suitable for the `#if` expression
     /// parser.
-    fn expand_for_if(&self, expr: &str) -> String {
+    fn expand_for_if(&self, expr: &str, line_no: usize) -> String {
         let mut out = String::with_capacity(expr.len());
         let bytes = expr.as_bytes();
         let mut i = 0;
@@ -1488,7 +1526,7 @@ impl Preprocessor {
         // and line comments from the result -- macro bodies can
         // carry inline `/* ... */` comments that survive expansion
         // and would otherwise confuse the expression tokenizer.
-        let substituted = self.substitute(&out, "<#if>", 0);
+        let substituted = self.substitute(&out, "<#if>", line_no);
         strip_comments(&substituted)
     }
 
@@ -1507,7 +1545,7 @@ impl Preprocessor {
         // parser sees them. `defined(X)` is protected by a
         // pre-pass that converts it to a literal 0/1 since
         // substitute would otherwise expand X away.
-        let prepared = self.expand_for_if(expr);
+        let prepared = self.expand_for_if(expr, line_no);
         let mut p = IfExprParser::new(&prepared, self);
         let v = p.parse_ternary()?;
         p.skip_ws();
@@ -2503,6 +2541,10 @@ enum Directive<'a> {
     /// text is carried verbatim; substitution happens in the
     /// handler.
     IncludeMacro(&'a str),
+    /// `#line pp-tokens` whose tokens are not already a literal line
+    /// number (C99 6.10.4): the operand is macro-expanded and reparsed
+    /// as `#line N ["file"]` in the handler.
+    LineMacro(&'a str),
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
@@ -2684,6 +2726,11 @@ fn parse_directive(rest: &str) -> Directive<'_> {
                 t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
             });
             return Directive::Line { line, file };
+        }
+        // C99 6.10.4: the operand is not already a digit sequence, so
+        // its tokens are macro-expanded and reparsed in the handler.
+        if !trimmed.is_empty() {
+            return Directive::LineMacro(trimmed);
         }
     }
     if let Some(after) = rest.strip_prefix("include") {

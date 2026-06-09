@@ -20,7 +20,7 @@
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::exit, "exit")
 #elif defined(_WIN32)
-#pragma dylib(libc, "ucrtbase.dll")
+#pragma dylib(libc, "msvcrt.dll")
 #pragma binding(libc::exit, "exit")
 #endif
 

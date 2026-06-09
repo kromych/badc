@@ -1691,13 +1691,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let bv = build_version();
     let uuid_lc = uuid_command(&build.text, &build.data);
     // Shared libraries replace `LC_MAIN` (24 bytes) with
-    // `LC_ID_DYLIB` (carries this image's install name --
-    // hard-coded to `@rpath/c5-output.dylib`; programs that
-    // dlopen this image by absolute path don't depend on the
-    // install name's contents). Same shape as
-    // `LC_LOAD_DYLIB`.
+    // `LC_ID_DYLIB` (carries this image's install name). It is
+    // `@rpath/<name>` so a consumer that links against the image by
+    // name resolves it through its rpath at runtime; a program that
+    // dlopens by absolute path does not depend on its contents.
     let id_dylib_lc = if is_dylib {
-        Some(id_dylib("@rpath/c5-output.dylib"))
+        let install_name = match build.shared_lib_name.as_deref() {
+            Some(name) => alloc::format!("@rpath/{name}"),
+            None => alloc::string::String::from("@rpath/c5-output.dylib"),
+        };
+        Some(id_dylib(&install_name))
     } else {
         None
     };
@@ -2540,6 +2543,7 @@ mod tests {
             code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
+            shared_lib_name: None,
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),

@@ -930,6 +930,28 @@ fn main() {
         } else {
             OutputKind::Executable
         };
+        // A shared library records its own name so a consumer that links
+        // against it by name (PE export-directory Name, Mach-O
+        // LC_ID_DYLIB install name) references the file it loads at
+        // runtime. Use the `-o` basename, or the default output name when
+        // `-o` is absent.
+        let shared_default_path;
+        let shared_lib_name: Option<&str> = if native_output_kind == OutputKind::SharedLibrary {
+            let path: &std::path::Path = match output_path.as_deref() {
+                Some(o) => o,
+                None => {
+                    shared_default_path = default_output_path(
+                        sources.first().map(|s| s.as_str()).unwrap_or("a"),
+                        target,
+                        mode,
+                    );
+                    &shared_default_path
+                }
+            };
+            path.file_name().and_then(|n| n.to_str())
+        } else {
+            None
+        };
         let write_result = badc::write_native_image_from_merged(
             &merged,
             &plt,
@@ -937,6 +959,7 @@ fn main() {
             subsystem_override,
             native_output_kind,
             target,
+            shared_lib_name,
         );
         let bytes = match write_result {
             Ok(b) => b,

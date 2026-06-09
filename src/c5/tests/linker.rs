@@ -200,6 +200,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         None,
         OutputKind::Executable,
         Target::LinuxX64,
+        None,
     )
     .expect("write executable");
     // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
@@ -366,6 +367,7 @@ fn pragma_export_round_trips_into_shared_library() {
         None,
         OutputKind::SharedLibrary,
         Target::LinuxX64,
+        None,
     )
     .expect("write shared library");
     // e_type @ 0x10: ET_DYN (3) for a shared object.
@@ -373,6 +375,54 @@ fn pragma_export_round_trips_into_shared_library() {
         u16::from_le_bytes(so[0x10..0x12].try_into().unwrap()),
         3,
         "shared library must be ET_DYN"
+    );
+}
+
+#[test]
+fn win64_dll_records_requested_name() {
+    // A Win64 DLL records its own name in the export directory so a
+    // consumer linking against it by name references the file it loads
+    // at runtime; the name comes from the requested `-o` basename, not a
+    // fixed default. (The runtime's `exit` binding resolving through
+    // msvcrt.dll rather than ucrtbase.dll is exercised by the Windows
+    // demos, which link the embedded runtime.)
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         #pragma export(api_fn)\n\
+         int api_fn(int x) {{ return x + 1; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let dll = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("requested_name.dll"),
+    )
+    .expect("write DLL");
+    let contains = |needle: &str| dll.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(
+        contains("requested_name.dll"),
+        "export directory must carry the requested DLL name"
+    );
+    assert!(
+        !contains("c5-output.dll"),
+        "the fixed default name must not leak into the image"
     );
 }
 

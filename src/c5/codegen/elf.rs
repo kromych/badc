@@ -2249,6 +2249,7 @@ mod tests {
             code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
+            shared_lib_name: None,
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),

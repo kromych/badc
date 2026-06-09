@@ -644,6 +644,7 @@ pub(super) fn write(
             text_rva + text_prologue_len,
             &build.exports,
             &build.pc_to_native,
+            build.shared_lib_name.as_deref(),
         )?
     } else {
         Vec::new()
@@ -1312,6 +1313,7 @@ fn build_export_directory(
     text_prologue_rva: u32,
     exports: &[crate::c5::program::ExportedFunction],
     pc_to_native: &[usize],
+    image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
     // Layout offsets within the section.
@@ -1324,7 +1326,7 @@ fn build_export_directory(
     // The DLL-name string heads the string blob; per-export
     // names follow, each NUL-terminated. We compute their
     // RVAs as we go so the AddressOfNames entries match.
-    let dll_name = "c5-output.dll";
+    let dll_name = image_name.unwrap_or("c5-output.dll");
     let strings_rva = edata_rva + strings_off;
     let dll_name_rva = strings_rva;
 

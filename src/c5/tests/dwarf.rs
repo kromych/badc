@@ -469,6 +469,7 @@ fn build_signed_mach_o_two_units(
         None,
         crate::OutputKind::Executable,
         target,
+        None,
     )
     .unwrap_or_else(|e| panic!("write_native_image_from_merged failed for {stem}: {e}"));
 

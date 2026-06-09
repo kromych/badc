@@ -2034,6 +2034,7 @@ pub(super) fn lower(
         code_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        shared_lib_name: None,
         dllmain_pc: None,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
         // is not in our target list.

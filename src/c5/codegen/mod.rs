@@ -1244,6 +1244,12 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
+    /// The shared library's own name, recorded in the image so a
+    /// consumer that links against it by name references the file it
+    /// loads at runtime (PE export-directory Name, Mach-O
+    /// `LC_ID_DYLIB` install name). `None` falls back to the
+    /// per-format default. Set to the `-o` basename for `--shared`.
+    pub shared_lib_name: Option<alloc::string::String>,
     /// Bytecode PC of a user-defined `DllMain`. Mirror of
     /// [`Program::dllmain_pc`]; only the PE writer reads it,
     /// and only for [`OutputKind::SharedLibrary`] output.
@@ -1647,7 +1653,25 @@ pub fn emit_native_with_options(
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C5Error> {
-    let build = lower_for(program, target, options)?;
+    emit_native_with_options_named(program, target, options, None)
+}
+
+/// Variant of [`emit_native_with_options`] that records the shared
+/// library's own name in the image (PE export-directory Name, Mach-O
+/// `LC_ID_DYLIB` install name) so a consumer linking against it by name
+/// references the file it loads at runtime. `shared_lib_name` is the
+/// `-o` basename for `--shared`; `None` falls back to the per-format
+/// default and is ignored for non-shared output.
+pub fn emit_native_with_options_named(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+    shared_lib_name: Option<&str>,
+) -> Result<Vec<u8>, C5Error> {
+    let mut build = lower_for(program, target, options)?;
+    if options.output_kind == OutputKind::SharedLibrary {
+        build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
+    }
     write_for(program, &build, target)
 }
 

@@ -481,10 +481,11 @@ fn wdm_driver_demo_builds_as_native_subsystem_pe() {
     // be IMAGE_SUBSYSTEM_NATIVE (1) for both Windows targets; the
     // kernel's PE loader refuses a CUI/GUI subsystem.
     //
-    // TODO: the image still imports `msvcrt!exit` through the
-    // auto-linked runtime `__c5_exit`, which is unreachable from the
-    // custom entry and unsatisfiable in kernel mode; this asserts
-    // only the subsystem until the dead-import strip lands.
+    // A NATIVE-subsystem image runs no `_start` CRT stub, so the
+    // libc-`exit` runtime wrapper is not linked and the image carries
+    // no user-mode `exit` import -- `msvcrt!exit` is unsatisfiable in
+    // kernel mode. The skeleton imports nothing, so the import data
+    // directory is empty.
     use crate::c5::{NativeOptions, Target, emit_native_with_options};
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("demos");
@@ -498,12 +499,26 @@ fn wdm_driver_demo_builds_as_native_subsystem_pe() {
         let pe = emit_native_with_options(&program, target, NativeOptions::default())
             .expect("emit driver PE");
         let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
+        let opt = pe_off + 24;
         // Subsystem sits at optional-header offset 68 in PE32+.
-        let subsystem =
-            u16::from_le_bytes(pe[pe_off + 24 + 68..pe_off + 24 + 70].try_into().unwrap());
+        let subsystem = u16::from_le_bytes(pe[opt + 68..opt + 70].try_into().unwrap());
         assert_eq!(
             subsystem, 1,
             "{target:?}: wdm_driver must be IMAGE_SUBSYSTEM_NATIVE"
+        );
+        // Import data directory (entry 1) must be empty.
+        let imp = opt + 112 + 8;
+        let imp_rva = u32::from_le_bytes(pe[imp..imp + 4].try_into().unwrap());
+        let imp_size = u32::from_le_bytes(pe[imp + 4..imp + 8].try_into().unwrap());
+        assert_eq!(
+            (imp_rva, imp_size),
+            (0, 0),
+            "{target:?}: a native driver must carry no imports"
+        );
+        assert!(
+            !pe.windows(10)
+                .any(|w| w.eq_ignore_ascii_case(b"msvcrt.dll")),
+            "{target:?}: a native driver must not reference msvcrt.dll"
         );
     }
 }

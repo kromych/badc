@@ -2546,3 +2546,99 @@ fn windows_x64_native_link_two_sources_with_libc() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("answer=42"), "unexpected stdout: {stdout}");
 }
+
+/// Returns the lowercased DLL names in a PE32+ image's import
+/// directory (empty when the image imports nothing).
+fn pe_import_dll_names(pe: &[u8]) -> Vec<String> {
+    let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
+    let opt = pe_off + 24;
+    let n_sec = u16::from_le_bytes(pe[pe_off + 6..pe_off + 8].try_into().unwrap()) as usize;
+    let so_hdr = u16::from_le_bytes(pe[pe_off + 20..pe_off + 22].try_into().unwrap()) as usize;
+    let sec = pe_off + 24 + so_hdr;
+    let imp = opt + 112 + 8; // data directory entry 1 (Import)
+    let imp_rva = u32::from_le_bytes(pe[imp..imp + 4].try_into().unwrap());
+    if imp_rva == 0 {
+        return Vec::new();
+    }
+    let rva2off = |rva: u32| -> Option<usize> {
+        for i in 0..n_sec {
+            let s = sec + i * 40;
+            let va = u32::from_le_bytes(pe[s + 12..s + 16].try_into().unwrap());
+            let vs = u32::from_le_bytes(pe[s + 8..s + 12].try_into().unwrap());
+            let raw = u32::from_le_bytes(pe[s + 20..s + 24].try_into().unwrap());
+            let rs = u32::from_le_bytes(pe[s + 16..s + 20].try_into().unwrap());
+            let span = vs.max(rs);
+            if rva >= va && rva < va + span {
+                return Some((raw + (rva - va)) as usize);
+            }
+        }
+        None
+    };
+    let mut off = rva2off(imp_rva).expect("import dir rva");
+    let mut names = Vec::new();
+    loop {
+        let name_rva = u32::from_le_bytes(pe[off + 12..off + 16].try_into().unwrap());
+        let chain = u32::from_le_bytes(pe[off..off + 4].try_into().unwrap());
+        if name_rva == 0 && chain == 0 {
+            break;
+        }
+        let no = rva2off(name_rva).expect("import name rva");
+        let end = pe[no..].iter().position(|&b| b == 0).unwrap() + no;
+        names.push(String::from_utf8_lossy(&pe[no..end]).to_lowercase());
+        off += 20;
+        if names.len() > 32 {
+            break;
+        }
+    }
+    names
+}
+
+// Build-only (cross-compiles a Windows PE from any host). A
+// NATIVE-subsystem driver runs no `_start` CRT stub, so the
+// libc-`exit` runtime wrapper is not linked and the image
+// imports nothing from msvcrt -- a user-mode `exit` is
+// unsatisfiable in kernel mode. A console executable still
+// imports it (the stub flushes stdio through libc `exit`).
+#[test]
+fn native_driver_omits_msvcrt_console_exe_keeps_it() {
+    let dir = tempdir("driver-no-msvcrt");
+    let mut driver_src = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    driver_src.push("demos");
+    driver_src.push("wdm_driver");
+    driver_src.push("wdm_driver.c");
+    let console = write_source(&dir, "console.c", "int main(void) { return 0; }\n");
+    for target in ["windows-x64", "windows-arm64"] {
+        let sys = dir.join(format!("wdm-{target}.sys"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-O")
+                .arg(&driver_src)
+                .arg("-o")
+                .arg(&sys)
+                .current_dir(&dir),
+            "build driver",
+        );
+        let names = pe_import_dll_names(&std::fs::read(&sys).expect("read .sys"));
+        assert!(
+            !names.iter().any(|n| n == "msvcrt.dll"),
+            "{target}: native driver must not import msvcrt.dll; imports: {names:?}"
+        );
+
+        let exe = dir.join(format!("console-{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg(&console)
+                .arg("-o")
+                .arg(&exe)
+                .current_dir(&dir),
+            "build console exe",
+        );
+        let names = pe_import_dll_names(&std::fs::read(&exe).expect("read .exe"));
+        assert!(
+            names.iter().any(|n| n == "msvcrt.dll"),
+            "{target}: console exe must import msvcrt.dll (libc exit for stdio flush); imports: {names:?}"
+        );
+    }
+}

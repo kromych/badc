@@ -56,7 +56,7 @@ pub use linker::{
 #[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "linker")]
-pub use runtime::embedded_runtime;
+pub use runtime::{embedded_runtime, embedded_start_runtime};
 #[cfg(feature = "linker")]
 pub use symbol::Linkage;
 

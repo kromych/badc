@@ -830,10 +830,30 @@ fn main() {
             }
         }
         // Embedded runtime sources. Compiled in-memory and
-        // appended to `native_objs` so every executable picks
-        // them up; the writer's start stub uses any helper
-        // they define (e.g. `__c5_exit`) when available.
-        for (name, body) in badc::embedded_runtime() {
+        // appended to `native_objs`. The data definitions
+        // (`environ`) link into every image; the libc-`exit`
+        // wrapper (`__c5_exit`) links only when the writer emits
+        // a `_start` CRT stub that calls it -- not into shared
+        // libraries or passthrough-entry subsystems (native /
+        // EFI), where no stub runs and a user-mode libc `exit`
+        // import would be dead (and unsatisfiable in kernel mode).
+        let emits_start_stub = mode != Mode::SharedLibrary
+            && !matches!(
+                subsystem_override,
+                Some(
+                    badc::Subsystem::Native
+                        | badc::Subsystem::EfiApplication
+                        | badc::Subsystem::EfiBootServiceDriver
+                        | badc::Subsystem::EfiRuntimeDriver
+                        | badc::Subsystem::EfiRom
+                )
+            );
+        let runtime_sources = badc::embedded_runtime().iter().chain(
+            badc::embedded_start_runtime()
+                .iter()
+                .take(if emits_start_stub { usize::MAX } else { 0 }),
+        );
+        for (name, body) in runtime_sources {
             let bytes = compile_in_memory(name, body.to_string());
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),

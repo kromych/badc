@@ -2138,12 +2138,29 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         .map(|off| base_rva + *off as u32)
         .collect();
 
+    // With no imported DLLs the descriptor block is a lone zero
+    // terminator and the IAT is empty. Pointing the Import data
+    // directory at that descriptor with a zero-size IAT directory is
+    // rejected by the Windows loader (ERROR_INVALID_PARAMETER) even
+    // though wine accepts it, so leave both directories empty
+    // (RVA = 0, size = 0) in that case.
+    let (import_directory_rva, import_directory_size, iat_rva_base, iat_size) = if n_dlls == 0 {
+        (0, 0, 0, 0)
+    } else {
+        (
+            base_rva + import_dir_off as u32,
+            import_dir_size as u32,
+            base_rva + iat_off as u32,
+            iat_size as u32,
+        )
+    };
+
     IDataLayout {
         bytes,
-        import_directory_rva: base_rva + import_dir_off as u32,
-        import_directory_size: import_dir_size as u32,
-        iat_rva_base: base_rva + iat_off as u32,
-        iat_size: iat_size as u32,
+        import_directory_rva,
+        import_directory_size,
+        iat_rva_base,
+        iat_size,
         iat_rva_for_import,
     }
 }

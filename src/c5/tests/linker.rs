@@ -427,6 +427,53 @@ fn win64_dll_records_requested_name() {
 }
 
 #[test]
+fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
+    // A DLL whose code calls nothing external has no imported DLLs.
+    // The import-descriptor block is then a lone zero terminator and
+    // the IAT is empty. Pointing the Import data directory at that
+    // descriptor with a zero-size IAT directory is rejected by the
+    // Windows loader (ERROR_INVALID_PARAMETER) at LoadLibrary time,
+    // though wine tolerates it. The writer must leave both directories
+    // empty (RVA = 0, size = 0) in that case.
+    use crate::c5::codegen::emit_native_with_options_named;
+    use crate::c5::{NativeOptions, Target};
+    let src = "#pragma export(answer)\nint answer(void) { return 42; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        // Compile for the same target the writer lowers for, so the
+        // per-target bindings are in scope (a host-default compile
+        // would feed the wrong `#pragma binding` set).
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let dll = emit_native_with_options_named(
+            &program,
+            target,
+            NativeOptions::new().with_shared_library(),
+            Some("noimports.dll"),
+        )
+        .expect("emit DLL");
+        let pe = u32::from_le_bytes(dll[0x3c..0x40].try_into().unwrap()) as usize;
+        let opt = pe + 24;
+        // PE32+ data directories start at optional-header offset 112;
+        // entry 1 is Import, entry 12 is IAT (8 bytes each: RVA, size).
+        let dir = |i: usize| {
+            let o = opt + 112 + i * 8;
+            let rva = u32::from_le_bytes(dll[o..o + 4].try_into().unwrap());
+            let size = u32::from_le_bytes(dll[o + 4..o + 8].try_into().unwrap());
+            (rva, size)
+        };
+        assert_eq!(dir(1), (0, 0), "{target:?}: import directory must be empty");
+        assert_eq!(dir(12), (0, 0), "{target:?}: IAT directory must be empty");
+        // The export directory (entry 0) still carries `answer`.
+        let (exp_rva, exp_size) = dir(0);
+        assert!(
+            exp_rva != 0 && exp_size != 0,
+            "{target:?}: export directory must be present"
+        );
+    }
+}
+
+#[test]
 fn cross_tu_call_into_secondary_dylib_keeps_routing() {
     // Cross-TU import routing through the native merge. The parser
     // records each `#pragma binding` import against its `#pragma

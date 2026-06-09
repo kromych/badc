@@ -783,4 +783,87 @@ fn original_c4_compiles_and_runs_hello_pe() {
     }
 }
 
+#[test]
+fn dll_export_load_unload_reload_cycle() {
+    // A c5-built loader EXE resolves a c5-built DLL at runtime through
+    // LoadLibraryA + GetProcAddress, calls the export, FreeLibrary's
+    // it, then repeats the load / call / unload once more. Exercises
+    // the PE export directory (GetProcAddress by name) and a clean
+    // unload followed by a reload of a c5 shared library. The DLL sits
+    // beside the loader in the temp directory and is loaded by bare
+    // name, which the loader's application directory resolves.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let uniq = format!(
+        "{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    );
+
+    let dll_src = "int answer(void) { return 42; }\n#pragma export(answer)\n";
+    let dll_prog = Compiler::with_target(dll_src.to_string(), Target::WindowsX64)
+        .compile()
+        .expect("compile dll");
+    let dll_name = format!("badc-pe64-ansdll-{uniq}.dll");
+    // Record the DLL's own name in its export directory, as the CLI
+    // does from the `-o` basename.
+    let dll_bytes = super::super::codegen::emit_native_with_options_named(
+        &dll_prog,
+        Target::WindowsX64,
+        NativeOptions::new().with_shared_library(),
+        Some(&dll_name),
+    )
+    .expect("emit dll");
+    let dll_path = std::env::temp_dir().join(&dll_name);
+    std::fs::write(&dll_path, &dll_bytes).expect("write dll");
+
+    let loader_src = format!(
+        r#"#include <windows.h>
+typedef int (*answer_fn)(void);
+int main(void) {{
+    HANDLE h = LoadLibraryA("{dll}");
+    if (!h) return 1;
+    answer_fn f = (answer_fn)GetProcAddress(h, "answer");
+    if (!f) {{ FreeLibrary(h); return 2; }}
+    int r = f();
+    if (!FreeLibrary(h)) return 3;
+    HANDLE h2 = LoadLibraryA("{dll}");
+    if (!h2) return 4;
+    answer_fn f2 = (answer_fn)GetProcAddress(h2, "answer");
+    if (!f2) {{ FreeLibrary(h2); return 5; }}
+    r += f2();
+    FreeLibrary(h2);
+    return r;
+}}
+"#,
+        dll = dll_name
+    );
+    let loader_prog = Compiler::with_target(loader_src, Target::WindowsX64)
+        .compile()
+        .expect("compile loader");
+    let loader_bytes =
+        emit_native_with_options(&loader_prog, Target::WindowsX64, NativeOptions::default())
+            .expect("emit loader");
+    let loader_path = std::env::temp_dir().join(format!("badc-pe64-ansloader-{uniq}.exe"));
+    std::fs::write(&loader_path, &loader_bytes).expect("write loader");
+
+    let outcome = run_pe(&loader_path, &[]);
+    let _ = std::fs::remove_file(&dll_path);
+    let _ = std::fs::remove_file(&loader_path);
+    match outcome {
+        Some(Ok(o)) => {
+            let code = o.status.code();
+            assert_eq!(
+                code,
+                Some(84),
+                "loader exit {:?} != 84 (42 + 42 over a load / unload / reload cycle); stderr: {}",
+                code,
+                String::from_utf8_lossy(&o.stderr)
+            );
+        }
+        Some(Err(e)) => panic!("exec loader PE: {e}"),
+        None => eprintln!("skip dll_export_load_unload_reload_cycle: no PE runner on this host"),
+    }
+}
+
 fn _link_path(_path: &Path) {} // keep the Path import in use even on hosts that skip

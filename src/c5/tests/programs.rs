@@ -485,6 +485,15 @@ fn vsnprintf_underscore_alias_resolves_to_libc() {
 }
 
 #[test]
+fn pointer_to_array_arithmetic_scales_by_array_size() {
+    // C99 6.5.6p8: arithmetic on a pointer-to-array `T (*p)[N]` steps
+    // by `sizeof(T[N])`, not `sizeof(T)`. The fixture self-checks
+    // `a+i`, `p++`/`p--`, a chained `p+i-j`, `(*p)[k]` after an offset,
+    // `p-a`, and the post-increment deref `(*p++)[k]`.
+    assert_eq!(run_fixture("pointer_to_array_arithmetic.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

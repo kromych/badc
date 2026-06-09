@@ -60,6 +60,27 @@ impl Compiler {
         }
     }
 
+    /// Pointer-arithmetic stride for `ty`. A pointer-to-array
+    /// `T (*p)[N]` carries the flat type of a `T*`, so `fallback`
+    /// (`pointee_size` / `pointee_step`) scales by `sizeof(T)` rather
+    /// than `sizeof(T[N])`. The array's per-element size is seeded
+    /// into the multi-dim stride snapshot when the operand is loaded
+    /// or an array decays; `seeded_stride` is that value (0 when the
+    /// operand is a plain pointer). When it is set, it is the correct
+    /// stride; otherwise fall back.
+    pub(super) fn pointer_to_array_arith_stride(
+        &self,
+        seeded_stride: i64,
+        ty: i64,
+        fallback: i64,
+    ) -> i64 {
+        if is_pointer_ty(ty) && seeded_stride > 1 {
+            seeded_stride
+        } else {
+            fallback
+        }
+    }
+
     /// Look up a tag in scope, searching from the innermost block
     /// outward (C99 6.2.1: tags have block scope). An inner `struct T`
     /// shadows an outer one declared at a wider scope.

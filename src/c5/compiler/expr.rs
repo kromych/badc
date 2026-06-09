@@ -1643,7 +1643,17 @@ impl Compiler {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
             self.ast_psh();
-            let step = self.pointee_step(self.ty);
+            // A pointer-to-array (`T (*p)[N]`) looks like a plain
+            // `T*` in the flat type, so `pointee_step` would scale by
+            // `sizeof(T)`. The correct step is the array's size,
+            // seeded into the stride snapshot when the operand was
+            // loaded (the operand was parsed via a nested `expr()`,
+            // so it sits in `end_of_expr_stride`).
+            let step = self.pointer_to_array_arith_stride(
+                self.pending.end_of_expr_stride,
+                self.ty,
+                self.pointee_step(self.ty),
+            );
             self.emit_imm(step);
             self.ast_binop(if t == Token::Inc as i64 {
                 super::super::ir::BinOp::Add
@@ -2280,6 +2290,12 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::AddOp {
                 self.next()?;
+                // Capture the LHS's pointer-to-array stride before the
+                // RHS parse moves it out of `index_stride`. `carry_stride`
+                // re-seeds it after this op so chained pointer-to-array
+                // arithmetic (`p + i - 1`) keeps the array size.
+                let lhs_stride = self.pending.index_stride;
+                let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
@@ -2311,7 +2327,17 @@ impl Compiler {
                         let rhs_ast = self.ast_acc.take();
                         let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                         self.ast_vstack.push(None);
-                        let scale = self.pointee_size(rhs_ty);
+                        // RHS is the pointer; a pointer-to-array RHS left
+                        // its array stride in `end_of_expr_stride` at the
+                        // RHS parse exit.
+                        let scale = self.pointer_to_array_arith_stride(
+                            self.pending.end_of_expr_stride,
+                            rhs_ty,
+                            self.pointee_size(rhs_ty),
+                        );
+                        if scale > self.pointee_size(rhs_ty) {
+                            carry_stride = scale;
+                        }
                         self.loc_offs += 1;
                         if self.loc_offs > self.max_loc_offs {
                             self.max_loc_offs = self.loc_offs;
@@ -2370,7 +2396,11 @@ impl Compiler {
                 } else {
                     let rhs_ty = self.ty;
                     if self.is_ptr_scaling_nontrivial(t) {
-                        let scale = self.pointee_size(t);
+                        let scale =
+                            self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
+                        if scale > self.pointee_size(t) {
+                            carry_stride = scale;
+                        }
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     }
                     // Pre-compute the common type so the dual-
@@ -2387,8 +2417,17 @@ impl Compiler {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
                 }
+                // Carry the pointer-to-array stride into the next
+                // arithmetic step so a chained `p + i - j` keeps the
+                // array element size; a following `[` subscript or the
+                // end of the expression clears it.
+                if carry_stride > 1 {
+                    self.pending.index_stride = carry_stride;
+                }
             } else if self.lex.tk == Token::SubOp {
                 self.next()?;
+                let lhs_stride = self.pending.index_stride;
+                let mut carry_stride: i64 = 0;
                 self.ast_psh();
                 self.expr(Token::MulOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
@@ -2399,15 +2438,21 @@ impl Compiler {
                     // ptr - ptr -> element count (Int). Divide by
                     // the pointee size to convert raw byte distance
                     // into element distance (skipped for `char*`,
-                    // where byte and element counts coincide).
+                    // where byte and element counts coincide). Both
+                    // operands share the pointer-to-array stride.
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
-                        let scale = self.pointee_size(t);
+                        let scale =
+                            self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
                         self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
                     }
                     self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
-                    let scale = self.pointee_size(t);
+                    let scale =
+                        self.pointer_to_array_arith_stride(lhs_stride, t, self.pointee_size(t));
+                    if scale > self.pointee_size(t) {
+                        carry_stride = scale;
+                    }
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
                     self.ast_binop(crate::c5::ir::BinOp::Sub);
                     self.ty = t;
@@ -2425,6 +2470,9 @@ impl Compiler {
                     if !is_pointer_ty(t) {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
+                }
+                if carry_stride > 1 {
+                    self.pending.index_stride = carry_stride;
                 }
             } else if self.lex.tk == Token::MulOp {
                 self.next()?;
@@ -2576,7 +2624,17 @@ impl Compiler {
                 });
                 self.ast_assign();
                 self.ast_psh();
-                self.emit_imm(self.pointee_step(self.ty));
+                // Pointer-to-array (`T (*p)[N]`) carries a `T*` flat
+                // type; the correct step is the array's size, seeded
+                // into the stride snapshot at the operand load (which
+                // sits in the current scope's `index_stride` for a
+                // postfix operand).
+                let post_step = self.pointer_to_array_arith_stride(
+                    self.pending.index_stride,
+                    self.ty,
+                    self.pointee_step(self.ty),
+                );
+                self.emit_imm(post_step);
                 self.ast_binop(if self.lex.tk == Token::Inc {
                     super::super::ir::BinOp::Sub
                 } else {
@@ -2586,7 +2644,6 @@ impl Compiler {
                 // the walker emits load -> binop_imm(Add, by) ->
                 // store -> return the pre-update value per C99
                 // 6.5.2.4p3.
-                let post_step = self.pointee_step(self.ty);
                 let post_signed = if self.lex.tk == Token::Inc {
                     post_step
                 } else {

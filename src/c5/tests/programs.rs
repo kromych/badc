@@ -100,6 +100,12 @@ fn multidim_array_init() {
 }
 
 #[test]
+fn macro_paste_stringize_unexpanded() {
+    // `#` and `##` operands substitute the unexpanded argument.
+    assert_eq!(run_fixture("macro_paste_stringize_unexpanded.c"), 0);
+}
+
+#[test]
 fn const_member_address_init() {
     // C99 6.6: a static initializer may be the constant address of a
     // global's member, array member, or indexed element's member.

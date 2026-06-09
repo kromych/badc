@@ -1177,7 +1177,7 @@ impl Preprocessor {
                                 self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
-                        let expanded = expand_fn_macro(macro_def, &expanded_args);
+                        let expanded = expand_fn_macro(macro_def, &expanded_args, &args);
                         // C99 6.10.3.4 "blue paint": any macro that
                         // fired during arg pre-expansion stays on
                         // the blocklist for the body rescan, so a
@@ -1252,7 +1252,8 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
-                                let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
+                                let inner_body =
+                                    expand_fn_macro(inner_def, &inner_expanded_args, &inner_args);
                                 let deeper = Blocklist::Cons(trimmed, blocklist);
                                 let inner_recursed = self.substitute_with_blocklist(
                                     &inner_body,
@@ -1320,7 +1321,8 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
-                                let body_expanded = expand_fn_macro(macro_def, &expanded_args);
+                                let body_expanded =
+                                    expand_fn_macro(macro_def, &expanded_args, &args);
                                 let deeper = Blocklist::Cons(trimmed, &nested);
                                 let recursed = self.substitute_with_blocklist(
                                     &body_expanded,
@@ -3483,23 +3485,29 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
-fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
+fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {
     // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
-    // the macro isn't variadic or no trailing args were supplied.
-    let va_args_str: String = if def.is_variadic {
-        let var_start = def.params.len();
-        if args.len() > var_start {
-            args[var_start..].join(", ")
+    // the macro isn't variadic or no trailing args were supplied. The
+    // raw form (unexpanded arguments) feeds the `#` and `##` operands
+    // per C99 6.10.3.1 / 6.10.3.2; the expanded form feeds ordinary
+    // substitution.
+    let var_start = def.params.len();
+    let join_from = |src: &[String]| -> String {
+        if def.is_variadic && src.len() > var_start {
+            src[var_start..].join(", ")
         } else {
             String::new()
         }
-    } else {
-        String::new()
     };
+    let va_args_str = join_from(args);
+    let raw_va_args_str = join_from(raw_args);
 
     let bytes = def.body.as_bytes();
     let mut out = String::with_capacity(def.body.len());
     let mut i = 0;
+    // True when the next token is the right-hand operand of a `##`, so
+    // it must substitute from the unexpanded argument.
+    let mut after_paste = false;
     while i < bytes.len() {
         let c = bytes[i];
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
@@ -3516,10 +3524,16 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
             while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
                 i += 1;
             }
-        } else if c == b'#' {
+            after_paste = true;
+            continue;
+        }
+        let preceded_by_paste = after_paste;
+        after_paste = false;
+        if c == b'#' {
             // Stringification: `#param` -> `"<arg>"`. The C standard
             // says the operand must be a parameter; we follow that
-            // and pass a stray `#` through unchanged.
+            // and pass a stray `#` through unchanged. The operand uses
+            // the unexpanded argument (C99 6.10.3.2p2).
             let mut j = i + 1;
             while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
                 j += 1;
@@ -3531,9 +3545,9 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
                 }
                 let name = &def.body[start..j];
                 let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
-                    Some(va_args_str.as_str())
+                    Some(raw_va_args_str.as_str())
                 } else if let Some(idx) = def.params.iter().position(|p| p == name) {
-                    args.get(idx).map(|s| s.as_str())
+                    raw_args.get(idx).map(|s| s.as_str())
                 } else {
                     None
                 };
@@ -3568,11 +3582,28 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
                 i += 1;
             }
             let word = &def.body[start..i];
+            // A parameter that is an operand of `##` (immediately
+            // before or after the operator) substitutes from the
+            // unexpanded argument (C99 6.10.3.1p1).
+            let followed_by_paste = {
+                let mut k = i;
+                while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                    k += 1;
+                }
+                k + 1 < bytes.len() && bytes[k] == b'#' && bytes[k + 1] == b'#'
+            };
+            let use_raw = preceded_by_paste || followed_by_paste;
+            let params = if use_raw { raw_args } else { args };
+            let va = if use_raw {
+                &raw_va_args_str
+            } else {
+                &va_args_str
+            };
             if word == "__VA_ARGS__" && def.is_variadic {
-                out.push_str(&va_args_str);
+                out.push_str(va);
             } else {
                 match def.params.iter().position(|p| p == word) {
-                    Some(idx) if idx < args.len() => out.push_str(&args[idx]),
+                    Some(idx) if idx < params.len() => out.push_str(&params[idx]),
                     _ => out.push_str(word),
                 }
             }
@@ -3969,10 +4000,14 @@ mod tests {
     fn counter_monotonically_increases() {
         // Each `__COUNTER__` expansion advances the per-TU
         // counter, starting from 0. The `##` paste here mints
-        // unique identifiers, the canonical use case.
+        // unique identifiers, the canonical use case. Three levels
+        // of indirection are required: `##` operands use the
+        // unexpanded argument (C99 6.10.3.1), so the extra `CAT`
+        // layer forces `__COUNTER__` to expand before the paste.
         let src = "\
-#define UNIQUE_(prefix, n) prefix##n
-#define UNIQUE(prefix)     UNIQUE_(prefix, __COUNTER__)
+#define CAT_(a, b) a##b
+#define CAT(a, b)  CAT_(a, b)
+#define UNIQUE(prefix) CAT(prefix, __COUNTER__)
 int UNIQUE(x_);
 int UNIQUE(x_);
 int x_2 = __COUNTER__;

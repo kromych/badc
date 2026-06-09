@@ -1169,6 +1169,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("sizeof_array_type_and_binding.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
+    ("macro_paste_stringize_unexpanded.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("anon_union_init.c", 0),

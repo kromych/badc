@@ -1085,8 +1085,22 @@ impl Compiler {
         // gains 8 bytes of reserved padding at offset 0.
         let data: Vec<u8> = alloc::vec![0u8; 8];
 
+        let lex = {
+            let mut l = Lexer::new(preprocessed);
+            // `wchar_t` is 2 bytes (UTF-16) on Windows, 4 bytes on the
+            // Unix targets; wide literals follow suit.
+            l.wchar_bytes = if matches!(
+                target,
+                super::codegen::Target::WindowsX64 | super::codegen::Target::WindowsAarch64
+            ) {
+                2
+            } else {
+                4
+            };
+            l
+        };
         Self {
-            lex: Lexer::new(preprocessed),
+            lex,
             symbols,
             symbol_index,
             deferred_error,

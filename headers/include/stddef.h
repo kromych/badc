@@ -23,11 +23,14 @@
 #ifdef __BADC_WINDOWS__
 typedef unsigned long long size_t;
 typedef long long ptrdiff_t;
+// Windows `wchar_t` is a 16-bit UTF-16 code unit; the Win32 wide-string
+// APIs depend on the 2-byte width.
+typedef unsigned short wchar_t;
 #else
 typedef unsigned long size_t;
 typedef long ptrdiff_t;
-#endif
 typedef int wchar_t;
+#endif
 
 #ifndef NULL
 #define NULL ((void*)0)

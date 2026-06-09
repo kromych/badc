@@ -234,17 +234,17 @@ impl Compiler {
         }
         if self.lex.tk == '"' && self.lex.str_is_wide {
             // C99 6.4.5 / 6.7.8p14: a wide string literal initializes a
-            // `wchar_t`-shaped array. `wchar_t` is `int` (4 bytes), and
-            // the lexer already stored one 4-byte code point per element
-            // plus a 4-byte NUL terminator. Read them back as elements
-            // at the 4-byte stride.
+            // `wchar_t`-shaped array. The lexer stored one code point
+            // per element plus a terminator at the target's `wchar_t`
+            // width; read them back at that stride.
+            let w = self.lex.wchar_bytes;
             let start_addr = self.lex.ival as usize;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
             let byte_count = self.data.len() - start_addr;
-            let mut elem_count = byte_count / 4;
+            let mut elem_count = byte_count / w;
             // The trailing NUL is dropped when the literal exactly fills
             // a bounded array (the array holds the characters and nothing
             // else); the lexer pushed it unconditionally, so trim it here.
@@ -253,16 +253,16 @@ impl Compiler {
                 let store_nul = target_size <= 0 || chars < target_size as usize;
                 if !store_nul {
                     elem_count -= 1;
-                    self.data.truncate(start_addr + elem_count * 4);
+                    self.data.truncate(start_addr + elem_count * w);
                 }
             }
             let elems: Vec<(i64, InitElemReloc)> = (0..elem_count)
                 .map(|k| {
-                    let base = start_addr + k * 4;
-                    let v = (self.data[base] as i64)
-                        | ((self.data[base + 1] as i64) << 8)
-                        | ((self.data[base + 2] as i64) << 16)
-                        | ((self.data[base + 3] as i64) << 24);
+                    let base = start_addr + k * w;
+                    let mut v: i64 = 0;
+                    for b in 0..w {
+                        v |= (self.data[base + b] as i64) << (b * 8);
+                    }
                     (v, InitElemReloc::None)
                 })
                 .collect();

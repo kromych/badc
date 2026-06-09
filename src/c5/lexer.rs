@@ -241,11 +241,16 @@ pub(crate) struct Lexer {
     pub int_is_decimal: bool,
 
     /// `true` when the most recent `'"'` string-literal token came from
-    /// a wide (`L"..."`) literal. `wchar_t` is `int` (4 bytes), so the
-    /// bytes already in `self.data` hold one 4-byte code point per
-    /// element; the initializer and expression parsers read this to
-    /// size the element stride (C99 6.4.5).
+    /// a wide (`L"..."`) literal. The element width follows
+    /// `wchar_bytes`; the initializer and expression parsers read this
+    /// to size the element stride (C99 6.4.5).
     pub str_is_wide: bool,
+
+    /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
+    /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
+    /// it from the target after construction; wide string and character
+    /// literals store this many bytes per element.
+    pub wchar_bytes: usize,
 
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
@@ -382,6 +387,7 @@ impl Lexer {
             int_suffix_unsigned: false,
             int_is_decimal: true,
             str_is_wide: false,
+            wchar_bytes: 4,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -609,12 +615,12 @@ impl Lexer {
                     }
                 }
                 if quote == b'"' {
-                    // `wchar_t` is `int` (stddef.h), so a wide string
-                    // stores one 4-byte code point per element.
-                    data.push(val as u8);
-                    data.push((val >> 8) as u8);
-                    data.push((val >> 16) as u8);
-                    data.push((val >> 24) as u8);
+                    // A wide string stores one code point per element at
+                    // the target's `wchar_t` width (4 bytes on Unix, 2
+                    // on Windows / UTF-16).
+                    for k in 0..self.wchar_bytes {
+                        data.push((val >> (k * 8)) as u8);
+                    }
                 } else {
                     char_value = val;
                 }
@@ -655,11 +661,10 @@ impl Lexer {
             }
             self.pos = saved_pos;
             self.line = saved_line;
-            // 4-byte (`wchar_t`) NUL terminator.
-            data.push(0);
-            data.push(0);
-            data.push(0);
-            data.push(0);
+            // `wchar_t`-width NUL terminator.
+            for _ in 0..self.wchar_bytes {
+                data.push(0);
+            }
             self.ival = start_data;
             self.tk = Tok('"' as i64);
             self.str_is_wide = true;
@@ -1927,7 +1932,12 @@ mod tests {
     /// return the bytes the lexer pushed into `data`. Used to pin
     /// the escape-sequence behaviour of string literals.
     fn lex_string_literal(src: &str) -> Vec<u8> {
+        lex_string_literal_w(src, 4)
+    }
+
+    fn lex_string_literal_w(src: &str, wchar_bytes: usize) -> Vec<u8> {
         let mut lex = Lexer::new(src.to_string());
+        lex.wchar_bytes = wchar_bytes;
         let mut symbols: Vec<Symbol> = Vec::new();
         let mut index = SymbolIndex::new();
         let mut data: Vec<u8> = Vec::new();
@@ -2002,6 +2012,16 @@ mod tests {
         assert_eq!(
             lex_string_literal(r#"L"AB""#),
             vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn wide_string_literal_emits_two_bytes_per_char_on_windows() {
+        // With a 2-byte `wchar_t` (Windows / UTF-16) `L"AB"` stores two
+        // bytes per code point (0x41 0, 0x42 0) plus a 2-byte nul.
+        assert_eq!(
+            lex_string_literal_w(r#"L"AB""#, 2),
+            vec![0x41, 0, 0x42, 0, 0, 0]
         );
     }
 

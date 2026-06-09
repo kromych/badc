@@ -56,6 +56,13 @@ fn struct_arg_by_stack() {
 }
 
 #[test]
+fn anon_union_init() {
+    // C11 6.7.2.1p13: an anonymous union is one positional slot in a
+    // brace initializer; an anonymous struct contributes one per member.
+    assert_eq!(run_fixture("anon_union_init.c"), 0);
+}
+
+#[test]
 fn builtin_trap() {
     // __builtin_trap() does not return; a function whose fall-through
     // path ends in it satisfies the non-void return requirement. The

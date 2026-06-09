@@ -1009,7 +1009,18 @@ impl Compiler {
                 let field_size = self.size_of_type(field.ty);
                 self.write_init_value(field_base, field_size, value, reloc, field.ty);
             }
+            // A positional initializer fills the first member of an
+            // anonymous union (C99 6.7.8); the remaining members share
+            // its storage, so advance past the whole group rather than
+            // landing on the next alternative.
             pos = field_idx + 1;
+            let group = field.anon_union_group;
+            if group != 0 {
+                let fields = &self.structs[struct_id].fields;
+                while pos < fields.len() && fields[pos].anon_union_group == group {
+                    pos += 1;
+                }
+            }
             if self.lex.tk == ',' {
                 self.next()?;
             }

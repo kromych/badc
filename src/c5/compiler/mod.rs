@@ -122,6 +122,14 @@ pub struct StructField {
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
+    /// Non-zero for a field promoted from an anonymous union (C11
+    /// 6.7.2.1p13). All members of one anonymous union share the same
+    /// value; the same id groups them so a brace-list initializer
+    /// treats the whole union as a single positional sub-object
+    /// (C99 6.7.8: one initializer fills the first member). Zero for a
+    /// regular field and for anonymous-struct members, which keep
+    /// distinct positions.
+    pub anon_union_group: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

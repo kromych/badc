@@ -376,6 +376,17 @@ impl Compiler {
                         // exactly this (anon-struct LowPart and
                         // named-`u`-struct LowPart coexist
                         // because the latter is qualified).
+                        // Members of one anonymous union share a single
+                        // positional initializer slot; tag them with the
+                        // inner aggregate's id so the initializer groups
+                        // them. Anonymous-struct members keep distinct
+                        // positions, so they propagate any group tag they
+                        // already carry (a union nested inside).
+                        let group = if self.structs[inner_id].is_union {
+                            inner_id as u32 + 1
+                        } else {
+                            inner_field.anon_union_group
+                        };
                         self.structs[struct_id].fields.push(StructField {
                             name: inner_field.name,
                             offset: base_offset + inner_field.offset,
@@ -387,6 +398,7 @@ impl Compiler {
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
+                            anon_union_group: group,
                         });
                     }
 
@@ -595,6 +607,7 @@ impl Compiler {
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bf_unit_size as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
+                    anon_union_group: 0,
                 });
 
                 if self.lex.tk == ',' {

@@ -19,8 +19,6 @@ Disassembly of section .text:
                	fmul	d1, d1, d3
                	fmadd	d0, d0, d2, d1
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

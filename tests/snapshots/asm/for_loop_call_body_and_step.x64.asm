@@ -19,8 +19,6 @@ Disassembly of section .text:
                	incq	%rax
                	movslq	%eax, %rax
                	retq
-
-<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -51,8 +49,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	popq	%rbp

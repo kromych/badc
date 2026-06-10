@@ -15,8 +15,6 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	sxtw	x0, w0
                	ret
-
-<driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -48,8 +46,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x1                // =1

@@ -13,8 +13,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0x110
                	ret
-
-<main>:
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
                	adrp	x1, <page>

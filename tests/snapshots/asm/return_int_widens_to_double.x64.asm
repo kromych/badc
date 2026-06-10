@@ -61,8 +61,6 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rax
                	cvtsi2sd	%rax, %xmm0
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp

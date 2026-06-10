@@ -267,8 +267,6 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

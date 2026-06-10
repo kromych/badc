@@ -62,8 +62,6 @@ Disassembly of section .text:
                	incq	%rdx
                	movl	%edx, (%rcx)
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

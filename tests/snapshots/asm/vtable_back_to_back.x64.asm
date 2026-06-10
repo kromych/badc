@@ -70,8 +70,6 @@ Disassembly of section .text:
                	movslq	0x8(%rdi), %rcx
                	movl	%ecx, (%rsi)
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp

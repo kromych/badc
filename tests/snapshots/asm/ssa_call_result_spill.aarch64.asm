@@ -33,8 +33,6 @@ Disassembly of section .text:
                	ror	x0, x0, #0x29
                	eor	x0, x1, x0
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xd0

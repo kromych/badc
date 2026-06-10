@@ -72,8 +72,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movl	%ecx, (%rsi)
                	retq
-
-<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
@@ -110,8 +108,6 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	popq	%rbp

@@ -58,8 +58,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x110, %rsp            # imm = 0x110

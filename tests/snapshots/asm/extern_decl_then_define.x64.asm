@@ -11,8 +11,6 @@ Disassembly of section .text:
                	ud2
                	leaq	<rip>, %rax
                	retq
-
-<main>:
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx
                	cmpq	%rcx, %rax

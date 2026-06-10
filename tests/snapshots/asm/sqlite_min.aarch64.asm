@@ -9,7 +9,7 @@ Disassembly of section .text:
                	mov	x1, #0x3b0              // =944
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#<addr>:
+               	brk	#0x1
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x150
@@ -135,8 +135,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
-
-<__c5_sys_open>:
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -154,8 +152,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-
-<__c5_sys_close>:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -169,8 +165,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
-
-<__c5_sys_ftruncate>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
@@ -186,8 +180,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
                	ret
-
-<__c5_sys_fcntl>:
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -205,8 +197,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
-
-<__c5_sys_stat>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
@@ -222,8 +212,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
                	ret
-
-<__c5_sys_fstat>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!

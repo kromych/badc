@@ -9,8 +9,6 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
-
-<main>:
                	leaq	<rip>, %rax
                	movzbq	(%rax), %rcx
                	cmpq	$0x0, %rcx

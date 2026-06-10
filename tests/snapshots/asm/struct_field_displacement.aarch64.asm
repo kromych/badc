@@ -42,8 +42,6 @@ Disassembly of section .text:
                	strb	w1, [x0, #0x12]
                	mov	x0, #0x0                // =0
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40

@@ -14,8 +14,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
-
-<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -45,8 +43,6 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x1, %edi

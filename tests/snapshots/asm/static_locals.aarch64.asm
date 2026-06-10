@@ -63,8 +63,6 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>

@@ -71,8 +71,6 @@ Disassembly of section .text:
                	callq	*%r11
                	popq	%rbp
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp

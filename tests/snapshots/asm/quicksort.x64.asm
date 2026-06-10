@@ -9,16 +9,12 @@ Disassembly of section .text:
                	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
                	ud2
-
-<swap>:
                	movslq	(%rdi), %rax
                	movslq	(%rsi), %rcx
                	movl	%ecx, (%rdi)
                	movl	%eax, (%rsi)
                	xorq	%rax, %rax
                	retq
-
-<partition>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -93,8 +89,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-
-<quicksort>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -137,8 +131,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

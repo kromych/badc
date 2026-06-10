@@ -46,8 +46,6 @@ Disassembly of section .text:
                	movl	%eax, 0xa0(%rdi)
                	movslq	%eax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp

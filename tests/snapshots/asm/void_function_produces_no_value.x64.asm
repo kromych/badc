@@ -55,8 +55,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-
-<no_value_void>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
@@ -66,8 +64,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	xorq	%rax, %rax
                	retq
-
-<early_return_void>:
                	movslq	%edi, %rdi
                	cmpq	$0x0, %rdi
                	jge	<addr>
@@ -75,8 +71,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp

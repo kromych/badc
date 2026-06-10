@@ -9,18 +9,12 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
-
-<ret_ptr_as_int>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rax
                	retq
-
-<ret_int_as_ptr>:
                	movq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
-
-<ret_wrong_struct>:
                	popq	%r10
                	subq	$0x10, %rsp
                	pushq	%r10
@@ -37,17 +31,11 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-
-<ret_null>:
                	xorq	%rax, %rax
                	retq
-
-<ret_ok>:
                	movq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
-
-<main>:
                	xorq	%rax, %rax
                	retq
                	addb	%al, (%rax)

@@ -25,8 +25,6 @@ Disassembly of section .text:
                	fdiv	d0, d0, d17
                	fcvt	s0, d0
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20

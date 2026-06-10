@@ -14,8 +14,6 @@ Disassembly of section .text:
                	movl	%edi, (%rax,%rdi,4)
                	movslq	(%rax,%rdi,4), %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rdi, %rdi

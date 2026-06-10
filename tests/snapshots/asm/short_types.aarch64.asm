@@ -77,8 +77,6 @@ Disassembly of section .text:
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xf0

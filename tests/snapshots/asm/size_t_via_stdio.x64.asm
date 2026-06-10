@@ -73,8 +73,6 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	xorq	%rax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x1, %edi

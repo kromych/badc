@@ -9,8 +9,6 @@ Disassembly of section .text:
                	movl	$0x2a0, %esi            # imm = 0x2A0
                	callq	<addr>
                	ud2
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax
@@ -30,8 +28,6 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-
-<__c5_sys_geteuid>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
@@ -39,8 +35,6 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
-
-<__c5_sys_getpid>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax

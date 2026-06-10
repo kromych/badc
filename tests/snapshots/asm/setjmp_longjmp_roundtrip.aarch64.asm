@@ -43,8 +43,6 @@ Disassembly of section .text:
                	bl	<addr>
                	uxtb	w0, w0
                	b	<addr>
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20

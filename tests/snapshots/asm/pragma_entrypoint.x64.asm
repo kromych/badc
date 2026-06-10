@@ -55,8 +55,6 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-
-<custom_entry>:
                	movl	$0x17, %eax
                	retq
                	addb	%al, 0x41(%rdx)

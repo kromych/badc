@@ -27,8 +27,6 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w2
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80

@@ -41,13 +41,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-
-<f>:
                	movq	%rdi, %rax
                	movslq	%eax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

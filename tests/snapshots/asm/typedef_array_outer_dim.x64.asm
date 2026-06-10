@@ -54,8 +54,6 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	jmp	<addr>
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x230, %rsp            # imm = 0x230

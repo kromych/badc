@@ -53,8 +53,6 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	b	<addr>
                	b	<addr>
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x230

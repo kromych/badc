@@ -63,8 +63,6 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -159,8 +157,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-
-<__c5_sys_atoi>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)

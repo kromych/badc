@@ -25,8 +25,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	sxtw	x0, w0
                	ret
-
-<main>:
                	mov	x0, #0x1234             // =4660
                	mov	x17, #0xff              // =255
                	and	x1, x0, x17

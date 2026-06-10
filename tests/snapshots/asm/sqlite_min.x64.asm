@@ -9,8 +9,6 @@ Disassembly of section .text:
                	movl	$0x3b0, %esi            # imm = 0x3B0
                	callq	<addr>
                	ud2
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x150, %rsp            # imm = 0x150
@@ -110,8 +108,6 @@ Disassembly of section .text:
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
-
-<__c5_sys_open>:
                	popq	%r10
                	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
@@ -131,8 +127,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
-
-<__c5_sys_close>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)
@@ -148,8 +142,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-
-<__c5_sys_ftruncate>:
                	popq	%r10
                	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
@@ -167,8 +159,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
-
-<__c5_sys_fcntl>:
                	popq	%r10
                	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
@@ -188,8 +178,6 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
-
-<__c5_sys_stat>:
                	popq	%r10
                	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
@@ -207,8 +195,6 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
-
-<__c5_sys_fstat>:
                	popq	%r10
                	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)

@@ -83,8 +83,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp

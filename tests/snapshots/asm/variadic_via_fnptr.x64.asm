@@ -91,8 +91,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

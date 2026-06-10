@@ -24,8 +24,6 @@ Disassembly of section .text:
                	divsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp

@@ -15,8 +15,6 @@ Disassembly of section .text:
                	imulq	%rsi, %rax
                	movslq	%eax, %rax
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp

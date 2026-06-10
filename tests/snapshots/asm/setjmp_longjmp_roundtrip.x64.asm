@@ -42,8 +42,6 @@ Disassembly of section .text:
                	callq	<addr>
                	movzbq	%al, %rax
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

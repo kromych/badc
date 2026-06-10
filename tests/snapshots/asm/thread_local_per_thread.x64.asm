@@ -9,8 +9,6 @@ Disassembly of section .text:
                	movl	$0x2f0, %esi            # imm = 0x2F0
                	callq	<addr>
                	ud2
-
-<thread_main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
@@ -32,8 +30,6 @@ Disassembly of section .text:
                	movslq	(%rax), %rax
                	popq	%rbp
                	retq
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp

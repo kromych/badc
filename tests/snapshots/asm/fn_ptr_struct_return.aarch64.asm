@@ -14,8 +14,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0xe0
                	ret
-
-<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x90

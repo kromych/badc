@@ -115,8 +115,6 @@ Disassembly of section .text:
                	addq	%r15, %rax
                	movslq	%eax, %r15
                	jmp	<addr>
-
-<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

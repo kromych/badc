@@ -3,6 +3,22 @@ name = "badc"
 version = "0.0.8"
 edition = "2024"
 license = "MIT"
+description = "A quick, slim cross-platform C99 compiler with a JIT and native ELF / PE / Mach-O backends."
+repository = "https://github.com/kromych/badc"
+readme = "README.md"
+keywords = ["c", "compiler", "c99", "jit", "cross-compiler"]
+categories = ["compilers", "development-tools"]
+# The bundled C headers and runtime are `include_str!`'d into the
+# library at build time, so they must ship in the published package.
+include = [
+    "src/**/*.rs",
+    "lib/**",
+    "headers/**",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+]
 
 [lib]
 name = "badc"

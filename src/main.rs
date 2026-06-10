@@ -837,15 +837,29 @@ fn main() {
                 }
             }
         }
-        // Embedded runtime sources. Compiled in-memory and
-        // appended to `native_objs`. The data definitions
-        // (`environ`) link into every image; the libc-`exit`
-        // wrapper (`__c5_exit`) links only when the writer emits
-        // a `_start` CRT stub that calls it -- not into shared
-        // libraries or passthrough-entry subsystems (native /
-        // EFI), where no stub runs and a user-mode libc `exit`
-        // import would be dead (and unsatisfiable in kernel mode).
+        // A program that defines `__c5_entry` itself takes over the
+        // process startup: the embedded runtime is then dropped (its
+        // own `__c5_entry` / `__c5_exit` / `environ` would collide or
+        // be dead), and the entry adapter resolves `__c5_entry` to the
+        // user's definition. With no headers pulled in this yields a
+        // freestanding image.
+        let user_defines_entry = native_objs.iter().any(|o| {
+            o.symbols
+                .iter()
+                .any(|s| s.name == "__c5_entry" && s.section == badc::NativeSymSection::Text)
+        });
+        // A user-supplied `__c5_entry` is the image entry; without an
+        // explicit `#pragma entrypoint`, point the writer at it (the
+        // default `main` need not exist in a freestanding image).
+        if user_defines_entry && entry_override.is_none() {
+            entry_override = Some("__c5_entry".to_string());
+        }
+        // The embedded runtime's startup (`__c5_entry`, `__c5_exit`,
+        // `environ`) links only when the writer emits an entry stub --
+        // not into shared libraries, passthrough-entry subsystems
+        // (native / EFI), or images that supply their own `__c5_entry`.
         let emits_start_stub = mode != Mode::SharedLibrary
+            && !user_defines_entry
             && !matches!(
                 subsystem_override,
                 Some(

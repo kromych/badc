@@ -54,15 +54,14 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	str	w1, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x4
-               	ldr	w1, [x0]
+               	ldr	w1, [x0, #0x4]
                	mov	x17, #0xffff00000000    // =281470681743360
                	movk	x17, #0xffff, lsl #48
                	and	x1, x1, x17
                	mov	x2, #0x5678             // =22136
                	movk	x2, #0x1234, lsl #16
                	orr	x1, x1, x2
-               	str	w1, [x0]
+               	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x10
                	mov	x1, #0x3e7              // =999
                	str	w1, [x0, #0x8]

@@ -19,13 +19,12 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movl	$0x4, %edx
                	movl	%edx, 0x4(%rax)
-               	movslq	%ecx, %rdx
+               	movslq	%ecx, %rsi
                	movslq	%ecx, %rcx
-               	imulq	%rdx, %rcx
+               	imulq	%rsi, %rcx
                	movslq	%ecx, %rcx
-               	addq	$0x4, %rax
-               	movslq	(%rax), %rdx
-               	movq	%rdx, %rax
+               	movslq	%edx, %rax
+               	movslq	%edx, %rdx
                	imulq	%rdx, %rax
                	movslq	%eax, %rax
                	addq	%rcx, %rax
@@ -33,4 +32,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

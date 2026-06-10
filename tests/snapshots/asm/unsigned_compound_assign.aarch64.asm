@@ -204,13 +204,12 @@ Disassembly of section .text:
                	mov	x1, #0x28               // =40
                	str	w1, [x0, #0x10]
                	sub	x0, x29, #0x40
-               	add	x0, x0, #0xc
-               	ldrsw	x1, [x0]
+               	ldrsw	x1, [x0, #0xc]
                	cmp	x1, #0x1e
                	b.eq	<addr>
                	adrp	x1, <page>
                	add	x1, x1, #0x19e
-               	ldrsw	x0, [x0]
+               	ldrsw	x0, [x0, #0xc]
                	mov	x16, x1
                	mov	x1, x0
                	mov	x0, x16

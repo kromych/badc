@@ -37,13 +37,12 @@ Disassembly of section .text:
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x10(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %ecx
                	movabsq	$-0x100000000, %r13     # imm = 0xFFFFFFFF00000000
                	andq	%r13, %rcx
                	movl	$0x12345678, %edx       # imm = 0x12345678
                	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
                	movl	$0x3e7, %ecx            # imm = 0x3E7
                	movl	%ecx, 0x8(%rax)
@@ -320,4 +319,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

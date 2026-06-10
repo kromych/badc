@@ -24,9 +24,11 @@
 //! uses is left alone.
 //!
 //! The same pass folds a constant pointer offset (a struct field offset)
-//! into the load/store displacement: a single-use `BinopI(Add, base, c)`
-//! address with an aligned, in-range `c` becomes `Load { addr=base,
-//! disp=c }`.
+//! into the load/store displacement: a `BinopI(Add, base, c)` address
+//! with an aligned, in-range `c` becomes `Load { addr=base, disp=c }`.
+//! As with the scaled-index case this fires for a shared address too --
+//! the load and store of a read-modify-write of one field fold the
+//! offset into both accesses, provided every use is a same-width access.
 
 use alloc::vec::Vec;
 
@@ -155,35 +157,81 @@ fn foldable_scaled_addresses(
         .collect()
 }
 
-/// When `addr` is a single-use `BinopI(Add, base, c)` whose constant `c`
-/// is a non-negative byte offset aligned to `width` and within the
-/// scaled immediate-offset range of both targets, return `(base, c)`.
-/// Aligning to the access width keeps the AArch64 `ldr` / `str`
-/// immediate encoding (which scales by the width) valid; struct field
-/// offsets for a width-`width` field are naturally width-aligned, while
-/// a packed field at an unaligned offset is left for the plain add path.
-fn displaced_address(
+/// Constant-offset addresses `BinopI(Add, base, c)` whose every use is a
+/// load or store of one consistent width with no existing displacement,
+/// keyed by the address value id and mapping to `(base, c)`. Mirrors
+/// [`foldable_scaled_addresses`]: a shared address -- one `base + c`
+/// feeding both the load and the store of a read-modify-write of the same
+/// field -- folds into every access, so the add drops out, not only the
+/// single-use case.
+///
+/// `c` must be a positive byte offset aligned to the access width and
+/// within the scaled immediate-offset range of both targets. Aligning to
+/// the width keeps the AArch64 `ldr` / `str` immediate encoding (which
+/// scales by the width) valid; a width-`w` field is naturally
+/// `w`-aligned, while a packed field at an unaligned offset is left for
+/// the plain add path. A mix of access widths on one address, or any
+/// non-access use, leaves the address alone.
+fn foldable_displaced_addresses(
     func: &FunctionSsa,
     counts: &[u32],
-    addr: ValueId,
-    width: u8,
-) -> Option<(ValueId, i32)> {
-    if counts.get(addr as usize).copied().unwrap_or(0) != 1 {
-        return None;
+) -> alloc::collections::BTreeMap<ValueId, (ValueId, i32)> {
+    let mut cand: alloc::collections::BTreeMap<ValueId, (ValueId, i64)> =
+        alloc::collections::BTreeMap::new();
+    for (p, inst) in func.insts.iter().enumerate() {
+        if let Inst::BinopI {
+            op: BinOp::Add,
+            lhs,
+            rhs_imm,
+        } = inst
+            && *rhs_imm > 0
+        {
+            cand.insert(p as ValueId, (*lhs, *rhs_imm));
+        }
     }
-    let Inst::BinopI {
-        op: BinOp::Add,
-        lhs,
-        rhs_imm,
-    } = func.insts.get(addr as usize)?
-    else {
-        return None;
-    };
-    let c = *rhs_imm;
-    if c <= 0 || c % (width as i64) != 0 || c >= (width as i64) * 4096 {
-        return None;
+    // Per candidate, require every use to be a same-width load or store
+    // with no existing displacement. `width_seen` records the first
+    // access width and marks `0xff` on a width conflict; `valid` counts
+    // the qualifying accesses so a non-access use (valid < total) drops
+    // the candidate.
+    let mut width_seen: alloc::collections::BTreeMap<ValueId, u8> =
+        alloc::collections::BTreeMap::new();
+    let mut valid: alloc::collections::BTreeMap<ValueId, u32> = alloc::collections::BTreeMap::new();
+    for inst in &func.insts {
+        let (addr, width) = match inst {
+            Inst::Load {
+                addr,
+                disp: 0,
+                kind,
+            } => (*addr, load_width(*kind)),
+            Inst::Store {
+                addr,
+                disp: 0,
+                kind,
+                ..
+            } => (*addr, store_width(*kind)),
+            _ => continue,
+        };
+        let (Some(w), true) = (width, cand.contains_key(&addr)) else {
+            continue;
+        };
+        let seen = width_seen.entry(addr).or_insert(0);
+        *seen = if *seen == 0 || *seen == w { w } else { 0xff };
+        *valid.entry(addr).or_insert(0) += 1;
     }
-    Some((*lhs, c as i32))
+    cand.into_iter()
+        .filter_map(|(p, (base, c))| {
+            let total = counts.get(p as usize).copied().unwrap_or(0);
+            let w = width_seen.get(&p).copied().unwrap_or(0);
+            if w == 0 || w == 0xff || valid.get(&p).copied().unwrap_or(0) != total {
+                return None;
+            }
+            if c % (w as i64) != 0 || c >= (w as i64) * 4096 {
+                return None;
+            }
+            i32::try_from(c).ok().map(|disp| (p, (base, disp)))
+        })
+        .collect()
 }
 
 /// Rewrite recognised scaled-index loads and stores in place.
@@ -191,6 +239,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         let counts = use_counts(func);
         let scaled = foldable_scaled_addresses(func, &counts);
+        let displaced = foldable_displaced_addresses(func, &counts);
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for idx in 0..n {
@@ -214,9 +263,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
                                     kind: *kind,
                                 },
                             ));
-                        } else if let Some((base, disp)) =
-                            displaced_address(func, &counts, *addr, width)
-                        {
+                        } else if let Some(&(base, disp)) = displaced.get(addr) {
                             rewrites.push((
                                 idx,
                                 Inst::Load {
@@ -247,9 +294,7 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
                                     kind: *kind,
                                 },
                             ));
-                        } else if let Some((base, disp)) =
-                            displaced_address(func, &counts, *addr, width)
-                        {
+                        } else if let Some(&(base, disp)) = displaced.get(addr) {
                             rewrites.push((
                                 idx,
                                 Inst::Store {

@@ -157,24 +157,24 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v103 Binop { op=or, lhs=v100, rhs=v102 }              -> x1
     v104 Store { addr=v98, disp=0, value=v103, kind=I32 } -> -
     v105 LocalAddr(-4)                                    -> x0
-    v106 BinopI { op=add, lhs=v105, rhs_imm=4 }           -> x0
-    v107 Load { addr=v106, disp=0, kind=U32 }             -> x1
+    v106 BinopI { op=add, lhs=v105, rhs_imm=4 }           -> x1
+    v107 Load { addr=v105, disp=4, kind=U32 }             -> x1
     v108 BinopI { op=and, lhs=v107, rhs_imm=-256 }        -> x1
     v109 Imm(0)                                           -> x2
     v110 Binop { op=or, lhs=v108, rhs=v109 }              -> x1
-    v111 Store { addr=v106, disp=0, value=v110, kind=I32 } -> -
+    v111 Store { addr=v105, disp=4, value=v110, kind=I32 } -> -
     v112 LocalAddr(-4)                                    -> x0
-    v113 BinopI { op=add, lhs=v112, rhs_imm=4 }           -> x0
-    v114 Load { addr=v113, disp=0, kind=U32 }             -> x1
+    v113 BinopI { op=add, lhs=v112, rhs_imm=4 }           -> x1
+    v114 Load { addr=v112, disp=4, kind=U32 }             -> x1
     v115 BinopI { op=and, lhs=v114, rhs_imm=-257 }        -> x1
     v116 Binop { op=or, lhs=v115, rhs=v109 }              -> x1
-    v117 Store { addr=v113, disp=0, value=v116, kind=I32 } -> -
+    v117 Store { addr=v112, disp=4, value=v116, kind=I32 } -> -
     v118 LocalAddr(-4)                                    -> x0
-    v119 BinopI { op=add, lhs=v118, rhs_imm=4 }           -> x0
-    v120 Load { addr=v119, disp=0, kind=U32 }             -> x1
+    v119 BinopI { op=add, lhs=v118, rhs_imm=4 }           -> x1
+    v120 Load { addr=v118, disp=4, kind=U32 }             -> x1
     v121 BinopI { op=and, lhs=v120, rhs_imm=-4294966785 } -> x1
     v122 Binop { op=or, lhs=v121, rhs=v109 }              -> x1
-    v123 Store { addr=v119, disp=0, value=v122, kind=I32 } -> -
+    v123 Store { addr=v118, disp=4, value=v122, kind=I32 } -> -
     v124 LocalAddr(-4)                                    -> x0
     v125 BinopI { op=add, lhs=v124, rhs_imm=4 }           -> x1
     v126 Load { addr=v124, disp=4, kind=U32 }             -> x0

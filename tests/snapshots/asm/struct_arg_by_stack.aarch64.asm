@@ -91,10 +91,9 @@ Disassembly of section .text:
                	add	x1, x1, #0x3e8
                	str	x1, [x0]
                	sub	x0, x29, #0x20
-               	add	x0, x0, #0x18
-               	ldr	x1, [x0]
+               	ldr	x1, [x0, #0x18]
                	sub	x1, x1, #0x1
-               	str	x1, [x0]
+               	str	x1, [x0, #0x18]
                	sub	x0, x29, #0x20
                	ldr	x0, [x0]
                	sub	x1, x29, #0x20

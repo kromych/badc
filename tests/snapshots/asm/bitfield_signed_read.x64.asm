@@ -161,19 +161,17 @@ Disassembly of section .text:
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
-               	movzwq	(%rax), %rcx
+               	movzwq	0x4(%rax), %rcx
                	andq	$-0x4, %rcx
                	movl	$0x3, %edx
                	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
+               	movw	%cx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
-               	movzwq	(%rax), %rcx
+               	movzwq	0x4(%rax), %rcx
                	andq	$-0xd, %rcx
                	movl	$0x4, %edx
                	orq	%rdx, %rcx
-               	movw	%cx, (%rax)
+               	movw	%cx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
                	movl	(%rax), %eax
                	andq	$0xfff, %rax            # imm = 0xFFF
@@ -224,4 +222,5 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

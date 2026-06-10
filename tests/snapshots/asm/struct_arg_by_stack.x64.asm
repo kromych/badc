@@ -78,10 +78,9 @@ Disassembly of section .text:
                	addq	$0x3e8, %rcx            # imm = 0x3E8
                	movq	%rcx, (%rax)
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x18, %rax
-               	movq	(%rax), %rcx
+               	movq	0x18(%rax), %rcx
                	decq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, 0x18(%rax)
                	leaq	-0x20(%rbp), %rax
                	movq	(%rax), %rax
                	leaq	-0x20(%rbp), %rcx
@@ -281,3 +280,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

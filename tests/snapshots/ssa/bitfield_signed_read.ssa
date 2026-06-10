@@ -163,21 +163,21 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v121 Binop { op=or, lhs=v119, rhs=v120 }              -> x1
     v122 Store { addr=v117, disp=0, value=v121, kind=I32 } -> -
     v123 LocalAddr(-3)                                    -> x0
-    v124 BinopI { op=add, lhs=v123, rhs_imm=4 }           -> x0
-    v125 Load { addr=v124, disp=0, kind=U16 }             -> x1
+    v124 BinopI { op=add, lhs=v123, rhs_imm=4 }           -> x1
+    v125 Load { addr=v123, disp=4, kind=U16 }             -> x1
     v126 BinopI { op=and, lhs=v125, rhs_imm=-4 }          -> x1
     v127 Imm(-1)                                          -> x2
     v128 Imm(3)                                           -> x2
     v129 Binop { op=or, lhs=v126, rhs=v128 }              -> x1
-    v130 Store { addr=v124, disp=0, value=v129, kind=I16 } -> -
+    v130 Store { addr=v123, disp=4, value=v129, kind=I16 } -> -
     v131 LocalAddr(-3)                                    -> x0
-    v132 BinopI { op=add, lhs=v131, rhs_imm=4 }           -> x0
-    v133 Load { addr=v132, disp=0, kind=U16 }             -> x1
+    v132 BinopI { op=add, lhs=v131, rhs_imm=4 }           -> x1
+    v133 Load { addr=v131, disp=4, kind=U16 }             -> x1
     v134 BinopI { op=and, lhs=v133, rhs_imm=-13 }         -> x1
     v135 Imm(1)                                           -> x2
     v136 Imm(4)                                           -> x2
     v137 Binop { op=or, lhs=v134, rhs=v136 }              -> x1
-    v138 Store { addr=v132, disp=0, value=v137, kind=I16 } -> -
+    v138 Store { addr=v131, disp=4, value=v137, kind=I16 } -> -
     v139 LocalAddr(-3)                                    -> x0
     v140 Load { addr=v139, disp=0, kind=U32 }             -> x0
     v141 BinopI { op=and, lhs=v140, rhs_imm=4095 }        -> x0

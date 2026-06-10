@@ -20,13 +20,13 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x2, #0x4                // =4
                	str	w2, [x0, #0x4]
-               	sxtw	x2, w1
+               	sxtw	x3, w1
                	sxtw	x1, w1
-               	mul	x1, x2, x1
+               	mul	x1, x3, x1
                	sxtw	x1, w1
-               	add	x0, x0, #0x4
-               	ldrsw	x2, [x0]
-               	mul	x0, x2, x2
+               	sxtw	x0, w2
+               	sxtw	x2, w2
+               	mul	x0, x0, x2
                	sxtw	x0, w0
                	add	x0, x1, x0
                	sxtw	x0, w0

@@ -201,15 +201,23 @@ impl Compiler {
             // so `sizeof_operand_bytes` returns N+1 instead of the
             // decayed pointer's 8.
             let start_offset = self.lex.ival;
+            // A wide literal carries its own `wchar_t`-width terminator
+            // from the lexer (which also absorbs adjacent `L"..."`
+            // parts); a narrow literal does not, so the single trailing
+            // NUL is added here. Capture the kind before `next()`
+            // re-lexes the following token.
+            let is_wide = self.lex.str_is_wide;
             self.emit_data_imm(start_offset);
             self.next()?;
             // C concatenates adjacent string literals -- `"a" "b"` is one
-            // string. The lexer leaves the NUL off so the bytes flow
-            // straight together; we add the single trailing NUL here.
+            // string. The lexer leaves the narrow NUL off so the bytes
+            // flow straight together; the trailing NUL is added below.
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            if !is_wide {
+                self.data.push(0);
+            }
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
             // Dual-emit: capture the decayed `char *` rvalue so

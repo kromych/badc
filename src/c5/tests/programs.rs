@@ -574,6 +574,17 @@ fn multichar_constant_packs_bytes() {
 }
 
 #[test]
+fn wide_string_literal_size_includes_one_terminator() {
+    // C99 6.4.5: a wide string literal is `wchar_t[N+1]` with a single
+    // wide terminator; adjacent wide literals concatenate. The lexer
+    // appends the wchar_t-width NUL, so the parser must not also append
+    // the narrow one-byte NUL. The fixture checks sizes (empty, single,
+    // multi, concatenated), narrow-literal sizes for contrast, and wide
+    // content across a concatenation.
+    assert_eq!(run_fixture("wide_string_literal_size.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

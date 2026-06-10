@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<or_ll>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -28,6 +30,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<or_rr>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -47,6 +51,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<and_ll>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -66,6 +72,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<and_rr>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -83,6 +91,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp

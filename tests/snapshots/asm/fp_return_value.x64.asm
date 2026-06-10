@@ -9,12 +9,16 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<make_double>:
                	movslq	%edi, %rdi
                	cvtsi2sd	%rdi, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm0
                	retq
+
+<make_float>:
                	movslq	%edi, %rdi
                	cvtsi2sd	%rdi, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
@@ -24,6 +28,8 @@ Disassembly of section .text:
                	divsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp

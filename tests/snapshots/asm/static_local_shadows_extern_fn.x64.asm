@@ -9,11 +9,15 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<sum_first_two>:
                	movzbq	(%rdi), %rax
                	movzbq	0x1(%rdi), %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -43,6 +47,8 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x1, %edi

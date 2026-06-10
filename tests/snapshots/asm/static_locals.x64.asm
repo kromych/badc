@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x230, %esi            # imm = 0x230
                	callq	<addr>
                	ud2
+
+<counter>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
@@ -16,6 +18,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<two_statics>:
                	movslq	%edi, %rdi
                	cmpq	$0x0, %rdi
                	je	<addr>
@@ -42,6 +46,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<next_x>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
@@ -49,6 +55,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<next_y>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
@@ -56,6 +64,8 @@ Disassembly of section .text:
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>

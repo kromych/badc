@@ -9,10 +9,14 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<f>:
                	movapd	%xmm0, %xmm14
                	movapd	%xmm1, %xmm15
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	retq
+
+<g>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	cvtsi2sd	%rdi, %xmm2
@@ -23,6 +27,8 @@ Disassembly of section .text:
                	movapd	%xmm1, %xmm0
                	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

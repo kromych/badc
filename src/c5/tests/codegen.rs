@@ -144,6 +144,84 @@ fn plt_trampoline_local_names_appear_in_every_target() {
     }
 }
 
+/// A profiler attributes a sample by `[st_value, st_value + st_size)`,
+/// so every defined function must carry a non-zero `st_size` in the ELF
+/// `.symtab` -- perf / `nm` / `gdb` otherwise cannot name the address.
+/// The static `priv` exercises the merged-path local-symbol carry
+/// (`link_native_objects` -> `local_funcs` -> synth `func_names`), which
+/// a previous globals-only attempt missed; `pub` / `main` cover the
+/// global path. Link the program and confirm all three appear as sized
+/// `STT_FUNC` symbols.
+#[test]
+fn defined_functions_get_sized_symtab_entries() {
+    use crate::{NativeOptions, Target};
+    // Compile without the header prelude: the program needs no libc,
+    // and pulling the prelude would drag a tentative `environ` into the
+    // link alongside the runtime's definition.
+    let program = super::compile_str_bare(
+        "static int priv(int x){return x*x;} \
+         int pub(int x){return priv(x)+1;} \
+         int main(){return pub(7);}",
+    );
+    let bytes =
+        super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
+            .expect("link LinuxX64");
+    let funcs = elf_func_symbols(&bytes);
+    for name in ["priv", "pub", "main"] {
+        let size = funcs.iter().find(|(n, _)| n == name).map(|(_, s)| *s);
+        assert!(
+            matches!(size, Some(s) if s > 0),
+            "function `{name}` must have a non-zero .symtab st_size; got {size:?} \
+             (all FUNC symbols: {funcs:?})"
+        );
+    }
+}
+
+/// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
+/// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
+/// size regression above.
+fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    // SHT_SYMTAB == 2; its sh_link names the matching .strtab section.
+    let mut symtab_sh = None;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32a(sh + 4) == 2 {
+            symtab_sh = Some(sh);
+            break;
+        }
+    }
+    let Some(sh) = symtab_sh else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let st_name = u32a(p) as usize;
+        let st_info = b[p + 4];
+        let st_size = u64a(p + 16);
+        if st_info & 0xf == 2 {
+            let s = str_off + st_name;
+            let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            out.push((
+                alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+                st_size,
+            ));
+        }
+        p += 24;
+    }
+    out
+}
+
 /// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
 /// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
 /// The aarch64 allocator's sxtw fold collapses that pair into a

@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<clamp_low>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%rdi, %rax
@@ -21,6 +23,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x7, %edi

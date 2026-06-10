@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x2b0, %esi            # imm = 0x2B0
                	callq	<addr>
                	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -55,6 +57,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<preinc_u8_wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -90,6 +94,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<preinc_u16_wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -125,6 +131,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<preinc_u32_wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -159,6 +167,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<compound_u8_wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -194,6 +204,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<compound_u16_wrap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -229,6 +241,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<preinc_u8_through_pointer>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -267,6 +281,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

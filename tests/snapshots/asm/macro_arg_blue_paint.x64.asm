@@ -9,20 +9,30 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<init>:
                	movq	%rsi, (%rdi)
                	xorq	%rax, %rax
                	retq
+
+<bare>:
                	movq	(%rdi), %rax
                	movslq	(%rax), %rax
                	retq
+
+<single>:
                	movq	(%rdi), %rax
                	movslq	(%rax), %rax
                	retq
+
+<two_arg>:
                	movq	(%rdi), %rax
                	movslq	(%rax), %rax
                	addq	$0x7, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp

@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<ld32>:
                	movzbq	0x3(%rdi), %rax
                	movl	%eax, %eax
                	shlq	$0x8, %rax
@@ -26,6 +28,8 @@ Disassembly of section .text:
                	movzbq	(%rdi), %rcx
                	orq	%rcx, %rax
                	retq
+
+<core>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp
@@ -140,6 +144,8 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+
+<stream_xor>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp
@@ -251,6 +257,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xa0, %rsp

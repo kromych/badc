@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x280, %esi            # imm = 0x280
                	callq	<addr>
                	ud2
+
+<onExit>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	cmpq	$0x0, %rcx
@@ -18,6 +20,8 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

@@ -9,7 +9,7 @@ Disassembly of section .text:
                	mov	x1, #0x270              // =624
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -59,39 +59,67 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<fadd>:
                	fadd	d0, d0, d1
                	ret
+
+<fsub>:
                	fsub	d0, d0, d1
                	ret
+
+<fmul>:
                	fmul	d0, d0, d1
                	ret
+
+<fdiv>:
                	fdiv	d0, d0, d1
                	ret
+
+<fneg>:
                	fneg	d0, d0
                	ret
+
+<feq>:
                	fcmp	d0, d1
                	cset	x0, eq
                	ret
+
+<fne>:
                	fcmp	d0, d1
                	cset	x0, ne
                	ret
+
+<flt>:
                	fcmp	d0, d1
                	cset	x0, mi
                	ret
+
+<fgt>:
                	fcmp	d0, d1
                	cset	x0, gt
                	ret
+
+<fle>:
                	fcmp	d0, d1
                	cset	x0, ls
                	ret
+
+<fge>:
                	fcmp	d0, d1
                	cset	x0, ge
                	ret
+
+<itof>:
                	sxtw	x0, w0
                	scvtf	d0, x0
                	ret
+
+<ftoi>:
                	fcvtzs	x0, d0
                	ret
+
+<round_through_f32>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -104,6 +132,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10

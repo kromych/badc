@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x2b0, %esi            # imm = 0x2B0
                	callq	<addr>
                	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -55,6 +57,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<va_start_then_two_args>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xe0, %rsp
@@ -112,6 +116,8 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
+
+<copy_then_walk_twice>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xf0, %rsp
@@ -178,6 +184,8 @@ Disassembly of section .text:
                	addq	$0xf0, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp

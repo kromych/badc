@@ -9,11 +9,15 @@ Disassembly of section .text:
                	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
                	ud2
+
+<s_local_to_force_layout_shift>:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	movl	%edi, (%rax,%rdi,4)
                	movslq	(%rax,%rdi,4), %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorq	%rdi, %rdi

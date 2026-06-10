@@ -9,9 +9,13 @@ Disassembly of section .text:
                	movl	$0x230, %esi            # imm = 0x230
                	callq	<addr>
                	ud2
+
+<finder_impl>:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp

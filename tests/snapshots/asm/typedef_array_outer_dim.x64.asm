@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<fill_and_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -54,6 +56,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x230, %rsp            # imm = 0x230

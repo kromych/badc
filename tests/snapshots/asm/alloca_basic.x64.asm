@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x2f0, %esi            # imm = 0x2F0
                	callq	<addr>
                	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -55,6 +57,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<single>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x2030, %rsp           # imm = 0x2030
@@ -102,6 +106,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<dynamic>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)
@@ -171,6 +177,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
+
+<distinct>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x2050, %rsp           # imm = 0x2050
@@ -281,6 +289,8 @@ Disassembly of section .text:
                	addq	$0x2050, %rsp           # imm = 0x2050
                	popq	%rbp
                	retq
+
+<looped>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)
@@ -331,6 +341,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
+
+<inner_alloca_disturbs_outer>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)
@@ -404,6 +416,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

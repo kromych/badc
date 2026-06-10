@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<rot>:
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rcx
@@ -24,6 +26,8 @@ Disassembly of section .text:
                	movq	%r13, %rcx
                	orq	%rcx, %rax
                	retq
+
+<ch>:
                	movq	%rdi, %rax
                	andq	%rsi, %rax
                	movq	%rdi, %rcx
@@ -31,6 +35,8 @@ Disassembly of section .text:
                	andq	%rdx, %rcx
                	xorq	%rcx, %rax
                	retq
+
+<bs1>:
                	movq	%rdi, %rax
                	rorq	$0xe, %rax
                	movq	%rdi, %rcx
@@ -40,6 +46,8 @@ Disassembly of section .text:
                	rorq	$0x29, %rcx
                	xorq	%rcx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp

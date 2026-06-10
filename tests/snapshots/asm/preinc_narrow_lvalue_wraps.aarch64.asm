@@ -9,7 +9,7 @@ Disassembly of section .text:
                	mov	x1, #0x2b0              // =688
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -59,6 +59,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<preinc_u8_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -91,6 +93,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u16_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -123,6 +127,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u32_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -158,6 +164,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<compound_u8_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -190,6 +198,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<compound_u16_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -222,6 +232,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u8_through_pointer>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -256,6 +268,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40

@@ -9,23 +9,31 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	sxtw	x0, w0
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
+
+<minus_one>:
                	sxtw	x0, w0
                	sub	x0, x0, #0x1
                	sxtw	x0, w0
                	ret
+
+<plus_one_l>:
                	add	x0, x0, #0x1
                	ret
+
+<minus_neg_one>:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	sub	x0, x0, x17
                	ret
+
+<count_up>:
                	sxtw	x0, w0
                	mov	x2, #0x0                // =0
                	mov	x1, x2
@@ -43,6 +51,8 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w1
                	ret
+
+<wrap>:
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
                	and	x0, x0, x17
@@ -51,6 +61,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x0, x0, x17
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x29               // =41

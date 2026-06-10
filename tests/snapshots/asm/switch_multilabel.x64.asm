@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<classify>:
                	movslq	%edi, %rdi
                	cmpq	$0x61, %rdi
                	je	<addr>
@@ -50,6 +52,8 @@ Disassembly of section .text:
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x61, %edi

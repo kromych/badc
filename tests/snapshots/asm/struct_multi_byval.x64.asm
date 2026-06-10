@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<take_many>:
                	popq	%r10
                	subq	$0x80, %rsp
                	movq	0x90(%rsp), %rax
@@ -113,6 +115,8 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	pushq	%r11
                	retq
+
+<make2>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -130,6 +134,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<make4>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -158,6 +164,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<make6>:
                	popq	%r10
                	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
@@ -211,6 +219,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x150, %rsp            # imm = 0x150

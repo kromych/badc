@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<float_plus_double_is_double>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -58,6 +60,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<widen_preserves_float_value>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -102,6 +106,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<narrow_drops_precision>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -193,6 +199,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<assign_double_to_float_narrows>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -250,6 +258,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>

@@ -9,10 +9,12 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, #0x110
                	ret
+
+<main>:
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
                	adrp	x1, <page>

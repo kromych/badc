@@ -9,7 +9,7 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	ldr	x1, [x0]
                	mov	x2, #0x18               // =24
                	udiv	x2, x1, x2
@@ -24,6 +24,8 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	sxtw	x0, w0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20

@@ -9,7 +9,7 @@ Disassembly of section .text:
                	mov	x1, #0x230              // =560
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, #0xe0
                	ldrsw	x1, [x0]
@@ -18,6 +18,8 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<two_statics>:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	adrp	x0, <page>
@@ -47,6 +49,8 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
+
+<next_x>:
                	adrp	x0, <page>
                	add	x0, x0, #0xf8
                	ldrsw	x1, [x0]
@@ -55,6 +59,8 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<next_y>:
                	adrp	x0, <page>
                	add	x0, x0, #0x100
                	ldrsw	x1, [x0]
@@ -63,6 +69,8 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>

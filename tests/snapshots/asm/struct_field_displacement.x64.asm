@@ -9,21 +9,35 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<get_b>:
                	movslq	0x4(%rdi), %rax
                	retq
+
+<get_c>:
                	movq	0x8(%rdi), %rax
                	retq
+
+<get_e>:
                	movswq	0x10(%rdi), %rax
                	retq
+
+<get_d>:
                	movzbq	0x12(%rdi), %rax
                	retq
+
+<set_b>:
                	movslq	%esi, %rsi
                	movl	%esi, 0x4(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<set_c>:
                	movq	%rsi, 0x8(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<rmw_b>:
                	movslq	%esi, %rsi
                	movslq	0x4(%rdi), %rax
                	addq	%rsi, %rax
@@ -31,16 +45,22 @@ Disassembly of section .text:
                	movl	%eax, 0x4(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<rmw_c>:
                	movq	0x8(%rdi), %rax
                	addq	%rsi, %rax
                	movq	%rax, 0x8(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<rmw_d>:
                	movzbq	0x12(%rdi), %rax
                	incq	%rax
                	movb	%al, 0x12(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

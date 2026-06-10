@@ -165,6 +165,21 @@ fn synth_program_and_build(
             func_prologue_native.insert(pc, post_native as usize);
         }
     }
+    // Static (`STB_LOCAL`) functions get the same treatment as the
+    // global Text symbols above, so the static symbol table and DWARF
+    // name the program's own static functions too.
+    for (name, offset) in &merged.local_funcs {
+        let pc = *offset as usize;
+        func_ent_pcs.push(pc);
+        func_names.push(name.clone());
+        if pc_to_native.len() < pc + 1 {
+            pc_to_native.resize(pc + 1, usize::MAX);
+        }
+        pc_to_native[pc] = pc;
+        if let Some(&post_native) = merged.prologue_ends.get(name) {
+            func_prologue_native.insert(pc, post_native as usize);
+        }
+    }
 
     let build = Build {
         text: merged.text.clone(),
@@ -715,6 +730,7 @@ mod tests {
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: alloc::collections::BTreeMap::new(),
+            local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
         }

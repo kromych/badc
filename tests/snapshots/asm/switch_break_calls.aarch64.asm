@@ -9,15 +9,23 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	mov	x0, #0x64               // =100
                	ret
+
+<f2>:
                	mov	x0, #0xc8               // =200
                	ret
+
+<f3>:
                	mov	x0, #0x12c              // =300
                	ret
+
+<f4>:
                	mov	x0, #0x190              // =400
                	ret
+
+<driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -50,6 +58,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x2                // =2

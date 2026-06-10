@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x2b0, %esi            # imm = 0x2B0
                	callq	<addr>
                	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -55,6 +57,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<sink_op>:
                	movslq	%ecx, %rcx
                	xorq	%rax, %rax
                	movzbq	(%rsi), %rdx
@@ -62,6 +66,8 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	movl	%ecx, (%r8)
                	retq
+
+<forward>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%ecx, %rcx
@@ -71,6 +77,8 @@ Disassembly of section .text:
                	callq	*%r11
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp

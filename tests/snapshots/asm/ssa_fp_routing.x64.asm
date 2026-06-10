@@ -9,6 +9,8 @@ Disassembly of section .text:
                	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
                	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -55,18 +57,30 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<fadd>:
                	addsd	%xmm1, %xmm0
                	retq
+
+<fsub>:
                	subsd	%xmm1, %xmm0
                	retq
+
+<fmul>:
                	mulsd	%xmm1, %xmm0
                	retq
+
+<fdiv>:
                	divsd	%xmm1, %xmm0
                	retq
+
+<fneg>:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	retq
+
+<feq>:
                	ucomisd	%xmm1, %xmm0
                	sete	%al
                	movzbq	%al, %rax
@@ -74,6 +88,8 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
                	retq
+
+<fne>:
                	ucomisd	%xmm1, %xmm0
                	setne	%al
                	movzbq	%al, %rax
@@ -81,6 +97,8 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
                	retq
+
+<flt>:
                	ucomisd	%xmm1, %xmm0
                	setb	%al
                	movzbq	%al, %rax
@@ -88,10 +106,14 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
                	retq
+
+<fgt>:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
                	retq
+
+<fle>:
                	ucomisd	%xmm1, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
@@ -99,15 +121,23 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
                	retq
+
+<fge>:
                	ucomisd	%xmm1, %xmm0
                	setae	%al
                	movzbq	%al, %rax
                	retq
+
+<itof>:
                	movslq	%edi, %rdi
                	cvtsi2sd	%rdi, %xmm0
                	retq
+
+<ftoi>:
                	cvttsd2si	%xmm0, %rax
                	retq
+
+<round_through_f32>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -119,6 +149,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

@@ -1,7 +1,6 @@
-//! Tiny bench harness for badc's execution pipelines. Runs a few
-//! workloads through the VM and the in-process JIT, and reports
-//! wall-clock timings so successive commits have a number to
-//! point at.
+//! Bench harness for badc's execution pipelines. Runs a few workloads
+//! through the VM and the in-process JIT and reports wall-clock
+//! timings.
 //!
 //! Run from the repo root:
 //!
@@ -9,25 +8,25 @@
 //!     cargo run --release --example bench -- --iter 10
 //!     cargo run --release --example bench -- fib       # just fib
 //!
-//! Each workload is compiled once per pipeline (compile time isn't
-//! the thing we're optimizing) and then run `iter` times; we report
-//! min / median / mean of the run-time samples.
+//! Each workload is compiled once per pipeline (compile time is
+//! excluded) and run `iter` times; the table reports min / median /
+//! mean of the run-time samples.
 //!
-//! Stdout from the JIT'd program would interleave with our own
-//! output, so the workloads here are pure computation -- no printf,
-//! no syscalls. The c4 self-host is excluded for the same reason;
-//! for that path use `cargo test --lib c4::tests::jit::original_c4`
-//! which runs under cargo's stdout-capture.
+//! A run's stdout would interleave with the table, so the workloads
+//! are pure computation -- no printf, no syscalls. The c4 self-host is
+//! excluded for the same reason; run it under cargo's stdout capture
+//! with `cargo test --lib
+//! c5::tests::jit::original_c4_compiles_and_runs_hello_jit`.
 
 use std::time::{Duration, Instant};
 
-use badc::{Compiler, Program, Vm, jit_run};
+use badc::{Compiler, NativeOptions, Program, Vm, jit_run_with_options};
 
 /// One pipeline = one column in the output table.
 struct Pipeline {
     label: &'static str,
-    /// Whether `jit_run` is supported on this host. The bench skips
-    /// JIT pipelines on hosts that don't support it (Windows, old
+    /// Whether the in-process JIT is supported on this host. The bench
+    /// skips JIT pipelines on hosts that don't support it (Windows, old
     /// macOS Intel, ...) instead of crashing.
     needs_jit: bool,
     run: fn(&Program, &[String]) -> i32,
@@ -46,8 +45,8 @@ const PIPELINES: &[Pipeline] = &[
     },
 ];
 
-/// VM run. Pre-cloned by `measure` so the timed region excludes
-/// the program clone.
+/// VM run. `Vm::new` consumes an owned `Program`, so the per-run
+/// clone is part of the timed region.
 fn run_vm(program: &Program, args: &[String]) -> i32 {
     Vm::new(program.clone())
         .with_args(args.iter().cloned())
@@ -55,10 +54,11 @@ fn run_vm(program: &Program, args: &[String]) -> i32 {
         .expect("vm run") as i32
 }
 
-/// JIT run. The always-on peepholes in the lowering -- self-mov
-/// elision and cmp+branch fusion -- still fire here.
+/// JIT run with the SSA optimization passes enabled (mem2reg,
+/// inlining, branch const-fold, immediate dedup), matching
+/// `badc --jit -O`.
 fn run_jit(program: &Program, args: &[String]) -> i32 {
-    jit_run(program, args).expect("jit run")
+    jit_run_with_options(program, args, NativeOptions::default().with_optimize()).expect("jit run")
 }
 
 /// Inline workloads. Each is a (name, source, argv, expected exit)
@@ -193,7 +193,7 @@ const WORKLOADS: &[Workload] = &[
                     }
                     i = i + 1;
                 }
-                // Return c[0] & 255 as a result-fingerprint.
+                // Return c[0] & 255 as a result check.
                 return c[0] & 255;
             }
         "#,
@@ -207,18 +207,16 @@ const WORKLOADS: &[Workload] = &[
 ];
 
 fn measure(pipeline: &Pipeline, program: &Program, args: &[String], iter: usize) -> Vec<Duration> {
-    // VM pre-prepares so the timed region is execution only. JIT
-    // calls jit_run inside the timed region, which includes
-    // lowering + mmap + dlsym -- realistic per-run overhead. For
-    // long-running workloads (>1ms) this asymmetry is well under
-    // the run-to-run noise, but it's worth flagging when
-    // comparing across pipelines.
+    // The timed region is one full `run` per iteration. For the VM
+    // that includes cloning the program (the VM consumes an owned
+    // `Program`); for the JIT it includes lowering + mmap + dlsym.
+    // Both are realistic per-run setup, but the asymmetry matters when
+    // comparing the two columns on sub-millisecond workloads.
     let argv: Vec<String> = args.to_vec();
-    let prepared: Program = program.clone();
     let mut samples = Vec::with_capacity(iter);
     for _ in 0..iter {
         let t = Instant::now();
-        let _ = (pipeline.run)(&prepared, &argv);
+        let _ = (pipeline.run)(program, &argv);
         samples.push(t.elapsed());
     }
     samples
@@ -315,9 +313,9 @@ fn main() {
             .expect("compile workload");
         let args: Vec<String> = w.args.iter().map(|s| s.to_string()).collect();
 
-        // Sanity-check exit code once before we time anything. If
-        // any pipeline disagrees, the timings would be measuring
-        // unrelated work.
+        // Verify the VM exit against the expected value once before
+        // timing; a miscompile would otherwise be timed as if it were
+        // the intended workload.
         let exit_vm = run_vm(&program, &args);
         assert_eq!(
             exit_vm, w.expected,

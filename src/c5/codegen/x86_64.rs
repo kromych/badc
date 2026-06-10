@@ -1312,6 +1312,22 @@ pub(super) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
     emit_i32(code, rel32);
 }
 
+/// `Jmp rel8` -- short unconditional branch, 2 bytes. The target must
+/// be within -128..127 of the byte after the rel8 field; the caller
+/// (branch relaxation) guarantees the range.
+pub(super) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
+    emit_byte(code, 0xEB);
+    emit_byte(code, rel8 as u8);
+}
+
+/// `Jcc rel8` -- short conditional branch, 2 bytes. The opcode is
+/// `0x70 | cc`, the one-byte-displacement form of the `0x0F 0x80 | cc`
+/// rel32 encoding.
+pub(super) fn emit_jcc_rel8(code: &mut Vec<u8>, cc: Cc, rel8: i8) {
+    emit_byte(code, 0x70 | (cc as u8));
+    emit_byte(code, rel8 as u8);
+}
+
 /// `CALL r64` -- indirect call through a register. Encoding:
 /// `FF /2`.
 pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
@@ -2276,6 +2292,24 @@ mod tests {
             assemble(|c| emit_test_rr(c, Reg::RAX, Reg::RAX)),
             vec![0x48, 0x85, 0xC0]
         );
+    }
+
+    #[test]
+    fn short_branch_encodings() {
+        // jmp rel8  ->  EB cb (2 bytes), vs the 5-byte E9 rel32 form.
+        assert_eq!(assemble(|c| emit_jmp_rel8(c, 0x10)), vec![0xEB, 0x10]);
+        assert_eq!(assemble(|c| emit_jmp_rel8(c, -2)), vec![0xEB, 0xFE]);
+        // jcc rel8  ->  (0x70 | cc) cb (2 bytes), vs the 6-byte
+        // 0F 8x rel32 form. je -> 74, jne -> 75, jl -> 7C.
+        assert_eq!(
+            assemble(|c| emit_jcc_rel8(c, Cc::E, 0x05)),
+            vec![0x74, 0x05]
+        );
+        assert_eq!(
+            assemble(|c| emit_jcc_rel8(c, Cc::Ne, 0x05)),
+            vec![0x75, 0x05]
+        );
+        assert_eq!(assemble(|c| emit_jcc_rel8(c, Cc::L, -4)), vec![0x7C, 0xFC]);
     }
 
     #[test]

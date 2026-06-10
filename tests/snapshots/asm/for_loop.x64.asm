@@ -27,4 +27,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

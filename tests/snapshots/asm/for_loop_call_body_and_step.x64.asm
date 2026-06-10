@@ -60,3 +60,4 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

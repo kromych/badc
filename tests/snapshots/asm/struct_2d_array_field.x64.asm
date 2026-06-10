@@ -81,4 +81,4 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

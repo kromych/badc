@@ -1011,6 +1011,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("goto.c", 5),
     ("switch_statement.c", 25),
     ("switch_binary_search.c", 0),
+    ("branch_relaxation.c", 21),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),

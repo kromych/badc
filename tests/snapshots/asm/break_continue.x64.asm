@@ -42,5 +42,4 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

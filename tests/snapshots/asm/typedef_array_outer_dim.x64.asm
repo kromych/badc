@@ -133,4 +133,4 @@ Disassembly of section .text:
                	addq	$0x230, %rsp            # imm = 0x230
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -95,7 +95,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	leaq	-<rip>, %rdi      # <addr>
+               	leaq	-<rip>, %rdi       # <addr>
                	movl	$0x14, %esi
                	movl	$0x8, %edx
                	callq	<addr>

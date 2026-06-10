@@ -31,4 +31,3 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	addb	%al, (%rax)

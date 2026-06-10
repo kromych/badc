@@ -1726,76 +1726,128 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
-    // Set by `Inst::AllocaInit` (slot != 0) and read by the
-    // matching `Inst::Intrinsic(Alloca)`. Zero means the
-    // function doesn't use alloca.
-    let mut current_alloca_top: u32 = 0;
+    // Branch relaxation. The block loop runs once with every local
+    // branch in the rel32 long form (`branch_short` empty), then, when
+    // `relax_branches` finds shortenable branches, once more with the
+    // rel8 form for those branches. The second pass re-records every
+    // code-offset metadatum (relocations, line rows, pc map) against
+    // the shortened layout, so no recorded offset needs remapping. The
+    // snapshots mark the buffers' lengths after the prologue, where the
+    // re-emitted body begins.
+    let mut branch_short: Vec<bool> = Vec::new();
+    let body_code = code.len();
+    let body_fixups = fixups.len();
+    let body_plt = plt_call_fixups.len();
+    let body_data = data_fixups.len();
+    let body_uext = user_extern_data_refs.len();
+    let body_pending = pending_func_fixups.len();
+    let body_tls = tls_index_fixups.len();
+    let body_line_rows = ssa_line_rows.len();
 
-    for (block_idx, block) in func.blocks.iter().enumerate() {
-        block_offsets[block_idx] = code.len();
-        super::ssa_emit_common::record_block_start_pc(
-            block_idx,
-            block.start_pc,
-            pc_to_native,
-            code.len(),
-        );
-        // Tail-call opportunity: when the block's last instruction is
-        // a direct `Inst::Call` whose result is the same block's
-        // `Terminator::Return` value, lower the call as `marshal_args;
-        // epilogue; jmp target` instead of `call target; capture;
-        // epilogue; ret`. Saves one call+ret pair per recursion level
-        // and removes the post-call rax-to-place mov. See
-        // `detect_tail_call` for the safety preconditions.
-        let tail_call = detect_tail_call(func, block, abi, variadic_targets);
-        for v in block.inst_range.clone() {
-            let inst = &func.insts[v as usize];
-            let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-            if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
-                continue;
+    'emit: loop {
+        // Set by `Inst::AllocaInit` (slot != 0) and read by the
+        // matching `Inst::Intrinsic(Alloca)`. Zero means the
+        // function doesn't use alloca.
+        let mut current_alloca_top: u32 = 0;
+
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            block_offsets[block_idx] = code.len();
+            super::ssa_emit_common::record_block_start_pc(
+                block_idx,
+                block.start_pc,
+                pc_to_native,
+                code.len(),
+            );
+            // Tail-call opportunity: when the block's last instruction is
+            // a direct `Inst::Call` whose result is the same block's
+            // `Terminator::Return` value, lower the call as `marshal_args;
+            // epilogue; jmp target` instead of `call target; capture;
+            // epilogue; ret`. Saves one call+ret pair per recursion level
+            // and removes the post-call rax-to-place mov. See
+            // `detect_tail_call` for the safety preconditions.
+            let tail_call = detect_tail_call(func, block, abi, variadic_targets);
+            for v in block.inst_range.clone() {
+                let inst = &func.insts[v as usize];
+                let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+                if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                    continue;
+                }
+                // ParamRef already placed by the entry parallel copy.
+                if param_prebatched[v as usize] {
+                    continue;
+                }
+                // The tail-call Call's args setup is folded into the
+                // terminator emit; skip the per-inst emit so we don't
+                // emit the `call` instruction and the post-call capture.
+                if let Some((tail_pc, _, _)) = tail_call
+                    && (v as usize) == tail_pc
+                {
+                    continue;
+                }
+                super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+                let data_fixups_pre_inst = data_fixups.len();
+                if !emit_inst(
+                    code,
+                    inst,
+                    v,
+                    place,
+                    func,
+                    alloc,
+                    frame,
+                    abi,
+                    target,
+                    fixups,
+                    plt_call_fixups,
+                    data_fixups,
+                    pending_func_fixups,
+                    imports,
+                    variadic_targets,
+                    tls_index_fixups,
+                    tls_total_size,
+                    &mut current_alloca_top,
+                    &param_from_home,
+                    &param_plan,
+                ) {
+                    #[cfg(feature = "codegen_test")]
+                    if std::env::var("BADC_DUMP_SSA").is_ok() {
+                        eprintln!(
+                            "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
+                            inst, place,
+                        );
+                    }
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+                // Convert the just-emitted ImmData's local `.data`
+                // fixup into a named cross-TU reference when the
+                // value-id appears in `extern_data_names`. See the
+                // matching comment in ssa_emit_aarch64.
+                if let Inst::ImmData(_) = inst
+                    && let Some(name) = extern_data_names.get(&v)
+                    && data_fixups.len() > data_fixups_pre_inst
+                {
+                    let popped = data_fixups.pop().unwrap();
+                    user_extern_data_refs.push(super::UserExternDataRef {
+                        instr_offset: popped.adrp_offset,
+                        symbol_name: name.clone(),
+                    });
+                }
             }
-            // ParamRef already placed by the entry parallel copy.
-            if param_prebatched[v as usize] {
-                continue;
-            }
-            // The tail-call Call's args setup is folded into the
-            // terminator emit; skip the per-inst emit so we don't
-            // emit the `call` instruction and the post-call capture.
-            if let Some((tail_pc, _, _)) = tail_call
-                && (v as usize) == tail_pc
-            {
-                continue;
-            }
-            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
-            let data_fixups_pre_inst = data_fixups.len();
-            if !emit_inst(
+            // Predecessor-exit moves for any phi at every CFG
+            // successor's head. A Return / TailExt block has no
+            // successor; the helper is a no-op there.
+            if !emit_phi_predecessor_moves(
                 code,
-                inst,
-                v,
-                place,
+                block_idx as super::super::ir::BlockId,
                 func,
                 alloc,
                 frame,
-                abi,
-                target,
-                fixups,
-                plt_call_fixups,
-                data_fixups,
-                pending_func_fixups,
-                imports,
-                variadic_targets,
-                tls_index_fixups,
-                tls_total_size,
-                &mut current_alloca_top,
-                &param_from_home,
-                &param_plan,
             ) {
-                #[cfg(feature = "codegen_test")]
-                if std::env::var("BADC_DUMP_SSA").is_ok() {
-                    eprintln!(
-                        "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
-                        inst, place,
-                    );
-                }
                 code.truncate(snapshot);
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1804,57 +1856,139 @@ pub(super) fn emit_function(
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }
-            // Convert the just-emitted ImmData's local `.data`
-            // fixup into a named cross-TU reference when the
-            // value-id appears in `extern_data_names`. See the
-            // matching comment in ssa_emit_aarch64.
-            if let Inst::ImmData(_) = inst
-                && let Some(name) = extern_data_names.get(&v)
-                && data_fixups.len() > data_fixups_pre_inst
-            {
-                let popped = data_fixups.pop().unwrap();
-                user_extern_data_refs.push(super::UserExternDataRef {
-                    instr_offset: popped.adrp_offset,
-                    symbol_name: name.clone(),
-                });
-            }
-        }
-        // Predecessor-exit moves for any phi at every CFG
-        // successor's head. A Return / TailExt block has no
-        // successor; the helper is a no-op there.
-        if !emit_phi_predecessor_moves(
-            code,
-            block_idx as super::super::ir::BlockId,
-            func,
-            alloc,
-            frame,
-        ) {
-            code.truncate(snapshot);
-            fixups.truncate(fixups_snapshot);
-            plt_call_fixups.truncate(plt_call_fixups_snapshot);
-            data_fixups.truncate(data_fixups_snapshot);
-            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-            pending_func_fixups.truncate(pending_func_fixups_snapshot);
-            return false;
-        }
-        match block.terminator {
-            Terminator::Return(v) => {
-                if let Some((tail_pc, target_pc, args)) = tail_call {
-                    let fp_arg_mask = match &func.insts[tail_pc] {
-                        Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
-                        _ => 0,
+            match block.terminator {
+                Terminator::Return(v) => {
+                    if let Some((tail_pc, target_pc, args)) = tail_call {
+                        let fp_arg_mask = match &func.insts[tail_pc] {
+                            Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
+                            _ => 0,
+                        };
+                        if !emit_tail_call(
+                            code,
+                            target_pc,
+                            args,
+                            alloc,
+                            frame,
+                            abi,
+                            fixups,
+                            func,
+                            fp_arg_mask,
+                        ) {
+                            code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            return false;
+                        }
+                    } else {
+                        emit_return(code, v, alloc, frame, func, abi)
+                    }
+                }
+                Terminator::Jmp(t) => {
+                    // Fall through when the target is the next block in
+                    // layout rather than emitting a jump to it.
+                    if t as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            t,
+                        );
+                    }
+                }
+                Terminator::Bz {
+                    cond,
+                    target,
+                    fall_through,
+                } => {
+                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jcc(cc),
+                            target,
+                        );
+                        if fall_through as usize != block_idx + 1 {
+                            emit_local_branch(
+                                code,
+                                &mut branch_fixups,
+                                &branch_short,
+                                LocalBranchKind::Jmp,
+                                fall_through,
+                            );
+                        }
+                        continue;
+                    }
+                    let cond_place = alloc
+                        .places
+                        .get(cond as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                        bail_msg("Bz: cond Place not int reg / spill / fp");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
                     };
-                    if !emit_tail_call(
+                    // `test rc, rc` sets ZF=1 iff rc==0; je takes the
+                    // branch on ZF=1. Shorter than `cmp rc, 0`.
+                    super::x86_64::emit_test_rr(code, rc, rc);
+                    emit_local_branch(
                         code,
-                        target_pc,
-                        args,
-                        alloc,
-                        frame,
-                        abi,
-                        fixups,
-                        func,
-                        fp_arg_mask,
-                    ) {
+                        &mut branch_fixups,
+                        &branch_short,
+                        LocalBranchKind::Jcc(Cc::E),
+                        target,
+                    );
+                    if fall_through as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            fall_through,
+                        );
+                    }
+                }
+                Terminator::Bnz {
+                    cond,
+                    target,
+                    fall_through,
+                } => {
+                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jcc(cc),
+                            target,
+                        );
+                        if fall_through as usize != block_idx + 1 {
+                            emit_local_branch(
+                                code,
+                                &mut branch_fixups,
+                                &branch_short,
+                                LocalBranchKind::Jmp,
+                                fall_through,
+                            );
+                        }
+                        continue;
+                    }
+                    let cond_place = alloc
+                        .places
+                        .get(cond as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                        bail_msg("Bnz: cond Place not int reg / spill / fp");
                         code.truncate(snapshot);
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1862,194 +1996,142 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
-                    }
-                } else {
-                    emit_return(code, v, alloc, frame, func, abi)
-                }
-            }
-            Terminator::Jmp(t) => {
-                // Fall through when the target is the next block in
-                // layout rather than emitting a jump to it.
-                if t as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1, // rel32 follows the 1-byte opcode
-                        target: t,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            } => {
-                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 2,
+                    };
+                    super::x86_64::emit_test_rr(code, rc, rc);
+                    emit_local_branch(
+                        code,
+                        &mut branch_fixups,
+                        &branch_short,
+                        LocalBranchKind::Jcc(Cc::Ne),
                         target,
-                        kind: LocalBranchKind::Jcc(cc),
-                    });
-                    super::x86_64::emit_jcc_rel32(code, cc, 0);
+                    );
                     if fall_through as usize != block_idx + 1 {
-                        branch_fixups.push(BranchFixup {
-                            site: code.len() + 1,
-                            target: fall_through,
-                            kind: LocalBranchKind::Jmp,
-                        });
-                        super::x86_64::emit_jmp_rel32(code, 0);
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            fall_through,
+                        );
                     }
-                    continue;
                 }
-                let cond_place = alloc
-                    .places
-                    .get(cond as usize)
-                    .copied()
-                    .unwrap_or(Place::None);
-                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
-                    bail_msg("Bz: cond Place not int reg / spill / fp");
-                    code.truncate(snapshot);
-                    fixups.truncate(fixups_snapshot);
-                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                    data_fixups.truncate(data_fixups_snapshot);
-                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                    return false;
-                };
-                // `test rc, rc` sets ZF=1 iff rc==0; je takes the
-                // branch on ZF=1. Shorter than `cmp rc, 0`.
-                super::x86_64::emit_test_rr(code, rc, rc);
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 2, // 0x0F 0x8x + rel32
-                    target,
-                    kind: LocalBranchKind::Jcc(Cc::E),
-                });
-                super::x86_64::emit_jcc_rel32(code, Cc::E, 0);
-                if fall_through as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: fall_through,
-                        kind: LocalBranchKind::Jmp,
+                Terminator::FallThrough(t) => {
+                    if t as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            t,
+                        );
+                    }
+                }
+                Terminator::TailExt(binding_idx) => {
+                    // The parser emits `Terminator::TailExt` for the
+                    // sys-trampoline bodies: the matching indirect
+                    // call already placed every arg in the host ABI's
+                    // argument registers / shadow-space slots, so the
+                    // emit just forwards control through the PLT
+                    // trampoline and lets the libc fn's `ret` carry
+                    // us back to the original caller.
+                    let import_index = match imports.index_of_binding(binding_idx) {
+                        Some(i) => i,
+                        None => {
+                            bail_msg("TailExt: no import slot for binding");
+                            code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            return false;
+                        }
+                    };
+                    plt_call_fixups.push(PltCallFixup {
+                        instr_offset: code.len(),
+                        import_index,
+                        is_tail: true,
                     });
                     super::x86_64::emit_jmp_rel32(code, 0);
                 }
-            }
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            } => {
-                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 2,
-                        target,
-                        kind: LocalBranchKind::Jcc(cc),
-                    });
-                    super::x86_64::emit_jcc_rel32(code, cc, 0);
-                    if fall_through as usize != block_idx + 1 {
-                        branch_fixups.push(BranchFixup {
-                            site: code.len() + 1,
-                            target: fall_through,
-                            kind: LocalBranchKind::Jmp,
-                        });
-                        super::x86_64::emit_jmp_rel32(code, 0);
-                    }
-                    continue;
-                }
-                let cond_place = alloc
-                    .places
-                    .get(cond as usize)
-                    .copied()
-                    .unwrap_or(Place::None);
-                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
-                    bail_msg("Bnz: cond Place not int reg / spill / fp");
-                    code.truncate(snapshot);
-                    fixups.truncate(fixups_snapshot);
-                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                    data_fixups.truncate(data_fixups_snapshot);
-                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                    return false;
-                };
-                super::x86_64::emit_test_rr(code, rc, rc);
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 2,
-                    target,
-                    kind: LocalBranchKind::Jcc(Cc::Ne),
-                });
-                super::x86_64::emit_jcc_rel32(code, Cc::Ne, 0);
-                if fall_through as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: fall_through,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::FallThrough(t) => {
-                if t as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: t,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::TailExt(binding_idx) => {
-                // The parser emits `Terminator::TailExt` for the
-                // sys-trampoline bodies: the matching indirect
-                // call already placed every arg in the host ABI's
-                // argument registers / shadow-space slots, so the
-                // emit just forwards control through the PLT
-                // trampoline and lets the libc fn's `ret` carry
-                // us back to the original caller.
-                let import_index = match imports.index_of_binding(binding_idx) {
-                    Some(i) => i,
-                    None => {
-                        bail_msg("TailExt: no import slot for binding");
-                        code.truncate(snapshot);
-                        fixups.truncate(fixups_snapshot);
-                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                        data_fixups.truncate(data_fixups_snapshot);
-                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                        return false;
-                    }
-                };
-                plt_call_fixups.push(PltCallFixup {
-                    instr_offset: code.len(),
-                    import_index,
-                    is_tail: true,
-                });
-                super::x86_64::emit_jmp_rel32(code, 0);
             }
         }
+
+        // First pass emitted every branch long; decide which can shrink and,
+        // if any, reset the body-appended buffers and re-emit. A pass that
+        // finds nothing to shorten produces the final layout.
+        if branch_short.is_empty() {
+            let branches: Vec<(usize, usize, usize)> = branch_fixups
+                .iter()
+                .map(|fx| {
+                    let (opcode_start, long_size) = match fx.kind {
+                        LocalBranchKind::Jmp => (fx.site - 1, 5),
+                        LocalBranchKind::Jcc(_) => (fx.site - 2, 6),
+                    };
+                    (opcode_start, long_size, fx.target as usize)
+                })
+                .collect();
+            branch_short = relax_branches(&branches, &block_offsets);
+            if branch_short.iter().any(|&s| s) {
+                // pc_to_native is index-keyed and overwritten in place by
+                // the second pass, so it needs no reset.
+                code.truncate(body_code);
+                fixups.truncate(body_fixups);
+                plt_call_fixups.truncate(body_plt);
+                data_fixups.truncate(body_data);
+                user_extern_data_refs.truncate(body_uext);
+                pending_func_fixups.truncate(body_pending);
+                tls_index_fixups.truncate(body_tls);
+                ssa_line_rows.truncate(body_line_rows);
+                for b in block_offsets.iter_mut() {
+                    *b = 0;
+                }
+                branch_fixups.clear();
+                continue 'emit;
+            }
+        }
+        break 'emit;
     }
-    // Patch recorded branches. `site` is the byte offset of the
-    // first rel32 byte; rel32 is computed from the byte *after*
-    // the rel32 field (which on x86_64 is `site + 4`).
+
+    // Patch recorded branches. The displacement is measured from the
+    // byte after the displacement field: `site + 1` for the rel8 short
+    // form, `site + 4` for rel32. `relax_branches` guarantees a short
+    // branch's target is within the signed 8-bit range.
     for fx in &branch_fixups {
         let target_off = block_offsets[fx.target as usize];
-        let next_pc = fx.site + 4;
-        let rel = (target_off as i64) - (next_pc as i64);
-        let imm = match i32::try_from(rel) {
-            Ok(v) => v,
-            Err(_) => {
-                bail_msg("branch fixup: rel32 out of range");
-                code.truncate(snapshot);
-                fixups.truncate(fixups_snapshot);
-                plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                data_fixups.truncate(data_fixups_snapshot);
-                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                return false;
-            }
-        };
-        let bytes = imm.to_le_bytes();
-        code[fx.site..fx.site + 4].copy_from_slice(&bytes);
-        let _ = fx.kind;
+        if fx.short {
+            let rel = (target_off as i64) - (fx.site as i64 + 1);
+            let imm = match i8::try_from(rel) {
+                Ok(v) => v,
+                Err(_) => {
+                    bail_msg("branch fixup: rel8 out of range");
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+            };
+            code[fx.site] = imm as u8;
+        } else {
+            let rel = (target_off as i64) - (fx.site as i64 + 4);
+            let imm = match i32::try_from(rel) {
+                Ok(v) => v,
+                Err(_) => {
+                    bail_msg("branch fixup: rel32 out of range");
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+            };
+            code[fx.site..fx.site + 4].copy_from_slice(&imm.to_le_bytes());
+        }
     }
 
     true
@@ -2057,16 +2139,125 @@ pub(super) fn emit_function(
 
 #[derive(Debug, Clone, Copy)]
 struct BranchFixup {
-    /// Byte offset of the rel32 field in `code`.
+    /// Byte offset of the displacement field in `code` (rel8 for a
+    /// short branch, rel32 otherwise).
     site: usize,
     target: super::super::ir::BlockId,
     kind: LocalBranchKind,
+    /// `true` when the branch was emitted in the 2-byte rel8 form.
+    short: bool,
+}
+
+/// Emit a local branch to `target`, choosing the 2-byte rel8 short form
+/// when `branch_short[idx]` is set (idx = this branch's emission index),
+/// and record the fixup. `branch_short` is empty on the first all-long
+/// emission pass and is populated by `relax_branches` for the second.
+fn emit_local_branch(
+    code: &mut alloc::vec::Vec<u8>,
+    branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
+    branch_short: &[bool],
+    kind: LocalBranchKind,
+    target: super::super::ir::BlockId,
+) {
+    let idx = branch_fixups.len();
+    let short = branch_short.get(idx).copied().unwrap_or(false);
+    match kind {
+        LocalBranchKind::Jmp => {
+            // EB cb (rel8) / E9 cd (rel32): displacement follows the
+            // 1-byte opcode in both forms.
+            branch_fixups.push(BranchFixup {
+                site: code.len() + 1,
+                target,
+                kind,
+                short,
+            });
+            if short {
+                super::x86_64::emit_jmp_rel8(code, 0);
+            } else {
+                super::x86_64::emit_jmp_rel32(code, 0);
+            }
+        }
+        LocalBranchKind::Jcc(cc) => {
+            // 7x cb (rel8): displacement at +1. 0F 8x cd (rel32): at +2.
+            let site = if short {
+                code.len() + 1
+            } else {
+                code.len() + 2
+            };
+            branch_fixups.push(BranchFixup {
+                site,
+                target,
+                kind,
+                short,
+            });
+            if short {
+                super::x86_64::emit_jcc_rel8(code, cc, 0);
+            } else {
+                super::x86_64::emit_jcc_rel32(code, cc, 0);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalBranchKind {
     Jmp,
     Jcc(Cc),
+}
+
+/// Decide, per local branch, whether its target is close enough to use
+/// the 2-byte rel8 encoding (`EB`/`7x`) instead of the 5/6-byte rel32
+/// form (`E9`/`0F 8x`).
+///
+/// Each entry of `branches` is `(opcode_start, long_size, target_block)`
+/// in emission order, where `opcode_start` is the all-long byte offset
+/// of the instruction's first byte, `long_size` is 5 (jmp) or 6 (jcc),
+/// and `block_offsets` holds each block's all-long byte offset. Both
+/// short forms are 2 bytes, so a shortened branch removes
+/// `long_size - 2` bytes at its `opcode_start`.
+///
+/// Shortening one branch only reduces the magnitude of every other
+/// branch's displacement, so the shortenable set is a monotone fixpoint:
+/// start all-long and repeatedly mark a branch short once its
+/// displacement -- recomputed against the bytes already removed by the
+/// branches marked short so far -- fits a signed 8-bit field. The check
+/// excludes a forward branch's own saving, so the estimate is never
+/// optimistic: a branch marked short fits in the final layout.
+fn relax_branches(
+    branches: &[(usize, usize, usize)],
+    block_offsets: &[usize],
+) -> alloc::vec::Vec<bool> {
+    let n = branches.len();
+    let mut short = alloc::vec![false; n];
+    loop {
+        // prefix[k] = bytes removed by short branches among branches[0..k].
+        // `opcode_start` is non-decreasing in emission order, so the bytes
+        // removed before an offset are a prefix indexed by partition_point.
+        let mut prefix = alloc::vec![0usize; n + 1];
+        for i in 0..n {
+            prefix[i + 1] = prefix[i] + if short[i] { branches[i].1 - 2 } else { 0 };
+        }
+        let saved_before =
+            |off: usize| -> usize { prefix[branches.partition_point(|b| b.0 < off)] };
+        let mut changed = false;
+        for i in 0..n {
+            if short[i] {
+                continue;
+            }
+            let (opcode_start, _long, target) = branches[i];
+            let instr_end = (opcode_start - saved_before(opcode_start)) + 2;
+            let tgt = block_offsets[target] - saved_before(block_offsets[target]);
+            let rel = tgt as i64 - instr_end as i64;
+            if (-128..=127).contains(&rel) {
+                short[i] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    short
 }
 
 /// Spill the host-ABI argument registers into the c5 cdecl slots
@@ -6547,5 +6738,74 @@ mod scratch_picker_tests {
         let rd = Reg(7);
         let operands = [Reg(11), Reg(10), Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
         assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
+}
+
+#[cfg(test)]
+mod relax_branches_tests {
+    use super::*;
+
+    // jmp form: long_size 5; jcc form: long_size 6. Short form is 2
+    // bytes; displacement is measured from the byte after the 2-byte
+    // short instruction to the target offset.
+
+    #[test]
+    fn near_forward_branch_shortens() {
+        // Single jmp at offset 0 to a block 100 bytes ahead: short rel
+        // = 100 - 2 = 98, within i8.
+        let short = relax_branches(&[(0, 5, 1)], &[0, 100]);
+        assert_eq!(short, vec![true]);
+    }
+
+    #[test]
+    fn far_forward_branch_stays_long() {
+        // Target 200 bytes ahead: short rel = 198, out of i8 range.
+        let short = relax_branches(&[(0, 5, 1)], &[0, 200]);
+        assert_eq!(short, vec![false]);
+    }
+
+    #[test]
+    fn backward_branch_shortens() {
+        // jmp at offset 50 back to offset 0: short rel = 0 - 52 = -52.
+        let short = relax_branches(&[(50, 5, 0)], &[0, 50]);
+        assert_eq!(short, vec![true]);
+    }
+
+    #[test]
+    fn forward_boundary_127_shortens_128_does_not() {
+        // Short instr ends at offset 2; target 129 -> rel 127 (fits),
+        // target 130 -> rel 128 (does not).
+        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 129]), vec![true]);
+        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 130]), vec![false]);
+    }
+
+    #[test]
+    fn cascade_inner_shortening_brings_outer_into_range() {
+        // branch0 (offset 0) targets block 2 at 132; branch1 (offset 5)
+        // targets block 1 at 10 and shortens first (rel 3), removing 3
+        // bytes before branch0's target. branch0's short rel then
+        // becomes 132 - 3 - 2 = 127 -> fits. A single all-long pass
+        // (rel 130) would have missed branch0.
+        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 132]);
+        assert_eq!(short, vec![true, true]);
+        // One more byte of distance defeats the cascade for branch0.
+        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 133]);
+        assert_eq!(short, vec![false, true]);
+    }
+
+    #[test]
+    fn jcc_long_size_six_removes_four_bytes() {
+        // A shortened jcc removes 4 bytes (6 -> 2). Two jccs whose
+        // combined 8-byte saving brings a third into range.
+        // block layout: b0@0, b1@4, b2@8, b3@140.
+        // branch0@0 -> b3(140): all-long rel 138; after the two inner
+        // jccs shorten (save 8), rel = 140 - 8 - 2 = 130 -> still out.
+        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 140]);
+        assert!(short[1]);
+        assert!(short[2]);
+        assert!(!short[0]);
+        // Pull the target in by 3 so the saving is enough: 134 - 8 - 2 = 124.
+        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 134]);
+        assert!(short[0]);
     }
 }

@@ -43,4 +43,3 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

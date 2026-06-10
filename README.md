@@ -124,16 +124,22 @@ all you should need to start using `badc`.
 If you have Rust installed, clone the repo, and install it with
 
 ```sh
-cargo install --path .
+cargo install --path . --features linker
 ```
 
-or just 
+or just
 
 ```sh
-cargo install badc
+cargo install badc --features linker
 ```
 
 if you're not interested in building from the source code.
+
+The `--features linker` is required for the command-line compiler: the
+crate's default feature set is the host-architecture JIT library alone
+(so `cargo add badc` pulls in a slim dependency), and the `badc` binary
+additionally needs the native object writers and the cross-translation-unit
+linker, which the `linker` feature enables.
 
 Now `badc` is available on the PATH.
 
@@ -525,13 +531,18 @@ construct the VM with `Vm::with_host(program, my_host)`. Everything
 else -- lexer, parser, preprocessor, VM dispatch, pointer tracking,
 native backends -- runs on `extern crate alloc`.
 
-The CLI binary always builds with the default `std` feature.
+The CLI binary requires the `std` and `linker` features (see the
+install section above).
 
 ## Tests
 
 ```sh
-cargo test
+cargo test --features linker
 ```
+
+`--features linker` runs the full suite. A bare `cargo test` exercises
+only the host-only JIT library (the default feature set), gating out
+the `native*`, `linker`, and `dwarf` modules that emit on-disk images.
 
 Tests are split by what they exercise. `lexer`, `parser`, and
 `codegen` drive each phase directly. `programs` and `intrinsics`

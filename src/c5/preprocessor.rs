@@ -1943,6 +1943,12 @@ impl Preprocessor {
             "sqrtf" => super::op::Intrinsic::Sqrtf as i64,
             "fabs" => super::op::Intrinsic::Fabs as i64,
             "fabsf" => super::op::Intrinsic::Fabsf as i64,
+            "floor" => super::op::Intrinsic::Floor as i64,
+            "floorf" => super::op::Intrinsic::Floorf as i64,
+            "ceil" => super::op::Intrinsic::Ceil as i64,
+            "ceilf" => super::op::Intrinsic::Ceilf as i64,
+            "trunc" => super::op::Intrinsic::Trunc as i64,
+            "truncf" => super::op::Intrinsic::Truncf as i64,
             "__builtin_trap" => super::op::Intrinsic::Trap as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(

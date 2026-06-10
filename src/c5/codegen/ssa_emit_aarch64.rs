@@ -2860,9 +2860,18 @@ fn emit_intrinsic(
             emit(code, 0xD420_0000u32);
             true
         }
-        I::Sqrt | I::Sqrtf | I::Fabs | I::Fabsf => {
+        I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => {
             if args.len() != 1 {
-                bail_msg("sqrt / fabs: expected 1 arg");
+                bail_msg("unary FP intrinsic: expected 1 arg");
                 return false;
             }
             let src_place = alloc
@@ -2880,11 +2889,21 @@ fn emit_intrinsic(
                 Place::Spill(_) => SCRATCH_FP1,
                 _ => return false,
             };
-            let inst = match (intrinsic, is_f32) {
-                (I::Sqrt | I::Sqrtf, true) => super::aarch64::enc_fsqrt_s(dd, dn),
-                (I::Sqrt | I::Sqrtf, false) => super::aarch64::enc_fsqrt_d(dd, dn),
-                (_, true) => super::aarch64::enc_fabs_s(dd, dn),
-                (_, false) => super::aarch64::enc_fabs_d(dd, dn),
+            use super::aarch64::{
+                enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
+                enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
+            };
+            let inst = match intrinsic {
+                I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
+                I::Sqrt | I::Sqrtf => enc_fsqrt_d(dd, dn),
+                I::Fabs | I::Fabsf if is_f32 => enc_fabs_s(dd, dn),
+                I::Fabs | I::Fabsf => enc_fabs_d(dd, dn),
+                I::Floor | I::Floorf if is_f32 => enc_frintm_s(dd, dn),
+                I::Floor | I::Floorf => enc_frintm_d(dd, dn),
+                I::Ceil | I::Ceilf if is_f32 => enc_frintp_s(dd, dn),
+                I::Ceil | I::Ceilf => enc_frintp_d(dd, dn),
+                _ if is_f32 => enc_frintz_s(dd, dn),
+                _ => enc_frintz_d(dd, dn),
             };
             emit(code, inst);
             if let Place::Spill(slot) = dst {

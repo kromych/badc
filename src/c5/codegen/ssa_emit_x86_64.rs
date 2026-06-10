@@ -3787,7 +3787,7 @@ fn emit_fp_unary(
     frame: Frame,
 ) -> bool {
     use super::super::op::Intrinsic as I;
-    use super::x86_64::{emit_andpd, emit_sqrtsd, emit_sqrtss};
+    use super::x86_64::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = alloc
         .places
         .get(value as usize)
@@ -3824,6 +3824,22 @@ fn emit_fp_unary(
             emit_mov_r_imm64(code, SCRATCH_R10, mask);
             emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
             emit_andpd(code, dd, SCRATCH_XMM15);
+        }
+        I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
+            // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to
+            // suppress the precision (inexact) exception: 0x09 floor
+            // (toward -inf), 0x0A ceil (toward +inf), 0x0B trunc (toward
+            // zero).
+            let imm: u8 = match kind {
+                I::Floor | I::Floorf => 0x09,
+                I::Ceil | I::Ceilf => 0x0A,
+                _ => 0x0B,
+            };
+            if is_f32 {
+                emit_roundss(code, dd, dn, imm);
+            } else {
+                emit_roundsd(code, dd, dn, imm);
+            }
         }
         _ => {
             bail_msg("fp_unary: not a unary FP intrinsic");
@@ -6001,9 +6017,18 @@ fn emit_intrinsic(
             code.push(0x0B);
             true
         }
-        I::Sqrt | I::Sqrtf | I::Fabs | I::Fabsf => {
+        I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => {
             if args.len() != 1 {
-                bail_msg("sqrt / fabs: expected 1 arg");
+                bail_msg("unary FP intrinsic: expected 1 arg");
                 return false;
             }
             emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)

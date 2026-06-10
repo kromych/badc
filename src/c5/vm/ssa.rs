@@ -1516,6 +1516,22 @@ fn run_intrinsic(
             );
             Ok(())
         }
+        Intrinsic::Floor
+        | Intrinsic::Floorf
+        | Intrinsic::Ceil
+        | Intrinsic::Ceilf
+        | Intrinsic::Trunc
+        | Intrinsic::Truncf => {
+            let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
+            let r = match intr {
+                Intrinsic::Floor | Intrinsic::Floorf => libm::floor(x),
+                Intrinsic::Ceil | Intrinsic::Ceilf => libm::ceil(x),
+                _ => libm::trunc(x),
+            };
+            frame.regs[v as usize] =
+                round_if_f32(r.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            Ok(())
+        }
         // `__builtin_trap()` raises an illegal-instruction exception on
         // the native targets; the interpreter cannot continue past it,
         // so it surfaces as a runtime failure.

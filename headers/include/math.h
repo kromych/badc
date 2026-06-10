@@ -12,16 +12,12 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 // macOS routes math through libSystem (which re-exports libm
 // symbols). No separate libm needed.
-#pragma binding(libc::sqrt,  "_sqrt")
 #pragma binding(libc::log,   "_log")
 #pragma binding(libc::log10, "_log10")
 #pragma binding(libc::log2,  "_log2")
 #pragma binding(libc::exp,   "_exp")
 #pragma binding(libc::pow,   "_pow")
-#pragma binding(libc::floor, "_floor")
-#pragma binding(libc::ceil,  "_ceil")
 #pragma binding(libc::round, "_round")
-#pragma binding(libc::fabs,  "_fabs")
 #pragma binding(libc::fmod,  "_fmod")
 #pragma binding(libc::sin,   "_sin")
 #pragma binding(libc::cos,   "_cos")
@@ -43,7 +39,6 @@
 #pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
-#pragma binding(libc::trunc, "_trunc")
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
@@ -51,10 +46,7 @@
 #pragma binding(libc::log10f, "_log10f")
 #pragma binding(libc::expf,   "_expf")
 #pragma binding(libc::powf,   "_powf")
-#pragma binding(libc::floorf, "_floorf")
-#pragma binding(libc::ceilf,  "_ceilf")
 #pragma binding(libc::roundf, "_roundf")
-#pragma binding(libc::truncf, "_truncf")
 #pragma binding(libc::fmodf,  "_fmodf")
 #pragma binding(libc::sinf,   "_sinf")
 #pragma binding(libc::cosf,   "_cosf")
@@ -68,16 +60,12 @@
 #ifdef __linux__
 // Linux keeps math in a separate libm.so.6.
 #pragma dylib(libm, "libm.so.6")
-#pragma binding(libm::sqrt,  "sqrt")
 #pragma binding(libm::log,   "log")
 #pragma binding(libm::log10, "log10")
 #pragma binding(libm::log2,  "log2")
 #pragma binding(libm::exp,   "exp")
 #pragma binding(libm::pow,   "pow")
-#pragma binding(libm::floor, "floor")
-#pragma binding(libm::ceil,  "ceil")
 #pragma binding(libm::round, "round")
-#pragma binding(libm::fabs,  "fabs")
 #pragma binding(libm::fmod,  "fmod")
 #pragma binding(libm::sin,   "sin")
 #pragma binding(libm::cos,   "cos")
@@ -93,16 +81,12 @@
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
-#pragma binding(libm::trunc, "trunc")
 // C99 7.12 single-precision variants.
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
 #pragma binding(libm::expf,   "expf")
 #pragma binding(libm::powf,   "powf")
-#pragma binding(libm::floorf, "floorf")
-#pragma binding(libm::ceilf,  "ceilf")
 #pragma binding(libm::roundf, "roundf")
-#pragma binding(libm::truncf, "truncf")
 #pragma binding(libm::fmodf,  "fmodf")
 #pragma binding(libm::sinf,   "sinf")
 #pragma binding(libm::cosf,   "cosf")
@@ -115,15 +99,11 @@
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::sqrt,  "sqrt")
 #pragma binding(msvcrt::log,   "log")
 #pragma binding(msvcrt::log10, "log10")
 #pragma binding(msvcrt::log2,  "log2")
 #pragma binding(msvcrt::exp,   "exp")
-#pragma binding(msvcrt::floor, "floor")
-#pragma binding(msvcrt::ceil,  "ceil")
 #pragma binding(msvcrt::round, "round")
-#pragma binding(msvcrt::fabs,  "fabs")
 #pragma binding(msvcrt::fmod,  "fmod")
 #pragma binding(msvcrt::sin,   "sin")
 #pragma binding(msvcrt::cos,   "cos")
@@ -138,7 +118,6 @@
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::modf,  "modf")
-#pragma binding(msvcrt::trunc, "trunc")
 
 // msvcrt.dll's transcendental implementations underflow
 // aggressively and diverge from C99 at IEEE-754 edges:
@@ -158,17 +137,14 @@
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::pow,   "pow")
 // C99 7.12 single-precision variants. The Universal CRT exports these
-// `f`-suffixed entry points (the legacy msvcrt.dll does not); `sqrtf`
-// and `fabsf` are the exception -- they lower to a hardware instruction
-// via the `#pragma intrinsic` below and need no binding.
+// `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
+// with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
+// lower via `#pragma intrinsic` below and need no binding.
 #pragma binding(ucrtbase::logf,   "logf")
 #pragma binding(ucrtbase::log10f, "log10f")
 #pragma binding(ucrtbase::expf,   "expf")
 #pragma binding(ucrtbase::powf,   "powf")
-#pragma binding(ucrtbase::floorf, "floorf")
-#pragma binding(ucrtbase::ceilf,  "ceilf")
 #pragma binding(ucrtbase::roundf, "roundf")
-#pragma binding(ucrtbase::truncf, "truncf")
 #pragma binding(ucrtbase::fmodf,  "fmodf")
 #pragma binding(ucrtbase::sinf,   "sinf")
 #pragma binding(ucrtbase::cosf,   "cosf")
@@ -278,10 +254,23 @@ float acosf(float x);
 double fma(double x, double y, double z);
 float fmaf(float x, float y, float z);
 
-// C99 7.12.7.5 / 7.12.7.2: the single-precision square root and absolute
-// value lower to a hardware instruction (FSQRT / FABS on AArch64,
-// SQRTSS / sign-mask AND on x86-64) rather than a library call. This
-// also supplies them on Windows, whose CRT does not export the
-// `f`-suffixed entry points as DLL symbols.
+// Math functions that map to a single FP instruction lower to it
+// rather than a library call (C99 7.12.7.5 / 7.12.7.2 / 7.12.9.2 /
+// 7.12.9.1 / 7.12.9.8): square root (FSQRT; SQRTSD/SQRTSS), absolute
+// value (FABS; sign-mask AND), and floor / ceil / trunc (FRINTM /
+// FRINTP / FRINTZ; ROUNDSD/ROUNDSS with the rounding-mode immediate,
+// SSE4.1). The x86-64 backend already requires FMA (Haswell), which
+// implies SSE4.1. This removes the libm / ucrtbase dependency for these
+// and, on Windows, supplies the `f`-forms the CRT does not export.
+// `round` is not here: x86-64 ROUNDSS has no round-half-away-from-zero
+// mode, so C99 `round` keeps a library binding.
+#pragma intrinsic("sqrt")
 #pragma intrinsic("sqrtf")
+#pragma intrinsic("fabs")
 #pragma intrinsic("fabsf")
+#pragma intrinsic("floor")
+#pragma intrinsic("floorf")
+#pragma intrinsic("ceil")
+#pragma intrinsic("ceilf")
+#pragma intrinsic("trunc")
+#pragma intrinsic("truncf")

@@ -471,6 +471,34 @@ pub(super) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
     0x1E20_C000 | ((sn as u32) << 5) | (sd as u32)
 }
 
+/// `FRINTM <Dd>, <Dn>` -- round to integral toward -inf (floor).
+/// FP-1-source opcode 001010.
+pub(super) fn enc_frintm_d(dd: u8, dn: u8) -> u32 {
+    0x1E65_4000 | ((dn as u32) << 5) | (dd as u32)
+}
+/// `FRINTM <Sd>, <Sn>`.
+pub(super) fn enc_frintm_s(sd: u8, sn: u8) -> u32 {
+    0x1E25_4000 | ((sn as u32) << 5) | (sd as u32)
+}
+/// `FRINTP <Dd>, <Dn>` -- round to integral toward +inf (ceil).
+/// FP-1-source opcode 001001.
+pub(super) fn enc_frintp_d(dd: u8, dn: u8) -> u32 {
+    0x1E64_C000 | ((dn as u32) << 5) | (dd as u32)
+}
+/// `FRINTP <Sd>, <Sn>`.
+pub(super) fn enc_frintp_s(sd: u8, sn: u8) -> u32 {
+    0x1E24_C000 | ((sn as u32) << 5) | (sd as u32)
+}
+/// `FRINTZ <Dd>, <Dn>` -- round to integral toward zero (trunc).
+/// FP-1-source opcode 001011.
+pub(super) fn enc_frintz_d(dd: u8, dn: u8) -> u32 {
+    0x1E65_C000 | ((dn as u32) << 5) | (dd as u32)
+}
+/// `FRINTZ <Sd>, <Sn>`.
+pub(super) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
+    0x1E25_C000 | ((sn as u32) << 5) | (sd as u32)
+}
+
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
 /// and `Dm`. Used in the comparison lowering before `CSET`. Note:
 /// for unordered (NaN) operands the result is the IEEE "unordered"

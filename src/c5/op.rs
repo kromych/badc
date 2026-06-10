@@ -97,6 +97,16 @@ pub enum Intrinsic {
     /// `Inst::FUnary { op: Abs }`, which clears the IEEE 754 sign bit.
     Fabs = 13,
     Fabsf = 14,
+    /// `floor` / `ceil` / `trunc` and their single-precision partners --
+    /// C99 7.12.9.2 / 7.12.9.1 / 7.12.9.8. Each lowers to one rounding
+    /// instruction (x86-64 ROUNDSD/ROUNDSS with the rounding-mode
+    /// immediate, AArch64 FRINTM/FRINTP/FRINTZ).
+    Floor = 15,
+    Floorf = 16,
+    Ceil = 17,
+    Ceilf = 18,
+    Trunc = 19,
+    Truncf = 20,
 }
 
 impl Intrinsic {
@@ -116,7 +126,46 @@ impl Intrinsic {
             12 => Some(Intrinsic::Sqrtf),
             13 => Some(Intrinsic::Fabs),
             14 => Some(Intrinsic::Fabsf),
+            15 => Some(Intrinsic::Floor),
+            16 => Some(Intrinsic::Floorf),
+            17 => Some(Intrinsic::Ceil),
+            18 => Some(Intrinsic::Ceilf),
+            19 => Some(Intrinsic::Trunc),
+            20 => Some(Intrinsic::Truncf),
             _ => None,
         }
+    }
+
+    /// Unary FP math intrinsics: one floating argument, a floating
+    /// result of the same precision, lowered to one hardware
+    /// instruction via `Inst::Intrinsic`.
+    pub fn is_fp_unary(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Sqrt
+                | Intrinsic::Sqrtf
+                | Intrinsic::Fabs
+                | Intrinsic::Fabsf
+                | Intrinsic::Floor
+                | Intrinsic::Floorf
+                | Intrinsic::Ceil
+                | Intrinsic::Ceilf
+                | Intrinsic::Trunc
+                | Intrinsic::Truncf
+        )
+    }
+
+    /// True for the single-precision (`float`) intrinsic forms; the
+    /// rest operate on `double`.
+    pub fn is_single_precision(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Fmaf
+                | Intrinsic::Sqrtf
+                | Intrinsic::Fabsf
+                | Intrinsic::Floorf
+                | Intrinsic::Ceilf
+                | Intrinsic::Truncf
+        )
     }
 }

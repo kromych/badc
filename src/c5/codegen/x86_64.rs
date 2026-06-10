@@ -842,6 +842,36 @@ pub(super) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `ROUNDSD xmm, xmm, imm8` -- round a scalar double per the immediate
+/// rounding mode (SSE4.1). `66 0F 3A 0B /r ib`. The mode bits: 0x09
+/// floor (round down), 0x0A ceil (round up), 0x0B truncate; each sets
+/// bit 3 to suppress the precision exception.
+pub(super) fn emit_roundsd(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x3A);
+    emit_byte(code, 0x0B);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    emit_byte(code, imm);
+}
+
+/// `ROUNDSS xmm, xmm, imm8` -- scalar single-precision form. `66 0F 3A
+/// 0A /r ib`.
+pub(super) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x3A);
+    emit_byte(code, 0x0A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    emit_byte(code, imm);
+}
+
 /// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
 /// operands it zeroes the register, used as a building block for
 /// `FNEG` (we XOR with the sign-bit mask in another XMM).

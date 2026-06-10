@@ -1158,14 +1158,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
-            let k = *kind;
-            // sqrt / fabs and their single-precision partners produce an
-            // FP value (C99 7.12.7); the rest yield an integer / pointer.
-            if k == I::Sqrt as i64
-                || k == I::Sqrtf as i64
-                || k == I::Fabs as i64
-                || k == I::Fabsf as i64
-            {
+            // The unary FP math intrinsics (sqrt / fabs / floor / ceil /
+            // trunc, C99 7.12.7 / 7.12.9) produce an FP value; the rest
+            // yield an integer / pointer.
+            if I::from_i64(*kind).is_some_and(|i| i.is_fp_unary()) {
                 ResultKind::Fp
             } else {
                 ResultKind::Int

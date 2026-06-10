@@ -4,11 +4,11 @@ deferred_jit_thread_local.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	movl	%edi, (%rax,%rdi,4)

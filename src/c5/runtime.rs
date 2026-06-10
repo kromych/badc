@@ -7,32 +7,21 @@
 //! native-link driver compiles each `(name, body)` to a
 //! native ELF ET_REL alongside the user's translation units.
 //!
-//! Two registries:
-//!   * [`EMBEDDED_RUNTIME`] -- data definitions (`environ` /
-//!     `_environ`) linked into every native image.
-//!   * [`EMBEDDED_START_RUNTIME`] -- the libc-`exit` wrapper
-//!     (`__c5_exit`) the writer's `_start` stub calls instead
-//!     of the raw `exit_group` syscall. Linked only when a
-//!     `_start` stub is emitted; images with no stub (shared
-//!     libraries, passthrough-entry subsystems) skip it so
-//!     they carry no user-mode libc `exit` import.
+//! Single registry [`EMBEDDED_RUNTIME`]. Its one source
+//! (`runtime.c`) gates everything -- the `environ` / `_environ` data
+//! and the `__c5_exit` / `__c5_entry` startup -- on
+//! `__BADC_C5_START__`, which the driver defines only when the image
+//! writer emits an entry stub. Shared libraries and passthrough-entry
+//! subsystems (native / EFI) leave it undefined, so the source
+//! compiles to nothing for them: no user-mode CRT import, and no
+//! `environ` definition (a library inherits it from the host
+//! process).
 
-/// Runtime data sources linked into every native image.
+/// Runtime sources compiled + linked alongside the user's
+/// translation units on the native-link path.
 pub fn embedded_runtime() -> &'static [(&'static str, &'static str)] {
     EMBEDDED_RUNTIME
 }
 
-/// Runtime sources linked only when the writer emits a `_start`
-/// CRT stub (native executables, not shared libraries or
-/// passthrough-entry subsystems).
-pub fn embedded_start_runtime() -> &'static [(&'static str, &'static str)] {
-    EMBEDDED_START_RUNTIME
-}
-
 pub(super) const EMBEDDED_RUNTIME: &[(&str, &str)] =
     &[("runtime.c", include_str!("../../lib/runtime.c"))];
-
-pub(super) const EMBEDDED_START_RUNTIME: &[(&str, &str)] = &[(
-    "runtime_libc_exit.c",
-    include_str!("../../lib/runtime_libc_exit.c"),
-)];

@@ -4,11 +4,11 @@ pointer_to_array_struct_field.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x340, %esi            # imm = 0x340
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

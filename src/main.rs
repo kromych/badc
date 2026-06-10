@@ -776,15 +776,14 @@ fn main() {
         };
         // In-memory variant for the embedded runtime sources
         // below: same compile + emit chain, no filesystem read.
-        let compile_in_memory = |label: &str, src: String, win_gui: bool| -> Vec<u8> {
-            // The GUI-subsystem startup helpers in the embedded
-            // runtime are gated on `__BADC_WIN_GUI__`; define it for
-            // the runtime TU when the PE subsystem is GUI so the
-            // kernel32 `WinMain` argument helpers compile in place of
-            // the console argv synthesis.
+        let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
+            // The embedded runtime gates its sections on macros the
+            // driver sets per image: `__BADC_C5_START__` (an entry
+            // stub is emitted), `__BADC_WIN_GUI__` (PE GUI subsystem),
+            // `__BADC_WIN_WIDE__` (`wmain` entry).
             let mut copts_defines = defines.clone();
-            if win_gui {
-                copts_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
+            for (k, v) in extra {
+                copts_defines.push((k.to_string(), v.to_string()));
             }
             let copts = badc::CompileOptions::default()
                 .with_defines(copts_defines)
@@ -857,14 +856,24 @@ fn main() {
                         | badc::Subsystem::EfiRom
                 )
             );
-        let runtime_sources = badc::embedded_runtime().iter().chain(
-            badc::embedded_start_runtime()
-                .iter()
-                .take(if emits_start_stub { usize::MAX } else { 0 }),
-        );
-        let win_gui_runtime = subsystem_override == Some(badc::Subsystem::Windows);
-        for (name, body) in runtime_sources {
-            let bytes = compile_in_memory(name, body.to_string(), win_gui_runtime);
+        // The single runtime source compiles to nothing unless
+        // `__BADC_C5_START__` is set; the GUI / wide-entry macros
+        // select the matching `__c5_entry` body on Windows.
+        let mut runtime_defines: Vec<(&str, &str)> = Vec::new();
+        if emits_start_stub {
+            runtime_defines.push(("__BADC_C5_START__", "1"));
+            // `__c5_entry` calls this symbol; default `main`,
+            // overridden by `#pragma entrypoint` / `--entry`.
+            runtime_defines.push(("__BADC_ENTRY__", entry_override.as_deref().unwrap_or("main")));
+            if subsystem_override == Some(badc::Subsystem::Windows) {
+                runtime_defines.push(("__BADC_WIN_GUI__", "1"));
+            }
+            if entry_override.as_deref() == Some("wmain") {
+                runtime_defines.push(("__BADC_WIN_WIDE__", "1"));
+            }
+        }
+        for (name, body) in badc::embedded_runtime().iter() {
+            let bytes = compile_in_memory(name, body.to_string(), &runtime_defines);
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {

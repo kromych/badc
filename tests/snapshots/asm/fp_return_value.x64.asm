@@ -4,11 +4,11 @@ fp_return_value.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
                	movslq	%edi, %rdi
                	cvtsi2sd	%rdi, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000

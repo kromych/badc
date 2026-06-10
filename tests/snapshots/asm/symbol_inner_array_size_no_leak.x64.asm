@@ -4,11 +4,11 @@ symbol_inner_array_size_no_leak.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
                	jmp	<addr>

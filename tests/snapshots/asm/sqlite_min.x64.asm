@@ -4,11 +4,11 @@ sqlite_min.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x3b0, %esi            # imm = 0x3B0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x150, %rsp            # imm = 0x150

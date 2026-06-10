@@ -4,12 +4,12 @@ aapcs64_variadic_host_abi.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
                	sub	sp, sp, #0xc0
                	str	x0, [sp]
                	str	x1, [sp, #0x8]

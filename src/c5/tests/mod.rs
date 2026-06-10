@@ -104,9 +104,9 @@ pub fn link_executable_with_runtime(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, NativeMachine, OutputKind, embedded_runtime, embedded_start_runtime,
-        emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt, link_native_objects,
-        parse_native_elf, write_native_image_from_merged,
+        CompileOptions, NativeMachine, OutputKind, embedded_runtime, emit_aarch64_plt,
+        emit_native_with_options, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -116,19 +116,26 @@ pub fn link_executable_with_runtime(
         .map_err(|e| format!("emit program object: {e}"))?;
     objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
 
-    // The startup runtime defines the entry stub's `__c5_*` helpers;
-    // `__BADC_WIN_GUI__` selects the kernel32 WinMain helpers when the
-    // PE subsystem is GUI.
-    let win_gui = program.subsystem == Some(crate::Subsystem::Windows);
-    for (name, body) in embedded_runtime()
-        .iter()
-        .chain(embedded_start_runtime().iter())
-    {
-        let mut copts = CompileOptions::default().with_no_entry_point(true);
-        if win_gui {
-            copts =
-                copts.with_defines(vec![("__BADC_WIN_GUI__".to_string(), "1".to_string())]);
-        }
+    // This helper always builds a hosted executable, so the runtime's
+    // startup section is compiled in (`__BADC_C5_START__`).
+    // `__BADC_WIN_GUI__` selects the kernel32 WinMain entry on a PE GUI
+    // subsystem; `__BADC_WIN_WIDE__` selects the `wmain` entry.
+    let mut rt_defines: Vec<(String, String)> =
+        vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    rt_defines.push((
+        "__BADC_ENTRY__".to_string(),
+        program.entry_name.clone().unwrap_or_else(|| "main".to_string()),
+    ));
+    if program.subsystem == Some(crate::Subsystem::Windows) {
+        rt_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
+    }
+    if program.entry_name.as_deref() == Some("wmain") {
+        rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
+    }
+    for (name, body) in embedded_runtime().iter() {
+        let copts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(rt_defines.clone());
         let rt_program = Compiler::with_options(body.to_string(), target, copts)
             .compile()
             .map_err(|e| format!("compile runtime {name}: {e}"))?;

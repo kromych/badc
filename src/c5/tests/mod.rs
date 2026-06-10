@@ -108,6 +108,16 @@ pub fn compile_str_bare(src: &str) -> Program {
 /// helpers are defined by the runtime, so the produced executable is
 /// self-sufficient. `subsystem` (from `program.subsystem`) gates the
 /// runtime's console vs GUI startup helpers on Windows.
+///
+/// `program` must have been compiled for `target`. `compile_str` /
+/// `compile_fixture` use `Compiler::new`, which targets the host, so a
+/// test that links for a fixed non-host target (e.g. always
+/// `Target::LinuxX64`) must compile for that target -- via
+/// `Compiler::with_options(..., target, ..)` -- or use a prelude-free
+/// source (`compile_str_bare`). A host/target skew preprocesses the
+/// bundled headers under the wrong OS macros: on a Windows host the
+/// `<stdlib.h>` `_WIN32` branch then contributes an `environ` symbol
+/// that collides with the runtime's when the image is emitted as ELF.
 #[cfg(feature = "full")]
 pub fn link_executable_with_runtime(
     program: &Program,

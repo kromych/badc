@@ -17,18 +17,28 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token};
 use super::{C5Error, Compiler, Program, Vm};
 
+// These modules emit / link native images (via `emit_native*` and the
+// `link_*` helpers below), which require `native-emit` -- pulled in by
+// `linker`. The host-only `--features std` build gates them out.
+#[cfg(feature = "linker")]
 mod codegen;
 mod deferred;
+#[cfg(feature = "linker")]
 mod dwarf;
 mod intrinsics;
 mod jit;
 mod lexer;
 #[cfg(feature = "linker")]
 mod linker;
+#[cfg(feature = "linker")]
 mod native;
+#[cfg(feature = "linker")]
 mod native_elf;
+#[cfg(feature = "linker")]
 mod native_elf_x64;
+#[cfg(feature = "linker")]
 mod native_pe_arm64;
+#[cfg(feature = "linker")]
 mod native_pe_x64;
 mod parser;
 mod pointer_tracking;
@@ -98,6 +108,7 @@ pub fn compile_str_bare(src: &str) -> Program {
 /// helpers are defined by the runtime, so the produced executable is
 /// self-sufficient. `subsystem` (from `program.subsystem`) gates the
 /// runtime's console vs GUI startup helpers on Windows.
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime(
     program: &Program,
     target: crate::Target,
@@ -169,6 +180,7 @@ pub fn link_executable_with_runtime(
 /// freestanding executable: the embedded runtime is not linked and the
 /// image entry is `__c5_entry`. Mirrors the CLI path when an input
 /// object defines `__c5_entry`.
+#[cfg(feature = "linker")]
 pub fn link_freestanding(
     program: &Program,
     target: crate::Target,

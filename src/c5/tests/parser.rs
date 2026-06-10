@@ -299,6 +299,8 @@ fn bad_lvalue_in_assignment() {
     );
 }
 
+// Emits a native image for every target, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
 #[test]
 fn thread_local_compiles_to_op_tlslea() {
     // `_Thread_local` lexes as Token::ThreadLocal, the parser

@@ -134,7 +134,6 @@ Disassembly of section .text:
                	str	w0, [x1]
                	sub	x1, x29, #0x8
                	add	x0, x0, #0x1
-               	sxtw	x0, w0
                	str	w0, [x1, #0x4]
                	sub	x0, x29, #0x8
                	mov	x16, x0
@@ -152,15 +151,12 @@ Disassembly of section .text:
                	str	w0, [x1]
                	sub	x1, x29, #0x10
                	add	x2, x0, #0x1
-               	sxtw	x2, w2
                	str	w2, [x1, #0x4]
                	sub	x1, x29, #0x10
                	add	x2, x0, #0x2
-               	sxtw	x2, w2
                	str	w2, [x1, #0x8]
                	sub	x1, x29, #0x10
                	add	x0, x0, #0x3
-               	sxtw	x0, w0
                	str	w0, [x1, #0xc]
                	sub	x0, x29, #0x10
                	mov	x16, x0
@@ -181,23 +177,18 @@ Disassembly of section .text:
                	str	w0, [x1]
                	sub	x1, x29, #0x18
                	add	x2, x0, #0x1
-               	sxtw	x2, w2
                	str	w2, [x1, #0x4]
                	sub	x1, x29, #0x18
                	add	x2, x0, #0x2
-               	sxtw	x2, w2
                	str	w2, [x1, #0x8]
                	sub	x1, x29, #0x18
                	add	x2, x0, #0x3
-               	sxtw	x2, w2
                	str	w2, [x1, #0xc]
                	sub	x1, x29, #0x18
                	add	x2, x0, #0x4
-               	sxtw	x2, w2
                	str	w2, [x1, #0x10]
                	sub	x1, x29, #0x18
                	add	x0, x0, #0x5
-               	sxtw	x0, w0
                	str	w0, [x1, #0x14]
                	sub	x0, x29, #0x18
                	mov	x16, x0

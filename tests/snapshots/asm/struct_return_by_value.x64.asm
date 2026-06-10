@@ -20,7 +20,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rdi, %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
@@ -378,4 +377,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

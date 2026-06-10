@@ -17,21 +17,19 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	movq	%rsi, (%rdi)
                	movl	%edx, 0x8(%rdi)
-               	movswq	%dx, %rax
-               	movw	%ax, 0xc(%rdi)
-               	movsbq	%dl, %rax
-               	movb	%al, 0xe(%rdi)
-               	movq	%rdx, %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, 0xf(%rdi)
-               	movq	(%rdi), %rcx
-               	movslq	0x8(%rdi), %rdx
+               	movw	%dx, 0xc(%rdi)
+               	movb	%dl, 0xe(%rdi)
+               	movq	%rdx, %rax
+               	andq	$0xff, %rax
+               	movb	%al, 0xf(%rdi)
+               	movq	(%rdi), %rax
+               	movslq	0x8(%rdi), %rcx
                	movswq	0xc(%rdi), %rsi
-               	movsbq	%al, %rax
+               	movsbq	%dl, %rdx
                	movzbq	0xf(%rdi), %rdi
-               	addq	%rdx, %rcx
-               	addq	%rsi, %rcx
                	addq	%rcx, %rax
+               	addq	%rsi, %rax
+               	addq	%rdx, %rax
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	addq	%rcx, %rax

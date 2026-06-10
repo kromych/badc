@@ -22,9 +22,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v3   ImmData(8)                                       -> x0
     v4   LoadLocal { off=2, kind=I32 }                    -> x1
     v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x1
-    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x1
-    v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x1
-    v8   Store { addr=v3, disp=0, value=v7, kind=I32 }    -> -
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x2
+    v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x2
+    v8   Store { addr=v3, disp=0, value=v5, kind=I32 }    -> -
     terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

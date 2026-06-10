@@ -175,7 +175,6 @@ Disassembly of section .text:
                	imulq	$0x64, %rdx, %rdx
                	movslq	%edx, %rdx
                	addq	%rsi, %rdx
-               	movslq	%edx, %rdx
                	movl	%edx, (%rax,%rsi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -241,4 +240,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

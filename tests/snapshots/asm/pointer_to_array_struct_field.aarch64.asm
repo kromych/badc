@@ -109,7 +109,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	add	x3, x3, x4
                	sxtw	x3, w3
-               	sxth	x3, w3
                	strh	w3, [x0, x4, lsl #1]
                	b	<addr>
                	b	<addr>

@@ -76,7 +76,6 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	mul	x3, x2, x17
                	sxtw	x3, w3
-               	sxth	x3, w3
                	strh	w3, [x0, x2, lsl #1]
                	b	<addr>
                	sub	x0, x29, #0x30

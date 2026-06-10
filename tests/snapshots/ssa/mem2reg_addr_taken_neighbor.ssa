@@ -27,9 +27,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=4
     v17  Load { addr=v10, disp=0, kind=I32 }              -> x2
     v18  Extend { value=v8, kind=I32 }                    -> x7
     v19  Binop { op=add, lhs=v17, rhs=v18 }               -> x2
-    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x2
-    v21  BinopI { op=shr, lhs=v20, rhs_imm=32 }           -> x2
-    v22  Store { addr=v10, disp=0, value=v21, kind=I32 }  -> -
+    v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x7
+    v21  BinopI { op=shr, lhs=v20, rhs_imm=32 }           -> x7
+    v22  Store { addr=v10, disp=0, value=v19, kind=I32 }  -> -
     v23  Extend { value=v13, kind=I32 }                   -> x2
     v24  BinopI { op=add, lhs=v23, rhs_imm=1 }            -> x2
     v25  BinopI { op=shl, lhs=v24, rhs_imm=32 }           -> x2

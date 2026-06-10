@@ -40,7 +40,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	ldrsw	x2, [x0, #0x4]
                	add	x1, x2, x1
-               	sxtw	x1, w1
                	str	w1, [x0, #0x4]
                	mov	x0, #0x0                // =0
                	ret

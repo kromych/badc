@@ -24,7 +24,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	leaq	(%rax,%rax,2), %rdx
                	movslq	%edx, %rdx
-               	movswq	%dx, %rdx
                	movw	%dx, (%rdi,%rax,2)
                	jmp	<addr>
                	movq	%rsi, %rax

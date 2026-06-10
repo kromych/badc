@@ -85,9 +85,9 @@ fn ent_pc=1 n_params=5 variadic=false locals=0
     v18  Imm(0)                                           -> x0
     v19  Load { addr=v3, disp=0, kind=U8 }                -> x2
     v20  Binop { op=add, lhs=v7, rhs=v19 }                -> x1
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
-    v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x1
-    v23  Store { addr=v9, disp=0, value=v22, kind=I32 }   -> -
+    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x2
+    v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x2
+    v23  Store { addr=v9, disp=0, value=v20, kind=I32 }   -> -
     terminator Return(v18)   (exit_acc=v18)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=forward

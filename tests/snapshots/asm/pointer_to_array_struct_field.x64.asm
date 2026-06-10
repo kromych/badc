@@ -110,7 +110,6 @@ Disassembly of section .text:
                	movslq	%esi, %rsi
                	addq	%rdi, %rsi
                	movslq	%esi, %rsi
-               	movswq	%si, %rsi
                	movw	%si, (%rax,%rdi,2)
                	jmp	<addr>
                	jmp	<addr>

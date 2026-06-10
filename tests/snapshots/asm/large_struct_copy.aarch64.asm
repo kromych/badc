@@ -120,19 +120,16 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	sxtw	x2, w1
                	add	x3, x2, #0x3e8
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x210
                	add	x0, x0, #0xb4
                	sxtw	x2, w1
                	add	x3, x2, #0x7d0
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x210
                	add	x0, x0, #0x158
                	sxtw	x2, w1
                	add	x3, x2, #0xbb8
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	b	<addr>
                	sub	x0, x29, #0x420

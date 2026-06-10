@@ -195,9 +195,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v146 BinopI { op=add, lhs=v142, rhs_imm=1000 }        -> x6
     v147 BinopI { op=shl, lhs=v146, rhs_imm=32 }          -> x6
     v148 BinopI { op=shr, lhs=v147, rhs_imm=32 }          -> x6
-    v149 BinopI { op=shl, lhs=v148, rhs_imm=48 }          -> x6
-    v150 BinopI { op=shr, lhs=v149, rhs_imm=48 }          -> x6
-    v151 StoreIndexed { base=v140, index=v142, scale=2, value=v150, kind=I16 } -> -
+    v149 BinopI { op=shl, lhs=v148, rhs_imm=48 }          -> x7
+    v150 BinopI { op=shr, lhs=v149, rhs_imm=48 }          -> x7
+    v151 StoreIndexed { base=v140, index=v142, scale=2, value=v148, kind=I16 } -> -
     terminator Jmp(b20)   (exit_acc=v151)
   block 22  start_pc=0
     v152 Imm(0)                                           -> x1
@@ -325,9 +325,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=17
     v236 BinopI { op=shl, lhs=v235, rhs_imm=32 }          -> x6
     v237 BinopI { op=shr, lhs=v236, rhs_imm=32 }          -> x6
     v238 Binop { op=add, lhs=v237, rhs=v232 }             -> x6
-    v239 BinopI { op=shl, lhs=v238, rhs_imm=32 }          -> x6
-    v240 BinopI { op=shr, lhs=v239, rhs_imm=32 }          -> x6
-    v241 StoreIndexed { base=v231, index=v232, scale=4, value=v240, kind=I32 } -> -
+    v239 BinopI { op=shl, lhs=v238, rhs_imm=32 }          -> x8
+    v240 BinopI { op=shr, lhs=v239, rhs_imm=32 }          -> x8
+    v241 StoreIndexed { base=v231, index=v232, scale=4, value=v238, kind=I32 } -> -
     terminator Jmp(b40)   (exit_acc=v241)
   block 42  start_pc=0
     terminator Jmp(b36)

@@ -174,7 +174,6 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	sxtw	x2, w2
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	str	w2, [x0, x3, lsl #2]
                	b	<addr>
                	b	<addr>

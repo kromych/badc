@@ -43,7 +43,6 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	sxtw	x3, w3
                	add	x3, x3, x4
-               	sxtw	x3, w3
                	str	w3, [x0, x4, lsl #2]
                	b	<addr>
                	b	<addr>

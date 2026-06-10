@@ -155,7 +155,6 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	addq	$0x3e8, %rsi            # imm = 0x3E8
                	movslq	%esi, %rsi
-               	movswq	%si, %rsi
                	movw	%si, (%rax,%rdx,2)
                	jmp	<addr>
                	xorq	%rcx, %rcx
@@ -242,7 +241,6 @@ Disassembly of section .text:
                	imulq	$0x64, %rsi, %rsi
                	movslq	%esi, %rsi
                	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -533,4 +531,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)

@@ -23,7 +23,6 @@ Disassembly of section .text:
                	mov	x17, #0x3               // =3
                	mul	x4, x2, x17
                	sxtw	x4, w4
-               	sxth	x4, w4
                	strh	w4, [x0, x2, lsl #1]
                	b	<addr>
                	sub	x1, x1, #0x1

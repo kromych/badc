@@ -74,7 +74,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	leaq	(%rdx,%rdx,2), %rsi
                	movslq	%esi, %rsi
-               	movswq	%si, %rsi
                	movw	%si, (%rax,%rdx,2)
                	jmp	<addr>
                	leaq	-0x30(%rbp), %rax

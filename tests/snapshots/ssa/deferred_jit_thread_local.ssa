@@ -46,11 +46,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v14  TlsAddr(8)                                       -> x2
     v15  Load { addr=v14, disp=0, kind=I32 }              -> x2
     v16  Binop { op=add, lhs=v13, rhs=v15 }               -> x1
-    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x1
-    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x1
-    v19  Store { addr=v3, disp=0, value=v18, kind=I32 }   -> -
+    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x2
+    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x2
+    v19  Store { addr=v3, disp=0, value=v16, kind=I32 }   -> -
     v20  TlsAddr(0)                                       -> x0
-    v21  Extend { value=v18, kind=I32 }                   -> x0
+    v21  Extend { value=v16, kind=I32 }                   -> x0
     v22  BinopI { op=ne, lhs=v21, rhs_imm=4 }             -> x0
     terminator Bz { cond=v22, target=b6, fall=b5 }   (exit_acc=v22)
   block 5  start_pc=0

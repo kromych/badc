@@ -64,7 +64,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrb	w1, [x1]
                	add	x1, x3, x1
-               	sxtw	x1, w1
                	str	w1, [x4]
                	ret
 

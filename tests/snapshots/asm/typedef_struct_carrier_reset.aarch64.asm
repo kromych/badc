@@ -24,7 +24,6 @@ Disassembly of section .text:
                	add	x3, x0, #0x28
                	sxtw	x4, w1
                	add	x5, x4, #0x1
-               	sxtw	x5, w5
                	str	w5, [x3, x4, lsl #2]
                	sxtw	x2, w2
                	sxtw	x3, w1

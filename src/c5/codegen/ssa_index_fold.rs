@@ -235,8 +235,62 @@ fn foldable_displaced_addresses(
 }
 
 /// Rewrite recognised scaled-index loads and stores in place.
+/// When `v` is `Shr K` (arithmetic) or `Shru K` (logical) of `Shl K` of
+/// some `w`, return `w` if a store of `store_width` bytes keeps only the
+/// low bits the normalize leaves unchanged (`8 * store_width <= 64 - K`).
+/// The `Shl K; Shr K` pair is the walker's narrowing sign/zero-extend;
+/// the low `64 - K` bits of the result equal those of `w`, so a store
+/// that writes no more than that many bits sees the same value.
+fn pre_normalize(insts: &[Inst], v: ValueId, store_width: u8) -> Option<ValueId> {
+    let Some(Inst::BinopI {
+        op: BinOp::Shr | BinOp::Shru,
+        lhs,
+        rhs_imm: k,
+    }) = insts.get(v as usize)
+    else {
+        return None;
+    };
+    if *k <= 0 || *k >= 64 || (store_width as i64) * 8 > 64 - *k {
+        return None;
+    }
+    let Some(Inst::BinopI {
+        op: BinOp::Shl,
+        lhs: w,
+        rhs_imm: shl_k,
+    }) = insts.get(*lhs as usize)
+    else {
+        return None;
+    };
+    if *shl_k != *k {
+        return None;
+    }
+    Some(*w)
+}
+
+/// Redirect each sub-word store past a dead narrowing normalize (see
+/// [`pre_normalize`]). The normalize is left in place; it is dropped by
+/// the emit's dead-pure skip once it has no remaining use.
+fn narrow_store_values(func: &mut FunctionSsa) {
+    let n = func.insts.len();
+    for idx in 0..n {
+        let (value, width) = match &func.insts[idx] {
+            Inst::Store { value, kind, .. } => match store_width(*kind) {
+                Some(w) => (*value, w),
+                None => continue,
+            },
+            _ => continue,
+        };
+        if let Some(pre) = pre_normalize(&func.insts, value, width)
+            && let Inst::Store { value, .. } = &mut func.insts[idx]
+        {
+            *value = pre;
+        }
+    }
+}
+
 pub(super) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
+        narrow_store_values(func);
         let counts = use_counts(func);
         let scaled = foldable_scaled_addresses(func, &counts);
         let displaced = foldable_displaced_addresses(func, &counts);
@@ -313,5 +367,60 @@ pub(super) fn run(funcs: &mut [FunctionSsa]) {
         for (idx, inst) in rewrites {
             func.insts[idx] = inst;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    // v0 = Imm (the pre-normalize w); v1 = Shl(v0, k); v2 = Shr(v1, k).
+    fn shl_shr(k: i64) -> alloc::vec::Vec<Inst> {
+        vec![
+            Inst::Imm(0),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: 0,
+                rhs_imm: k,
+            },
+            Inst::BinopI {
+                op: BinOp::Shr,
+                lhs: 1,
+                rhs_imm: k,
+            },
+        ]
+    }
+
+    #[test]
+    fn pre_normalize_k32_drops_for_i32_store_not_i64() {
+        let insts = shl_shr(32);
+        assert_eq!(pre_normalize(&insts, 2, 4), Some(0)); // I32: 32 <= 64-32
+        assert_eq!(pre_normalize(&insts, 2, 8), None); // I64: 64 > 32
+    }
+
+    #[test]
+    fn pre_normalize_k48_only_drops_for_i16_or_narrower() {
+        let insts = shl_shr(48);
+        assert_eq!(pre_normalize(&insts, 2, 2), Some(0)); // I16: 16 <= 64-48
+        assert_eq!(pre_normalize(&insts, 2, 4), None); // I32: 32 > 16
+    }
+
+    #[test]
+    fn pre_normalize_requires_matching_shift_amounts() {
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: 0,
+                rhs_imm: 32,
+            },
+            Inst::BinopI {
+                op: BinOp::Shr,
+                lhs: 1,
+                rhs_imm: 16,
+            },
+        ];
+        assert_eq!(pre_normalize(&insts, 2, 4), None);
     }
 }

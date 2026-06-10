@@ -46,7 +46,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rsi, %rsi
                	movslq	%esi, %rsi
                	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -82,4 +81,4 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

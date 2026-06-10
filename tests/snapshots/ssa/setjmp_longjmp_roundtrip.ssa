@@ -11,9 +11,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=2
     v5   ImmData(520)                                     -> x0
     v6   Load { addr=v5, disp=0, kind=I32 }               -> x1
     v7   BinopI { op=add, lhs=v6, rhs_imm=1 }             -> x1
-    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x1
-    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x1
-    v10  Store { addr=v5, disp=0, value=v9, kind=I32 }    -> -
+    v8   BinopI { op=shl, lhs=v7, rhs_imm=32 }            -> x2
+    v9   BinopI { op=shr, lhs=v8, rhs_imm=32 }            -> x2
+    v10  Store { addr=v5, disp=0, value=v7, kind=I32 }    -> -
     v11  LoadLocal { off=2, kind=I32 }                    -> x0
     v12  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x0
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)

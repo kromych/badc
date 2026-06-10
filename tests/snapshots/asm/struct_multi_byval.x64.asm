@@ -126,7 +126,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	movq	%rdi, %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rax
                	movq	%rax, %rcx
@@ -145,17 +144,14 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movq	%rdi, %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x10(%rbp), %rax
                	movq	%rdi, %rcx
                	addq	$0x2, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x8(%rax)
                	leaq	-0x10(%rbp), %rax
                	movq	%rdi, %rcx
                	addq	$0x3, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0xc(%rax)
                	leaq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
@@ -180,27 +176,22 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rax
                	movslq	0x20(%rbp), %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	0x20(%rbp), %rcx
                	addq	$0x2, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x8(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	0x20(%rbp), %rcx
                	addq	$0x3, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0xc(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	0x20(%rbp), %rcx
                	addq	$0x4, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x10(%rax)
                	leaq	-0x18(%rbp), %rax
                	movslq	0x20(%rbp), %rcx
                	addq	$0x5, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, 0x14(%rax)
                	movq	0x10(%rbp), %rax
                	leaq	-0x18(%rbp), %rcx
@@ -542,4 +533,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

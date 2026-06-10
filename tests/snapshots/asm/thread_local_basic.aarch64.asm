@@ -63,7 +63,6 @@ Disassembly of section .text:
                	add	x2, x2, #0x18
                	ldrsw	x2, [x2]
                	add	x1, x1, x2
-               	sxtw	x1, w1
                	str	w1, [x0]
                	sxtw	x0, w1
                	cmp	x0, #0x31

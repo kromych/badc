@@ -110,21 +110,18 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	movq	%rdx, %rsi
                	addq	$0x3e8, %rsi            # imm = 0x3E8
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdx,4)
                	leaq	-0x210(%rbp), %rax
                	addq	$0xb4, %rax
                	movslq	%ecx, %rdx
                	movq	%rdx, %rsi
                	addq	$0x7d0, %rsi            # imm = 0x7D0
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdx,4)
                	leaq	-0x210(%rbp), %rax
                	addq	$0x158, %rax            # imm = 0x158
                	movslq	%ecx, %rdx
                	movq	%rdx, %rsi
                	addq	$0xbb8, %rsi            # imm = 0xBB8
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdx,4)
                	jmp	<addr>
                	leaq	-0x420(%rbp), %rdi
@@ -481,3 +478,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

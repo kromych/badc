@@ -66,7 +66,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	sxtw	x2, w1
                	add	x3, x2, #0x1
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x40
                	sxtw	x2, w1
@@ -74,7 +73,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	mov	x17, #0xa               // =10
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	b	<addr>
                	sub	x0, x29, #0x20

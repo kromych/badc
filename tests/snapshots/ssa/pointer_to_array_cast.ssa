@@ -86,9 +86,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v13  BinopI { op=mul, lhs=v10, rhs_imm=3 }            -> x6
     v14  BinopI { op=shl, lhs=v13, rhs_imm=32 }           -> x6
     v15  BinopI { op=shr, lhs=v14, rhs_imm=32 }           -> x6
-    v16  BinopI { op=shl, lhs=v15, rhs_imm=48 }           -> x6
-    v17  BinopI { op=shr, lhs=v16, rhs_imm=48 }           -> x6
-    v18  StoreIndexed { base=v9, index=v10, scale=2, value=v17, kind=I16 } -> -
+    v16  BinopI { op=shl, lhs=v15, rhs_imm=48 }           -> x7
+    v17  BinopI { op=shr, lhs=v16, rhs_imm=48 }           -> x7
+    v18  StoreIndexed { base=v9, index=v10, scale=2, value=v15, kind=I16 } -> -
     terminator Jmp(b2)   (exit_acc=v18)
   block 4  start_pc=0
     v19  LocalAddr(-6)                                    -> x0

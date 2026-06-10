@@ -137,9 +137,9 @@ fn ent_pc=2 n_params=1 variadic=false locals=1028
     v23  BinopI { op=shl, lhs=v22, rhs_imm=32 }           -> x2
     v24  BinopI { op=shr, lhs=v23, rhs_imm=32 }           -> x2
     v25  BinopI { op=sub, lhs=v24, rhs_imm=3 }            -> x2
-    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x2
-    v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x2
-    v28  StoreIndexed { base=v18, index=v19, scale=4, value=v27, kind=I32 } -> -
+    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x6
+    v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x6
+    v28  StoreIndexed { base=v18, index=v19, scale=4, value=v25, kind=I32 } -> -
     terminator Jmp(b2)   (exit_acc=v28)
   block 4  start_pc=0
     v29  Imm(0)                                           -> x0

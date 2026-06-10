@@ -38,7 +38,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	sxtw	x2, w1
                	add	x3, x2, #0x1
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
@@ -67,7 +66,6 @@ Disassembly of section .text:
                	sxtw	x2, w1
                	mov	x17, #0xa               // =10
                	mul	x3, x2, x17
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
@@ -162,7 +160,6 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	mov	x17, #0x64              // =100
                	mul	x2, x2, x17
-               	sxtw	x2, w2
                	str	w2, [x0, #0x4]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
@@ -206,7 +203,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x68
                	sxtw	x2, w1
                	add	x3, x2, #0x1
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x68
                	sub	x2, x29, #0x68
@@ -215,7 +211,6 @@ Disassembly of section .text:
                	sxtw	x4, w1
                	ldrsw	x3, [x3, x4, lsl #2]
                	add	x2, x2, x3
-               	sxtw	x2, w2
                	str	w2, [x0, #0x20]
                	sxtw	x0, w1
                	add	x0, x0, #0x1
@@ -237,7 +232,6 @@ Disassembly of section .text:
                	sxtw	x2, w1
                	add	x0, x0, x2
                	add	x2, x2, #0x41
-               	sxtw	x2, w2
                	strb	w2, [x0]
                	sxtw	x0, w1
                	add	x0, x0, #0x1

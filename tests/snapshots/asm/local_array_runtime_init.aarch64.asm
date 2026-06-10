@@ -122,15 +122,12 @@ Disassembly of section .text:
                	strb	w10, [x2, #0xb]
                	ldr	x10, [sp], #0x10
                	add	x2, x0, x1
-               	sxtw	x2, w2
                	sub	x3, x29, #0x10
                	str	w2, [x3]
                	sub	x2, x0, x1
-               	sxtw	x2, w2
                	sub	x3, x29, #0x10
                	str	w2, [x3, #0x4]
                	mul	x0, x0, x1
-               	sxtw	x0, w0
                	sub	x1, x29, #0x10
                	str	w0, [x1, #0x8]
                	sub	x0, x29, #0x10

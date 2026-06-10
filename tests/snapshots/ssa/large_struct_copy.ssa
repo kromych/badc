@@ -129,9 +129,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=142
     v56  Binop { op=add, lhs=v53, rhs=v55 }               -> x6
     v57  Imm(1000)                                        -> x6
     v58  BinopI { op=add, lhs=v54, rhs_imm=1000 }         -> x6
-    v59  BinopI { op=shl, lhs=v58, rhs_imm=32 }           -> x6
-    v60  BinopI { op=shr, lhs=v59, rhs_imm=32 }           -> x6
-    v61  StoreIndexed { base=v53, index=v54, scale=4, value=v60, kind=I32 } -> -
+    v59  BinopI { op=shl, lhs=v58, rhs_imm=32 }           -> x7
+    v60  BinopI { op=shr, lhs=v59, rhs_imm=32 }           -> x7
+    v61  StoreIndexed { base=v53, index=v54, scale=4, value=v58, kind=I32 } -> -
     v62  LocalAddr(-66)                                   -> x0
     v63  BinopI { op=add, lhs=v62, rhs_imm=180 }          -> x0
     v64  Extend { value=v46, kind=I32 }                   -> x2
@@ -139,9 +139,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=142
     v66  Binop { op=add, lhs=v63, rhs=v65 }               -> x6
     v67  Imm(2000)                                        -> x6
     v68  BinopI { op=add, lhs=v64, rhs_imm=2000 }         -> x6
-    v69  BinopI { op=shl, lhs=v68, rhs_imm=32 }           -> x6
-    v70  BinopI { op=shr, lhs=v69, rhs_imm=32 }           -> x6
-    v71  StoreIndexed { base=v63, index=v64, scale=4, value=v70, kind=I32 } -> -
+    v69  BinopI { op=shl, lhs=v68, rhs_imm=32 }           -> x7
+    v70  BinopI { op=shr, lhs=v69, rhs_imm=32 }           -> x7
+    v71  StoreIndexed { base=v63, index=v64, scale=4, value=v68, kind=I32 } -> -
     v72  LocalAddr(-66)                                   -> x0
     v73  BinopI { op=add, lhs=v72, rhs_imm=344 }          -> x0
     v74  Extend { value=v46, kind=I32 }                   -> x2
@@ -149,9 +149,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=142
     v76  Binop { op=add, lhs=v73, rhs=v75 }               -> x6
     v77  Imm(3000)                                        -> x6
     v78  BinopI { op=add, lhs=v74, rhs_imm=3000 }         -> x6
-    v79  BinopI { op=shl, lhs=v78, rhs_imm=32 }           -> x6
-    v80  BinopI { op=shr, lhs=v79, rhs_imm=32 }           -> x6
-    v81  StoreIndexed { base=v73, index=v74, scale=4, value=v80, kind=I32 } -> -
+    v79  BinopI { op=shl, lhs=v78, rhs_imm=32 }           -> x7
+    v80  BinopI { op=shr, lhs=v79, rhs_imm=32 }           -> x7
+    v81  StoreIndexed { base=v73, index=v74, scale=4, value=v78, kind=I32 } -> -
     terminator Jmp(b2)   (exit_acc=v81)
   block 4  start_pc=0
     v82  LocalAddr(-132)                                  -> x7

@@ -153,7 +153,6 @@ Disassembly of section .text:
                	mul	x2, x1, x17
                	sxtw	x2, w2
                	sub	x2, x2, #0x3
-               	sxtw	x2, w2
                	str	w2, [x0, x1, lsl #2]
                	b	<addr>
                	mov	x0, #0x0                // =0

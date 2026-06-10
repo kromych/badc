@@ -31,9 +31,9 @@ fn ent_pc=0 n_params=2 variadic=false locals=1
     v19  BinopI { op=mul, lhs=v16, rhs_imm=3 }            -> x2
     v20  BinopI { op=shl, lhs=v19, rhs_imm=32 }           -> x2
     v21  BinopI { op=shr, lhs=v20, rhs_imm=32 }           -> x2
-    v22  BinopI { op=shl, lhs=v21, rhs_imm=48 }           -> x2
-    v23  BinopI { op=shr, lhs=v22, rhs_imm=48 }           -> x2
-    v24  StoreIndexed { base=v1, index=v16, scale=2, value=v23, kind=I16 } -> -
+    v22  BinopI { op=shl, lhs=v21, rhs_imm=48 }           -> x8
+    v23  BinopI { op=shr, lhs=v22, rhs_imm=48 }           -> x8
+    v24  StoreIndexed { base=v1, index=v16, scale=2, value=v21, kind=I16 } -> -
     terminator Jmp(b2)   (exit_acc=v24)
   block 4  start_pc=0
     v25  LoadLocal { off=2, kind=I64 }                    -> x0

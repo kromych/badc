@@ -115,26 +115,26 @@ fn ent_pc=2 n_params=2 variadic=false locals=2
     v8   LoadLocal { off=2, kind=I32 }                    -> x0
     v9   LoadLocal { off=3, kind=I32 }                    -> x0
     v10  Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x0
-    v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x0
+    v11  BinopI { op=shl, lhs=v10, rhs_imm=32 }           -> x1
+    v12  BinopI { op=shr, lhs=v11, rhs_imm=32 }           -> x1
     v13  LocalAddr(-2)                                    -> x1
-    v14  Store { addr=v13, disp=0, value=v12, kind=I32 }  -> -
+    v14  Store { addr=v13, disp=0, value=v10, kind=I32 }  -> -
     v15  LoadLocal { off=2, kind=I32 }                    -> x0
     v16  LoadLocal { off=3, kind=I32 }                    -> x0
     v17  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
-    v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x0
-    v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x0
+    v18  BinopI { op=shl, lhs=v17, rhs_imm=32 }           -> x1
+    v19  BinopI { op=shr, lhs=v18, rhs_imm=32 }           -> x1
     v20  LocalAddr(-2)                                    -> x1
     v21  BinopI { op=add, lhs=v20, rhs_imm=4 }            -> x2
-    v22  Store { addr=v20, disp=4, value=v19, kind=I32 }  -> -
+    v22  Store { addr=v20, disp=4, value=v17, kind=I32 }  -> -
     v23  LoadLocal { off=2, kind=I32 }                    -> x0
     v24  LoadLocal { off=3, kind=I32 }                    -> x0
     v25  Binop { op=mul, lhs=v1, rhs=v3 }                 -> x0
-    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x0
-    v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x0
+    v26  BinopI { op=shl, lhs=v25, rhs_imm=32 }           -> x1
+    v27  BinopI { op=shr, lhs=v26, rhs_imm=32 }           -> x1
     v28  LocalAddr(-2)                                    -> x1
     v29  BinopI { op=add, lhs=v28, rhs_imm=8 }            -> x2
-    v30  Store { addr=v28, disp=8, value=v27, kind=I32 }  -> -
+    v30  Store { addr=v28, disp=8, value=v25, kind=I32 }  -> -
     v31  LocalAddr(-2)                                    -> x0
     v32  Imm(0)                                           -> x1
     v33  Load { addr=v31, disp=0, kind=I32 }              -> x0

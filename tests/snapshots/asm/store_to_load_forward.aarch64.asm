@@ -16,21 +16,19 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	str	x1, [x0]
                	str	w2, [x0, #0x8]
-               	sxth	x1, w2
-               	strh	w1, [x0, #0xc]
-               	sxtb	x1, w2
-               	strb	w1, [x0, #0xe]
+               	strh	w2, [x0, #0xc]
+               	strb	w2, [x0, #0xe]
                	mov	x17, #0xff              // =255
-               	and	x2, x2, x17
-               	strb	w2, [x0, #0xf]
-               	ldr	x2, [x0]
+               	and	x1, x2, x17
+               	strb	w1, [x0, #0xf]
+               	ldr	x1, [x0]
                	ldrsw	x3, [x0, #0x8]
                	ldrsh	x4, [x0, #0xc]
-               	sxtb	x1, w1
+               	sxtb	x2, w2
                	ldrb	w0, [x0, #0xf]
-               	add	x2, x2, x3
-               	add	x2, x2, x4
-               	add	x1, x2, x1
+               	add	x1, x1, x3
+               	add	x1, x1, x4
+               	add	x1, x1, x2
                	mov	x17, #0xff              // =255
                	and	x0, x0, x17
                	add	x0, x1, x0

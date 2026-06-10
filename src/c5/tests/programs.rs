@@ -564,6 +564,16 @@ fn brace_elided_struct_member_array_init() {
 }
 
 #[test]
+fn brace_elided_toplevel_struct_array() {
+    // C99 6.7.8p20: brace elision for a top-level array of structs at
+    // file scope, block scope, and static local, in known-size and
+    // size-from-initializer forms, plus a mix of braced and elided
+    // elements. Previously these rejected elided elements, and the
+    // known-size static-local path overran its buffer (panic).
+    assert_eq!(run_fixture("brace_elided_toplevel_struct_array.c"), 0);
+}
+
+#[test]
 fn multichar_constant_packs_bytes() {
     // C99 6.4.4.4p10: a narrow character constant with more than one
     // character packs the bytes with the first character most

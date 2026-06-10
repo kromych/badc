@@ -308,7 +308,18 @@ impl Compiler {
                     if self.lex.tk != '{' {
                         return Err(self.compile_err("array initializer must start with `{{`"));
                     }
-                    let count = self.lex.count_top_level_groups_in_array() as i64;
+                    let sid = struct_id_of(ty);
+                    // C99 6.7.8p20 brace elision: with no per-element
+                    // braces the flat value list fills consecutive struct
+                    // elements, each consuming the struct's slot count.
+                    let groups = self.lex.count_top_level_groups_in_array();
+                    let count = if groups > 0 {
+                        groups as i64
+                    } else {
+                        let items = self.lex.count_top_level_items_in_array();
+                        let slots = self.struct_flat_init_slots(sid).max(1);
+                        items.div_ceil(slots) as i64
+                    };
                     self.next()?;
                     self.align_data_to_8();
                     let off = self.data.len() as i64;
@@ -316,16 +327,13 @@ impl Compiler {
                     for _ in 0..(count * elem_size as i64) {
                         self.data.push(0);
                     }
-                    let sid = struct_id_of(ty);
                     let mut i: i64 = 0;
                     while self.lex.tk != '}' {
                         let here = off + i * elem_size as i64;
                         if self.lex.tk == '{' {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
-                            return Err(
-                                self.compile_err("struct array element must be a brace list")
-                            );
+                            self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
                         if self.lex.tk == ',' {
@@ -354,6 +362,39 @@ impl Compiler {
                     self.data.push(0);
                 }
                 self.write_array_init_into_data(off, ty, &elements);
+            } else if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                // Known-size static-local array of structs. Each element
+                // is a (possibly brace-elided, C99 6.7.8p20) struct
+                // initializer; the generic array collector below would
+                // treat the struct element as a scalar and write past the
+                // pre-allocated region.
+                let sid = struct_id_of(ty);
+                let elem_size = self.size_of_type(ty);
+                let var_offset = self.symbols[loc_idx].val;
+                if self.lex.tk != '{' {
+                    return Err(self.compile_err("array initializer must start with `{{`"));
+                }
+                self.next()?;
+                let mut i: i64 = 0;
+                while self.lex.tk != '}' {
+                    if i >= array_size {
+                        return Err(self.compile_err(format!(
+                            "too many initializers for `{}`",
+                            self.symbols[loc_idx].name
+                        )));
+                    }
+                    let here = var_offset + i * elem_size as i64;
+                    if self.lex.tk == '{' {
+                        self.collect_struct_initializer(sid, here)?;
+                    } else {
+                        self.fill_struct_fields(sid, here, false)?;
+                    }
+                    i += 1;
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `}`
             } else if array_size > 0 {
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = array_size;
@@ -421,20 +462,30 @@ impl Compiler {
                 // field doesn't shift the next element off its
                 // expected offset.
                 let elem_size = self.size_of_type(ty);
-                let count = self.lex.count_top_level_groups_in_array() as i64;
+                let sid = struct_id_of(ty);
+                // C99 6.7.8p20 brace elision: with no per-element braces
+                // the flat value list fills consecutive struct elements,
+                // each consuming the struct's slot count.
+                let groups = self.lex.count_top_level_groups_in_array();
+                let count = if groups > 0 {
+                    groups as i64
+                } else {
+                    let items = self.lex.count_top_level_items_in_array();
+                    let slots = self.struct_flat_init_slots(sid).max(1);
+                    items.div_ceil(slots) as i64
+                };
                 let staged_off = self.data.len();
                 self.next()?;
                 for _ in 0..(count * elem_size as i64) {
                     self.data.push(0);
                 }
-                let sid = struct_id_of(ty);
                 let mut i: i64 = 0;
                 while self.lex.tk != '}' {
                     let here = staged_off as i64 + i * elem_size as i64;
                     if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
-                        return Err(self.compile_err("struct array element must be a brace list"));
+                        self.fill_struct_fields(sid, here, false)?;
                     }
                     i += 1;
                     if self.lex.tk == ',' {
@@ -556,9 +607,17 @@ impl Compiler {
                                 )));
                             }
                             if self.lex.tk != '{' {
-                                return Err(
-                                    self.compile_err("struct array element must be a brace list")
-                                );
+                                // C99 6.7.8p20 brace elision is supported
+                                // for constant struct-array initializers
+                                // (see the staged branch below); the
+                                // runtime path -- a struct array with a
+                                // non-constant element -- still requires
+                                // each element's braces. TODO: thread a
+                                // brace-elided variant through
+                                // emit_struct_local_init_runtime_at.
+                                return Err(self.compile_err(
+                                    "a struct-array element with a non-constant initializer requires braces",
+                                ));
                             }
                             self.emit_struct_local_init_runtime_at(
                                 local_val,
@@ -585,12 +644,12 @@ impl Compiler {
                             )));
                         }
                         let here = staged_off as i64 + i * elem_size as i64;
+                        // C99 6.7.8p20: a struct element's braces may be
+                        // elided, filling its fields from the flat list.
                         if self.lex.tk == '{' {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
-                            return Err(
-                                self.compile_err("struct array element must be a brace list")
-                            );
+                            self.fill_struct_fields(sid, here, false)?;
                         }
                         i += 1;
                         if self.lex.tk == ',' {

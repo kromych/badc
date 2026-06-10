@@ -1497,12 +1497,14 @@ impl Compiler {
                                         )));
                                     }
                                     let here = var_offset + idx * elem_size as i64;
+                                    // C99 6.7.8p20: the braces around each
+                                    // struct element may be elided, in which
+                                    // case the flat list fills that element's
+                                    // fields in order.
                                     if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
-                                        return Err(self.compile_err(
-                                            "struct array element must be a brace list",
-                                        ));
+                                        self.fill_struct_fields(sid, here, false)?;
                                     }
                                     idx += 1;
                                     if self.lex.tk == ',' {

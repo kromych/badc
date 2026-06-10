@@ -510,7 +510,10 @@ fn emit_entry_adapter(
             // mov arg0, sp -- arg0 = initial stack pointer.
             aarch64::emit(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
             // arg1 = image_off (32-bit, via movz + movk).
-            aarch64::emit(code, aarch64::enc_movz(arg1, (image_off & 0xffff) as u16, 0));
+            aarch64::emit(
+                code,
+                aarch64::enc_movz(arg1, (image_off & 0xffff) as u16, 0),
+            );
             aarch64::emit(
                 code,
                 aarch64::enc_movk(arg1, ((image_off >> 16) & 0xffff) as u16, 1),

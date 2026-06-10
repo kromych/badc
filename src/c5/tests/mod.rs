@@ -135,7 +135,10 @@ pub fn link_executable_with_runtime(
         vec![("__BADC_C5_START__".to_string(), "1".to_string())];
     rt_defines.push((
         "__BADC_ENTRY__".to_string(),
-        program.entry_name.clone().unwrap_or_else(|| "main".to_string()),
+        program
+            .entry_name
+            .clone()
+            .unwrap_or_else(|| "main".to_string()),
     ));
     if program.subsystem == Some(crate::Subsystem::Windows) {
         rt_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
@@ -152,9 +155,7 @@ pub fn link_executable_with_runtime(
             .map_err(|e| format!("compile runtime {name}: {e}"))?;
         let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
             .map_err(|e| format!("emit runtime {name}: {e}"))?;
-        objs.push(
-            parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?,
-        );
+        objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
     }
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;

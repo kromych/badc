@@ -846,7 +846,12 @@ pub(super) fn write(
     // native offset in `build.text`, shifted past the stub prologue.
     for &(call_off, name) in &stub.direct_call_runtime {
         let target = runtime_symbol_offset(build, name)?;
-        patch_direct_call(machine, &mut text_bytes, call_off, text_prologue_len + target)?;
+        patch_direct_call(
+            machine,
+            &mut text_bytes,
+            call_off,
+            text_prologue_len + target,
+        )?;
     }
 
     // Program-side fixups land inside build.text, which is offset
@@ -2964,12 +2969,8 @@ mod tests {
                 let program = Compiler::new(super::super::super::tests::with_prelude(src))
                     .compile()
                     .expect("compile");
-                let build = lower_for(
-                    &program,
-                    target,
-                    super::super::NativeOptions::default(),
-                )
-                .expect("lower");
+                let build = lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
                 let machine = match target {
                     super::super::Target::WindowsX64 => Machine::X86_64,
                     super::super::Target::WindowsAarch64 => Machine::Aarch64,
@@ -3016,8 +3017,7 @@ mod tests {
                 .compile()
                 .expect("compile");
             let build =
-                lower_for(&program, target, super::super::NativeOptions::default())
-                    .expect("lower");
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
             let machine = match target {
                 super::super::Target::WindowsX64 => Machine::X86_64,
                 super::super::Target::WindowsAarch64 => Machine::Aarch64,

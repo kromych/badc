@@ -1700,7 +1700,9 @@ pub(crate) fn emit_native_single_tu_for_test(
     build.pc_to_native.push(build.entry_offset);
     // The entry adapter targets `__c5_entry`; the real link path
     // supplies it from the startup runtime.
-    build.func_names.push(alloc::string::String::from("__c5_entry"));
+    build
+        .func_names
+        .push(alloc::string::String::from("__c5_entry"));
     build.func_ent_pcs.push(pc);
     write_for(program, &build, target)
 }

@@ -138,16 +138,13 @@ fn build_and_run_with_options(
     // reference resolved by the runtime rather than a tentative def
     // that collides with `runtime.c` at link time.
     let copts = crate::CompileOptions::default().with_no_entry_point(true);
-    let program = match Compiler::with_options(
-        super::with_prelude(src),
-        Target::WindowsAarch64,
-        copts,
-    )
-    .compile()
-    {
-        Ok(p) => p,
-        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-    };
+    let program =
+        match Compiler::with_options(super::with_prelude(src), Target::WindowsAarch64, copts)
+            .compile()
+        {
+            Ok(p) => p,
+            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+        };
     let bytes = match super::link_executable_with_runtime(&program, Target::WindowsAarch64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),

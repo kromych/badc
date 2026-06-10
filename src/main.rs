@@ -903,8 +903,11 @@ fn main() {
         if emits_start_stub {
             runtime_defines.push(("__BADC_C5_START__", "1"));
             // `__c5_entry` calls this symbol; default `main`,
-            // overridden by `#pragma entrypoint` / `--entry`.
-            runtime_defines.push(("__BADC_ENTRY__", entry_override.as_deref().unwrap_or("main")));
+            // overridden by `#pragma entrypoint`.
+            runtime_defines.push((
+                "__BADC_ENTRY__",
+                entry_override.as_deref().unwrap_or("main"),
+            ));
             if subsystem_override == Some(badc::Subsystem::Windows) {
                 runtime_defines.push(("__BADC_WIN_GUI__", "1"));
             }

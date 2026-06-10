@@ -144,11 +144,12 @@ fn build_and_run_with_options(
     // reference resolved by the runtime rather than a tentative def
     // that collides with `runtime.c` at link time.
     let copts = crate::CompileOptions::default().with_no_entry_point(true);
-    let program =
-        match Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts).compile() {
-            Ok(p) => p,
-            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-        };
+    let program = match Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts)
+        .compile()
+    {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
     let bytes = match super::link_executable_with_runtime(&program, Target::WindowsX64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
@@ -855,9 +856,12 @@ int main(void) {{
     )
     .compile()
     .expect("compile loader");
-    let loader_bytes =
-        super::link_executable_with_runtime(&loader_prog, Target::WindowsX64, NativeOptions::default())
-            .expect("emit loader");
+    let loader_bytes = super::link_executable_with_runtime(
+        &loader_prog,
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit loader");
     let loader_path = std::env::temp_dir().join(format!("badc-pe64-ansloader-{uniq}.exe"));
     std::fs::write(&loader_path, &loader_bytes).expect("write loader");
 

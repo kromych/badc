@@ -165,6 +165,42 @@ pub fn link_executable_with_runtime(
     .map_err(|e| format!("write image: {e}"))
 }
 
+/// Link a program that supplies its own `__c5_entry` into a
+/// freestanding executable: the embedded runtime is not linked and the
+/// image entry is `__c5_entry`. Mirrors the CLI path when an input
+/// object defines `__c5_entry`.
+pub fn link_freestanding(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+    let prog_bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
+    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        "__c5_entry",
+        program.subsystem,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
 /// Compile a fixture with the standard prelude.
 pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))

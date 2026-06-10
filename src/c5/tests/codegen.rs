@@ -484,3 +484,35 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
         "win-arm64 must not emit the 16-byte c5 cdecl va_list stride for this function"
     );
 }
+
+/// A program defining its own `__c5_entry` links freestanding: the
+/// embedded runtime is not linked (no `__c5_exit` / `environ`), the
+/// image entry is `__c5_entry`, and the default `main` need not exist.
+#[test]
+fn user_defined_c5_entry_links_freestanding() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let src = "\
+        #pragma dylib(libc, \"libc.so.6\")\n\
+        #pragma binding(libc::exit, \"exit\")\n\
+        extern void exit(int);\n\
+        void __c5_entry(void *sp, long off) { (void)sp; (void)off; exit(0); }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    // Links without a `main` and without the embedded runtime.
+    let bytes = super::link_freestanding(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("freestanding link must not require `main`");
+    let has = |needle: &str| bytes.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(
+        !has("__c5_exit"),
+        "freestanding image must not pull in the runtime __c5_exit"
+    );
+    assert!(
+        !has("environ"),
+        "freestanding image must not pull in the runtime environ"
+    );
+}

@@ -20,17 +20,44 @@
  *
  *     badc -O demos/wdm_driver/wdm_driver.c -o wdm_hello.sys
  *
- * Load (Windows host, elevated, test-signing enabled so an
- * unsigned driver can load):
+ * Load on a Windows x64 host (admin / elevated). Test-signing mode
+ * permits a TEST-SIGNED driver, not an unsigned one: `sc start` on an
+ * unsigned image returns 577 (ERROR_INVALID_IMAGE_HASH). The steps,
+ * verified end to end:
  *
- *     bcdedit /set testsigning on   (then reboot)
- *     sc create wdm_hello type= kernel binPath= C:\path\wdm_hello.sys
- *     sc start wdm_hello            (DriverEntry runs)
- *     sc stop  wdm_hello            (DRIVER_UNLOAD runs)
- *     sc delete wdm_hello
+ *   1. Enable test-signing, then reboot:
+ *        bcdedit /set testsigning on
+ *        shutdown /r /t 0
+ *   2. Create a self-signed code-signing certificate and trust it in
+ *      both the Root and TrustedPublisher machine stores:
+ *        $c = New-SelfSignedCertificate -Type CodeSigningCert `
+ *               -Subject "CN=badc-test-driver" `
+ *               -CertStoreLocation Cert:\LocalMachine\My
+ *        Export-Certificate -Cert $c -FilePath badc-test.cer
+ *        Import-Certificate -FilePath badc-test.cer `
+ *               -CertStoreLocation Cert:\LocalMachine\Root
+ *        Import-Certificate -FilePath badc-test.cer `
+ *               -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+ *   3. Sign the image. `/sm` selects the machine store, where the
+ *      certificate lives:
+ *        signtool sign /sm /fd sha256 /sha1 <thumbprint> wdm_hello.sys
+ *   4. Register, start, query, stop, remove (spaces after `=` are
+ *      required):
+ *        sc create wdm_hello type= kernel binPath= C:\path\wdm_hello.sys
+ *        sc start  wdm_hello   (DriverEntry runs; state RUNNING)
+ *        sc query  wdm_hello
+ *        sc stop   wdm_hello   (DRIVER_UNLOAD runs; state STOPPED)
+ *        sc delete wdm_hello
+ *   5. Restore the host: remove the certificate from the three stores,
+ *      then `bcdedit /set testsigning off` and reboot.
+ *
+ * The `.sys` carries no base-relocation table; it does not need one,
+ * because the code is position-independent (`&DriverUnload` is a
+ * RIP-relative `lea`), so the kernel loads it at any base.
  *
  * Build-only in CI: loading a kernel driver requires admin,
- * test-signing, and a host willing to reboot. */
+ * test-signing, a code-signing certificate, and a host willing to
+ * reboot. */
 
 #pragma subsystem(driver)
 #pragma entrypoint(DriverEntry)

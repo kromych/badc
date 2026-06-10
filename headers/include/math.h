@@ -157,12 +157,26 @@
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::pow,   "pow")
-// `sqrtf` and `fabsf` lower to hardware instructions (see the
-// `#pragma intrinsic` below), so they need no Windows binding. TODO: the
-// remaining C99 7.12 single-precision functions (sinf, cosf, powf,
-// floorf, ...) are not exported as DLL symbols by the Windows CRT -- the
-// MSVC <math.h> defines them inline over intrinsics or the double-
-// precision entry points -- so they have no Windows binding yet.
+// C99 7.12 single-precision variants. The Universal CRT exports these
+// `f`-suffixed entry points (the legacy msvcrt.dll does not); `sqrtf`
+// and `fabsf` are the exception -- they lower to a hardware instruction
+// via the `#pragma intrinsic` below and need no binding.
+#pragma binding(ucrtbase::logf,   "logf")
+#pragma binding(ucrtbase::log10f, "log10f")
+#pragma binding(ucrtbase::expf,   "expf")
+#pragma binding(ucrtbase::powf,   "powf")
+#pragma binding(ucrtbase::floorf, "floorf")
+#pragma binding(ucrtbase::ceilf,  "ceilf")
+#pragma binding(ucrtbase::roundf, "roundf")
+#pragma binding(ucrtbase::truncf, "truncf")
+#pragma binding(ucrtbase::fmodf,  "fmodf")
+#pragma binding(ucrtbase::sinf,   "sinf")
+#pragma binding(ucrtbase::cosf,   "cosf")
+#pragma binding(ucrtbase::tanf,   "tanf")
+#pragma binding(ucrtbase::atanf,  "atanf")
+#pragma binding(ucrtbase::atan2f, "atan2f")
+#pragma binding(ucrtbase::asinf,  "asinf")
+#pragma binding(ucrtbase::acosf,  "acosf")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical

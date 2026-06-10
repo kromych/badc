@@ -149,6 +149,26 @@ def main() -> int:
     )
     if rc != 0:
         return rc
+    # The default features are the host-JIT library only, so the run
+    # above skips the `badc` binary and the CLI integration tests (both
+    # gated on `full`). Lint them too.
+    rc = run(
+        "cargo clippy --release --all-targets --features full -- -D warnings",
+        [
+            "cargo",
+            "clippy",
+            "--release",
+            "--all-targets",
+            "--features",
+            "full",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        root,
+    )
+    if rc != 0:
+        return rc
     # Matches the `feature combos` CI job's first step. The lib still
     # has to compile with the default features dropped (`std`-gated
     # paths excluded), which mostly catches missing `alloc::*` /

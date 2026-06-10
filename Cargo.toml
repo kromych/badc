@@ -29,6 +29,21 @@ name = "badc"
 path = "src/main.rs"
 required-features = ["std", "full"]
 
+# The CLI integration tests drive the `badc` binary (`CARGO_BIN_EXE_badc`)
+# and the native object / link APIs, so they only build under `full`.
+# Declaring it here keeps `cargo build/clippy --all-targets` under the
+# default (host-JIT) features from compiling them, the same way the bin
+# is skipped.
+[[test]]
+name = "cli_linker_smoke"
+path = "tests/cli_linker_smoke.rs"
+required-features = ["full"]
+
+[[test]]
+name = "cli_fixture_smoke"
+path = "tests/cli_fixture_smoke.rs"
+required-features = ["full"]
+
 [features]
 # The default library is the host-arch JIT only (lexer / parser /
 # preprocessor / codegen passes / `jit_run`). On-disk native output

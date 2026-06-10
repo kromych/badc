@@ -45,6 +45,12 @@ jobs:
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --all-targets -- -D warnings
+      # The default features are the host-JIT library only, so the line
+      # above does not build the `badc` binary or the CLI integration
+      # tests (both gated on `full`). Run clippy again with `--features
+      # full` so `main.rs` and the full-only targets are linted too.
+      - name: cargo clippy (full)
+        run: cargo clippy --all-targets --features full -- -D warnings
       # Sources and docs are ASCII-only. Smart quotes / em dashes /
       # arrows tend to sneak in via copy-paste and rendered editor
       # autocorrect; keep them out at the gate. A fixture that exercises

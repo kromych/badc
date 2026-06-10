@@ -60,7 +60,6 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	b	<addr>
                	mov	x1, #0x2                // =2
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x2
                	b.eq	<addr>

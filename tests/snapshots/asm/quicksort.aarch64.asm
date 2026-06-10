@@ -34,7 +34,6 @@ Disassembly of section .text:
                	ldrsw	x22, [x20, x21, lsl #2]
                	sub	x0, x23, #0x1
                	sxtw	x24, w0
-               	b	<addr>
                	sxtw	x0, w23
                	cmp	x0, x21
                	b.ge	<addr>
@@ -77,7 +76,6 @@ Disassembly of section .text:
                	bl	<addr>
                	b	<addr>
                	b	<addr>
-               	b	<addr>
 
 <quicksort>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -111,7 +109,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x2, x22
                	bl	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

@@ -311,7 +311,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x4]
                	cmp	x0, #0x5
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x60

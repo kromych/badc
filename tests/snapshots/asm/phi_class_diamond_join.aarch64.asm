@@ -16,7 +16,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	add	x0, x1, #0x1
                	sxtw	x1, w0
-               	b	<addr>
                	sxtw	x0, w1
                	ret
                	sub	x0, x2, #0x1

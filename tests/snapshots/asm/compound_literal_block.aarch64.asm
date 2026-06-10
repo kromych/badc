@@ -30,7 +30,6 @@ Disassembly of section .text:
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x3, ne
-               	b	<addr>
                	mov	x2, #0x0                // =0
                	cbz	x3, <addr>
                	ldrsw	x1, [x0, #0x8]
@@ -38,7 +37,6 @@ Disassembly of section .text:
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x2, ne
-               	b	<addr>
                	mov	x3, #0x0                // =0
                	cbz	x2, <addr>
                	ldrsw	x0, [x0, #0xc]
@@ -46,7 +44,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x3, ne
-               	b	<addr>
                	mov	x0, x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -81,7 +78,6 @@ Disassembly of section .text:
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x3, ne
-               	b	<addr>
                	mov	x2, #0x0                // =0
                	cbz	x3, <addr>
                	ldr	x1, [x0]
@@ -90,7 +86,6 @@ Disassembly of section .text:
                	cset	x1, eq
                	cmp	x1, #0x0
                	cset	x2, ne
-               	b	<addr>
                	mov	x3, #0x0                // =0
                	cbz	x2, <addr>
                	ldr	x0, [x0, #0x8]
@@ -104,7 +99,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	x0, #0x0
                	cset	x3, ne
-               	b	<addr>
                	mov	x0, x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -223,7 +217,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x21, ne
-               	b	<addr>
                	mov	x22, #0x1               // =1
                	cbnz	x21, <addr>
                	ldrsw	x0, [x20, #0x8]
@@ -231,12 +224,10 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x22, ne
-               	b	<addr>
                	cbnz	x22, <addr>
                	ldrsw	x0, [x20, #0xc]
                	cmp	x0, #0x0
                	cset	x22, ne
-               	b	<addr>
                	cbz	x22, <addr>
                	mov	x0, #0x4                // =4
                	ldr	x20, [sp]

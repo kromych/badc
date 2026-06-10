@@ -22,7 +22,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x4]
                	cmp	x1, #0xb
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -35,7 +34,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0xc]
                	cmp	x1, #0x0
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -48,7 +46,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x14]
                	cmp	x0, #0x1f
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20

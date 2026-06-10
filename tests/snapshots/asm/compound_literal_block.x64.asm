@@ -35,7 +35,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	xorq	%rcx, %rcx
                	cmpq	$0x0, %rdx
                	je	<addr>
@@ -46,7 +45,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	xorq	%rdx, %rdx
                	cmpq	$0x0, %rcx
                	je	<addr>
@@ -57,7 +55,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	movq	%rdx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -90,7 +87,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	xorq	%rcx, %rcx
                	cmpq	$0x0, %rdx
                	je	<addr>
@@ -102,7 +98,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	xorq	%rdx, %rdx
                	cmpq	$0x0, %rcx
                	je	<addr>
@@ -116,7 +111,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	movq	%rdx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
@@ -241,7 +235,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	movl	$0x1, %r14d
                	cmpq	$0x0, %r12
                	jne	<addr>
@@ -252,14 +245,12 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%r14b
                	movzbq	%r14b, %r14
-               	jmp	<addr>
                	cmpq	$0x0, %r14
                	jne	<addr>
                	movslq	0xc(%rbx), %rax
                	cmpq	$0x0, %rax
                	setne	%r14b
                	movzbq	%r14b, %r14
-               	jmp	<addr>
                	cmpq	$0x0, %r14
                	je	<addr>
                	movl	$0x4, %eax
@@ -341,4 +332,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

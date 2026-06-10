@@ -64,12 +64,10 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x5, ne
-               	b	<addr>
                	cbnz	x5, <addr>
                	ldrb	w0, [x1, #0x2]
                	cmp	x0, #0x0
                	cset	x5, ne
-               	b	<addr>
                	cbz	x5, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x40

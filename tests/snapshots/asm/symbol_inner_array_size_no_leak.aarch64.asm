@@ -12,7 +12,6 @@ Disassembly of section .text:
                	brk	#<addr>:
                	sxtw	x1, w1
                	mov	x3, #0x0                // =0
-               	b	<addr>
                	sxtw	x2, w3
                	cmp	x2, x1
                	b.ge	<addr>
@@ -55,7 +54,6 @@ Disassembly of section .text:
                	ldrsh	x0, [x0, #0xe]
                	cmp	x0, #0x15
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x30

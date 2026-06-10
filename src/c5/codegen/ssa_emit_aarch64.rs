@@ -911,12 +911,16 @@ pub(super) fn emit_function(
         match block.terminator {
             Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
             Terminator::Jmp(t) => {
-                branch_fixups.push(BranchFixup {
-                    site: code.len(),
-                    target: t,
-                    kind: LocalBranchKind::B,
-                });
-                emit(code, enc_b(0));
+                // Fall through when the target is the next block in
+                // layout rather than emitting a branch to it.
+                if t as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: t,
+                        kind: LocalBranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
             }
             Terminator::Bz {
                 cond,

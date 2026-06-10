@@ -30,7 +30,6 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x1, x20
                	bl	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

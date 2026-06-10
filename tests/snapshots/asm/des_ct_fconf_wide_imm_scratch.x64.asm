@@ -710,7 +710,6 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movl	$0xa5a5a5a5, %r12d      # imm = 0xA5A5A5A5
                	movq	%rbx, %r14
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x10, %rax
                	jge	<addr>
@@ -749,5 +748,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

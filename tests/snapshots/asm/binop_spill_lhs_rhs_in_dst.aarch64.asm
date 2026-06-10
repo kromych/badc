@@ -15,7 +15,6 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	ldrsw	x1, [x0, x2, lsl #2]
                	mov	x4, #0x0                // =0
-               	b	<addr>
                	sxtw	x3, w5
                	cmp	x3, x2
                	b.gt	<addr>

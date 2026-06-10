@@ -32,7 +32,6 @@ Disassembly of section .text:
                	add	x21, x21, #0x238
                	mov	x22, #0x0               // =0
                	mov	x23, x22
-               	b	<addr>
                	cmp	x22, x20
                	b.ge	<addr>
                	mov	x0, x22

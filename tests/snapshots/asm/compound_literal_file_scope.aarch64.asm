@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -78,13 +77,11 @@ Disassembly of section .text:
                	cset	x1, ne
                	cmp	x1, #0x0
                	cset	x3, ne
-               	b	<addr>
                	cbnz	x3, <addr>
                	ldr	x0, [x0]
                	ldrsw	x0, [x0, #0x8]
                	cmp	x0, #0x4
                	cset	x3, ne
-               	b	<addr>
                	cbz	x3, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x40
@@ -106,7 +103,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x2, ne
-               	b	<addr>
                	cbnz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x130
@@ -114,7 +110,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x8]
                	cmp	x0, #0x8
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x40
@@ -155,7 +150,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x40
@@ -187,7 +181,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x2, ne
-               	b	<addr>
                	cbnz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x170
@@ -195,7 +188,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x8]
                	cmp	x0, #0x0
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x40

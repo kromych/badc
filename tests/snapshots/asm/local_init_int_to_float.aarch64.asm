@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -107,7 +106,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x20, gt
-               	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x120
@@ -145,7 +143,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x20, gt
-               	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x136
@@ -177,7 +174,6 @@ Disassembly of section .text:
                	fneg	d0, d16
                	fcmp	d8, d0
                	cset	x20, gt
-               	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x14e
@@ -216,7 +212,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x20, gt
-               	b	<addr>
                	cbz	x20, <addr>
                	adrp	x0, <page>
                	add	x0, x0, #0x167

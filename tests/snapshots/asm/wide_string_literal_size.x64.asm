@@ -95,14 +95,12 @@ Disassembly of section .text:
                	cmpq	$0x0, %rcx
                	setne	%sil
                	movzbq	%sil, %rsi
-               	jmp	<addr>
                	cmpq	$0x0, %rsi
                	jne	<addr>
                	movslq	0x8(%rax), %rax
                	cmpq	$0x0, %rax
                	setne	%sil
                	movzbq	%sil, %rsi
-               	jmp	<addr>
                	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x9, %eax
@@ -115,4 +113,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)

@@ -340,7 +340,6 @@ Disassembly of section .text:
                	cmpq	$0x33, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>
                	movl	$0x2, %eax
@@ -380,7 +379,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	movl	$0x1, %r12d
                	cmpq	$0x0, %rbx
                	jne	<addr>
@@ -392,7 +390,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x68(%rbp), %rax
@@ -400,7 +397,6 @@ Disassembly of section .text:
                	cmpq	$0x3f, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x3, %eax
@@ -441,7 +437,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	movl	$0x1, %r12d
                	cmpq	$0x0, %rbx
                	jne	<addr>
@@ -453,7 +448,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	movl	$0x1, %ebx
                	cmpq	$0x0, %r12
                	jne	<addr>
@@ -465,7 +459,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	movl	$0x1, %r12d
                	cmpq	$0x0, %rbx
                	jne	<addr>
@@ -477,7 +470,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	cmpq	$0x0, %r12
                	jne	<addr>
                	leaq	-0x90(%rbp), %rax
@@ -485,7 +477,6 @@ Disassembly of section .text:
                	cmpq	$0x4b, %rax
                	setne	%r12b
                	movzbq	%r12b, %r12
-               	jmp	<addr>
                	cmpq	$0x0, %r12
                	je	<addr>
                	movl	$0x4, %eax
@@ -523,7 +514,6 @@ Disassembly of section .text:
                	cmpq	$0x66, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x5, %eax
@@ -552,3 +542,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

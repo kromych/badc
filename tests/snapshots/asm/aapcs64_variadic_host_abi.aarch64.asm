@@ -52,7 +52,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	mov	x0, x2
-               	b	<addr>
                	sxtw	x1, w2
                	ldursw	x3, [x29, #0x10]
                	cmp	x1, x3
@@ -133,7 +132,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	b	<addr>
                	sxtw	x0, w2
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -212,7 +210,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
-               	b	<addr>
                	sxtw	x0, w2
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -251,7 +248,6 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldr	d1, [x0]
                	fadd	d0, d0, d1
-               	b	<addr>
                	b	<addr>
                	sub	x0, x29, #0x20
                	mov	x17, x0
@@ -330,7 +326,6 @@ Disassembly of section .text:
                	str	x9, [x0, #0x18]
                	ldr	x9, [sp], #0x10
                	mov	x0, x2
-               	b	<addr>
                	sxtw	x1, w2
                	ldursw	x3, [x29, #0x10]
                	cmp	x1, x3
@@ -361,7 +356,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	b	<addr>
                	mov	x2, #0x0                // =0
-               	b	<addr>
                	sxtw	x1, w2
                	ldursw	x3, [x29, #0x10]
                	cmp	x1, x3
@@ -551,7 +545,6 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x17, #0x1               // =1
                	orr	x20, x20, x17
-               	b	<addr>
                	mov	x0, #0xc                // =12
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
@@ -577,7 +570,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x2               // =2
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x4                // =4
                	mov	x1, #0x3ff8000000000000 // =4609434218613702656
                	mov	x2, #0x4004000000000000 // =4612811918334230528
@@ -596,7 +588,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x4               // =4
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0xa                // =10
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	mov	x2, #0x4000000000000000 // =4611686018427387904
@@ -630,7 +621,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x8               // =8
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x4                // =4
                	mov	x1, #0xa                // =10
                	mov	x2, #0x3ff8000000000000 // =4609434218613702656
@@ -648,7 +638,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x10              // =16
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x5                // =5
                	mov	x1, #0x2                // =2
                	mov	x2, #0x4                // =4
@@ -661,7 +650,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x20              // =32
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -688,7 +676,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x40              // =64
                	orr	x20, x0, x17
-               	b	<addr>
                	sxtw	x0, w20
                	ldr	x20, [sp]
                	add	sp, sp, #0x80

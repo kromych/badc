@@ -18,7 +18,6 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x20, #0x0               // =0
                	mov	x21, x20
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x5
                	b.ge	<addr>
@@ -35,7 +34,6 @@ Disassembly of section .text:
                	str	x21, [x1, #0x8]
                	b	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	cmp	x21, #0x0
                	b.eq	<addr>
                	sxtw	x0, w1

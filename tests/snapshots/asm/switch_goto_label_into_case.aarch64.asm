@@ -29,7 +29,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	b	<addr>
                	mov	x0, #0x1e               // =30
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -49,7 +48,6 @@ Disassembly of section .text:
                	b	<addr>
                	cmp	x0, #0x8
                	cset	x2, le
-               	b	<addr>
                	cbz	x2, <addr>
                	b	<addr>
                	mov	x0, #0x0                // =0

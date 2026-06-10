@@ -36,7 +36,6 @@ Disassembly of section .text:
                	decq	%rax
                	movslq	%eax, %r10
                	movq	%r10, 0x28(%rsp)
-               	jmp	<addr>
                	movslq	%r15d, %rax
                	cmpq	%r12, %rax
                	jge	<addr>
@@ -92,7 +91,6 @@ Disassembly of section .text:
                	callq	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
 
 <quicksort>:
                	pushq	%rbp
@@ -126,7 +124,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r14, %rdx
                	callq	<addr>
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -218,4 +215,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

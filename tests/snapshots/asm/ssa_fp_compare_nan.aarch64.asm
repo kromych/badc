@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x17, #0x1               // =1
                	orr	x20, x20, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -100,7 +98,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x2               // =2
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -109,7 +106,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x4               // =4
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -118,7 +114,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x8               // =8
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -127,7 +122,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x10              // =16
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -137,21 +131,18 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x20              // =32
                	orr	x20, x0, x17
-               	b	<addr>
                	fcmp	d8, d8
                	cset	x0, mi
                	cbz	x0, <addr>
                	sxtw	x0, w20
                	mov	x17, #0x40              // =64
                	orr	x20, x0, x17
-               	b	<addr>
                	fcmp	d8, d8
                	cset	x0, eq
                	cbz	x0, <addr>
                	sxtw	x0, w20
                	mov	x17, #0x80              // =128
                	orr	x20, x0, x17
-               	b	<addr>
                	sxtw	x0, w20
                	cbz	x0, <addr>
                	adrp	x0, <page>

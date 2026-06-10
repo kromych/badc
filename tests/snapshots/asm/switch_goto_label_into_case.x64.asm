@@ -30,7 +30,6 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	jmp	<addr>
                	movl	$0x1e, %eax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -53,7 +52,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rdi
                	setle	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	jmp	<addr>
@@ -132,4 +130,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

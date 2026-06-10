@@ -48,7 +48,6 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	je	<addr>
                	orq	$0x1, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -103,7 +101,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x2, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -118,7 +115,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x4, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -130,7 +126,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x8, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -145,7 +140,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x10, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -160,7 +154,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x20, %rbx
-               	jmp	<addr>
                	movsd	0x18(%rsp), %xmm14
                	movsd	0x18(%rsp), %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -174,7 +167,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x40, %rbx
-               	jmp	<addr>
                	movsd	0x18(%rsp), %xmm14
                	movsd	0x18(%rsp), %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -188,7 +180,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x80, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x0, %rax
                	je	<addr>
@@ -224,3 +215,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

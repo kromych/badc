@@ -66,7 +66,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	cmp	x0, x17
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0xe                // =14
                	add	sp, sp, #0x40

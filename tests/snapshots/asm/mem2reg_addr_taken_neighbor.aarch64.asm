@@ -19,7 +19,6 @@ Disassembly of section .text:
                	lsl	x0, x0, #1
                	sxtw	x0, w0
                	sub	x1, x29, #0x8
-               	b	<addr>
                	sxtw	x2, w3
                	cmp	x2, #0x3
                	b.ge	<addr>

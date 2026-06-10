@@ -60,7 +60,6 @@ Disassembly of section .text:
                	mov	x22, #0x4000            // =16384
                	mov	x21, #0x8000            // =32768
                	mov	x20, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x4
                	b.ge	<addr>

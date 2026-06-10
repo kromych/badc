@@ -13,7 +13,6 @@ Disassembly of section .text:
 <zero_and_sum>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%eax, %rdx
                	cmpq	$0xa, %rdx
                	jge	<addr>
@@ -90,4 +89,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

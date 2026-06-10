@@ -46,7 +46,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0x5616             // =22038
                	movk	x0, #0x9ee7, lsl #16
                	movk	x0, #0x3af, lsl #32
@@ -91,7 +90,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0xd497             // =54423
                	movk	x0, #0x4646, lsl #16
                	movk	x0, #0xef5, lsl #32
@@ -154,7 +152,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	mov	x0, #0x8c3a             // =35898
@@ -182,7 +179,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0xd695             // =54933
                	movk	x0, #0xe826, lsl #16
                	movk	x0, #0x2e0b, lsl #32
@@ -241,7 +237,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	mov	x0, #0xaf48             // =44872

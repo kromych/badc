@@ -43,7 +43,6 @@ Disassembly of section .text:
                	cmpq	$0x6, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x1, %eax
@@ -82,7 +81,6 @@ Disassembly of section .text:
                	cmpq	$0x12c, %rax            # imm = 0x12C
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x4, %eax
@@ -121,7 +119,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x7, %eax
@@ -170,7 +167,6 @@ Disassembly of section .text:
                	cmpq	$0x6, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0xa, %eax

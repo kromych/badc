@@ -17,17 +17,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
-               	jmp	<addr>
                	movl	$0x2, %eax
                	retq
-               	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x3, %eax
                	retq
                	xorq	%rax, %rax
@@ -122,3 +115,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

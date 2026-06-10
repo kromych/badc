@@ -69,7 +69,6 @@ Disassembly of section .text:
                	movl	$0x4000, %r14d          # imm = 0x4000
                	movl	$0x8000, %r12d          # imm = 0x8000
                	xorq	%rbx, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x4, %rax
                	jge	<addr>
@@ -145,3 +144,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

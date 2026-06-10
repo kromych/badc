@@ -13,7 +13,6 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	mov	x3, #0x0                // =0
                	mov	x2, x3
-               	b	<addr>
                	sxtw	x4, w3
                	cmp	x4, x1
                	b.ge	<addr>
@@ -33,7 +32,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x80
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ge	<addr>
@@ -61,7 +59,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ge	<addr>
@@ -151,7 +148,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x3
                	b.ge	<addr>
@@ -204,7 +200,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x68
                	mov	x1, #0x0                // =0
                	str	w1, [x0, #0x20]
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x8
                	b.ge	<addr>
@@ -235,7 +230,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x8
                	b.ge	<addr>

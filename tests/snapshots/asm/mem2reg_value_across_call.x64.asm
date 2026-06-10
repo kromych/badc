@@ -33,7 +33,6 @@ Disassembly of section .text:
                	leaq	-<rip>, %r12       # <addr>
                	xorq	%r14, %r14
                	movq	%r14, %r15
-               	jmp	<addr>
                	cmpq	%rbx, %r14
                	jge	<addr>
                	movq	%r14, %rdi
@@ -64,3 +63,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -80,7 +79,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x1               // =1
-               	b	<addr>
                	mov	x0, #0x18               // =24
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -94,7 +92,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x2               // =2
-               	b	<addr>
                	mov	x0, #0x40               // =64
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -108,7 +105,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x3               // =3
-               	b	<addr>
                	mov	x0, #0x40               // =64
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -121,7 +117,6 @@ Disassembly of section .text:
                	sdiv	x1, x1, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	b	<addr>
                	mov	x0, #0x18               // =24
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -135,7 +130,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x5               // =5
-               	b	<addr>
                	mov	x0, #0x20               // =32
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -149,7 +143,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x6               // =6
-               	b	<addr>
                	mov	x0, #0x18               // =24
                	mov	x1, #0x4                // =4
                	sdiv	x0, x0, x1
@@ -163,7 +156,6 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x20, #0x7               // =7
-               	b	<addr>
                	sxtw	x0, w20
                	ldr	x20, [sp]
                	ldr	x19, [sp, #0x10]

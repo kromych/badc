@@ -13,7 +13,6 @@ Disassembly of section .text:
 <build_one>:
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	%rsi, %rax
                	jge	<addr>
@@ -60,7 +59,6 @@ Disassembly of section .text:
                	cmpq	$0x15, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x2, %eax
@@ -83,5 +81,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

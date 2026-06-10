@@ -24,7 +24,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -45,7 +44,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rsi
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	movq	%rdx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -66,7 +64,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -85,7 +82,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rsi
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
@@ -205,12 +201,10 @@ Disassembly of section .text:
                	cmpq	$0x0, %rbx
                	jne	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movl	$0x1, %edx
                	cmpq	$0x0, %rcx
                	jne	<addr>
                	xorq	%rdx, %rdx
-               	jmp	<addr>
                	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0x8, %eax
@@ -222,14 +216,11 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rdx, %rdx
-               	jmp	<addr>
                	movl	$0x1, %edx
-               	jmp	<addr>
                	xorq	%rcx, %rcx
                	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x1, %ecx
-               	jmp	<addr>
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x9, %eax
@@ -252,3 +243,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

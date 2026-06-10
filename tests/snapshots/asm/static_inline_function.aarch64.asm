@@ -24,7 +24,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x2, x0
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x17, #0x1               // =1
                	and	x0, x2, x17

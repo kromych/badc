@@ -52,7 +52,6 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
                	sxtw	x2, w1
                	ldursw	x3, [x29, #0x10]
                	cmp	x2, x3

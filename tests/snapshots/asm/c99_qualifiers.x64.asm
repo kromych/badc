@@ -23,7 +23,6 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	cmpq	%rsi, %rcx
                	jae	<addr>
                	movslq	%eax, %rax
@@ -105,3 +104,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

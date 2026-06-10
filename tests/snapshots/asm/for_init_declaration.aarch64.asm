@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -63,7 +62,6 @@ Disassembly of section .text:
 <simple_sum>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
                	sxtw	x2, w1
                	cmp	x2, #0xa
                	b.ge	<addr>
@@ -84,7 +82,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	mov	x2, #0x0                // =0
                	mov	x1, #0xa                // =10
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	sxtw	x3, w1
                	cmp	x0, x3
@@ -118,7 +115,6 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x2a               // =42
                	mov	x2, #0x0                // =0
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x3
                	b.ge	<addr>
@@ -134,7 +130,6 @@ Disassembly of section .text:
 <adjacent_fors>:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
                	sxtw	x2, w1
                	cmp	x2, #0x5
                	b.ge	<addr>
@@ -147,7 +142,6 @@ Disassembly of section .text:
                	add	x0, x0, x2
                	b	<addr>
                	mov	x2, #0xa                // =10
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0xd
                	b.ge	<addr>
@@ -176,7 +170,6 @@ Disassembly of section .text:
                	str	w2, [x0, #0x4]
                	str	w1, [x0, #0x8]
                	mov	x1, x0
-               	b	<addr>
                	add	x2, x0, #0xc
                	cmp	x1, x2
                	b.ge	<addr>

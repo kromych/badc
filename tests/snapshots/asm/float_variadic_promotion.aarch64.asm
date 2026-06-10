@@ -20,7 +20,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0xa9fc             // =43516
                	movk	x0, #0xd2f1, lsl #16
                	movk	x0, #0x624d, lsl #32
@@ -76,7 +75,6 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	mov	x1, #0x0                // =0
                	scvtf	d0, x1
-               	b	<addr>
                	sxtw	x0, w1
                	ldursw	x2, [x29, #0x10]
                	cmp	x0, x2

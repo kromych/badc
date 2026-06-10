@@ -222,6 +222,34 @@ fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
     out
 }
 
+/// A block whose unconditional `Jmp` targets the next block in layout
+/// must fall through, not emit a jump to the immediately-following
+/// instruction (`e9 00 00 00 00` -- `jmp rel32 = 0` -- on x86-64). Such
+/// dead jumps inflate the dynamic branch count and code size. Compile a
+/// branchy function and confirm the byte sequence is absent.
+#[test]
+fn jmp_to_next_block_falls_through() {
+    use crate::{NativeOptions, Target};
+    let program = super::compile_str_bare(
+        "int f(int x){ int r; if(x>0){r=1;}else{r=2;} return r+x; } \
+         int main(){ return f(3); }",
+    );
+    let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit LinuxX64");
+    let dead = bytes
+        .windows(5)
+        .filter(|w| *w == [0xe9, 0x00, 0x00, 0x00, 0x00])
+        .count();
+    assert_eq!(
+        dead, 0,
+        "found {dead} `jmp +0` (dead fall-through jump) byte sequences"
+    );
+}
+
 /// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
 /// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
 /// The aarch64 allocator's sxtw fold collapses that pair into a

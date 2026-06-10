@@ -873,7 +873,6 @@ Disassembly of section .text:
                	mov	x21, #0xa5a5            // =42405
                	movk	x21, #0xa5a5, lsl #16
                	mov	x22, x20
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x10
                	b.ge	<addr>

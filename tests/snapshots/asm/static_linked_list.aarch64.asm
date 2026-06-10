@@ -32,7 +32,6 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, #0x110
                	ldr	x1, [x0]
-               	b	<addr>
                	cmp	x1, #0x0
                	b.eq	<addr>
                	sxtw	x0, w2

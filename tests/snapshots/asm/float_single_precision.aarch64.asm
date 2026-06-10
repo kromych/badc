@@ -49,7 +49,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	mov	x0, #0xaf48             // =44872
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	fcvt	s0, d16
                	sub	x0, x29, #0x8
                	str	s0, [x0]
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0xa
                	b.ge	<addr>
@@ -126,7 +124,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x20
                	ldr	s0, [x16]
                	mov	x0, #0xed8d             // =60813
@@ -203,7 +200,6 @@ Disassembly of section .text:
                	ldr	s0, [x16]
                	fneg	s0, s0
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x18
                	ldr	s0, [x16]
                	mov	x0, #0x68f1             // =26865

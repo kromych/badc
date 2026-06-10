@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	cmp	x0, #0x20
                	b.ge	<addr>
@@ -140,7 +138,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -161,7 +158,6 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -255,7 +251,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
                	sub	x17, x17, #0x38
                	str	x0, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x2, lsl #12 // =0x2000
                	sub	x16, x16, #0x38
                	ldr	x0, [x16]
@@ -292,7 +287,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
                	sub	x17, x17, #0x40
                	str	x0, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x2, lsl #12 // =0x2000
                	sub	x16, x16, #0x40
                	ldr	x0, [x16]
@@ -326,7 +320,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -389,7 +382,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x18]
                	cmp	x0, #0x40
                	b.ge	<addr>

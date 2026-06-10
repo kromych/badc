@@ -40,7 +40,6 @@ Disassembly of section .text:
                	leaq	-0xe0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
                	movq	%rdx, %rax
-               	jmp	<addr>
                	movslq	%edx, %rcx
                	movslq	-0xe0(%rbp), %rsi
                	cmpq	%rsi, %rcx
@@ -101,7 +100,6 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rax)
                	leaq	-0xe0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
-               	jmp	<addr>
                	movslq	%edx, %rax
                	movslq	-0xe0(%rbp), %rcx
                	cmpq	%rcx, %rax
@@ -160,7 +158,6 @@ Disassembly of section .text:
                	movq	%r10, 0x8(%rax)
                	leaq	-0xe0(%rbp), %r10
                	movq	%r10, 0x10(%rax)
-               	jmp	<addr>
                	movslq	%edx, %rax
                	movslq	-0xe0(%rbp), %rcx
                	cmpq	%rcx, %rax
@@ -192,7 +189,6 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movsd	(%rax,%riz), %xmm1
                	addsd	%xmm1, %xmm0
-               	jmp	<addr>
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r13
@@ -248,7 +244,6 @@ Disassembly of section .text:
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
                	movq	%rdx, %rax
-               	jmp	<addr>
                	movslq	%edx, %rcx
                	movslq	-0xf0(%rbp), %rsi
                	cmpq	%rsi, %rcx
@@ -274,7 +269,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	jmp	<addr>
                	xorq	%rdx, %rdx
-               	jmp	<addr>
                	movslq	%edx, %rcx
                	movslq	-0xf0(%rbp), %rsi
                	cmpq	%rsi, %rcx
@@ -430,7 +424,6 @@ Disassembly of section .text:
                	cmpq	$0xf, %rax
                	je	<addr>
                	orq	$0x1, %rbx
-               	jmp	<addr>
                	movl	$0xc, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -461,7 +454,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x2, %rbx
-               	jmp	<addr>
                	movl	$0x4, %edi
                	movabsq	$0x3ff8000000000000, %rsi # imm = 0x3FF8000000000000
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
@@ -486,7 +478,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x4, %rbx
-               	jmp	<addr>
                	movl	$0xa, %edi
                	movabsq	$0x3ff0000000000000, %rsi # imm = 0x3FF0000000000000
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
@@ -525,7 +516,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x8, %rbx
-               	jmp	<addr>
                	movl	$0x4, %edi
                	movl	$0xa, %esi
                	movabsq	$0x3ff8000000000000, %rdx # imm = 0x3FF8000000000000
@@ -549,7 +539,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x10, %rbx
-               	jmp	<addr>
                	movl	$0x5, %edi
                	movl	$0x2, %esi
                	movl	$0x4, %edx
@@ -563,7 +552,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x20, %rbx
-               	jmp	<addr>
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx
@@ -597,7 +585,6 @@ Disassembly of section .text:
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x40, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -615,3 +602,4 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

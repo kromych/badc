@@ -12,8 +12,8 @@ Disassembly of section .text:
 
 <main>:
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x1, %eax
                	retq
                	xorq	%rax, %rax
                	retq
+               	addb	%al, 0x41(%rdx)

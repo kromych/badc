@@ -33,7 +33,6 @@ Disassembly of section .text:
                	cset	x0, gt
                	cmp	x0, #0x0
                	cset	x2, ne
-               	b	<addr>
                	mov	x0, x2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

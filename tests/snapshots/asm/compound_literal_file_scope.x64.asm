@@ -48,7 +48,6 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -79,7 +78,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rcx
                	setne	%sil
                	movzbq	%sil, %rsi
-               	jmp	<addr>
                	cmpq	$0x0, %rsi
                	jne	<addr>
                	movq	(%rax), %rax
@@ -87,7 +85,6 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	setne	%sil
                	movzbq	%sil, %rsi
-               	jmp	<addr>
                	cmpq	$0x0, %rsi
                	je	<addr>
                	movl	$0x1, %eax
@@ -112,7 +109,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
@@ -121,7 +117,6 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x2, %eax
@@ -157,7 +152,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
                	cmpq	$0x0, %rcx
                	je	<addr>
                	movl	$0x4, %eax
@@ -191,7 +185,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	cmpq	$0x0, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax
@@ -200,7 +193,6 @@ Disassembly of section .text:
                	cmpq	$0x0, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
                	cmpq	$0x0, %rdx
                	je	<addr>
                	movl	$0x6, %eax

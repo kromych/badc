@@ -30,7 +30,6 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	jmp	<addr>
                	movabsq	$0x3e112e0be826d695, %rax # imm = 0x3E112E0BE826D695
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm1
@@ -58,7 +57,6 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	subq	$0x2, %rax
                	movslq	%eax, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x0, %rax
                	jl	<addr>
@@ -90,7 +88,6 @@ Disassembly of section .text:
                	xorq	%r8, %r8
                	movq	%r8, %xmm14
                	movsd	%xmm14, -0x8(%rbp,%riz)
-               	jmp	<addr>
                	movslq	%r8d, %rax
                	cmpq	$0x3, %rax
                	jge	<addr>
@@ -229,7 +226,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x3, %rax
                	jge	<addr>
@@ -285,7 +281,6 @@ Disassembly of section .text:
                	xorq	%rsi, %rsi
                	movq	%rsi, %xmm14
                	movsd	%xmm14, -0xf8(%rbp,%riz)
-               	jmp	<addr>
                	movsd	-0xf8(%rbp,%riz), %xmm0
                	movsd	%xmm0, (%rax,%riz)
                	jmp	<addr>
@@ -362,7 +357,6 @@ Disassembly of section .text:
                	divsd	%xmm15, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
                	xorq	%rbx, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x10, %rax
                	jge	<addr>
@@ -397,7 +391,6 @@ Disassembly of section .text:
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm1
-               	jmp	<addr>
                	movabsq	$0x3eb0c6f7a0b5ed8d, %rax # imm = 0x3EB0C6F7A0B5ED8D
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm1
@@ -422,3 +415,5 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

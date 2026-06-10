@@ -228,13 +228,11 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x3, ne
-               	b	<addr>
                	cbnz	x3, <addr>
                	sub	x0, x29, #0x60
                	ldrb	w0, [x0, #0x2]
                	cmp	x0, #0x1
                	cset	x3, ne
-               	b	<addr>
                	cbz	x3, <addr>
                	mov	x0, #0x10               // =16
                	ldr	x20, [sp]
@@ -266,7 +264,6 @@ Disassembly of section .text:
                	cset	x2, eq
                	cbnz	x2, <addr>
                	mov	x2, x1
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x12               // =18
                	ldr	x20, [sp]

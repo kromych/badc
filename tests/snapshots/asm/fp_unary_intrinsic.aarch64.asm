@@ -125,7 +125,6 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fcmp	d0, d1
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	ldr	x19, [sp]
@@ -157,7 +156,6 @@ Disassembly of section .text:
                	fcvt	d0, s0
                	fcmp	d0, d1
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	ldr	x19, [sp]
@@ -189,7 +187,6 @@ Disassembly of section .text:
                	fmov	d17, x0
                	fcmp	d0, d17
                	cset	x1, ne
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x9                // =9
                	ldr	x19, [sp]

@@ -26,7 +26,6 @@ Disassembly of section .text:
                	add	x1, x1, #0x238
                	b	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

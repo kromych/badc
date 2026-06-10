@@ -1868,12 +1868,16 @@ pub(super) fn emit_function(
                 }
             }
             Terminator::Jmp(t) => {
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 1, // rel32 follows the 1-byte opcode
-                    target: t,
-                    kind: LocalBranchKind::Jmp,
-                });
-                super::x86_64::emit_jmp_rel32(code, 0);
+                // Fall through when the target is the next block in
+                // layout rather than emitting a jump to it.
+                if t as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 1, // rel32 follows the 1-byte opcode
+                        target: t,
+                        kind: LocalBranchKind::Jmp,
+                    });
+                    super::x86_64::emit_jmp_rel32(code, 0);
+                }
             }
             Terminator::Bz {
                 cond,

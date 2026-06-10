@@ -48,7 +48,6 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -100,7 +99,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	seta	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -140,7 +138,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	seta	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -182,7 +179,6 @@ Disassembly of section .text:
                	ucomisd	%xmm0, %xmm14
                	seta	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -221,7 +217,6 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	seta	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
                	cmpq	$0x0, %rbx
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -292,5 +287,3 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

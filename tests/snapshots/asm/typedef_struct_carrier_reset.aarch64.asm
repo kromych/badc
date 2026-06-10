@@ -12,7 +12,6 @@ Disassembly of section .text:
                	brk	#<addr>:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
-               	b	<addr>
                	sxtw	x3, w1
                	cmp	x3, #0xa
                	b.ge	<addr>

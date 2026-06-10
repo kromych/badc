@@ -14,14 +14,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	add	x0, x0, #0x1
                	sxtw	x1, w0
                	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ge	<addr>
-               	b	<addr>
                	b	<addr>
                	sxtw	x0, w1
                	add	sp, sp, #0x10

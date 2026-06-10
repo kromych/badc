@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -63,7 +62,6 @@ Disassembly of section .text:
 <run>:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x5
                	b.ge	<addr>

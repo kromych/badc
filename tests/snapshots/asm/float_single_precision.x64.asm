@@ -50,7 +50,6 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	movss	%xmm0, (%rax,%riz)
-               	jmp	<addr>
                	movss	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x3e7ad7f29abcaf48, %rax # imm = 0x3E7AD7F29ABCAF48
                	cvtss2sd	%xmm0, %xmm0
@@ -78,7 +77,6 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm14, %xmm0
                	leaq	-0x8(%rbp), %rax
                	movss	%xmm0, (%rax,%riz)
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0xa, %rax
                	jge	<addr>
@@ -124,7 +122,6 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	movss	%xmm0, (%rax,%riz)
-               	jmp	<addr>
                	movss	-0x20(%rbp,%riz), %xmm0
                	movabsq	$0x3eb0c6f7a0b5ed8d, %rax # imm = 0x3EB0C6F7A0B5ED8D
                	cvtss2sd	%xmm0, %xmm0
@@ -203,7 +200,6 @@ Disassembly of section .text:
                	movq	%r10, %xmm15
                	xorpd	%xmm15, %xmm0
                	movss	%xmm0, (%rax,%riz)
-               	jmp	<addr>
                	movss	-0x18(%rbp,%riz), %xmm0
                	movabsq	$0x3ee4f8b588e368f1, %rax # imm = 0x3EE4F8B588E368F1
                	cvtss2sd	%xmm0, %xmm0

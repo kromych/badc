@@ -2642,3 +2642,92 @@ fn native_driver_omits_msvcrt_console_exe_keeps_it() {
         );
     }
 }
+
+// `--freestanding` produces an image without the embedded startup
+// runtime: the program's own `__c5_entry` is the image entry and none
+// of the runtime's startup symbols (`__c5_exit` / `environ`) are
+// linked. Cross-compiles to linux-x64 so the test runs on any host
+// (it inspects the bytes, it does not exec).
+#[test]
+fn freestanding_flag_drops_startup_runtime() {
+    let dir = tempdir("freestanding-drops-runtime");
+    let src = write_source(&dir, "free.c", "int __c5_entry(void) { return 7; }\n");
+    let out = dir.join("free");
+    run(
+        Command::new(badc())
+            .arg("--freestanding")
+            .arg("--target=linux-x64")
+            .arg(&src)
+            .arg("-o")
+            .arg(&out)
+            .current_dir(&dir),
+        "freestanding build",
+    );
+    let bytes = std::fs::read(&out).expect("read freestanding image");
+    for sym in ["__c5_exit", "environ", "__c5_getmainargs"] {
+        assert!(
+            !bytes.windows(sym.len()).any(|w| w == sym.as_bytes()),
+            "freestanding image must not link the startup runtime symbol `{sym}`"
+        );
+    }
+    // The ELF entry (e_entry at offset 24) must be non-zero: the writer
+    // resolved it to the program's `__c5_entry`, not left it unset.
+    let e_entry = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+    assert!(e_entry != 0, "freestanding image entry must be set");
+}
+
+// `--freestanding` without a program-defined entry is reported up front
+// rather than as a bare undefined-symbol relocation.
+#[test]
+fn freestanding_without_entry_is_an_error() {
+    let dir = tempdir("freestanding-no-entry");
+    let src = write_source(&dir, "noentry.c", "int helper(void) { return 1; }\n");
+    let out = dir.join("x");
+    let result = Command::new(badc())
+        .arg("--freestanding")
+        .arg("--target=linux-x64")
+        .arg(&src)
+        .arg("-o")
+        .arg(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !result.status.success(),
+        "--freestanding without __c5_entry must fail"
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("__c5_entry") && stderr.contains("freestanding"),
+        "diagnostic must name the missing entry; got: {stderr:?}"
+    );
+}
+
+// A program that defines `__c5_entry` WITHOUT `--freestanding` keeps
+// the startup runtime, so its definition collides with the runtime's
+// `__c5_entry`. This must be a duplicate-symbol error, not a silent
+// switch to a freestanding image: defining a function with that name
+// by accident should not change the output kind.
+#[test]
+fn defining_c5_entry_without_flag_is_not_implicitly_freestanding() {
+    let dir = tempdir("c5entry-no-flag");
+    let src = write_source(&dir, "free.c", "int __c5_entry(void) { return 7; }\n");
+    let out = dir.join("x");
+    let result = Command::new(badc())
+        .arg("--target=linux-x64")
+        .arg(&src)
+        .arg("-o")
+        .arg(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    assert!(
+        !result.status.success(),
+        "defining __c5_entry without --freestanding must not silently build freestanding"
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("multiple definition") && stderr.contains("__c5_entry"),
+        "expected a duplicate-symbol error for __c5_entry; got: {stderr:?}"
+    );
+}

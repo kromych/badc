@@ -52,6 +52,11 @@ Compile knobs:
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size.
   -g0, --no-debug          Skip DWARF emission (the default).
+  --freestanding           Do not link the embedded startup runtime.
+                           The image enters at the program's own entry
+                           (`__c5_entry` by default, or the
+                           `#pragma entrypoint` symbol), which the
+                           program must define.
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
@@ -171,6 +176,11 @@ fn main() {
     let mut dump_ssa = false;
     let mut inline_cap: u32 = 64;
     let mut emit_debug_info = false;
+    // Produce a freestanding image: do not link the embedded startup
+    // runtime, and make the program's own entry the image entry
+    // (`__c5_entry` by default, or `#pragma entrypoint`), which the
+    // program must define. Requested only by this flag.
+    let mut freestanding = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -270,6 +280,7 @@ fn main() {
             }
             "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
+            "--freestanding" => freestanding = true,
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
             "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
@@ -837,29 +848,44 @@ fn main() {
                 }
             }
         }
-        // A program that defines `__c5_entry` itself takes over the
-        // process startup: the embedded runtime is then dropped (its
-        // own `__c5_entry` / `__c5_exit` / `environ` would collide or
-        // be dead), and the entry adapter resolves `__c5_entry` to the
-        // user's definition. With no headers pulled in this yields a
-        // freestanding image.
-        let user_defines_entry = native_objs.iter().any(|o| {
-            o.symbols
-                .iter()
-                .any(|s| s.name == "__c5_entry" && s.section == badc::NativeSymSection::Text)
-        });
-        // A user-supplied `__c5_entry` is the image entry; without an
-        // explicit `#pragma entrypoint`, point the writer at it (the
-        // default `main` need not exist in a freestanding image).
-        if user_defines_entry && entry_override.is_none() {
+        // `--freestanding` drops the embedded startup runtime: the
+        // program's own entry becomes the image entry and the entry
+        // adapter resolves to it. A freestanding build is requested only
+        // by the flag. A program that merely defines `__c5_entry`
+        // without the flag keeps the runtime, so its definition collides
+        // with the runtime's `__c5_entry` -- a duplicate-symbol link
+        // error rather than a silent switch to a freestanding image.
+        //
+        // Without an explicit `#pragma entrypoint`, a freestanding image
+        // enters at `__c5_entry` (the default `main` need not exist).
+        if freestanding && entry_override.is_none() {
             entry_override = Some("__c5_entry".to_string());
+        }
+        // A freestanding image must supply its own entry symbol; the
+        // embedded runtime that would otherwise define `__c5_entry` is
+        // not linked. Report a missing entry here rather than as a bare
+        // undefined-symbol relocation at link time.
+        if freestanding {
+            let entry = entry_override.as_deref().unwrap_or("__c5_entry");
+            let defined = native_objs.iter().any(|o| {
+                o.symbols
+                    .iter()
+                    .any(|s| s.name == entry && s.section == badc::NativeSymSection::Text)
+            });
+            if !defined {
+                eprint_diagnostic(format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ));
+                std::process::exit(1);
+            }
         }
         // The embedded runtime's startup (`__c5_entry`, `__c5_exit`,
         // `environ`) links only when the writer emits an entry stub --
         // not into shared libraries, passthrough-entry subsystems
-        // (native / EFI), or images that supply their own `__c5_entry`.
+        // (native / EFI), or freestanding images.
         let emits_start_stub = mode != Mode::SharedLibrary
-            && !user_defines_entry
+            && !freestanding
             && !matches!(
                 subsystem_override,
                 Some(

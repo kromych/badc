@@ -114,8 +114,6 @@ def sync_linux(box: Box, github_token: str) -> int:
         "-az",
         "--delete-excluded",
         "--exclude=target",
-        "--exclude=demos/scc/.cache",
-        "--exclude=demos/scc/src",
         "--exclude=demos/*/.cache",
         "--exclude=demos/*/.work",
         "--exclude=.git",
@@ -151,7 +149,6 @@ def sync_windows(box: Box, github_token: str) -> int:
             "--exclude=.git",
             "--exclude=demos/*/.cache",
             "--exclude=demos/*/.work",
-            "--exclude=demos/scc/src",
             "--exclude=._*",
             ".",
         ],
@@ -254,7 +251,7 @@ def main() -> int:
         ).stdout.strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
         sys.stdout.write(
-            "warning: `gh auth token` failed; scc setup.py will 404 on private repo\n"
+            "warning: `gh auth token` failed; vendored-demo setup.py fetches will 404 on the private mirror\n"
         )
 
     results: dict[str, int] = {}

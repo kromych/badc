@@ -576,7 +576,7 @@ CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. Every
 runner additionally runs the demo smokes -- sqlite3, miniz,
 kissfft, bzip2, tweetnacl, monocypher, bearssl, lua, stb,
-chibicc, tinycc, scc, gui_hello, nt_loader -- end-to-end (or
+chibicc, tinycc, gui_hello, nt_loader -- end-to-end (or
 build-only for the GUI demos, which need a display). See
 [`demos/`](./demos/) for what each exercises. The PE-via-
 WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`

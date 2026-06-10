@@ -2,7 +2,7 @@
 
 Demos that pull a third-party library (`miniz`, `kissfft`,
 `bzip2`, `sqlite3`, `stb`, `chibicc`, `tinycc`, `tweetnacl`,
-`monocypher`, `bearssl`, `lua`, `scc`) fetch the upstream
+`monocypher`, `bearssl`, `lua`) fetch the upstream
 archive on first use. CI hitting the upstream hosts directly
 was flaky -- transient
 `RemoteDisconnected` failures from the GitHub release CDN and
@@ -33,7 +33,6 @@ project's identifier for the release:
 | monocypher | github LoupVaillant/Monocypher tag      | tarball-sha256  |
 | bearssl    | bearssl.org release tarball             | tarball-sha256  |
 | lua        | lua.org source + test-suite tarballs    | tarball-sha256  |
-| scc        | git.simple-cc.org/scc master HEAD       | git             |
 
 The full sha is recorded in `manifest.json` and in each
 demo's `setup.py` constants (`UPSTREAM_SHA`).

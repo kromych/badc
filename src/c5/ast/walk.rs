@@ -2429,7 +2429,16 @@ impl<'a> Walker<'a> {
                     }
                     return Ok(v);
                 }
-                Ok(b.intrinsic(intr_kind, arg_vals))
+                // sqrt / fabs (and their single-precision partners) produce
+                // an FP value; tag the f32 form so the codegen picks the
+                // single-precision instruction and width.
+                let sqrtf_kind = super::super::op::Intrinsic::Sqrtf as i64;
+                let fabsf_kind = super::super::op::Intrinsic::Fabsf as i64;
+                let v = b.intrinsic(intr_kind, arg_vals);
+                if intr_kind == sqrtf_kind || intr_kind == fabsf_kind {
+                    return Ok(b.mark_f32(v));
+                }
+                Ok(v)
             }
         }
     }

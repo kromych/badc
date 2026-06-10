@@ -446,6 +446,31 @@ pub(super) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
     0x1E61_4000 | ((dn as u32) << 5) | (dd as u32)
 }
 
+/// `FSQRT <Dd>, <Dn>` -- scalar double square root. FP data-processing
+/// (1 source), ptype=01, opcode=000011.
+pub(super) fn enc_fsqrt_d(dd: u8, dn: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32);
+    0x1E61_C000 | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FSQRT <Sd>, <Sn>` -- scalar single square root. ptype=00.
+pub(super) fn enc_fsqrt_s(sd: u8, sn: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32);
+    0x1E21_C000 | ((sn as u32) << 5) | (sd as u32)
+}
+
+/// `FABS <Dd>, <Dn>` -- scalar double absolute value. opcode=000001.
+pub(super) fn enc_fabs_d(dd: u8, dn: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32);
+    0x1E60_C000 | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FABS <Sd>, <Sn>` -- scalar single absolute value.
+pub(super) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
+    debug_assert!(sd < 32 && sn < 32);
+    0x1E20_C000 | ((sn as u32) << 5) | (sd as u32)
+}
+
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
 /// and `Dm`. Used in the comparison lowering before `CSET`. Note:
 /// for unordered (NaN) operands the result is the IEEE "unordered"

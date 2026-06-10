@@ -533,6 +533,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("fp_unary_intrinsic.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),

@@ -1939,6 +1939,10 @@ impl Preprocessor {
             "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
             "fma" => super::op::Intrinsic::Fma as i64,
             "fmaf" => super::op::Intrinsic::Fmaf as i64,
+            "sqrt" => super::op::Intrinsic::Sqrt as i64,
+            "sqrtf" => super::op::Intrinsic::Sqrtf as i64,
+            "fabs" => super::op::Intrinsic::Fabs as i64,
+            "fabsf" => super::op::Intrinsic::Fabsf as i64,
             "__builtin_trap" => super::op::Intrinsic::Trap as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
@@ -1950,7 +1954,8 @@ impl Preprocessor {
                          __builtin_alloca, __c5_aarch64_setjmp, \
                          __c5_aarch64_longjmp, __builtin_va_start, \
                          __builtin_va_arg, __builtin_va_end, \
-                         __builtin_va_copy, fma, fmaf"
+                         __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
+                         fabs, fabsf"
                     ),
                 )));
             }

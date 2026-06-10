@@ -584,6 +584,15 @@ fn multichar_constant_packs_bytes() {
 }
 
 #[test]
+fn sqrtf_fabsf_lower_to_hardware_intrinsics() {
+    // C99 7.12.7.5 / 7.12.7.2: sqrtf / fabsf lower to a single hardware
+    // instruction (no math library), so they run on the interpreter too.
+    // The fixture self-checks several values, a float result widened to
+    // double, nesting, and a non-constant argument.
+    assert_eq!(run_fixture("fp_unary_intrinsic.c"), 0);
+}
+
+#[test]
 fn wide_string_literal_size_includes_one_terminator() {
     // C99 6.4.5: a wide string literal is `wchar_t[N+1]` with a single
     // wide terminator; adjacent wide literals concatenate. The lexer

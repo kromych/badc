@@ -445,6 +445,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_return_by_value.c", 0),
     ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
+    ("fp_unary_intrinsic.c", 0),
     ("param_incoming_reg_clobber.c", 0),
     ("indexed_load_store.c", 0),
     ("struct_field_displacement.c", 0),

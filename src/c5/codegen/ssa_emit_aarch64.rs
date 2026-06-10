@@ -1925,6 +1925,7 @@ fn emit_inst(
             *kind,
             args,
             dst,
+            v,
             alloc,
             frame,
             scratch,
@@ -2359,6 +2360,7 @@ fn emit_intrinsic(
     kind: i64,
     args: &[u32],
     dst: Place,
+    v: super::super::ir::ValueId,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2856,6 +2858,39 @@ fn emit_intrinsic(
             // `brk #0` (0xD4200000) raises a breakpoint / illegal-state
             // exception. Execution does not continue past it.
             emit(code, 0xD420_0000u32);
+            true
+        }
+        I::Sqrt | I::Sqrtf | I::Fabs | I::Fabsf => {
+            if args.len() != 1 {
+                bail_msg("sqrt / fabs: expected 1 arg");
+                return false;
+            }
+            let src_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let is_f32 = alloc.is_f32(v);
+            let dn = match materialize_fp_for(code, args[0], src_place, SCRATCH_FP0, frame, alloc) {
+                Some(r) => r,
+                None => return false,
+            };
+            let dd = match dst {
+                Place::FpReg(r) => r,
+                Place::Spill(_) => SCRATCH_FP1,
+                _ => return false,
+            };
+            let inst = match (intrinsic, is_f32) {
+                (I::Sqrt | I::Sqrtf, true) => super::aarch64::enc_fsqrt_s(dd, dn),
+                (I::Sqrt | I::Sqrtf, false) => super::aarch64::enc_fsqrt_d(dd, dn),
+                (_, true) => super::aarch64::enc_fabs_s(dd, dn),
+                (_, false) => super::aarch64::enc_fabs_d(dd, dn),
+            };
+            emit(code, inst);
+            if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_d_auto(code, dd, sp_off);
+            }
             true
         }
     }

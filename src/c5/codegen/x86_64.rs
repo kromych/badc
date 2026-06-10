@@ -820,6 +820,28 @@ pub(super) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5E, dst, src);
 }
 
+/// `SQRTSD xmm, xmm` -- `dst = sqrt(src)`, scalar double. `F2 0F 51 /r`.
+pub(super) fn emit_sqrtsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x51, dst, src);
+}
+
+/// `SQRTSS xmm, xmm` -- `dst = sqrt(src)`, scalar single. `F3 0F 51 /r`.
+pub(super) fn emit_sqrtss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x51, dst, src);
+}
+
+/// `ANDPD xmm, xmm` -- bitwise AND of two doubles. `66 0F 54 /r`. Used
+/// for `FABS` (AND with the inverted sign-bit mask in another XMM).
+pub(super) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x54);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
 /// operands it zeroes the register, used as a building block for
 /// `FNEG` (we XOR with the sign-bit mask in another XMM).

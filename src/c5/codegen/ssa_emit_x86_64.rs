@@ -3772,6 +3772,68 @@ fn emit_fneg(
     true
 }
 
+/// `sqrt` / `fabs` intrinsic -- a unary FP operation lowering to a
+/// single hardware instruction. `sqrt` uses `SQRTSD` / `SQRTSS`; `fabs`
+/// clears the IEEE 754 sign bit by AND-ing with the inverted-sign mask
+/// (C99 7.12.7), built in an integer scratch and transferred to
+/// SCRATCH_XMM15, mirroring `emit_fneg`.
+fn emit_fp_unary(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    value: u32,
+    kind: super::super::op::Intrinsic,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::x86_64::{emit_andpd, emit_sqrtsd, emit_sqrtss};
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let dd = match fp_or_spill_dst(dst) {
+        Some(r) => r,
+        None => {
+            bail_msg("fp_unary: dst not fp reg / spill");
+            return false;
+        }
+    };
+    let dn = match materialize_fp(code, src_place, dd, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("fp_unary: value not fp reg / spill / int reg");
+            return false;
+        }
+    };
+    let is_f32 = alloc.is_f32(v);
+    match kind {
+        I::Sqrt | I::Sqrtf => {
+            if is_f32 {
+                emit_sqrtss(code, dd, dn);
+            } else {
+                emit_sqrtsd(code, dd, dn);
+            }
+        }
+        I::Fabs | I::Fabsf => {
+            if dn.0 != dd.0 {
+                emit_movapd_xmm_xmm(code, dd, dn);
+            }
+            let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
+            emit_mov_r_imm64(code, SCRATCH_R10, mask);
+            emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
+            emit_andpd(code, dd, SCRATCH_XMM15);
+        }
+        _ => {
+            bail_msg("fp_unary: not a unary FP intrinsic");
+            return false;
+        }
+    }
+    fp_spill_dst_to_slot(code, dst, dd, frame);
+    true
+}
+
 /// `Inst::FpCast { kind, value }` -- int <-> f64 conversion. For
 /// `IntToFp`, `CVTSI2SD` widens a signed 64-bit GPR into an xmm.
 /// For `FpToInt`, `CVTTSD2SI` rounds-to-zero an xmm into a 64-bit
@@ -5516,7 +5578,7 @@ fn emit_intrinsic(
     kind: i64,
     args: &[u32],
     dst: Place,
-    _v: super::super::ir::ValueId,
+    v: super::super::ir::ValueId,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -5938,6 +6000,13 @@ fn emit_intrinsic(
             code.push(0x0F);
             code.push(0x0B);
             true
+        }
+        I::Sqrt | I::Sqrtf | I::Fabs | I::Fabsf => {
+            if args.len() != 1 {
+                bail_msg("sqrt / fabs: expected 1 arg");
+                return false;
+            }
+            emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)
         }
     }
 }

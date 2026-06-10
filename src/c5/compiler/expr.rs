@@ -300,6 +300,14 @@ impl Compiler {
                     let fma_id = crate::c5::op::Intrinsic::Fma as i64;
                     let fmaf_id = crate::c5::op::Intrinsic::Fmaf as i64;
                     let trap_id = crate::c5::op::Intrinsic::Trap as i64;
+                    let sqrt_id = crate::c5::op::Intrinsic::Sqrt as i64;
+                    let sqrtf_id = crate::c5::op::Intrinsic::Sqrtf as i64;
+                    let fabs_id = crate::c5::op::Intrinsic::Fabs as i64;
+                    let fabsf_id = crate::c5::op::Intrinsic::Fabsf as i64;
+                    let is_fp_unary = intrinsic_id == sqrt_id
+                        || intrinsic_id == sqrtf_id
+                        || intrinsic_id == fabs_id
+                        || intrinsic_id == fabsf_id;
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -340,6 +348,29 @@ impl Compiler {
                             return Err(
                                 self.compile_err(format!("intrinsic `{fn_name}` takes (x, y, z)"))
                             );
+                        }
+                    } else if is_fp_unary {
+                        // sqrt(x) / sqrtf(x) / fabs(x) / fabsf(x) -- one
+                        // FP argument cast to the result precision
+                        // (6.3.1.4 / 6.3.1.5). The walker lowers the call
+                        // to a single `Inst::Intrinsic` that emits the
+                        // hardware instruction.
+                        let elem_ty = if intrinsic_id == sqrtf_id || intrinsic_id == fabsf_id {
+                            Ty::Float as i64
+                        } else {
+                            Ty::Double as i64
+                        };
+                        self.expr(Token::Assign as i64)?;
+                        if let Some(child) = self.ast_acc {
+                            let pos = self.ast_src_pos();
+                            let cast_id = self.ast.push_expr(
+                                super::super::ast::Expr::Cast {
+                                    child,
+                                    to_ty: elem_ty,
+                                },
+                                pos,
+                            );
+                            ast_intrinsic_args.push(cast_id);
                         }
                     } else if intrinsic_id == va_arg_id {
                         // `__builtin_va_arg(self, T)` -- self is the
@@ -482,6 +513,10 @@ impl Compiler {
                     } else if intrinsic_id == fma_id {
                         self.ty = Ty::Double as i64;
                     } else if intrinsic_id == fmaf_id {
+                        self.ty = Ty::Float as i64;
+                    } else if intrinsic_id == sqrt_id || intrinsic_id == fabs_id {
+                        self.ty = Ty::Double as i64;
+                    } else if intrinsic_id == sqrtf_id || intrinsic_id == fabsf_id {
                         self.ty = Ty::Float as i64;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);

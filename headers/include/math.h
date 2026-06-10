@@ -47,7 +47,6 @@
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
-#pragma binding(libc::sqrtf,  "_sqrtf")
 #pragma binding(libc::logf,   "_logf")
 #pragma binding(libc::log10f, "_log10f")
 #pragma binding(libc::expf,   "_expf")
@@ -56,7 +55,6 @@
 #pragma binding(libc::ceilf,  "_ceilf")
 #pragma binding(libc::roundf, "_roundf")
 #pragma binding(libc::truncf, "_truncf")
-#pragma binding(libc::fabsf,  "_fabsf")
 #pragma binding(libc::fmodf,  "_fmodf")
 #pragma binding(libc::sinf,   "_sinf")
 #pragma binding(libc::cosf,   "_cosf")
@@ -97,7 +95,6 @@
 #pragma binding(libm::modf,  "modf")
 #pragma binding(libm::trunc, "trunc")
 // C99 7.12 single-precision variants.
-#pragma binding(libm::sqrtf,  "sqrtf")
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
 #pragma binding(libm::expf,   "expf")
@@ -106,7 +103,6 @@
 #pragma binding(libm::ceilf,  "ceilf")
 #pragma binding(libm::roundf, "roundf")
 #pragma binding(libm::truncf, "truncf")
-#pragma binding(libm::fabsf,  "fabsf")
 #pragma binding(libm::fmodf,  "fmodf")
 #pragma binding(libm::sinf,   "sinf")
 #pragma binding(libm::cosf,   "cosf")
@@ -161,12 +157,12 @@
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::pow,   "pow")
-// TODO: the C99 7.12 single-precision math functions (sqrtf, fabsf,
-// floorf, ...) are not exported as DLL symbols by the Windows CRT --
-// the MSVC <math.h> defines them inline over compiler intrinsics
-// (sqrtss, andps) or the double-precision entry points. Supporting
-// them on Windows needs intrinsic lowering rather than a binding, so
-// the `f`-suffixed prototypes below have no Windows binding yet.
+// `sqrtf` and `fabsf` lower to hardware instructions (see the
+// `#pragma intrinsic` below), so they need no Windows binding. TODO: the
+// remaining C99 7.12 single-precision functions (sinf, cosf, powf,
+// floorf, ...) are not exported as DLL symbols by the Windows CRT -- the
+// MSVC <math.h> defines them inline over intrinsics or the double-
+// precision entry points -- so they have no Windows binding yet.
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -267,3 +263,11 @@ float acosf(float x);
 #pragma intrinsic("fmaf")
 double fma(double x, double y, double z);
 float fmaf(float x, float y, float z);
+
+// C99 7.12.7.5 / 7.12.7.2: the single-precision square root and absolute
+// value lower to a hardware instruction (FSQRT / FABS on AArch64,
+// SQRTSS / sign-mask AND on x86-64) rather than a library call. This
+// also supplies them on Windows, whose CRT does not export the
+// `f`-suffixed entry points as DLL symbols.
+#pragma intrinsic("sqrtf")
+#pragma intrinsic("fabsf")

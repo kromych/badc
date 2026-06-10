@@ -1495,6 +1495,27 @@ fn run_intrinsic(
         Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
+        Intrinsic::Sqrt | Intrinsic::Sqrtf => {
+            let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
+            let r = if matches!(intr, Intrinsic::Sqrtf) {
+                libm::sqrtf(x as f32) as f64
+            } else {
+                libm::sqrt(x)
+            };
+            frame.regs[v as usize] =
+                round_if_f32(r.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            Ok(())
+        }
+        Intrinsic::Fabs | Intrinsic::Fabsf => {
+            // Clear the IEEE 754 sign bit. The value is held as an f64
+            // bit pattern; an f32 value occupies the same sign position.
+            let raw = frame.regs[args[0] as usize];
+            frame.regs[v as usize] = round_if_f32(
+                raw & 0x7fff_ffff_ffff_ffff,
+                frame.func.f32_values.get(v as usize),
+            );
+            Ok(())
+        }
         // `__builtin_trap()` raises an illegal-instruction exception on
         // the native targets; the interpreter cannot continue past it,
         // so it surfaces as a runtime failure.

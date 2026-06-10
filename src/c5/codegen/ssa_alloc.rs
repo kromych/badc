@@ -1156,7 +1156,21 @@ fn result_kind(inst: &Inst) -> ResultKind {
         CallExt { .. } => ResultKind::Int,
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
-        Intrinsic { .. } => ResultKind::Int,
+        Intrinsic { kind, .. } => {
+            use super::super::op::Intrinsic as I;
+            let k = *kind;
+            // sqrt / fabs and their single-precision partners produce an
+            // FP value (C99 7.12.7); the rest yield an integer / pointer.
+            if k == I::Sqrt as i64
+                || k == I::Sqrtf as i64
+                || k == I::Fabs as i64
+                || k == I::Fabsf as i64
+            {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
         AllocaInit(_) => ResultKind::None,
     }
 }

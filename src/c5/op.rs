@@ -87,6 +87,16 @@ pub enum Intrinsic {
     /// no value, and does not return to its caller. The VM aborts the
     /// process.
     Trap = 10,
+    /// `sqrt(x)` / `sqrtf(x)` -- C99 7.12.7.5, the correctly-rounded
+    /// square root. Lowered to `Inst::FUnary { op: Sqrt }` so it emits
+    /// the hardware instruction (`fsqrt` / `sqrtsd` / `sqrtss`) rather
+    /// than a library call. `Sqrt` is double, `Sqrtf` single precision.
+    Sqrt = 11,
+    Sqrtf = 12,
+    /// `fabs(x)` / `fabsf(x)` -- C99 7.12.7.2, absolute value. Lowered to
+    /// `Inst::FUnary { op: Abs }`, which clears the IEEE 754 sign bit.
+    Fabs = 13,
+    Fabsf = 14,
 }
 
 impl Intrinsic {
@@ -102,6 +112,10 @@ impl Intrinsic {
             8 => Some(Intrinsic::Fma),
             9 => Some(Intrinsic::Fmaf),
             10 => Some(Intrinsic::Trap),
+            11 => Some(Intrinsic::Sqrt),
+            12 => Some(Intrinsic::Sqrtf),
+            13 => Some(Intrinsic::Fabs),
+            14 => Some(Intrinsic::Fabsf),
             _ => None,
         }
     }

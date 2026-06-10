@@ -582,10 +582,12 @@ fn build_dynstr(
     (bytes, name_offsets, lib_offsets, export_offsets)
 }
 
-/// Build the static `.symtab` + `.strtab` for the
-/// PLT-trampoline pool. One local `STT_FUNC` per import, plus
-/// the SHT_SYMTAB sentinel at index 0. Returns
-/// `(symtab_bytes, strtab_bytes)`.
+/// Build the static `.symtab` + `.strtab`: the SHT_SYMTAB sentinel at
+/// index 0, one local `STT_FUNC` per import trampoline, then one local
+/// `STT_FUNC` per defined function (named, with its address and length)
+/// so the output is profilable without DWARF. Returns
+/// `(symtab_bytes, strtab_bytes)`. All symbols are local, so the
+/// section header's `sh_info` stays at the symbol count.
 ///
 /// `text_vmaddr` is the runtime vmaddr of `build.text[0]` (i.e.
 /// `code_vmaddr + stub_len`), so each symbol's `st_value` resolves
@@ -648,6 +650,44 @@ fn build_plt_symtab(
                 st_shndx: 6,
                 st_value,
                 st_size: trampoline_size,
+            },
+        );
+    }
+    // One local STT_FUNC per defined function so a profiler / `nm` /
+    // `gdb` can attribute an address to a function and its length
+    // without DWARF (perf maps a sample by `[st_value, st_value +
+    // st_size)`, so a zero size leaves the function unattributable).
+    // The size is the span to the next function or trampoline start,
+    // capped at the text length; collecting all of them as boundaries
+    // handles any code layout.
+    let text_len = build.text.len() as u64;
+    let mut boundaries: Vec<u64> = build
+        .func_ent_pcs
+        .iter()
+        .map(|&pc| build.pc_to_native[pc] as u64)
+        .collect();
+    boundaries.extend(build.plt_trampoline_offsets.iter().map(|&o| o as u64));
+    boundaries.push(text_len);
+    boundaries.sort_unstable();
+    for (i, name) in build.func_names.iter().enumerate() {
+        let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
+        let end = boundaries
+            .iter()
+            .copied()
+            .find(|&b| b > start)
+            .unwrap_or(text_len);
+        let st_name = strtab.len() as u32;
+        strtab.extend_from_slice(name.as_bytes());
+        strtab.push(0);
+        write_struct(
+            &mut symtab,
+            &Elf64Sym {
+                st_name,
+                st_info: (STB_LOCAL << 4) | STT_FUNC,
+                st_other: 0,
+                st_shndx: 6,
+                st_value: text_vmaddr + start,
+                st_size: end.saturating_sub(start),
             },
         );
     }

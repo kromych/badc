@@ -24,6 +24,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	movl	$0x1234, %eax           # imm = 0x1234
                	movq	%rax, %rcx
                	andq	$0xff, %rcx

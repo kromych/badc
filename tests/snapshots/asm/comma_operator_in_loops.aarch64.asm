@@ -66,6 +66,8 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	str	w2, [x1]
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10

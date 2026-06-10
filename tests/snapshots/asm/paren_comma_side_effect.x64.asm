@@ -60,6 +60,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movl	%eax, (%rcx)
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp

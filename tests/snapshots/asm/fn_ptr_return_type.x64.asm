@@ -9,14 +9,24 @@ Disassembly of section .text:
                	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
                	ud2
+
+<anon>:
                	leaq	<rip>, %rax
                	retq
+
+<vec>:
                	leaq	<rip>, %rax
                	retq
+
+<go_s>:
                	leaq	-<rip>, %rax       # <addr>
                	retq
+
+<go_i>:
                	leaq	-<rip>, %rax       # <addr>
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

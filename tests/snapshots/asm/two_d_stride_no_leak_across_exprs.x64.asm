@@ -57,6 +57,8 @@ Disassembly of section .text:
                	retq
                	movzwq	(%rdi), %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x520, %rsp            # imm = 0x520

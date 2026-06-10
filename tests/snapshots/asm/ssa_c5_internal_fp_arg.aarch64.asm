@@ -67,6 +67,8 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	cset	x0, ls
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

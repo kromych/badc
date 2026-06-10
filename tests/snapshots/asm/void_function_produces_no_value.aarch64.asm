@@ -59,6 +59,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<no_value_void>:
                	sxtw	x0, w0
                	sxtw	x1, w1
                	mul	x0, x0, x1
@@ -67,6 +69,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0
                	ret
+
+<early_return_void>:
                	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.ge	<addr>
@@ -74,6 +78,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60

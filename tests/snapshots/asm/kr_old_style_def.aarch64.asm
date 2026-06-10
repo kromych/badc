@@ -9,15 +9,19 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	sxtw	x0, w0
                	sub	x0, x0, x2
                	mov	x17, #0xff              // =255
                	and	x1, x1, x17
                	add	x0, x0, x1
                	ret
+
+<first>:
                	ldrb	w0, [x0]
                	ret
+
+<main>:
                	mov	x0, #0x1                // =1
                	mov	x1, #0x0                // =0
                	sub	x0, x0, x0

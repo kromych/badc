@@ -74,6 +74,8 @@ Disassembly of section .text:
                	str	w0, [x1]
                	mov	x0, x2
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80

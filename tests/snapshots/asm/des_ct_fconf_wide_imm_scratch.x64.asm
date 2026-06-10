@@ -695,6 +695,8 @@ Disassembly of section .text:
                	addq	$0x5f0, %rsp            # imm = 0x5F0
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp

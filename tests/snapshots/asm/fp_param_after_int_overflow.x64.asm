@@ -56,6 +56,8 @@ Disassembly of section .text:
                	addq	$0xa0, %rsp
                	pushq	%r11
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp

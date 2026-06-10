@@ -12,6 +12,8 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp

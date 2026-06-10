@@ -55,6 +55,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	jmp	<addr>
                	movl	$0x1, %eax
                	retq

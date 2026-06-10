@@ -72,6 +72,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xf0, %rsp

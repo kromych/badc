@@ -87,6 +87,8 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp

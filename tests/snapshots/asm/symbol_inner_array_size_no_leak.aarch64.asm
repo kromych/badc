@@ -31,6 +31,8 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	ldrsh	x0, [x0, x1, lsl #1]
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

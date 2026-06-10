@@ -55,6 +55,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<run>:
                	xorq	%rdx, %rdx
                	movl	$0x1, %ecx
                	jmp	<addr>
@@ -88,6 +90,8 @@ Disassembly of section .text:
                	addq	%rax, %rdx
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>

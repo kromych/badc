@@ -55,6 +55,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	leaq	<rip>, %rax
                	movq	(%rax), %rcx
                	cmpq	$0x0, %rcx
@@ -68,6 +70,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+
+<__c5_sys_read>:
                	popq	%r10
                	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
@@ -87,6 +91,8 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_close>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)

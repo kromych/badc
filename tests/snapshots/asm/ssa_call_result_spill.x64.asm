@@ -40,6 +40,8 @@ Disassembly of section .text:
                	rorq	$0x29, %rcx
                	xorq	%rcx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp

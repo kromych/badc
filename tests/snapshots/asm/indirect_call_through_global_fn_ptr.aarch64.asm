@@ -17,6 +17,8 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x0, #0x0                // =0
                	ret
+
+<driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -52,6 +54,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>

@@ -90,6 +90,8 @@ Disassembly of section .text:
                	mov	x4, x2
                	b	<addr>
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50

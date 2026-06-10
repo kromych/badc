@@ -17,6 +17,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	mul	x0, x0, x17
                	ret
+
+<negate>:
                	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -24,6 +26,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	mul	x0, x0, x17
                	ret
+
+<main>:
                	mov	x0, #0xfffb             // =65531
                	movk	x0, #0xffff, lsl #16
                	movk	x0, #0xffff, lsl #32

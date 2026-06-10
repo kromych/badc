@@ -12,9 +12,13 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	retq
+
+<negate>:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	retq
+
+<main>:
                	movabsq	$-0x5, %rax
                	imulq	$-0x1, %rax, %rax
                	cmpq	$0x5, %rax

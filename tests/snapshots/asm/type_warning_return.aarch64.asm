@@ -9,13 +9,17 @@ Disassembly of section .text:
                	mov	x1, #0x220              // =544
                	movk	x1, #0x0, lsl #16
                	b	<addr>
-               	brk	#0x1
+               	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, #0xd0
                	ldr	x0, [x0]
                	ret
+
+<ret_int_as_ptr>:
                	sxtw	x0, w0
                	ret
+
+<ret_wrong_struct>:
                	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -29,9 +33,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
+
+<ret_null>:
                	mov	x0, #0x0                // =0
                	ret
+
+<ret_ok>:
                	sxtw	x0, w0
                	ret
+
+<main>:
                	mov	x0, #0x0                // =0
                	ret

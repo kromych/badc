@@ -56,17 +56,17 @@ jobs:
       # in debug for speed; release flags don't change observable
       # behavior in this codebase.
       - name: cargo test
-        run: cargo test --locked --features linker --verbose
+        run: cargo test --locked --features full --verbose
 
-      # `--features linker` is required: the `badc` binary declares
-      # `required-features = ["std", "linker"]`, so without it the bin
+      # `--features full` is required: the `badc` binary declares
+      # `required-features = ["std", "full"]`, so without it the bin
       # is skipped (the crate default is the slim host-JIT library) and
       # the staging step below would find no binary to ship. The flag
-      # yields a fully capable compiler (std + native-emit + linker);
-      # the test-only `codegen_test` pressure knobs stay out of the
-      # released binary.
+      # yields a fully capable compiler (std + native-emit + the
+      # cross-TU linker); the test-only `codegen_test` pressure knobs
+      # stay out of the released binary.
       - name: cargo build --release
-        run: cargo build --locked --release --features linker --target ${{ matrix.target }} --verbose
+        run: cargo build --locked --release --features full --target ${{ matrix.target }} --verbose
 
       # Stage the binary + README + LICENSE under a target-named dir so
       # the archive unpacks cleanly into one folder.

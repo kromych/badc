@@ -151,7 +151,7 @@ pub(crate) struct Symbol {
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`
     /// for everything else at file scope. Used by the linker
-    /// (when the `linker` feature is enabled) to decide whether
+    /// (when the `full` feature is enabled) to decide whether
     /// this symbol participates in the cross-translation-unit
     /// symbol table -- internal-linkage names stay private to the
     /// translation unit. Inside a single TU compile this field is

@@ -6,12 +6,12 @@ mod headers;
 mod host;
 mod ir;
 mod lexer;
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 mod linker;
 mod op;
 mod preprocessor;
 mod program;
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 mod runtime;
 mod symbol;
 mod token;
@@ -41,10 +41,10 @@ pub use {
 #[cfg(feature = "std")]
 pub use host::StdHost;
 
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 #[allow(unused_imports)]
 pub use linker::{ArchiveMember, read_archive, write_archive};
-#[cfg(all(feature = "linker", feature = "std"))]
+#[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
@@ -52,11 +52,11 @@ pub use linker::{
     is_elf_object, link_native_objects, parse_native_elf, write_executable_elf64,
     write_native_image_from_merged,
 };
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 pub use runtime::embedded_runtime;
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 pub use symbol::Linkage;
 
 /// Base offset that separates the code address space from the data /

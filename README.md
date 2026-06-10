@@ -124,22 +124,22 @@ all you should need to start using `badc`.
 If you have Rust installed, clone the repo, and install it with
 
 ```sh
-cargo install --path . --features linker
+cargo install --path . --features full
 ```
 
 or just
 
 ```sh
-cargo install badc --features linker
+cargo install badc --features full
 ```
 
 if you're not interested in building from the source code.
 
-The `--features linker` is required for the command-line compiler: the
+The `--features full` is required for the command-line compiler: the
 crate's default feature set is the host-architecture JIT library alone
 (so `cargo add badc` pulls in a slim dependency), and the `badc` binary
 additionally needs the native object writers and the cross-translation-unit
-linker, which the `linker` feature enables.
+linker, which the `full` feature enables.
 
 Now `badc` is available on the PATH.
 
@@ -290,8 +290,8 @@ for the name table, and `.rela.text` carrying the relocations
 the linker applies once each unit's final position is known.
 The target is pinned at `-c` time, and the objects are also
 linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
-symbol index. The `linker` cargo feature (on by default)
-gates the entire pipeline; library consumers that don't need
+symbol index. The `full` cargo feature gates the entire
+pipeline; library consumers that don't need
 multi-TU artifacts can opt out via
 `default-features = false, features = ["std"]` to keep the
 footprint slim.
@@ -531,16 +531,16 @@ construct the VM with `Vm::with_host(program, my_host)`. Everything
 else -- lexer, parser, preprocessor, VM dispatch, pointer tracking,
 native backends -- runs on `extern crate alloc`.
 
-The CLI binary requires the `std` and `linker` features (see the
+The CLI binary requires the `std` and `full` features (see the
 install section above).
 
 ## Tests
 
 ```sh
-cargo test --features linker
+cargo test --features full
 ```
 
-`--features linker` runs the full suite. A bare `cargo test` exercises
+`--features full` runs the full suite. A bare `cargo test` exercises
 only the host-only JIT library (the default feature set), gating out
 the `native*`, `linker`, and `dwarf` modules that emit on-disk images.
 

@@ -85,13 +85,13 @@ pub use c5::{emit_native, emit_native_with_options};
 #[cfg(feature = "std")]
 pub use c5::StdHost;
 
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 pub use c5::{
     ArchiveMember, Binding, DylibSpec, Linkage, Subsystem, embedded_runtime, read_archive,
     write_archive,
 };
 
-#[cfg(all(feature = "linker", feature = "std"))]
+#[cfg(all(feature = "full", feature = "std"))]
 pub use c5::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
     NativeSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt, emit_x86_64_plt,

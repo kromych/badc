@@ -27,14 +27,14 @@ path = "src/lib.rs"
 [[bin]]
 name = "badc"
 path = "src/main.rs"
-required-features = ["std", "linker"]
+required-features = ["std", "full"]
 
 [features]
 # The default library is the host-arch JIT only (lexer / parser /
 # preprocessor / codegen passes / `jit_run`). On-disk native output
-# (`native-emit`) and the cross-TU linker (`linker`) are opt-in. The
-# `badc` binary declares them in `required-features`, and the repo's
-# build / test / CI invocations pass `--features linker`.
+# (`native-emit`) and the cross-TU linker it pulls in (`full`) are
+# opt-in. The `badc` binary declares them in `required-features`, and
+# the repo's build / test / CI invocations pass `--features full`.
 default = ["std"]
 # Enables the StdHost adapter (file IO, env vars, real stdin/stdout) and
 # the std::error::Error impl on C5Error (the c5-dialect error type).
@@ -47,16 +47,17 @@ std = []
 # in-memory JIT (`jit_run`) and the codegen passes but cannot write a
 # native binary. Requires `std`.
 native-emit = ["std"]
-# Enables the cross-translation-unit linker: writing and reading c5
-# bytecode object files (ELF wrapper, `.o`) and ar(5) archives
-# (`.a`), plus the `link_units` driver that merges objects into a
-# single Program ready for the native code emitters. Adds
-# storage-class linkage tracking (external vs internal) and the
-# corresponding undefined-symbol relocation machinery. Required by
-# the `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`).
-# Library callers that want only the host JIT can opt out with
-# `default-features = false, features = ["std"]`.
-linker = ["native-emit"]
+# The full standalone-compiler feature set the `badc` binary needs.
+# Pulls in `native-emit` and adds the cross-translation-unit linker:
+# writing and reading c5 bytecode object files (ELF wrapper, `.o`) and
+# ar(5) archives (`.a`), plus the `link_units` driver that merges
+# objects into a single Program ready for the native code emitters.
+# Adds storage-class linkage tracking (external vs internal) and the
+# corresponding undefined-symbol relocation machinery. Required by the
+# `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`). Library callers
+# that want only the host JIT can opt out with `default-features =
+# false, features = ["std"]`.
+full = ["native-emit"]
 # Exposes the register-allocator pressure knobs (per-bank GPR / FP
 # count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
 # `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment

@@ -1,6 +1,6 @@
 //! Native object linker.
 //!
-//! Gated behind the `linker` feature; absent it the lib has no way
+//! Gated behind the `full` feature; absent it the lib has no way
 //! to write or read object / archive files and `Compiler`'s
 //! single-TU compile-to-`Program` shape is the only path.
 //!

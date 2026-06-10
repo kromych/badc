@@ -27,7 +27,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+use crate::{Compiler, NativeOptions, Target};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
 /// through WINE if the environment opts in via `BADC_RUN_WINE`.
@@ -139,12 +139,17 @@ fn build_and_run_with_options(
     // one whose `#pragma dylib` / `#pragma binding` directives end
     // up on `program.dylibs` and whose `#define __BADC_WINDOWS__` reaches
     // any conditional source.
+    // Compile as a relocatable TU (no entry-point synthesis), matching
+    // the CLI's user-source path, so `environ` stays an extern
+    // reference resolved by the runtime rather than a tentative def
+    // that collides with `runtime.c` at link time.
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
     let program =
-        match Compiler::with_target(super::with_prelude(src), Target::WindowsX64).compile() {
+        match Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts).compile() {
             Ok(p) => p,
             Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
         };
-    let bytes = match emit_native_with_options(&program, Target::WindowsX64, opts) {
+    let bytes = match super::link_executable_with_runtime(&program, Target::WindowsX64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -382,8 +387,12 @@ fn build_pe_bytes(src: &str) -> Vec<u8> {
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-        emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
-            .expect("emit_native")
+        crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            Target::WindowsX64,
+            NativeOptions::default(),
+        )
+        .expect("emit_native")
     })
 }
 
@@ -839,11 +848,15 @@ int main(void) {{
 "#,
         dll = dll_name
     );
-    let loader_prog = Compiler::with_target(loader_src, Target::WindowsX64)
-        .compile()
-        .expect("compile loader");
+    let loader_prog = Compiler::with_options(
+        loader_src,
+        Target::WindowsX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile loader");
     let loader_bytes =
-        emit_native_with_options(&loader_prog, Target::WindowsX64, NativeOptions::default())
+        super::link_executable_with_runtime(&loader_prog, Target::WindowsX64, NativeOptions::default())
             .expect("emit loader");
     let loader_path = std::env::temp_dir().join(format!("badc-pe64-ansloader-{uniq}.exe"));
     std::fs::write(&loader_path, &loader_bytes).expect("write loader");

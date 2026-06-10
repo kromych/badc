@@ -1675,6 +1675,34 @@ pub fn emit_native_with_options_named(
     write_for(program, &build, target)
 }
 
+/// Test-only: emit a complete native image for a single program,
+/// satisfying the PE entry stub's `__c5_*` runtime-helper references
+/// that the bare single-TU path cannot link (production links them
+/// from the embedded startup runtime). The injected symbols point at
+/// the program entry; the image is inspected for structure, not run.
+/// ELF / Mach-O ignore the extra names.
+#[cfg(test)]
+pub(crate) fn emit_native_single_tu_for_test(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<alloc::vec::Vec<u8>, C5Error> {
+    let mut build = lower_for(program, target, options)?;
+    let pc = build.pc_to_native.len();
+    build.pc_to_native.push(build.entry_offset);
+    for name in [
+        "__c5_getmainargs",
+        "__c5_wgetmainargs",
+        "__c5_exit",
+        "__c5_getmodulehandle",
+        "__c5_getcommandline",
+    ] {
+        build.func_names.push(alloc::string::String::from(name));
+        build.func_ent_pcs.push(pc);
+    }
+    write_for(program, &build, target)
+}
+
 /// Lower the program for `target`, returning the per-arch `Build`
 /// without writing to any container. Used by both [`emit_native`]
 /// (which then runs the container writer) and the listing-dump path

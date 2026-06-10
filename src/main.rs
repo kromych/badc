@@ -776,9 +776,18 @@ fn main() {
         };
         // In-memory variant for the embedded runtime sources
         // below: same compile + emit chain, no filesystem read.
-        let compile_in_memory = |label: &str, src: String| -> Vec<u8> {
+        let compile_in_memory = |label: &str, src: String, win_gui: bool| -> Vec<u8> {
+            // The GUI-subsystem startup helpers in the embedded
+            // runtime are gated on `__BADC_WIN_GUI__`; define it for
+            // the runtime TU when the PE subsystem is GUI so the
+            // kernel32 `WinMain` argument helpers compile in place of
+            // the console argv synthesis.
+            let mut copts_defines = defines.clone();
+            if win_gui {
+                copts_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
+            }
             let copts = badc::CompileOptions::default()
-                .with_defines(defines.clone())
+                .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
@@ -853,8 +862,9 @@ fn main() {
                 .iter()
                 .take(if emits_start_stub { usize::MAX } else { 0 }),
         );
+        let win_gui_runtime = subsystem_override == Some(badc::Subsystem::Windows);
         for (name, body) in runtime_sources {
-            let bytes = compile_in_memory(name, body.to_string());
+            let bytes = compile_in_memory(name, body.to_string(), win_gui_runtime);
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {

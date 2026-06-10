@@ -18,7 +18,7 @@ fn entry_pc_points_at_main() {
 /// so they're invisible at runtime but easy to find on disk.
 #[test]
 fn build_info_marker_appears_in_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
     // `BUILD_INFO` starts with `BADC\n\tv<version>` (see
     // `src/lib.rs`). Probe the first line of the marker as a
@@ -32,8 +32,12 @@ fn build_info_marker_appears_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
         let found = bytes.windows(needle.len()).any(|w| w == needle);
         assert!(
             found,
@@ -52,7 +56,7 @@ fn build_info_marker_appears_in_every_target() {
 /// scan per target.
 #[test]
 fn with_debug_info_false_strips_dwarf_for_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
     let needle = b"debug_info";
     for target in [
@@ -62,14 +66,17 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let on =
-            emit_native_with_options(&program, target, NativeOptions::new().with_debug_info(true))
-                .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
+        let on = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::new().with_debug_info(true),
+        )
+        .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
         assert!(
             on.windows(needle.len()).any(|w| w == needle),
             "{target:?}: expected `debug_info` section name in the DWARF-on (`-g`) image"
         );
-        let off = emit_native_with_options(
+        let off = crate::c5::codegen::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::new().with_debug_info(false),
@@ -105,7 +112,7 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
 /// Mach-O `__LINKEDIT` symbol entries).
 #[test]
 fn plt_trampoline_local_names_appear_in_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     // Call `printf` so the resolver pulls it in as an import on
     // every target (the test prelude `#include <stdio.h>` is
     // already wired up via `compile_str`). With the import in
@@ -122,8 +129,12 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
         let occurrences = bytes.windows(needle.len()).filter(|w| *w == needle).count();
         assert!(
             occurrences >= 2,
@@ -414,7 +425,7 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
 /// caught without a Windows box.
 #[test]
 fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
-    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    use crate::{Compiler, NativeOptions, Target};
     let src = r#"
         #include <stdarg.h>
         int vsum(int count, ...) {
@@ -438,8 +449,12 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     let bytes =
         crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-            emit_native_with_options(&program, Target::WindowsAarch64, NativeOptions::default())
-                .expect("emit_native windows-arm64")
+            crate::c5::codegen::emit_native_single_tu_for_test(
+                &program,
+                Target::WindowsAarch64,
+                NativeOptions::default(),
+            )
+            .expect("emit_native windows-arm64")
         });
 
     // Callee gr-save spill of x7: `str x7, [sp, #0x38]` (the eighth and

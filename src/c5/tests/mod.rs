@@ -91,6 +91,73 @@ pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()
 }
 
+/// Link a compiled program against the embedded startup runtime into
+/// a complete, runnable native image, mirroring the CLI's native path
+/// (`emit_native` -> relocatable objects -> `link_native_objects` ->
+/// `write_native_image_from_merged`). The entry stub's `__c5_*`
+/// helpers are defined by the runtime, so the produced executable is
+/// self-sufficient. `subsystem` (from `program.subsystem`) gates the
+/// runtime's console vs GUI startup helpers on Windows.
+pub fn link_executable_with_runtime(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        CompileOptions, NativeMachine, OutputKind, embedded_runtime, embedded_start_runtime,
+        emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt, link_native_objects,
+        parse_native_elf, write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+
+    let mut objs = Vec::new();
+    let prog_bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
+
+    // The startup runtime defines the entry stub's `__c5_*` helpers;
+    // `__BADC_WIN_GUI__` selects the kernel32 WinMain helpers when the
+    // PE subsystem is GUI.
+    let win_gui = program.subsystem == Some(crate::Subsystem::Windows);
+    for (name, body) in embedded_runtime()
+        .iter()
+        .chain(embedded_start_runtime().iter())
+    {
+        let mut copts = CompileOptions::default().with_no_entry_point(true);
+        if win_gui {
+            copts =
+                copts.with_defines(vec![("__BADC_WIN_GUI__".to_string(), "1".to_string())]);
+        }
+        let rt_program = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .map_err(|e| format!("compile runtime {name}: {e}"))?;
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+            .map_err(|e| format!("emit runtime {name}: {e}"))?;
+        objs.push(
+            parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?,
+        );
+    }
+
+    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    let entry_name = program.entry_name.as_deref().unwrap_or("main");
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        entry_name,
+        program.subsystem,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
 /// Compile a fixture with the standard prelude.
 pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))

@@ -327,8 +327,12 @@ fn thread_local_compiles_to_op_tlslea() {
         super::super::codegen::Target::WindowsAarch64,
         super::super::codegen::Target::MacOSAarch64,
     ] {
-        super::super::emit_native_with_options(&p, target, super::super::NativeOptions::default())
-            .unwrap_or_else(|e| panic!("`{target:?}` rejected `_Thread_local`: {e}"));
+        super::super::codegen::emit_native_single_tu_for_test(
+            &p,
+            target,
+            super::super::NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("`{target:?}` rejected `_Thread_local`: {e}"));
     }
 }
 

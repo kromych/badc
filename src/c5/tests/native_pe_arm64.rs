@@ -27,7 +27,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+use crate::{Compiler, NativeOptions, Target};
 
 /// On Windows we run the binary directly; on Linux we go through
 /// WINE if the environment opts in via `BADC_RUN_WINE`. Returns
@@ -133,12 +133,22 @@ fn build_and_run_with_options(
     // any conditional source. Using the default `Compiler::new` would
     // load the macOS header and silently feed the wrong bindings
     // to the codegen.
-    let program =
-        match Compiler::with_target(super::with_prelude(src), Target::WindowsAarch64).compile() {
-            Ok(p) => p,
-            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-        };
-    let bytes = match emit_native_with_options(&program, Target::WindowsAarch64, opts) {
+    // Compile as a relocatable TU (no entry-point synthesis), matching
+    // the CLI's user-source path, so `environ` stays an extern
+    // reference resolved by the runtime rather than a tentative def
+    // that collides with `runtime.c` at link time.
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let program = match Compiler::with_options(
+        super::with_prelude(src),
+        Target::WindowsAarch64,
+        copts,
+    )
+    .compile()
+    {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match super::link_executable_with_runtime(&program, Target::WindowsAarch64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -714,10 +724,14 @@ int main(void) {{
 "#,
         dll = dll_name
     );
-    let loader_prog = Compiler::with_target(loader_src, Target::WindowsAarch64)
-        .compile()
-        .expect("compile loader");
-    let loader_bytes = emit_native_with_options(
+    let loader_prog = Compiler::with_options(
+        loader_src,
+        Target::WindowsAarch64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile loader");
+    let loader_bytes = super::link_executable_with_runtime(
         &loader_prog,
         Target::WindowsAarch64,
         NativeOptions::default(),

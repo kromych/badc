@@ -13,7 +13,7 @@ Disassembly of section .text:
 <onExit>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %ecx
                	movl	%ecx, (%rax)

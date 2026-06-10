@@ -25,7 +25,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -141,7 +141,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rbx, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	movabsq	$0x4051a7ae147ae148, %rdi # imm = 0x4051A7AE147AE148
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx
@@ -181,7 +181,7 @@ Disassembly of section .text:
                	movabsq	$0x405427ae147ae148, %rdi # imm = 0x405427AE147AE148
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
                	movq	%rax, %rcx

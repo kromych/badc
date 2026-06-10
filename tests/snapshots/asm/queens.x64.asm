@@ -32,7 +32,7 @@ Disassembly of section .text:
                	subq	%r10, %rax
                	movslq	%eax, %r9
                	movslq	%r9d, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jge	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	movslq	%r15d, %rax

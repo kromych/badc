@@ -52,7 +52,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

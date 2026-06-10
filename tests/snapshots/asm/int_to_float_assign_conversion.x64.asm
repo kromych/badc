@@ -20,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
@@ -193,7 +193,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%bl
                	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movss	-0x30(%rbp,%riz), %xmm0
                	movabsq	$0x4046000000000000, %rax # imm = 0x4046000000000000
@@ -208,7 +208,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0x5, %eax
                	movq	%rax, %rcx
@@ -232,7 +232,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	%rax, %rcx

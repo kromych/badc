@@ -48,17 +48,17 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movswq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movswq	0xe(%rax), %rax
                	cmpq	$0x15, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp

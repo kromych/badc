@@ -18,7 +18,7 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	callq	*%r11
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jg	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

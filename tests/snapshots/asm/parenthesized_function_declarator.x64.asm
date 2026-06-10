@@ -45,16 +45,16 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	(%rax), %rax
                	cmpq	$0xa, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

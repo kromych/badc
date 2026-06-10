@@ -18,7 +18,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x18, %edi
                	xorl	%eax, %eax
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	movl	$0x28, %esi
                	movq	%rbx, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

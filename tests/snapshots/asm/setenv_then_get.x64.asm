@@ -23,7 +23,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp

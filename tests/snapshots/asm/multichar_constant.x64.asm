@@ -31,10 +31,10 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edx
                	xorq	%rdx, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	xorq	%rdx, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x10, %rsp

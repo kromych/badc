@@ -21,7 +21,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	cmpq	$0x0, %r12
+               	testq	%r12, %r12
                	jne	<addr>
                	movq	%rbx, %rdi
                	xorl	%eax, %eax

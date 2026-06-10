@@ -16,7 +16,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	subq	$0x8, %rax
                	movslq	(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
                	popq	%rbp

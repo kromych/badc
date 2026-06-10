@@ -25,7 +25,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	subq	$0x2, %rax
                	movslq	%eax, %rcx
                	movslq	%ecx, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jl	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rax
@@ -197,7 +197,7 @@ Disassembly of section .text:
                	movabsq	$0x4060200000000000, %rdi # imm = 0x4060200000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -215,7 +215,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -302,7 +302,7 @@ Disassembly of section .text:
                	movabsq	$0x4058000000000000, %rdi # imm = 0x4058000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>
                	movslq	%r12d, %rax
@@ -327,7 +327,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movsd	(%rax,%riz), %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -386,7 +386,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
                	movq	%r10, %xmm15
@@ -396,7 +396,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm1
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	%rax, %rcx

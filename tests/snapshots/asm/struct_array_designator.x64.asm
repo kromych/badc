@@ -19,29 +19,29 @@ Disassembly of section .text:
                	cmpq	$0xa, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0x4(%rax), %rcx
                	cmpq	$0xb, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
                	movslq	0x8(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0xc(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -51,13 +51,13 @@ Disassembly of section .text:
                	cmpq	$0x1e, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0x14(%rax), %rax
                	cmpq	$0x1f, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp

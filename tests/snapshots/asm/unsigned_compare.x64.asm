@@ -20,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	cmpq	%rbx, %r12
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	cmpq	%rbx, %r12
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -148,7 +148,7 @@ Disassembly of section .text:
                	cmpq	%rbx, %r12
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -181,7 +181,7 @@ Disassembly of section .text:
                	cmpq	%rbx, %r12
                	setae	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -216,7 +216,7 @@ Disassembly of section .text:
                	cmpq	%r12, %rbx
                	setg	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al

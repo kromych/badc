@@ -49,7 +49,7 @@ Disassembly of section .text:
                	movl	%edx, %edx
                	orq	%rdx, %rcx
                	shrq	$0x1f, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x40, %rsp
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	shrq	$0x1f, %rax
                	xorq	$0x1, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x40, %rsp

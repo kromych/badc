@@ -156,7 +156,7 @@ Disassembly of section .text:
                	movq	%r8, %rbx
                	movq	%rdx, %r15
                	movq	%rsi, %r14
-               	cmpq	$0x0, %r15
+               	testq	%r15, %r15
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -228,12 +228,12 @@ Disassembly of section .text:
                	jmp	<addr>
                	movl	%ecx, %eax
                	addq	%r12, %rax
-               	cmpq	$0x0, %r14
+               	testq	%r14, %r14
                	je	<addr>
                	jmp	<addr>
                	subq	$0x40, %r15
                	addq	$0x40, %r12
-               	cmpq	$0x0, %r14
+               	testq	%r14, %r14
                	je	<addr>
                	jmp	<addr>
                	movl	%ecx, %edx
@@ -287,7 +287,7 @@ Disassembly of section .text:
                	movzbq	(%rax), %rax
                	xorq	$0x4d, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rcx, %rcx
                	jmp	<addr>

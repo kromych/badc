@@ -20,7 +20,7 @@ Disassembly of section .text:
 
 <two_statics>:
                	movslq	%edi, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x64, %ecx

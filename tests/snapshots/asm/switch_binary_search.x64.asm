@@ -42,13 +42,13 @@ Disassembly of section .text:
                	cmpq	$-0x64, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	jl	<addr>
                	jmp	<addr>
                	cmpq	$-0x3, %rdi
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	jmp	<addr>
                	cmpq	$0x7, %rdi
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	cmpq	%r13, %rax
                	jb	<addr>
                	jmp	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	cmpq	$0x5, %rax
@@ -176,21 +176,21 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x12, %eax
                	popq	%rbp
                	retq
                	movl	$0x8, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x13, %eax
                	popq	%rbp
                	retq
                	movl	$0x3e7, %edi            # imm = 0x3E7
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x14, %eax
                	popq	%rbp
@@ -232,14 +232,14 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x24, %eax
                	popq	%rbp
                	retq
                	movl	$0x80000001, %edi       # imm = 0x80000001
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x25, %eax
                	popq	%rbp

@@ -24,7 +24,7 @@ Disassembly of section .text:
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
                	xorq	%rdx, %rdx
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movabsq	$0x3f50624dd2f1a9fc, %rax # imm = 0x3F50624DD2F1A9FC
                	movq	%rax, %xmm1
@@ -34,7 +34,7 @@ Disassembly of section .text:
                	ucomisd	%xmm1, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
                	movq	%rdx, %rax
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	movabsq	$0x4004000000000000, %rdi # imm = 0x4004000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
                	popq	%rbp
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rdi # imm = 0x3FF0000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	movabsq	$0x4004000000000000, %rdi # imm = 0x4004000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
                	popq	%rbp
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	movabsq	$0x4008000000000000, %rdi # imm = 0x4008000000000000
                	movq	%rdi, %xmm1
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x8, %eax
                	popq	%rbp

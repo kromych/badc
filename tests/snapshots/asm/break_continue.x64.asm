@@ -34,7 +34,7 @@ Disassembly of section .text:
                	cqto
                	idivq	%rsi
                	popq	%rax
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rcx

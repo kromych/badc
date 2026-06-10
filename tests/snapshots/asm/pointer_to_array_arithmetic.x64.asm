@@ -48,13 +48,13 @@ Disassembly of section .text:
                	cmpq	$0x4, %rsi
                	setne	%dil
                	movzbq	%dil, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	movslq	0x4(%rdx), %rdx
                	cmpq	$0x5, %rdx
                	setne	%dil
                	movzbq	%dil, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x40, %rsp
@@ -84,12 +84,12 @@ Disassembly of section .text:
                	cmpq	$0x1, %rdx
                	setne	%sil
                	movzbq	%sil, %rsi
-               	cmpq	$0x0, %rsi
+               	testq	%rsi, %rsi
                	jne	<addr>
                	cmpq	$0x3, %rcx
                	setne	%sil
                	movzbq	%sil, %rsi
-               	cmpq	$0x0, %rsi
+               	testq	%rsi, %rsi
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x40, %rsp

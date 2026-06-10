@@ -321,14 +321,14 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x8(%rbp), %rax
                	movslq	0x4(%rax), %rax
                	cmpq	$0x5, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x60, %rsp

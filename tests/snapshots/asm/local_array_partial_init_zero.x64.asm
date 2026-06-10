@@ -107,7 +107,7 @@ Disassembly of section .text:
                	callq	<addr>
                	callq	<addr>
                	movl	%ebx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -117,7 +117,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

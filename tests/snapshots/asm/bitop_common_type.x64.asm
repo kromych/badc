@@ -81,7 +81,7 @@ Disassembly of section .text:
                	cmpq	%r13, %rax
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x7, %eax
                	addq	$0x20, %rsp

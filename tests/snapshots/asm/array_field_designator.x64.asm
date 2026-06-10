@@ -18,7 +18,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movslq	0x4(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -28,7 +28,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movslq	0xc(%rax), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	retq

@@ -14,7 +14,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	movq	%rsi, %rax
                	incq	%rax

@@ -103,7 +103,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	incq	%rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp

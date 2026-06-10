@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	decq	%rcx
                	movl	%ecx, 0x30(%rbp)
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	%rdi, %rax
                	incq	%rax
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movq	%rdi, %rbx
                	movslq	%ecx, %rcx
                	movq	%rdx, 0x30(%rbp)
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	0x30(%rbp), %edx
                	movq	%rbx, %rdi
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	decq	%rdx
                	movl	%edx, 0x30(%rbp)
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	%rcx, %rax
                	decq	%rax

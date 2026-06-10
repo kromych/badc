@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movzbq	(%rax), %rax
                	xorq	$0x68, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x20, %rsp
@@ -47,7 +47,7 @@ Disassembly of section .text:
                	movzbq	0x1(%rax), %rax
                	xorq	$0x69, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x20, %rsp
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x20, %rsp
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x20, %rsp
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	movzbq	(%rax), %rax
                	xorq	$0x79, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
                	addq	$0x20, %rsp

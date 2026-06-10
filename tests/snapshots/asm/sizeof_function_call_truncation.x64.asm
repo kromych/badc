@@ -58,7 +58,7 @@ Disassembly of section .text:
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq

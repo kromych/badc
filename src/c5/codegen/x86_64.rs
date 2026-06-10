@@ -521,6 +521,15 @@ pub(super) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x39, dst, src);
 }
 
+/// `TEST dst, src` -- `dst & src`, setting ZF / SF (and clearing
+/// CF / OF). Encoding: `REX.W + 85 /r`. `test reg, reg` is the 3-byte
+/// compare-with-zero that replaces a 7-byte `cmp reg, imm32` against 0:
+/// ZF / SF / CF / OF match, so every dependent `jcc` / `setcc` is
+/// unchanged.
+pub(super) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x85, dst, src);
+}
+
 fn emit_alu_rr(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, src.high(), false, dst.high()));
     emit_byte(code, opcode);
@@ -2256,6 +2265,16 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
+        );
+    }
+
+    #[test]
+    fn test_rax_rax_is_three_bytes() {
+        // test rax, rax  ->  48 85 C0 -- the compare-with-zero form,
+        // shorter than `cmp rax, 0` (48 81 F8 00 00 00 00).
+        assert_eq!(
+            assemble(|c| emit_test_rr(c, Reg::RAX, Reg::RAX)),
+            vec![0x48, 0x85, 0xC0]
         );
     }
 

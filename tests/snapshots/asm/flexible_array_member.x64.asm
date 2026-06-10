@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movzbq	0x4(%rax), %rcx
                	xorq	$0x1, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x60, %rsp
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movzbq	0x7(%rax), %rcx
                	xorq	$0x9, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x60, %rsp

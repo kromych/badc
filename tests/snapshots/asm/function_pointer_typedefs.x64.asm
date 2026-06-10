@@ -88,7 +88,7 @@ Disassembly of section .text:
                	movq	%rbx, %r11
                	movq	%rdi, %rsi
                	callq	*%r11
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx

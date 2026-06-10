@@ -176,7 +176,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movl	0x4(%rax), %eax
                	andq	$0xff, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x20, %rsp
@@ -186,7 +186,7 @@ Disassembly of section .text:
                	movl	0x4(%rax), %eax
                	sarq	$0x8, %rax
                	andq	$0x1, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x18, %eax
                	addq	$0x20, %rsp
@@ -196,7 +196,7 @@ Disassembly of section .text:
                	movl	0x4(%rax), %eax
                	sarq	$0x9, %rax
                	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x19, %eax
                	addq	$0x20, %rsp

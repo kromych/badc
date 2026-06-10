@@ -47,28 +47,28 @@ Disassembly of section .text:
                	movzbq	(%rcx), %rax
                	xorq	$0x78, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
                	movl	$0x1, %r8d
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movzbq	0x1(%rcx), %rax
                	xorq	$0x79, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%r8b
                	movzbq	%r8b, %r8
-               	cmpq	$0x0, %r8
+               	testq	%r8, %r8
                	jne	<addr>
                	movzbq	0x2(%rcx), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%r8b
                	movzbq	%r8b, %r8
-               	cmpq	$0x0, %r8
+               	testq	%r8, %r8
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x40, %rsp

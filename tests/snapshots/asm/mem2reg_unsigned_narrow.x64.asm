@@ -40,7 +40,7 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	xorq	$0x2c, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	%r8, %rax
                	incq	%rax
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x2345, %rax           # imm = 0x2345
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%r8d, %rax
                	addq	$0x2, %rax

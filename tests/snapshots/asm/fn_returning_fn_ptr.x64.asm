@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movslq	%edi, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	leaq	-<rip>, %rcx       # <addr>
                	jmp	<addr>
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x50, %rsp

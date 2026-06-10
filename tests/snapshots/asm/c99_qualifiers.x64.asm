@@ -66,7 +66,7 @@ Disassembly of section .text:
                	movzbq	(%rax), %rax
                	xorq	$0x62, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x50, %rsp
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	xorq	$0x1, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x50, %rsp

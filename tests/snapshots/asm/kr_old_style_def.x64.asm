@@ -30,7 +30,7 @@ Disassembly of section .text:
                	subq	%r10, %rax
                	andq	$0xff, %rcx
                	addq	%rcx, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	retq

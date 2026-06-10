@@ -37,7 +37,7 @@ Disassembly of section .text:
                	cmpq	$0x5, %rdi
                	setge	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	jmp	<addr>
                	cmpq	$0x2, %rdi
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	cmpq	$0x8, %rdi
                	setle	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
@@ -126,14 +126,14 @@ Disassembly of section .text:
                	retq
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp

@@ -138,7 +138,7 @@ Disassembly of section .text:
                	andq	$0x7, %rax
                	shlq	$0x3d, %rax
                	sarq	$0x3d, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jle	<addr>
                	movl	$0x18, %eax
                	addq	$0x20, %rsp
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	andq	$0x1fffff, %rax         # imm = 0x1FFFFF
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jl	<addr>
                	movl	$0x19, %eax
                	addq	$0x20, %rsp

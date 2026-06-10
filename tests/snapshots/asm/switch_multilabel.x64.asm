@@ -142,7 +142,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x3f, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp

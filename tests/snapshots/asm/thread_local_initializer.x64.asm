@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	subq	$0x8, %rcx
                	movslq	(%rcx), %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp

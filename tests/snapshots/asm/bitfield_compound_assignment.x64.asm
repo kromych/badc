@@ -263,7 +263,7 @@ Disassembly of section .text:
                	popq	%rax
                	xorq	%rcx, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x60, %rsp

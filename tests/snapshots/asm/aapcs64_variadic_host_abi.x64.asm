@@ -169,7 +169,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%edx, %rax
                	andq	$0x1, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -473,7 +473,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
@@ -511,7 +511,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
@@ -534,7 +534,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx

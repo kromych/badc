@@ -55,7 +55,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, %rbx
                	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	je	<addr>
                	jmp	<addr>
                	cmpq	$0x2, %rbx

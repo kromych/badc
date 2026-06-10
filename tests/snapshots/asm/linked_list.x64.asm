@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%rax, (%rcx)
                	movq	%r14, 0x8(%rcx)
                	jmp	<addr>
-               	cmpq	$0x0, %r14
+               	testq	%r14, %r14
                	je	<addr>
                	movslq	%r12d, %rax
                	movq	(%r14), %rcx

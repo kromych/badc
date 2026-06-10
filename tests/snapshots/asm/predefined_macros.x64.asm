@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rax), %rcx
                	xorq	$0x20, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x30, %rsp
@@ -44,14 +44,14 @@ Disassembly of section .text:
                	movzbq	0x6(%rax), %rcx
                	xorq	$0x20, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movzbq	0xb(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	addq	$0x30, %rsp
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movzbq	0x2(%rax), %rcx
                	xorq	$0x3a, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x30, %rsp
@@ -70,14 +70,14 @@ Disassembly of section .text:
                	movzbq	0x5(%rax), %rcx
                	xorq	$0x3a, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
                	movzbq	0x8(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	addq	$0x30, %rsp
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	movzbq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x9, %eax
                	addq	$0x30, %rsp

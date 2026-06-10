@@ -93,7 +93,7 @@ Disassembly of section .text:
                	cmpq	$0x3, %rax
                	jl	<addr>
                	jmp	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	cmpq	$0x1, %rax
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	decq	%rsi
                	movslq	%esi, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jg	<addr>
                	jmp	<addr>
                	jmp	<addr>

@@ -29,7 +29,7 @@ Disassembly of section .text:
 <store_consumed_after_branch_is_silenced>:
                	movslq	%edi, %rdi
                	movl	$0x1, %ecx
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x2, %ecx
                	movslq	%ecx, %rax

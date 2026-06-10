@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp

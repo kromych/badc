@@ -22,7 +22,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	jne	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx

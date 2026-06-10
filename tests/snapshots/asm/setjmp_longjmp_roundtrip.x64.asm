@@ -22,7 +22,7 @@ Disassembly of section .text:
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	jle	<addr>
                	movq	%rdi, %rax
                	decq	%rax
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	xorq	%rsi, %rsi
                	movq	%r12, %rdi
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax

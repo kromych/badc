@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp

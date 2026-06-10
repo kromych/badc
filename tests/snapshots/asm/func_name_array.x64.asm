@@ -38,7 +38,7 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	xorq	%rsi, %rcx
                	movl	%ecx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax

@@ -1916,9 +1916,9 @@ pub(super) fn emit_function(
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
-                // `cmp rc, 0` sets ZF=1 iff rc==0; je takes the
-                // branch on ZF=1.
-                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
+                // `test rc, rc` sets ZF=1 iff rc==0; je takes the
+                // branch on ZF=1. Shorter than `cmp rc, 0`.
+                super::x86_64::emit_test_rr(code, rc, rc);
                 branch_fixups.push(BranchFixup {
                     site: code.len() + 2, // 0x0F 0x8x + rel32
                     target,
@@ -1971,7 +1971,7 @@ pub(super) fn emit_function(
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
-                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
+                super::x86_64::emit_test_rr(code, rc, rc);
                 branch_fixups.push(BranchFixup {
                     site: code.len() + 2,
                     target,
@@ -4823,7 +4823,14 @@ fn emit_binop_imm(
     );
     let is_unsigned_cmp = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
     if (is_signed_cmp || is_unsigned_cmp) && imm_fits_i32 {
-        super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+        // A compare against 0 is the shorter `test rn, rn`; ZF / SF /
+        // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
+        // unchanged.
+        if rhs_imm == 0 {
+            super::x86_64::emit_test_rr(code, rn, rn);
+        } else {
+            super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+        }
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }

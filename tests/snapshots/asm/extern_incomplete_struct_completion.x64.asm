@@ -19,13 +19,13 @@ Disassembly of section .text:
                	cmpq	$0x3, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	0x4(%rax), %rcx
                	cmpq	$0x4, %rcx
                	setne	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	addq	$0x10, %rsp

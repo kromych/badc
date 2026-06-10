@@ -36,17 +36,22 @@ default = ["std", "linker"]
 # Without it, the library builds under no_std + alloc and callers must
 # supply their own Host impl.
 std = []
+# Enables on-disk native output: the per-format container writers
+# (ELF / PE / Mach-O) and `emit_native*`, which turn a lowered program
+# into an executable / object image. Without it the library keeps the
+# in-memory JIT (`jit_run`) and the codegen passes but cannot write a
+# native binary. Requires `std`.
+native-emit = ["std"]
 # Enables the cross-translation-unit linker: writing and reading c5
 # bytecode object files (ELF wrapper, `.o`) and ar(5) archives
 # (`.a`), plus the `link_units` driver that merges objects into a
-# single Program ready for the existing native code emitters. Adds
+# single Program ready for the native code emitters. Adds
 # storage-class linkage tracking (external vs internal) and the
 # corresponding undefined-symbol relocation machinery. Required by
 # the `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`).
-# Library callers that don't need multi-TU artifacts can opt out
-# with `default-features = false, features = ["std"]` to keep the
-# library footprint slim.
-linker = []
+# Library callers that want only the host JIT can opt out with
+# `default-features = false, features = ["std"]`.
+linker = ["native-emit"]
 # Exposes the register-allocator pressure knobs (per-bank GPR / FP
 # count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
 # `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment

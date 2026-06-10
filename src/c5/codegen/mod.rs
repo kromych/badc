@@ -39,13 +39,18 @@ mod aarch64;
 // ABI; the rules + unit tests land first as a standalone unit.
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
+#[cfg(feature = "native-emit")]
 mod dwarf;
+#[cfg(feature = "native-emit")]
 mod dwarf_reloc;
+#[cfg(feature = "native-emit")]
 mod elf;
-#[cfg(feature = "std")]
+#[cfg(feature = "native-emit")]
 mod elf_reloc;
 mod jit;
+#[cfg(feature = "native-emit")]
 mod mach_o;
+#[cfg(feature = "native-emit")]
 mod pe;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
@@ -1641,6 +1646,7 @@ impl NativeOptions {
 /// This is the zero-options shorthand; pass `NativeOptions` via
 /// [`emit_native_with_options`] to enable optimization knobs like
 /// the register allocator.
+#[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())
 }
@@ -1648,6 +1654,7 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 /// Variant of [`emit_native`] that accepts user-controllable
 /// [`NativeOptions`]. `options.optimize` gates the SSA optimization
 /// passes (see [`NativeOptions::optimize`]).
+#[cfg(feature = "native-emit")]
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,
@@ -1662,6 +1669,7 @@ pub fn emit_native_with_options(
 /// references the file it loads at runtime. `shared_lib_name` is the
 /// `-o` basename for `--shared`; `None` falls back to the per-format
 /// default and is ignored for non-shared output.
+#[cfg(feature = "native-emit")]
 pub fn emit_native_with_options_named(
     program: &Program,
     target: Target,
@@ -1681,7 +1689,7 @@ pub fn emit_native_with_options_named(
 /// from the embedded startup runtime). The injected symbols point at
 /// the program entry; the image is inspected for structure, not run.
 /// ELF / Mach-O ignore the extra names.
-#[cfg(test)]
+#[cfg(all(test, feature = "native-emit"))]
 pub(crate) fn emit_native_single_tu_for_test(
     program: &Program,
     target: Target,
@@ -1827,6 +1835,7 @@ pub(crate) fn write_native_image(
     write_for(program, build, target)
 }
 
+#[cfg(feature = "native-emit")]
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {

@@ -25,11 +25,10 @@ mod tests;
 // resolve through the inner module path) -- they are still part of the
 // intended public API.
 #[allow(unused_imports)]
+#[cfg(feature = "native-emit")]
+pub use codegen::{emit_native, emit_native_with_options};
 pub use {
-    codegen::{
-        NativeOptions, OutputKind, Target, emit_native, emit_native_with_options, jit_run,
-        jit_run_with_options,
-    },
+    codegen::{NativeOptions, OutputKind, Target, jit_run, jit_run_with_options},
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     error::C5Error,
     headers::embedded_headers,

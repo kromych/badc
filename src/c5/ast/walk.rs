@@ -933,16 +933,26 @@ impl<'a> Walker<'a> {
                 let mut default_blk: Option<super::super::ir::BlockId> = None;
                 self.collect_switch_cases(b, body_id, &mut cases, &mut default_blk);
 
-                // Dispatcher: compare the discriminant against each case
-                // value and branch to its block when equal; fall to the
-                // default block (or past the switch) otherwise.
-                for (val, blk) in &cases {
-                    let eq = b.binop_imm(BinOp::Eq, disc_val, *val);
-                    let next = b.new_block();
-                    b.branch_nonzero(eq, *blk, next);
-                    b.switch_to(next);
+                // Dispatcher: a balanced binary search over the sorted
+                // case values. Each internal node branches on `<` (one
+                // conditional branch) and a leaf tests equality, so a
+                // dispatch is O(log n) branches where a linear compare
+                // chain is O(n). Case values are distinct (C99 6.8.4.2);
+                // the discriminant's signedness selects the ordering and
+                // the comparison so an unsigned discriminant with the
+                // high bit set still sorts correctly.
+                let deflt = default_blk.unwrap_or(after_blk);
+                let disc_unsigned = expr_ty(self.ast.expr(*disc))
+                    .map(|t| t & UNSIGNED_BIT != 0)
+                    .unwrap_or(false);
+                let mut sorted = cases.clone();
+                if disc_unsigned {
+                    sorted.sort_by_key(|p| p.0 as u64);
+                } else {
+                    sorted.sort_by_key(|p| p.0);
                 }
-                b.jmp(default_blk.unwrap_or(after_blk));
+                let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
+                self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
 
                 // Walk the body linearly. The opening block is reachable
                 // only by a goto into the switch ahead of the first case
@@ -1142,6 +1152,40 @@ impl<'a> Walker<'a> {
     /// nested switch (whose labels belong to it, C99 6.8.4.2). A
     /// duplicate case value keeps the first block; the parser already
     /// rejects duplicates.
+    /// Emit a balanced binary search over a sorted, distinct case list
+    /// as the switch dispatcher. The cursor is at an open block on entry
+    /// and the block is closed on return. Internal nodes branch on
+    /// `lt_op` (`<`); a leaf tests equality and falls to `deflt` when the
+    /// discriminant matches no case.
+    fn emit_switch_search(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        disc: super::super::ir::ValueId,
+        cases: &[(i64, super::super::ir::BlockId)],
+        lt_op: BinOp,
+        deflt: super::super::ir::BlockId,
+    ) {
+        match cases {
+            [] => b.jmp(deflt),
+            [(val, blk)] => {
+                let eq = b.binop_imm(BinOp::Eq, disc, *val);
+                b.branch_nonzero(eq, *blk, deflt);
+            }
+            _ => {
+                let mid = cases.len() / 2;
+                let pivot = cases[mid].0;
+                let lt = b.binop_imm(lt_op, disc, pivot);
+                let left = b.new_block();
+                let ge = b.new_block();
+                b.branch_nonzero(lt, left, ge);
+                b.switch_to(left);
+                self.emit_switch_search(b, disc, &cases[..mid], lt_op, deflt);
+                b.switch_to(ge);
+                self.emit_switch_search(b, disc, &cases[mid..], lt_op, deflt);
+            }
+        }
+    }
+
     fn collect_switch_cases(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,

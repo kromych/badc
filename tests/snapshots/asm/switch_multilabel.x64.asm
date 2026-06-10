@@ -12,8 +12,8 @@ Disassembly of section .text:
 
 <classify>:
                	movslq	%edi, %rdi
-               	cmpq	$0x61, %rdi
-               	je	<addr>
+               	cmpq	$0x42, %rdi
+               	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
@@ -25,23 +25,58 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+               	cmpq	$0x32, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x62, %rdi
-               	je	<addr>
-               	cmpq	$0x63, %rdi
-               	je	<addr>
-               	cmpq	$0x64, %rdi
-               	je	<addr>
-               	cmpq	$0x41, %rdi
-               	je	<addr>
-               	cmpq	$0x42, %rdi
-               	je	<addr>
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x31, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x33, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x30, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x31, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x32, %rdi
                	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x41, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x33, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x41, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x61, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x63, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x42, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x61, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x62, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x64, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x63, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x64, %rdi
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -115,5 +150,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

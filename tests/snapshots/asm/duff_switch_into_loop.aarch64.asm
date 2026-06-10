@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sdiv	x3, x0, x1
                	sdiv	x17, x2, x1
                	msub	x0, x17, x1, x2
-               	cmp	x0, #0x0
-               	b.eq	<addr>
+               	cmp	x0, #0x4
+               	b.lt	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ret
@@ -56,19 +56,46 @@ Disassembly of section .text:
                	ldrb	w0, [x5]
                	strb	w0, [x4]
                	b	<addr>
-               	cmp	x0, #0x7
-               	b.eq	<addr>
+               	cmp	x0, #0x2
+               	b.lt	<addr>
+               	b	<addr>
                	cmp	x0, #0x6
-               	b.eq	<addr>
-               	cmp	x0, #0x5
-               	b.eq	<addr>
-               	cmp	x0, #0x4
-               	b.eq	<addr>
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x1
+               	b.lt	<addr>
+               	b	<addr>
                	cmp	x0, #0x3
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x0
                	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x1
+               	b.eq	<addr>
+               	b	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
-               	cmp	x0, #0x1
+               	b	<addr>
+               	cmp	x0, #0x3
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x5
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x7
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x4
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x5
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x6
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x7
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>

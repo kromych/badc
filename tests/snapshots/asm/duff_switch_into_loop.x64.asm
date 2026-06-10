@@ -30,8 +30,8 @@ Disassembly of section .text:
                	idivq	%rcx
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	$0x0, %rax
-               	je	<addr>
+               	cmpq	$0x4, %rax
+               	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
@@ -81,19 +81,46 @@ Disassembly of section .text:
                	movzbq	(%r8), %rax
                	movb	%al, (%rdi)
                	jmp	<addr>
-               	cmpq	$0x7, %rax
-               	je	<addr>
+               	cmpq	$0x2, %rax
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x6, %rax
-               	je	<addr>
-               	cmpq	$0x5, %rax
-               	je	<addr>
-               	cmpq	$0x4, %rax
-               	je	<addr>
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x1, %rax
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x3, %rax
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x0, %rax
                	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x1, %rax
+               	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x2, %rax
                	je	<addr>
-               	cmpq	$0x1, %rax
+               	jmp	<addr>
+               	cmpq	$0x3, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x5, %rax
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x7, %rax
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x4, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x5, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x6, %rax
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x7, %rax
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>

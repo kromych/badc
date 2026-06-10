@@ -14,8 +14,8 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x0, #0x63               // =99
-               	cmp	x0, #0x1
-               	b.eq	<addr>
+               	cmp	x0, #0x2
+               	b.lt	<addr>
                	b	<addr>
                	sxtw	x0, w0
                	add	sp, sp, #0x10
@@ -26,6 +26,9 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	b	<addr>
                	mov	x0, #0x64               // =100
+               	b	<addr>
+               	cmp	x0, #0x1
+               	b.eq	<addr>
                	b	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>

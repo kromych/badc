@@ -11,8 +11,8 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	sxtw	x0, w0
-               	cmp	x0, #0x61
-               	b.eq	<addr>
+               	cmp	x0, #0x42
+               	b.lt	<addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
                	ret
@@ -24,23 +24,58 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	ret
+               	cmp	x0, #0x32
+               	b.lt	<addr>
+               	b	<addr>
                	cmp	x0, #0x62
-               	b.eq	<addr>
-               	cmp	x0, #0x63
-               	b.eq	<addr>
-               	cmp	x0, #0x64
-               	b.eq	<addr>
-               	cmp	x0, #0x41
-               	b.eq	<addr>
-               	cmp	x0, #0x42
-               	b.eq	<addr>
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x31
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x33
+               	b.lt	<addr>
+               	b	<addr>
                	cmp	x0, #0x30
                	b.eq	<addr>
+               	b	<addr>
                	cmp	x0, #0x31
                	b.eq	<addr>
+               	b	<addr>
                	cmp	x0, #0x32
                	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x41
+               	b.lt	<addr>
+               	b	<addr>
                	cmp	x0, #0x33
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x41
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x61
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x63
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x42
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x61
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x62
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x64
+               	b.lt	<addr>
+               	b	<addr>
+               	cmp	x0, #0x63
+               	b.eq	<addr>
+               	b	<addr>
+               	cmp	x0, #0x64
                	b.eq	<addr>
                	b	<addr>
                	b	<addr>

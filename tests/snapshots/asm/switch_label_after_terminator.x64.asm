@@ -12,8 +12,8 @@ Disassembly of section .text:
 
 <outer>:
                	movslq	%edi, %rdi
-               	cmpq	$0x1, %rdi
-               	je	<addr>
+               	cmpq	$0x2, %rdi
+               	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
@@ -25,8 +25,15 @@ Disassembly of section .text:
                	jmp	<addr>
                	movabsq	$-0x1, %rax
                	retq
+               	cmpq	$0x1, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x3, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x2, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x3, %rdi
                	je	<addr>
                	jmp	<addr>
@@ -71,4 +78,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

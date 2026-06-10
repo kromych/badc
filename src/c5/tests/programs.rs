@@ -262,6 +262,7 @@ fn function_pointers() {
 fn switch_statement() {
     // a == 2 -> res = 20, falls through to case 3 -> res += 5 -> 25
     assert_eq!(run_fixture("switch_statement.c"), 25);
+    assert_eq!(run_fixture("switch_binary_search.c"), 0);
 }
 
 #[test]

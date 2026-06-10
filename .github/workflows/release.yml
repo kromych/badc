@@ -56,10 +56,10 @@ jobs:
       # in debug for speed; release flags don't change observable
       # behavior in this codebase.
       - name: cargo test
-        run: cargo test --locked --verbose
+        run: cargo test --locked --features linker --verbose
 
       - name: cargo build --release
-        run: cargo build --locked --release --target ${{ matrix.target }} --verbose
+        run: cargo build --locked --release --features linker --target ${{ matrix.target }} --verbose
 
       # Stage the binary + README + LICENSE under a target-named dir so
       # the archive unpacks cleanly into one folder.

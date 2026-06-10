@@ -30,7 +30,12 @@ path = "src/main.rs"
 required-features = ["std", "linker"]
 
 [features]
-default = ["std", "linker"]
+# The default library is the host-arch JIT only (lexer / parser /
+# preprocessor / codegen passes / `jit_run`). On-disk native output
+# (`native-emit`) and the cross-TU linker (`linker`) are opt-in. The
+# `badc` binary declares them in `required-features`, and the repo's
+# build / test / CI invocations pass `--features linker`.
+default = ["std"]
 # Enables the StdHost adapter (file IO, env vars, real stdin/stdout) and
 # the std::error::Error impl on C5Error (the c5-dialect error type).
 # Without it, the library builds under no_std + alloc and callers must

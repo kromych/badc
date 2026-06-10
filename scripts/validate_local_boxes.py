@@ -129,8 +129,8 @@ def remote_run_linux(box: Box, github_token: str) -> int:
     inner = (
         f"cd {box.remote_path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"cargo build --release --locked 2>&1 | tail -3 && "
-        f"cargo test --release --lib 2>&1 | tail -3 && "
+        f"cargo build --release --locked --features linker 2>&1 | tail -3 && "
+        f"cargo test --release --lib --features linker 2>&1 | tail -3 && "
         + " && ".join(f"python3 {d} 2>&1 | tail -2" for d in GATING_DEMOS)
     )
     return stream(box.short, ["ssh", box.host, inner])
@@ -202,8 +202,8 @@ def remote_run_windows(box: Box, github_token: str) -> int:
     inner = (
         f"cd /d {remote_path} && "
         f"set GITHUB_TOKEN={github_token} && "
-        f"cargo build --release --locked && "
-        f"cargo test --release --lib && "
+        f"cargo build --release --locked --features linker && "
+        f"cargo test --release --lib --features linker && "
         f"{demo_cmd}"
     )
     # Quote the entire command so the outer ssh-side cmd /c treats the

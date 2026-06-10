@@ -132,7 +132,7 @@ jobs:
         #  # any X11 init paths that might still be reachable past
         #  # WINEDLLOVERRIDES.
         #  DISPLAY: ""
-      - name: cargo test (default features)
+      - name: cargo test (full features)
         # `BADC_RUN_WINE` maybe be used in the macOS / Linux -> wine -> PE
         # test lane; without it the PE-via-WINE tests skip (so a
         # routine `cargo test` on a developer machine doesn't shell
@@ -172,7 +172,7 @@ jobs:
         # respective triples, so the other runners compile them out
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
-        run: cargo test --locked --verbose
+        run: cargo test --locked --features linker --verbose
       - name: compare fib vs libc_basic ELFs (ubuntu-latest only, on failure)
         # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
         # macOS/aarch64 lanes pass identical bytes. The perf-table
@@ -183,7 +183,7 @@ jobs:
         if: ${{ failure() && matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get install -y -qq strace || true
-          cargo build --release --locked --bin badc
+          cargo build --release --locked --features linker --bin badc
           set +e
           BADC=./target/release/badc
           echo '#include <stdio.h>'                                  > /tmp/pf.c
@@ -220,7 +220,7 @@ jobs:
         # Same script across all five runners thanks to the
         # `actions/setup-python` step above.
         run: |
-          cargo build --release --locked
+          cargo build --release --locked --features linker
           python demos/sqlite3/smoke.py
       - name: capture sqlite3 shell crash under gdb (Linux x86_64 only)
         # Build the shell the way smoke.py does (amalgamated +
@@ -803,9 +803,9 @@ jobs:
         with:
           key: pressure-${{ matrix.os }}
       - name: build codegen_test binary
-        run: cargo build --release --locked --features codegen_test
+        run: cargo build --release --locked --features "codegen_test linker"
       - name: cargo test under pressure
-        run: cargo test --release --locked --features codegen_test --lib
+        run: cargo test --release --locked --features "codegen_test linker" --lib
       - name: demos under pressure
         run: |
           set -e
@@ -863,7 +863,7 @@ jobs:
         # produced with llvm-objdump; require it here too.
         run: sudo apt-get update -y && sudo apt-get install -y llvm
       - name: build badc release
-        run: cargo build --release --locked
+        run: cargo build --release --locked --features linker
       - name: regenerate snapshots
         run: python3 scripts/snapshots.py
       - name: verify no diff
@@ -905,7 +905,7 @@ jobs:
         with:
           key: perf-${{ matrix.os }}
       - name: build badc release
-        run: cargo build --release --locked
+        run: cargo build --release --locked --features linker
       - name: fetch vendored tinycc sources
         run: python3 demos/tinycc/setup.py
       - name: fetch vendored perf fixture sources

@@ -58,6 +58,13 @@ jobs:
       - name: cargo test
         run: cargo test --locked --features linker --verbose
 
+      # `--features linker` is required: the `badc` binary declares
+      # `required-features = ["std", "linker"]`, so without it the bin
+      # is skipped (the crate default is the slim host-JIT library) and
+      # the staging step below would find no binary to ship. The flag
+      # yields a fully capable compiler (std + native-emit + linker);
+      # the test-only `codegen_test` pressure knobs stay out of the
+      # released binary.
       - name: cargo build --release
         run: cargo build --locked --release --features linker --target ${{ matrix.target }} --verbose
 

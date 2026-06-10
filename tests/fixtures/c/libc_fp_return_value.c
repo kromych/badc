@@ -17,5 +17,20 @@ int main(void) {
     double c = ceil(2.3);   if (c != 3.0) ok = 0;
     double a = fabs(-3.5);  if (a != 3.5) ok = 0;
     double m = fmod(7.0, 4.0); if (m != 3.0) ok = 0;
+
+    // C99 7.12 single-precision variants. A `float`-returning libc
+    // function hands the result back in the low bits of the FP return
+    // register; the call-return bridge must widen it before reading.
+    // The Windows CRT does not export the `f`-suffixed math functions as
+    // DLL symbols (they are inline over intrinsics), so these are checked
+    // only where they bind to a host library.
+#ifndef _WIN32
+    float sf = sqrtf(4.0f);   if (sf != 2.0f) ok = 0;
+    float ff = floorf(2.7f);  if (ff != 2.0f) ok = 0;
+    float cf = ceilf(2.3f);   if (cf != 3.0f) ok = 0;
+    float af = fabsf(-3.5f);  if (af != 3.5f) ok = 0;
+    float mf = fmodf(7.0f, 4.0f); if (mf != 3.0f) ok = 0;
+    double wf = sqrtf(16.0f); if (wf != 4.0) ok = 0; // float result as double
+#endif
     return ok ? 11 : 0;
 }

@@ -44,6 +44,27 @@
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
 #pragma binding(libc::trunc, "_trunc")
+// C99 7.12 single-precision variants. Each takes and returns `float`;
+// the FP-register ABI narrows the argument and the call-return bridge
+// recovers the single-precision result.
+#pragma binding(libc::sqrtf,  "_sqrtf")
+#pragma binding(libc::logf,   "_logf")
+#pragma binding(libc::log10f, "_log10f")
+#pragma binding(libc::expf,   "_expf")
+#pragma binding(libc::powf,   "_powf")
+#pragma binding(libc::floorf, "_floorf")
+#pragma binding(libc::ceilf,  "_ceilf")
+#pragma binding(libc::roundf, "_roundf")
+#pragma binding(libc::truncf, "_truncf")
+#pragma binding(libc::fabsf,  "_fabsf")
+#pragma binding(libc::fmodf,  "_fmodf")
+#pragma binding(libc::sinf,   "_sinf")
+#pragma binding(libc::cosf,   "_cosf")
+#pragma binding(libc::tanf,   "_tanf")
+#pragma binding(libc::atanf,  "_atanf")
+#pragma binding(libc::atan2f, "_atan2f")
+#pragma binding(libc::asinf,  "_asinf")
+#pragma binding(libc::acosf,  "_acosf")
 #endif
 
 #ifdef __linux__
@@ -75,6 +96,25 @@
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
 #pragma binding(libm::trunc, "trunc")
+// C99 7.12 single-precision variants.
+#pragma binding(libm::sqrtf,  "sqrtf")
+#pragma binding(libm::logf,   "logf")
+#pragma binding(libm::log10f, "log10f")
+#pragma binding(libm::expf,   "expf")
+#pragma binding(libm::powf,   "powf")
+#pragma binding(libm::floorf, "floorf")
+#pragma binding(libm::ceilf,  "ceilf")
+#pragma binding(libm::roundf, "roundf")
+#pragma binding(libm::truncf, "truncf")
+#pragma binding(libm::fabsf,  "fabsf")
+#pragma binding(libm::fmodf,  "fmodf")
+#pragma binding(libm::sinf,   "sinf")
+#pragma binding(libm::cosf,   "cosf")
+#pragma binding(libm::tanf,   "tanf")
+#pragma binding(libm::atanf,  "atanf")
+#pragma binding(libm::atan2f, "atan2f")
+#pragma binding(libm::asinf,  "asinf")
+#pragma binding(libm::acosf,  "acosf")
 #endif
 
 #ifdef _WIN32
@@ -121,6 +161,12 @@
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::pow,   "pow")
+// TODO: the C99 7.12 single-precision math functions (sqrtf, fabsf,
+// floorf, ...) are not exported as DLL symbols by the Windows CRT --
+// the MSVC <math.h> defines them inline over compiler intrinsics
+// (sqrtss, andps) or the double-precision entry points. Supporting
+// them on Windows needs intrinsic lowering rather than a binding, so
+// the `f`-suffixed prototypes below have no Windows binding yet.
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -187,6 +233,28 @@ double frexp(double x, int *exp);
 double modf(double x, double *iptr);
 // C99 7.12.9.8: trunc rounds toward zero.
 double trunc(double x);
+
+// C99 7.12 single-precision variants. A `float`-returning host function
+// hands the result back in the low bits of the FP return register; the
+// call-return bridge widens it before reading so the value survives.
+float sqrtf(float x);
+float logf(float x);
+float log10f(float x);
+float expf(float x);
+float powf(float base, float exp);
+float floorf(float x);
+float ceilf(float x);
+float roundf(float x);
+float truncf(float x);
+float fabsf(float x);
+float fmodf(float x, float y);
+float sinf(float x);
+float cosf(float x);
+float tanf(float x);
+float atanf(float x);
+float atan2f(float y, float x);
+float asinf(float x);
+float acosf(float x);
 
 // C99 7.12.13.1: fma(x, y, z) = x*y + z computed with a single
 // rounding of the infinitely precise result. Tagged as an intrinsic so

@@ -2962,6 +2962,16 @@ fn emit_call_ext(
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
     if returns_fp || imp.returns_long_double {
+        if ty_helpers::is_float_ty(bare) {
+            // A `float`-returning callee leaves single precision in s0
+            // (the low 32 bits of v0; the upper bits are unspecified per
+            // AAPCS64). The c5 model carries an f32 value in a GPR as its
+            // f64-widened bit pattern, so widen s0 to d0 before bridging
+            // into x0. The matching `F32` store narrows it back, which is
+            // lossless because every float is exactly representable as a
+            // double.
+            emit(code, enc_fcvt_d_s(0, 0));
+        }
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
         let ext = super::return_extension(return_type_tag, target);

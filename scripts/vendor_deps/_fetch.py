@@ -31,6 +31,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -44,6 +45,29 @@ def _token() -> str | None:
     return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
 
+def _urlopen_retry(make_request: Callable[[], object], *, attempts: int = 4):
+    """Call `make_request()` (a urlopen), retrying transient failures
+    with exponential backoff. The vendor-deps downloads run on every CI
+    job, so an occasional GitHub 5xx / 429 or a network blip would
+    otherwise turn a whole lane red. HTTP 4xx other than 429 (notably
+    404, the private-repo no-token case) are not transient and raise on
+    the first attempt."""
+    delay = 1.0
+    for attempt in range(1, attempts + 1):
+        try:
+            return make_request()
+        except urllib.error.HTTPError as e:
+            if (e.code < 500 and e.code != 429) or attempt == attempts:
+                raise
+            sys.stderr.write(f"fetch: HTTP {e.code}, retry {attempt}/{attempts - 1}\n")
+        except urllib.error.URLError as e:
+            if attempt == attempts:
+                raise
+            sys.stderr.write(f"fetch: {e.reason}, retry {attempt}/{attempts - 1}\n")
+        time.sleep(delay)
+        delay *= 2
+
+
 def _open(url: str, *, accept: str | None = None):
     """urlopen with optional token auth + Accept header."""
     req = urllib.request.Request(url)
@@ -52,7 +76,7 @@ def _open(url: str, *, accept: str | None = None):
         req.add_header("Authorization", f"token {tok}")
     if accept:
         req.add_header("Accept", accept)
-    return urllib.request.urlopen(req)
+    return _urlopen_retry(lambda: urllib.request.urlopen(req))
 
 
 def _api_asset_url(release_tag: str, asset_name: str) -> str:
@@ -77,7 +101,7 @@ def _download(release_tag: str, asset_name: str, dst: Path) -> None:
         public = (
             f"https://github.com/{REPO}/releases/download/{release_tag}/{asset_name}"
         )
-        opener = lambda: urllib.request.urlopen(public)
+        opener = lambda: _urlopen_retry(lambda: urllib.request.urlopen(public))
     try:
         with opener() as resp, dst.open("wb") as out:
             shutil.copyfileobj(resp, out)

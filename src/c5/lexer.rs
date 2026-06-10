@@ -1294,6 +1294,13 @@ impl Lexer {
                 }
             } else if c == '\'' || c == '"' {
                 let start_data = data.len() as i64;
+                // C99 6.4.4.4p10: a character constant containing more
+                // than one character has an implementation-defined value;
+                // the common convention packs the bytes with the first
+                // character in the most significant position. Accumulate
+                // here; a single-character constant keeps its exact value.
+                let mut char_acc: i64 = 0;
+                let mut char_count: i64 = 0;
                 while self.pos < self.src.len() && self.src[self.pos] as char != c {
                     let mut val = self.src[self.pos] as i64;
                     self.pos += 1;
@@ -1369,7 +1376,12 @@ impl Lexer {
                     if c == '"' {
                         data.push(val as u8);
                     } else {
-                        self.ival = val;
+                        char_count += 1;
+                        char_acc = (char_acc << 8) | (val & 0xFF);
+                        // Single-character constant keeps its exact value
+                        // (so a hex escape that overran a byte is not
+                        // re-masked); multi-character packs the bytes.
+                        self.ival = if char_count == 1 { val } else { char_acc };
                     }
                 }
                 self.pos += 1;

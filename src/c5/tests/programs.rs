@@ -564,6 +564,16 @@ fn brace_elided_struct_member_array_init() {
 }
 
 #[test]
+fn multichar_constant_packs_bytes() {
+    // C99 6.4.4.4p10: a narrow character constant with more than one
+    // character packs the bytes with the first character most
+    // significant (`value = (value << 8) | byte`). The fixture checks the
+    // packed value, that a single-character constant and escape sequences
+    // are unaffected, and a char followed by an octal escape.
+    assert_eq!(run_fixture("multichar_constant.c"), 0);
+}
+
+#[test]
 fn bitop_preserves_operand_width() {
     // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
     // `^` / `|` is the common type from the usual arithmetic

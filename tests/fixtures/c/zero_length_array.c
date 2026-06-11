@@ -8,8 +8,8 @@ struct S {
     unsigned char data[0];
 };
 
-// A union of zero-length arrays (the JSString shape): both members sit
-// at the same offset and the storage follows the fixed part.
+// A union of zero-length arrays: both members sit at the same offset
+// and the storage follows the fixed part.
 struct W {
     int len;
     union {

@@ -1,18 +1,18 @@
-; --- SSA dump (ok=true) ent_pc=10 ---
+; --- SSA dump (ok=true) ent_pc=13 ---
 ; name=main
-fn ent_pc=10 n_params=0 variadic=false locals=14
+fn ent_pc=13 n_params=0 variadic=false locals=14
   spill_count=1 gpr_used=[3, 12, 14, 15] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmCode(ent_pc=12)                               -> x0
+    v1   ImmCode(ent_pc=15)                               -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmCode(ent_pc=11)                               -> x3
+    v3   ImmCode(ent_pc=14)                               -> x3
     v4   Imm(0)                                           -> x1
-    v5   ImmCode(ent_pc=13)                               -> x12
+    v5   ImmCode(ent_pc=16)                               -> x12
     v6   Imm(0)                                           -> x1
-    v7   ImmCode(ent_pc=14)                               -> x14
+    v7   ImmCode(ent_pc=17)                               -> x14
     v8   Imm(0)                                           -> x1
-    v9   ImmCode(ent_pc=15)                               -> x15
+    v9   ImmCode(ent_pc=18)                               -> x15
     v10  Imm(0)                                           -> x1
     v11  Imm(4615063718147915776)                         -> [spill 0]
     v12  Fneg(v11)                                        -> d0
@@ -125,45 +125,45 @@ fn ent_pc=10 n_params=0 variadic=false locals=14
   block 20  start_pc=0
     v80  Imm(0)                                           -> x0
     terminator Return(v80)   (exit_acc=v80)
-; --- SSA dump (ok=true) ent_pc=11 ---
+; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=__c5_sys_sqrt
-fn ent_pc=11 n_params=1 variadic=false locals=0
+fn ent_pc=14 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=I64 }                    -> x7
     v2   CallExt { binding_idx=42, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=12 ---
+; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=__c5_sys_fabs
-fn ent_pc=12 n_params=1 variadic=false locals=0
+fn ent_pc=15 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=I64 }                    -> x7
     v2   CallExt { binding_idx=43, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=13 ---
+; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=__c5_sys_floor
-fn ent_pc=13 n_params=1 variadic=false locals=0
+fn ent_pc=16 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=I64 }                    -> x7
     v2   CallExt { binding_idx=44, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=14 ---
+; --- SSA dump (ok=true) ent_pc=17 ---
 ; name=__c5_sys_ceil
-fn ent_pc=14 n_params=1 variadic=false locals=0
+fn ent_pc=17 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   LoadLocal { off=2, kind=I64 }                    -> x7
     v2   CallExt { binding_idx=45, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Return(v2)   (exit_acc=v2)
-; --- SSA dump (ok=true) ent_pc=15 ---
+; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=__c5_sys_trunc
-fn ent_pc=15 n_params=1 variadic=false locals=0
+fn ent_pc=18 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

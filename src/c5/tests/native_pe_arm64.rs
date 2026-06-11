@@ -427,6 +427,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
     ("libc_fp_classify.c", 0),
+    ("libc_math_fdim_scalbn.c", 0),
     ("libc_fileno_isblank.c", 0),
     ("pragma_entrypoint.c", 23),
     ("struct_field_enum_type.c", 13),

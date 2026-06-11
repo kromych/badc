@@ -325,6 +325,15 @@ static inline float copysignf(float x, float y) {
     return (float) copysign((double) x, (double) y);
 }
 
+// C99 7.12.12.1: fdim(x, y) is the positive difference x - y when
+// x > y, otherwise +0; a NaN argument propagates.
+static inline double fdim(double x, double y) {
+    return (x > y || x != x || y != y) ? x - y : 0.0;
+}
+static inline float fdimf(float x, float y) {
+    return (float) fdim((double) x, (double) y);
+}
+
 double sqrt(double x);
 double log(double x);
 double log10(double x);
@@ -377,6 +386,20 @@ double acosh(double x);
 double atanh(double x);
 // C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
 double ldexp(double x, int exp);
+// C99 7.12.6.13: scalbn / scalbln compute x * FLT_RADIX^n; with the
+// binary radix here that is ldexp, so they forward to it.
+static inline double scalbn(double x, int n) {
+    return ldexp(x, n);
+}
+static inline double scalbln(double x, long n) {
+    return ldexp(x, (int) n);
+}
+static inline float scalbnf(float x, int n) {
+    return (float) ldexp((double) x, n);
+}
+static inline float scalblnf(float x, long n) {
+    return (float) ldexp((double) x, (int) n);
+}
 // C99 7.12 long-double form. c5 aliases long double to double, so
 // the prototype and the binding both reduce to the `ldexp` ABI.
 double ldexpl(double x, int exp);

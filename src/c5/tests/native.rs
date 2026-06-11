@@ -385,6 +385,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
     ("libc_fp_classify.c", 0),
+    ("libc_math_fdim_scalbn.c", 0),
     ("libc_fileno_isblank.c", 0),
     ("libc_math_minmax.c", 0),
     ("libc_math_round.c", 0),

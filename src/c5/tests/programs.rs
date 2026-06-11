@@ -259,6 +259,13 @@ fn fn_type_typedef_field() {
 }
 
 #[test]
+fn struct_array_elided_runtime() {
+    // C99 6.7.8p20 brace elision for a struct-array element with a
+    // non-constant initializer (runtime per-field stores).
+    assert_eq!(run_fixture("struct_array_elided_runtime.c"), 0);
+}
+
+#[test]
 fn bitfield_incdec() {
     // C99 6.7.2.1: ++/-- on a bitfield member, wrapping within the field
     // width and preserving the other bits.

@@ -507,20 +507,15 @@ impl Compiler {
                                 count
                             )));
                         }
-                        if self.lex.tk != '{' {
-                            // Brace elision (6.7.8p20) is supported on the
-                            // constant path only; a non-constant element
-                            // still requires its braces. TODO: thread an
-                            // elided variant through
-                            // emit_struct_local_init_runtime_at.
-                            return Err(self.compile_err(
-                                "a struct-array element with a non-constant initializer requires braces",
-                            ));
-                        }
+                        // C99 6.7.8p20: an element's braces may be elided;
+                        // the runtime path fills the struct's fields from
+                        // the flat list.
+                        let braced = self.lex.tk == '{';
                         self.emit_struct_local_init_runtime_at(
                             local_val,
                             i * elem_size as i64,
                             sid,
+                            braced,
                         )?;
                         i += 1;
                         if self.lex.tk == ',' {
@@ -662,23 +657,15 @@ impl Compiler {
                                     declared_array_size
                                 )));
                             }
-                            if self.lex.tk != '{' {
-                                // C99 6.7.8p20 brace elision is supported
-                                // for constant struct-array initializers
-                                // (see the staged branch below); the
-                                // runtime path -- a struct array with a
-                                // non-constant element -- still requires
-                                // each element's braces. TODO: thread a
-                                // brace-elided variant through
-                                // emit_struct_local_init_runtime_at.
-                                return Err(self.compile_err(
-                                    "a struct-array element with a non-constant initializer requires braces",
-                                ));
-                            }
+                            // C99 6.7.8p20: an element's braces may be
+                            // elided; the runtime path fills the struct's
+                            // fields from the flat list.
+                            let braced = self.lex.tk == '{';
                             self.emit_struct_local_init_runtime_at(
                                 local_val,
                                 i * elem_size as i64,
                                 sid,
+                                braced,
                             )?;
                             i += 1;
                             if self.lex.tk == ',' {
@@ -1198,7 +1185,7 @@ impl Compiler {
         local_val: i64,
         sid: usize,
     ) -> Result<(), C5Error> {
-        self.emit_struct_local_init_runtime_at(local_val, 0, sid)
+        self.emit_struct_local_init_runtime_at(local_val, 0, sid, true)
     }
 
     /// Same as `emit_struct_local_init_runtime` but writes the
@@ -1211,11 +1198,18 @@ impl Compiler {
         local_val: i64,
         extra_offset: i64,
         sid: usize,
+        braced: bool,
     ) -> Result<(), C5Error> {
-        debug_assert!(self.lex.tk == '{');
-        self.next()?; // consume `{`
+        // With `braced` false (C99 6.7.8p20 brace elision) there is no
+        // enclosing `{ }`: fill the struct's fields from the surrounding
+        // flat list and return once every field is filled, leaving the
+        // rest for the next element. Mirrors `fill_struct_fields`.
+        if braced {
+            debug_assert!(self.lex.tk == '{');
+            self.next()?; // consume `{`
+        }
         let mut pos: usize = 0;
-        while self.lex.tk != '}' {
+        while self.lex.tk != '}' && (braced || pos < self.structs[sid].fields.len()) {
             let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
                 if self.lex.tk != Token::Id {
@@ -1349,6 +1343,7 @@ impl Compiler {
                     local_val,
                     extra_offset + field.offset as i64,
                     nested_sid,
+                    true,
                 )?;
                 pos = field_idx + 1;
                 if self.lex.tk == ',' {
@@ -1386,7 +1381,9 @@ impl Compiler {
                 self.next()?;
             }
         }
-        self.next()?; // consume `}`
+        if braced {
+            self.next()?; // consume `}`
+        }
         Ok(())
     }
 

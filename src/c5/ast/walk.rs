@@ -2044,6 +2044,23 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                // Host-ABI aggregate return through a function pointer:
+                // mirror the direct-call path. Reserve the result temp and
+                // tag the call so the codegen reads the eightbytes from
+                // x0/x1 (<= 16 bytes) or has the callee write through x8
+                // (> 16 bytes on aarch64); the VM copies the returned
+                // struct into the temp. The OutPtr class (Win64, SysV
+                // > 16 bytes) is not yet wired for indirect calls.
+                let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                {
+                    let ridx = b.intern_agg_desc(desc.clone());
+                    let slot = b.alloc_synthetic_struct(desc.size as i64);
+                    Some((ridx, slot))
+                } else {
+                    None
+                };
                 if callee_variadic && abi.variadic_on_stack {
                     // macOS arm64 variadic ABI: named arguments follow
                     // AAPCS64 (int / FP bank), variadic arguments on the
@@ -2063,14 +2080,19 @@ impl<'a> Walker<'a> {
                             arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
                         }
                     }
-                    return Ok(b.call_indirect(
+                    let call = b.call_indirect(
                         target,
                         arg_vals,
                         true,
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
-                    ));
+                    );
+                    if let Some((ridx, slot)) = ret_temp {
+                        b.set_call_ret_agg(call, ridx, slot);
+                        return Ok(b.local_addr(slot));
+                    }
+                    return Ok(call);
                 }
                 // Register-save host variadic ABI (System V AMD64 on Linux
                 // x86_64, AAPCS64 on Linux aarch64): a variadic callee
@@ -2091,14 +2113,19 @@ impl<'a> Walker<'a> {
                             arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
                         }
                     }
-                    return Ok(b.call_indirect(
+                    let call = b.call_indirect(
                         target,
                         arg_vals,
                         true,
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
-                    ));
+                    );
+                    if let Some((ridx, slot)) = ret_temp {
+                        b.set_call_ret_agg(call, ridx, slot);
+                        return Ok(b.local_addr(slot));
+                    }
+                    return Ok(call);
                 }
                 // A function-pointer callee whose register/stack
                 // placement would interleave keeps the all-integer c5
@@ -2143,14 +2170,19 @@ impl<'a> Walker<'a> {
                 // for the indirect call regardless of `callee_variadic`
                 // (`fixed_args` is unused there); pass the prototype
                 // through so only the macOS path consults it.
-                Ok(b.call_indirect(
+                let call = b.call_indirect(
                     target,
                     arg_vals,
                     callee_variadic,
                     callee_fixed,
                     fp_return,
                     call_fp_arg_mask,
-                ))
+                );
+                if let Some((ridx, slot)) = ret_temp {
+                    b.set_call_ret_agg(call, ridx, slot);
+                    return Ok(b.local_addr(slot));
+                }
+                Ok(call)
             }
             Expr::Member {
                 obj,

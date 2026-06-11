@@ -3433,6 +3433,7 @@ fn emit_call_indirect(
     if (callee_variadic
         && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
         || !aggs.is_empty()
+        || ret_agg.is_some()
     {
         // Host ABI through a function pointer, taken for a host
         // variadic callee or any call passing an aggregate by value

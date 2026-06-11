@@ -2939,6 +2939,8 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ret_agg,
+            ret_slot_local,
             ..
         } => emit_call_indirect(
             code,
@@ -2952,6 +2954,10 @@ fn emit_inst(
             abi,
             *fp_return,
             *fp_arg_mask,
+            &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
@@ -5545,6 +5551,10 @@ fn emit_call_indirect(
     abi: super::Abi,
     fp_return: bool,
     fp_arg_mask: u32,
+    agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &super::super::ir::FunctionSsa,
 ) -> bool {
     let target_place = alloc
         .places
@@ -5683,6 +5693,20 @@ fn emit_call_indirect(
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
         emit_add_rsp_imm32(code, slot_bytes);
+    }
+    // Host-ABI aggregate return through a function pointer (System V
+    // AMD64 3.2.3): a <= 16-byte aggregate arrives in rax:rdx; store it
+    // into the caller's result temp. The walker tags `ret_agg` only for
+    // the register-returned class, so > 16-byte (out-pointer) returns do
+    // not reach here.
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+        if size > 8 {
+            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        }
+        return true;
     }
     // A floating-point return rides xmm0 (C99 6.2.5p10); an integer
     // / pointer return rides rax. `fp_return` selects the source for

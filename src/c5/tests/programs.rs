@@ -224,6 +224,13 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn indirect_struct_return() {
+    // A struct returned by value from a call through a function pointer
+    // follows the same return ABI as a direct call.
+    assert_eq!(run_fixture("indirect_struct_return.c"), 0);
+}
+
+#[test]
 fn nested_compound_literal() {
     // C99 6.5.2.5 compound literal nested inside another aggregate
     // initializer; the inner cast names the member type and is dropped

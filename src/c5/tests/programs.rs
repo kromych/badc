@@ -231,6 +231,13 @@ fn nested_runtime_init() {
 }
 
 #[test]
+fn fn_type_typedef_cast() {
+    // A cast through a function-type-typedef pointer must not leak its
+    // marker into a following declarator's return type.
+    assert_eq!(run_fixture("fn_type_typedef_cast.c"), 0);
+}
+
+#[test]
 fn fn_type_typedef_local() {
     // A pointer to a function-type typedef is a function pointer (one
     // level), distinct from a pointer to a function-pointer typedef.

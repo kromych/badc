@@ -187,6 +187,10 @@ impl Compiler {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
         self.pending.base_was_void = false;
+        // Same for the function-type-typedef marker: a cast or sizeof
+        // operand whose base was a function-type typedef must not leave
+        // the flag set for a following declarator.
+        self.pending.base_is_function_type = false;
         // Same reset for the long-double marker -- a binding
         // declared `double f(...)` after one declared `long
         // double g(...)` must not inherit g's marker.

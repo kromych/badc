@@ -1209,11 +1209,22 @@ impl Compiler {
                 // fn-ptr branch further down overrides this when a
                 // `(*)(args)` shape is present in the cast.
                 let mut cast_fpi = self.pending.fn_ptr_indirection.take();
+                // A function-TYPE typedef already encodes one pointer
+                // level, so the first `*` in `(F *)x` forms the
+                // pointer-to-function rather than adding a level (matching
+                // the declarator path). Take and clear the flag so it does
+                // not leak into a later declarator.
+                let mut absorb_fn_type_ptr =
+                    core::mem::take(&mut self.pending.base_is_function_type);
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
-                    t += Ty::Ptr as i64;
-                    if let Some(fpi) = cast_fpi {
-                        cast_fpi = Some(fpi + 1);
+                    if absorb_fn_type_ptr {
+                        absorb_fn_type_ptr = false;
+                    } else {
+                        t += Ty::Ptr as i64;
+                        if let Some(fpi) = cast_fpi {
+                            cast_fpi = Some(fpi + 1);
+                        }
                     }
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;

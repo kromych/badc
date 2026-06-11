@@ -446,6 +446,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("indirect_struct_return.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
+    ("fn_type_typedef_cast.c", 0),
     ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
     ("builtin_trap.c", 0),

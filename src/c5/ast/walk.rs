@@ -2636,6 +2636,27 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         store_kind: StoreKind,
     ) -> Result<RmwPlace, WalkError> {
+        // A bitfield member: compute the storage unit's address once so
+        // the read and the write target the same unit (the object is
+        // evaluated a single time per C99 6.5.2.4 / 6.5.16.2).
+        if let Expr::Member {
+            obj,
+            field_off,
+            bitfield: Some(bf),
+            ..
+        } = self.ast.expr(lvalue)
+        {
+            let bf = *bf;
+            let obj = *obj;
+            let field_off = *field_off;
+            let base = self.walk_expr_rvalue(b, obj)?;
+            let addr = if field_off != 0 {
+                b.binop_imm(BinOp::Add, base, field_off)
+            } else {
+                base
+            };
+            return Ok(RmwPlace::Bitfield { addr, bf });
+        }
         if !matches!(store_kind, StoreKind::F32)
             && let Expr::Ident {
                 class,
@@ -3008,6 +3029,15 @@ impl<'a> Walker<'a> {
 enum RmwPlace {
     Slot(i64),
     Addr(super::super::ir::ValueId),
+    /// A bitfield read-modify-write target: the storage unit's address
+    /// and the field descriptor. `load` extracts the field value;
+    /// `store` merges the new value back into the unit, preserving the
+    /// other bits. The passed `LoadKind` / `StoreKind` are ignored; the
+    /// unit width comes from the descriptor.
+    Bitfield {
+        addr: super::super::ir::ValueId,
+        bf: super::super::ast::BitfieldDesc,
+    },
 }
 
 impl RmwPlace {
@@ -3019,6 +3049,32 @@ impl RmwPlace {
         match *self {
             RmwPlace::Slot(off) => b.load_local(off, kind),
             RmwPlace::Addr(addr) => b.load(addr, kind),
+            RmwPlace::Bitfield { addr, bf } => {
+                // C99 6.7.2.1: load the unit, shift the slice to bit 0,
+                // mask, and sign-extend when the field type is signed.
+                let unit_kind = match bf.unit_size {
+                    1 => LoadKind::U8,
+                    2 => LoadKind::U16,
+                    4 => LoadKind::U32,
+                    _ => LoadKind::I64,
+                };
+                let mut v = b.load(addr, unit_kind);
+                if bf.bit_offset > 0 {
+                    v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
+                }
+                let mask: i64 = if bf.bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bf.bit_width) - 1
+                };
+                v = b.binop_imm(BinOp::And, v, mask);
+                if bf.signed && bf.bit_width < 64 {
+                    let shift = 64i64 - (bf.bit_width as i64);
+                    v = b.binop_imm(BinOp::Shl, v, shift);
+                    v = b.binop_imm(BinOp::Shr, v, shift);
+                }
+                v
+            }
         }
     }
 
@@ -3034,6 +3090,32 @@ impl RmwPlace {
             }
             RmwPlace::Addr(addr) => {
                 b.store(addr, value, kind);
+            }
+            RmwPlace::Bitfield { addr, bf } => {
+                // C99 6.7.2.1: load the unit, clear the slice, mask + shift
+                // the new value into place, OR back, store.
+                let (load_kind, store_kind) = match bf.unit_size {
+                    1 => (LoadKind::U8, StoreKind::I8),
+                    2 => (LoadKind::U16, StoreKind::I16),
+                    4 => (LoadKind::U32, StoreKind::I32),
+                    _ => (LoadKind::I64, StoreKind::I64),
+                };
+                let mask: i64 = if bf.bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bf.bit_width) - 1
+                };
+                let clear_mask: i64 = !(mask << bf.bit_offset);
+                let old = b.load(addr, load_kind);
+                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+                let masked = b.binop_imm(BinOp::And, value, mask);
+                let shifted = if bf.bit_offset > 0 {
+                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+                } else {
+                    masked
+                };
+                let combined = b.binop(BinOp::Or, cleared, shifted);
+                b.store(addr, combined, store_kind);
             }
         }
     }

@@ -1760,55 +1760,85 @@ impl Compiler {
             // helpers that pop the vstack regardless of whether the
             // build succeeded, so by the time `ast_emit_pre_inc`
             // fires the lvalue would otherwise be gone.
-            let pre_inc_lvalue = self.ast_acc;
-            self.rewrite_trailing_load_as_psh()
-                .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
-            // ++/-- reads the prior value and stores a new one.
-            // `take_last_loaded_local` restored was_read to its
-            // pre-load state; force it true because the reload
-            // below re-emits the load. The read clears any
-            // pending dead-store entries; the subsequent store
-            // pushes a fresh one.
-            let line = self.lex.line;
-            if let Some(idx) = self.take_last_loaded_local() {
-                self.symbols[idx].was_read = true;
-                self.symbols[idx].was_written = true;
-                self.record_local_read(idx);
-                self.record_local_store(idx, line);
-            }
-            self.mark_emit_other();
-            if is_floating_scalar(self.ty) {
-                return Err(self.compile_err("floating-point ++/-- not yet implemented"));
-            }
-            self.ast_psh();
-            // A pointer-to-array (`T (*p)[N]`) looks like a plain
-            // `T*` in the flat type, so `pointee_step` would scale by
-            // `sizeof(T)`. The correct step is the array's size,
-            // seeded into the stride snapshot when the operand was
-            // loaded (the operand was parsed via a nested `expr()`,
-            // so it sits in `end_of_expr_stride`).
-            let step = self.pointer_to_array_arith_stride(
-                self.pending.end_of_expr_stride,
-                self.ty,
-                self.pointee_step(self.ty),
-            );
-            self.emit_imm(step);
-            self.ast_binop(if t == Token::Inc as i64 {
-                super::super::ir::BinOp::Add
-            } else {
-                super::super::ir::BinOp::Sub
+            // A bitfield member cannot use the generic load-rewrite path;
+            // build Expr::PreInc over the bitfield Member directly (read
+            // old, store old +/- 1, yield the new value).
+            let bf_pre = self.ast_acc.and_then(|lv| {
+                if let super::super::ast::Expr::Member {
+                    bitfield: Some(_),
+                    ty,
+                    ..
+                } = self.ast.expr(lv)
+                {
+                    Some((lv, *ty))
+                } else {
+                    None
+                }
             });
-            self.ast_assign();
-            // Build the AST `Expr::PreInc` whose `by` is signed
-            // by the op direction so the walker routes to a
-            // single `binop_imm(Add, lvalue, by)` rather than
-            // matching the sign separately. The lvalue producer
-            // is already on the parser-side vstack from the
-            // trailing-load rewrite.
-            let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
-            let pre_inc_ty = self.ty;
-            if let Some(lvalue) = pre_inc_lvalue {
-                self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
+            if let Some((lv, ety)) = bf_pre {
+                let by = if t == Token::Inc as i64 { 1 } else { -1 };
+                let src = self.ast_src_pos();
+                let id = self.ast.push_expr(
+                    super::super::ast::Expr::PreInc {
+                        lvalue: lv,
+                        by,
+                        ty: ety,
+                    },
+                    src,
+                );
+                self.ast_acc = Some(id);
+                self.ty = ety;
+            } else {
+                let pre_inc_lvalue = self.ast_acc;
+                self.rewrite_trailing_load_as_psh()
+                    .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
+                // ++/-- reads the prior value and stores a new one.
+                // `take_last_loaded_local` restored was_read to its
+                // pre-load state; force it true because the reload
+                // below re-emits the load. The read clears any
+                // pending dead-store entries; the subsequent store
+                // pushes a fresh one.
+                let line = self.lex.line;
+                if let Some(idx) = self.take_last_loaded_local() {
+                    self.symbols[idx].was_read = true;
+                    self.symbols[idx].was_written = true;
+                    self.record_local_read(idx);
+                    self.record_local_store(idx, line);
+                }
+                self.mark_emit_other();
+                if is_floating_scalar(self.ty) {
+                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
+                }
+                self.ast_psh();
+                // A pointer-to-array (`T (*p)[N]`) looks like a plain
+                // `T*` in the flat type, so `pointee_step` would scale by
+                // `sizeof(T)`. The correct step is the array's size,
+                // seeded into the stride snapshot when the operand was
+                // loaded (the operand was parsed via a nested `expr()`,
+                // so it sits in `end_of_expr_stride`).
+                let step = self.pointer_to_array_arith_stride(
+                    self.pending.end_of_expr_stride,
+                    self.ty,
+                    self.pointee_step(self.ty),
+                );
+                self.emit_imm(step);
+                self.ast_binop(if t == Token::Inc as i64 {
+                    super::super::ir::BinOp::Add
+                } else {
+                    super::super::ir::BinOp::Sub
+                });
+                self.ast_assign();
+                // Build the AST `Expr::PreInc` whose `by` is signed
+                // by the op direction so the walker routes to a
+                // single `binop_imm(Add, lvalue, by)` rather than
+                // matching the sign separately. The lvalue producer
+                // is already on the parser-side vstack from the
+                // trailing-load rewrite.
+                let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
+                let pre_inc_ty = self.ty;
+                if let Some(lvalue) = pre_inc_lvalue {
+                    self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
+                }
             }
         } else {
             // The parse-error message includes the enclosing function
@@ -2975,6 +3005,11 @@ impl Compiler {
                     //                    the surrounding expression.
                     let is_bf_assign = self.lex.tk == Token::Assign;
                     let is_bf_compound = self.lex.tk == Token::AssignOp;
+                    // Postfix `s.f++` / `s.f--` on a bitfield. The `++`
+                    // sits after the member access; build an `Expr::PostInc`
+                    // over the bitfield member so the walker reads the old
+                    // value, stores old +/- 1, and yields the old value.
+                    let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
                     let bf_desc = super::super::ast::BitfieldDesc {
                         bit_offset: field.bit_offset as u8,
                         bit_width: field.bit_width as u8,
@@ -3059,6 +3094,33 @@ impl Compiler {
                                     res_ty,
                                 );
                             }
+                        } else if is_bf_incdec {
+                            // Postfix `s.f++` / `s.f--`. The member-access
+                            // helper above ran in read mode and left the
+                            // `++` / `--` token; consume it here and build
+                            // an `Expr::PostInc` over the bitfield member.
+                            let by = if self.lex.tk == Token::Inc { 1 } else { -1 };
+                            self.next()?;
+                            let src = self.ast_src_pos();
+                            let lvalue = self.ast.push_expr(
+                                super::super::ast::Expr::Member {
+                                    obj,
+                                    field_off: bf_field_off,
+                                    bitfield: Some(bf_desc),
+                                    ty: bf_field_ty,
+                                    array_size: 0,
+                                },
+                                src,
+                            );
+                            let id = self.ast.push_expr(
+                                super::super::ast::Expr::PostInc {
+                                    lvalue,
+                                    by,
+                                    ty: bf_field_ty,
+                                },
+                                src,
+                            );
+                            self.ast_acc = Some(id);
                         } else {
                             // Read path: dual-emit
                             // `Expr::Member { bitfield: Some(_) }`

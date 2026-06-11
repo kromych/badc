@@ -259,6 +259,13 @@ fn fn_type_typedef_field() {
 }
 
 #[test]
+fn bitfield_incdec() {
+    // C99 6.7.2.1: ++/-- on a bitfield member, wrapping within the field
+    // width and preserving the other bits.
+    assert_eq!(run_fixture("bitfield_incdec.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

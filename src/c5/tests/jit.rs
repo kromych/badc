@@ -1212,6 +1212,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("nested_compound_literal.c", 0),
     ("indirect_struct_return.c", 0),
     ("indirect_struct_return_outptr.c", 0),
+    ("bitfield_incdec.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),
     ("fn_type_typedef_cast.c", 0),

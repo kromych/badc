@@ -290,6 +290,13 @@ pub(crate) enum Token {
     /// fall-off-the-end diagnostic on a caller whose last statement
     /// is such a call.
     Noreturn,
+    /// `_Atomic` (C11 6.7.2.4 / 6.7.3). Two forms: the type
+    /// specifier `_Atomic ( type-name )` and the type qualifier
+    /// `_Atomic` preceding a type. c5 does not model atomicity, so
+    /// both reduce to the unqualified inner type; a distinct token
+    /// is needed only so the parser can recognize the parenthesized
+    /// specifier (the qualifier form is consumed like `const`).
+    Atomic,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is
@@ -395,6 +402,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::ShrOp as i64 => "`>>`",
         x if x == Token::AddOp as i64 => "`+`",
         x if x == Token::SubOp as i64 => "`-`",
+        x if x == Token::Atomic as i64 => "`_Atomic`",
         x if x == Token::MulOp as i64 => "`*`",
         x if x == Token::DivOp as i64 => "`/`",
         x if x == Token::ModOp as i64 => "`%`",

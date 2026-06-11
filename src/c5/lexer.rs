@@ -1739,6 +1739,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
     // under the same token so source using the keyword without the
     // header still parses.
+    ("_Atomic", Token::Atomic),
     ("_Noreturn", Token::Noreturn),
     ("noreturn", Token::Noreturn),
     // typedef -- drives the parser's type-alias registration.

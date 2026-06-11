@@ -94,7 +94,10 @@ class for larger aggregates). A compound literal may be nested
 inside another aggregate initializer (`(Outer){(Inner){...},
 ...}`), and a nested struct / union member may carry
 non-constant initializers. `<stdio.h>` exposes the `scanf` /
-`fscanf` / `sscanf` family (C99 7.19.6).
+`fscanf` / `sscanf` family (C99 7.19.6). The C11 `_Atomic`
+type specifier `_Atomic(type-name)` (6.7.2.4) and the
+`_Atomic` type qualifier (6.7.3) are accepted and reduce to
+the unqualified inner type (atomicity is not modelled).
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-

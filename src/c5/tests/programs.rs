@@ -273,6 +273,13 @@ fn bitfield_incdec() {
 }
 
 #[test]
+fn c11_atomic_specifier() {
+    // C11 6.7.2.4 / 6.7.3: the `_Atomic(type-name)` specifier and the
+    // `_Atomic` qualifier both reduce to the unqualified inner type.
+    assert_eq!(run_fixture("c11_atomic_specifier.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

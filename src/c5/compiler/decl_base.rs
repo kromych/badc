@@ -208,6 +208,26 @@ impl Compiler {
         // for the type keyword.
         let mut m = IntModifiers::default();
         while is_decl_modifier(self.lex.tk) {
+            // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
+            // Distinct from the `_Atomic` qualifier handled below: here
+            // `_Atomic` names the type rather than qualifying a later
+            // one. c5 does not model atomicity, so the declared type is
+            // the unqualified inner type-name (base plus any abstract
+            // pointer declarator inside the parentheses).
+            if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                self.next()?; // _Atomic
+                self.next()?; // (
+                let mut inner = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp {
+                    self.next()?;
+                    inner += Ty::Ptr as i64;
+                }
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+                }
+                self.next()?; // )
+                return Ok(inner);
+            }
             if self.lex.tk == Token::Inline {
                 self.pending_is_inline = true;
             }

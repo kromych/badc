@@ -1566,6 +1566,12 @@ fn run_intrinsic(
         // the native targets; the interpreter cannot continue past it,
         // so it surfaces as a runtime failure.
         Intrinsic::Trap => Err(C5Error::Runtime("__builtin_trap".to_string())),
+        // A spin-loop hint with no architectural effect; the
+        // interpreter need do nothing.
+        Intrinsic::CpuRelax => {
+            frame.regs[v as usize] = 0;
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable

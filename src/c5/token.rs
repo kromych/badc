@@ -297,6 +297,12 @@ pub(crate) enum Token {
     /// is needed only so the parser can recognize the parenthesized
     /// specifier (the qualifier form is consumed like `const`).
     Atomic,
+    /// `asm` / `__asm__` / `__asm` (GCC inline assembly statement).
+    /// c5 supports the operand-free forms: an empty template (a
+    /// compiler barrier, no instruction) and a single known
+    /// operand-free hint instruction (`pause` / `yield`). Operand
+    /// constraints and other instructions are rejected.
+    Asm,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is
@@ -403,6 +409,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::AddOp as i64 => "`+`",
         x if x == Token::SubOp as i64 => "`-`",
         x if x == Token::Atomic as i64 => "`_Atomic`",
+        x if x == Token::Asm as i64 => "`asm`",
         x if x == Token::MulOp as i64 => "`*`",
         x if x == Token::DivOp as i64 => "`/`",
         x if x == Token::ModOp as i64 => "`%`",

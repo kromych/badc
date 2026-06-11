@@ -581,6 +581,77 @@ impl Compiler {
         Ok(())
     }
 
+    /// Parse a GCC inline-asm statement. c5 supports the operand-free
+    /// forms: an empty template (a compiler barrier, no instruction
+    /// emitted) and a single known operand-free hint instruction
+    /// (`pause` / `yield`, lowered to the target spin-loop hint).
+    /// Operand constraints and other instructions are rejected.
+    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        self.next()?; // asm / __asm__ / __asm
+        // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
+        // `goto`). c5 acts on none of them.
+        while self.lex.tk == Token::TypeQual || self.lex.tk == Token::Inline {
+            self.next()?;
+        }
+        self.consume(b'(', "`(` expected after `asm`")?;
+        if self.lex.tk != '"' {
+            return Err(self.compile_err("inline asm template string expected"));
+        }
+        // The lexer has appended the template bytes to the data
+        // section; read them back, then drop them once parsing is done
+        // so the template does not occupy the data section.
+        let tstart = self.lex.ival as usize;
+        let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        self.next()?; // consume the template string
+        // Optional `: outputs : inputs : clobbers`. An operand binding
+        // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
+        // clobber strings and the separating colons are accepted.
+        while self.lex.tk != ')' {
+            if self.lex.tk == '(' {
+                self.data.truncate(tstart);
+                return Err(self.compile_err("inline asm operands are not supported"));
+            }
+            if self.lex.tk == ':' || self.lex.tk == ',' || self.lex.tk == '"' {
+                self.next()?;
+                continue;
+            }
+            self.data.truncate(tstart);
+            return Err(self.compile_err("unsupported inline asm syntax"));
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(tstart);
+        let t = core::str::from_utf8(&template)
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .to_ascii_lowercase();
+        if t.is_empty() {
+            // A compiler barrier with no instruction. c5 does not
+            // reorder memory accesses across the statement, so nothing
+            // is emitted.
+            return Ok(());
+        }
+        if t == "pause" || t == "yield" {
+            self.mark_emit_other();
+            self.ty = Ty::Int as i64;
+            let pos = self.ast_src_pos();
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::Intrinsic {
+                    kind: super::super::op::Intrinsic::CpuRelax as i64,
+                    args: alloc::vec::Vec::new(),
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            );
+            self.ast_acc = Some(id);
+            let _ = self.ast_emit_expr_stmt();
+            return Ok(());
+        }
+        Err(self.compile_err(format!("inline asm instruction `{t}` is not supported")))
+    }
+
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -593,6 +664,10 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_labeled(label, body_s);
             return Ok(());
+        }
+
+        if self.lex.tk == Token::Asm {
+            return self.parse_asm_stmt();
         }
 
         if self.lex.tk == Token::If {

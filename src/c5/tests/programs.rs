@@ -288,6 +288,14 @@ fn c11_atomic_ops() {
 }
 
 #[test]
+fn inline_asm_hint() {
+    // GCC inline asm: the operand-free empty barrier and the
+    // pause / yield spin hint compile and leave the surrounding
+    // computation unaffected.
+    assert_eq!(run_fixture("inline_asm_hint.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

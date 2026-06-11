@@ -1740,6 +1740,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     // under the same token so source using the keyword without the
     // header still parses.
     ("_Atomic", Token::Atomic),
+    ("asm", Token::Asm),
+    ("__asm__", Token::Asm),
+    ("__asm", Token::Asm),
     ("_Noreturn", Token::Noreturn),
     ("noreturn", Token::Noreturn),
     // typedef -- drives the parser's type-alias registration.

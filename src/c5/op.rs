@@ -134,6 +134,13 @@ pub enum Intrinsic {
     /// non-zero level (a caller's frame) is not. Used for stack-depth /
     /// stack-overflow checks.
     FrameAddress = 30,
+    /// CPU spin-loop relax hint, the lowering of an operand-free
+    /// inline-asm spin hint (`asm volatile("pause")` on x86-64,
+    /// `asm volatile("yield")` on AArch64). Emits the target hint
+    /// instruction (`pause` = F3 90, `yield` = 0xD503203F); a no-op
+    /// for correctness, so the interpreter ignores it. Takes no
+    /// argument and produces no value.
+    CpuRelax = 31,
 }
 
 impl Intrinsic {
@@ -169,6 +176,7 @@ impl Intrinsic {
             28 => Some(Intrinsic::Bswap32),
             29 => Some(Intrinsic::Bswap64),
             30 => Some(Intrinsic::FrameAddress),
+            31 => Some(Intrinsic::CpuRelax),
             _ => None,
         }
     }

@@ -102,7 +102,10 @@ C11 7.17 atomic operations `atomic_load`, `atomic_store`,
 `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or`
 / `xor`, and `atomic_compare_exchange_strong` are available
 as header-less compiler builtins; the operand width is the
-pointee type of the first argument.
+pointee type of the first argument. The GCC inline-asm
+statement (`asm` / `__asm__`) is accepted in its operand-free
+forms: an empty template (a compiler barrier) and the
+`pause` / `yield` spin-loop hint.
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -142,6 +145,20 @@ as a distinct type and integer-promotes to signed `int` for
 arithmetic. Severity: 4.
 
 ## Divergences
+
+### Inline asm is limited to operand-free hints and the barrier, severity 3
+
+The GCC inline-asm statement (`asm` / `__asm__`) is accepted only in
+its operand-free forms: an empty template (a compiler barrier, no
+instruction emitted) and a single known operand-free hint instruction
+(`pause` / `yield`, lowered to the target spin-loop hint). Output /
+input operand constraints and any other instruction text are rejected
+with a diagnostic, because c5 emits machine code directly and has no
+assembler to translate an arbitrary template. The empty-template
+barrier emits nothing; c5 does not reorder memory accesses across the
+statement, but this is weaker than a full hardware memory barrier.
+General inline asm needs an assembler for the template and
+constraint-driven operand allocation.
 
 ### C11 atomic read-modify-write is not inter-thread atomic, severity 3
 

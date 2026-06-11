@@ -6291,6 +6291,12 @@ fn emit_intrinsic(
             code.push(0x0B);
             true
         }
+        I::CpuRelax => {
+            // `pause` (F3 90), the x86-64 spin-loop hint.
+            code.push(0xF3);
+            code.push(0x90);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

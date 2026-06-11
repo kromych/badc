@@ -2874,6 +2874,11 @@ fn emit_intrinsic(
             emit(code, 0xD420_0000u32);
             true
         }
+        I::CpuRelax => {
+            // `yield` (0xD503203F), the AArch64 spin-loop hint.
+            emit(code, 0xD503_203Fu32);
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

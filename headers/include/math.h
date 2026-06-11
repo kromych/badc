@@ -60,6 +60,16 @@
 #pragma binding(libc::log1p,     "_log1p")
 #pragma binding(libc::expm1,     "_expm1")
 #pragma binding(libc::remainder, "_remainder")
+// sqrt / fabs / floor / ceil / trunc lower a direct call to a single
+// FP instruction through the `#pragma intrinsic` below, so a call
+// needs no binding. Taking the function's address still requires a
+// real callable, so bind them to the library symbol: the address
+// resolves to it while direct calls keep using the instruction.
+#pragma binding(libc::sqrt,  "_sqrt")
+#pragma binding(libc::fabs,  "_fabs")
+#pragma binding(libc::floor, "_floor")
+#pragma binding(libc::ceil,  "_ceil")
+#pragma binding(libc::trunc, "_trunc")
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
@@ -140,6 +150,11 @@
 #pragma binding(libm::log1p,     "log1p")
 #pragma binding(libm::expm1,     "expm1")
 #pragma binding(libm::remainder, "remainder")
+#pragma binding(libm::sqrt,  "sqrt")
+#pragma binding(libm::fabs,  "fabs")
+#pragma binding(libm::floor, "floor")
+#pragma binding(libm::ceil,  "ceil")
+#pragma binding(libm::trunc, "trunc")
 // C99 7.12 single-precision variants.
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
@@ -181,6 +196,15 @@
 #pragma binding(msvcrt::exp,   "exp")
 #pragma binding(msvcrt::round, "round")
 #pragma binding(msvcrt::fmod,  "fmod")
+// sqrt / fabs / floor / ceil / trunc lower a direct call to a single
+// FP instruction through the `#pragma intrinsic` below; bind them so
+// taking the function's address resolves to the library symbol. sqrt /
+// fabs / floor / ceil are C89 and live in msvcrt.dll; the C99 `trunc`
+// only landed in the Universal CRT and is bound to ucrtbase below.
+#pragma binding(msvcrt::sqrt,  "sqrt")
+#pragma binding(msvcrt::fabs,  "fabs")
+#pragma binding(msvcrt::floor, "floor")
+#pragma binding(msvcrt::ceil,  "ceil")
 #pragma binding(msvcrt::sin,   "sin")
 #pragma binding(msvcrt::cos,   "cos")
 #pragma binding(msvcrt::tan,   "tan")
@@ -217,6 +241,7 @@
 // surface stays on msvcrt for now and migrates as new
 // divergences turn up under the TODO marker.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::trunc, "trunc")
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::ilogb,      "ilogb")
 #pragma binding(ucrtbase::nextafterf, "nextafterf")

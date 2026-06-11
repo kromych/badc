@@ -1218,6 +1218,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_hint.c", 0),
     ("compound_assign_int_fp.c", 0),
     ("signal_sig_t.c", 0),
+    ("addr_of_intrinsic_math.c", 0),
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),

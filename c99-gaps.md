@@ -117,6 +117,33 @@ arithmetic. Severity: 4.
 
 ## Divergences
 
+### Address of a dynamically-imported function on native targets, severity 3
+
+Taking the address of a function resolved through a `#pragma
+binding` import (a libc / libm symbol such as `fabs`, `sin`,
+`memcpy`) is unsupported when emitting a native binary, in both
+data and code:
+
+```c
+typedef double (*fn1)(double);
+static fn1 table[] = { fabs, sin, cos };   // error: undefined reference to `fabs` (data initializer)
+fn1 p = fabs;                              // error: undefined reference to `fabs`
+```
+
+The native path lowers a *call* to an imported function to a
+PLT-relative call resolved by the per-import trampoline, but it
+does not materialize the import's *address* as a value: the
+operand decays to a plain global-undef symbol that the linker
+cannot place. The address of a c5-*defined* function in the same
+position works (it resolves against the merged Text section);
+only dynamic imports diverge. The interpreter and JIT resolve the
+address at run time, so this is native-only. Fixing it spans
+codegen (emit an address-of-import relocation), the linker (a GOT
+slot per address-taken import), and all three object writers
+(Mach-O / ELF / PE) across both architectures. The common idiom
+it blocks is a static dispatch table of libc functions (math
+expression evaluators, scripting glue).
+
 ### libc `struct`-by-value ABI, severity 2
 
 `div(...)`, `gmtime(...)`, and other libc functions that take

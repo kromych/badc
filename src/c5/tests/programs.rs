@@ -209,6 +209,13 @@ fn const_member_address_init() {
 }
 
 #[test]
+fn const_float_div_zero() {
+    // IEEE float division by zero in a constant expression yields
+    // inf / NaN, not a diagnostic.
+    assert_eq!(run_fixture("const_float_div_zero.c"), 0);
+}
+
+#[test]
 fn array_of_struct_brace_elision() {
     // C99 6.7.8p20: a flat value list fills an array of structs with the
     // per-element braces elided; the length follows from the slot count.

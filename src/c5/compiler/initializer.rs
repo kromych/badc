@@ -1637,9 +1637,10 @@ impl Compiler {
             } else if self.lex.tk == Token::DivOp {
                 self.next()?;
                 let r = self.parse_const_float_unary()?;
-                if r == 0.0 {
-                    return Err(self.compile_err("division by zero in constant float expression"));
-                }
+                // IEEE 754 (C99 Annex F): floating division by zero yields
+                // +/-infinity for a non-zero numerator and NaN for 0.0/0.0,
+                // not a diagnostic. Rust's f64 division produces these
+                // directly, matching the `1.0 / 0.0` infinity idiom.
                 acc /= r;
             } else {
                 break;

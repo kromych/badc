@@ -655,6 +655,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("block_scope_extern.c", 0),
     ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),
+    ("const_float_div_zero.c", 0),
     ("array_of_struct_brace_elision.c", 0),
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),

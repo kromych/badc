@@ -97,7 +97,12 @@ non-constant initializers. `<stdio.h>` exposes the `scanf` /
 `fscanf` / `sscanf` family (C99 7.19.6). The C11 `_Atomic`
 type specifier `_Atomic(type-name)` (6.7.2.4) and the
 `_Atomic` type qualifier (6.7.3) are accepted and reduce to
-the unqualified inner type (atomicity is not modelled).
+the unqualified inner type (atomicity is not modelled). The
+C11 7.17 atomic operations `atomic_load`, `atomic_store`,
+`atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or`
+/ `xor`, and `atomic_compare_exchange_strong` are available
+as header-less compiler builtins; the operand width is the
+pointee type of the first argument.
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -137,6 +142,21 @@ as a distinct type and integer-promotes to signed `int` for
 arithmetic. Severity: 4.
 
 ## Divergences
+
+### C11 atomic read-modify-write is not inter-thread atomic, severity 3
+
+The C11 7.17 atomic operations are accepted (see "What works").
+`atomic_load` and `atomic_store` carry full semantics: a
+naturally-aligned scalar load and store is already atomic on the
+supported targets. The read-modify-write forms (`atomic_exchange`,
+`atomic_fetch_*`, `atomic_compare_exchange_strong`) lower to a
+non-atomic load-operate-store sequence. The result is correct for
+a single thread of execution but does not provide atomicity
+against concurrent access. Memory-order arguments are not modelled;
+only the non-`_explicit` forms are recognized. Making the
+read-modify-write forms inter-thread atomic needs the target's
+atomic instructions (x86 `lock` prefix / `xchg` / `cmpxchg`,
+AArch64 LSE or load-exclusive / store-exclusive).
 
 ### Address of a dynamically-imported function on native targets, severity 3
 

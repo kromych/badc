@@ -280,6 +280,14 @@ fn c11_atomic_specifier() {
 }
 
 #[test]
+fn c11_atomic_ops() {
+    // C11 7.17: atomic_load / store / exchange / fetch_* /
+    // compare_exchange_strong lowered to load / store / RMW on the
+    // pointee width.
+    assert_eq!(run_fixture("c11_atomic_ops.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

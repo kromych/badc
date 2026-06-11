@@ -83,6 +83,31 @@ pub(crate) enum UnOp {
     Deref,
 }
 
+/// C11 7.17 generic atomic operation. The operand width is the
+/// pointee type of the first argument; the walker lowers each kind
+/// to ordinary load / store / read-modify-write on that width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AtomicKind {
+    /// `atomic_load(p)` -- yield `*p`.
+    Load,
+    /// `atomic_store(p, v)` -- `*p = v`, no value.
+    Store,
+    /// `atomic_exchange(p, v)` -- store `v`, yield the prior `*p`.
+    Exchange,
+    /// `atomic_fetch_add/sub/and/or/xor(p, v)` -- apply the binary
+    /// operator to `*p` and `v`, store the result, yield the prior
+    /// `*p`.
+    FetchAdd,
+    FetchSub,
+    FetchAnd,
+    FetchOr,
+    FetchXor,
+    /// `atomic_compare_exchange_strong(p, expected, desired)` --
+    /// if `*p == *expected`, store `desired` and yield 1; otherwise
+    /// store `*p` into `*expected` and yield 0.
+    CompareExchangeStrong,
+}
+
 /// Storage-unit width + bit position for a bitfield reference. The
 /// parser resolves these from the struct-field metadata at parse
 /// time; the walker emits the load + shift + mask sequence.
@@ -261,6 +286,24 @@ pub(crate) enum Expr {
     Intrinsic {
         kind: i64,
         args: Vec<ExprId>,
+        ty: i64,
+    },
+    /// C11 7.17 atomic operation (`atomic_load`, `atomic_store`,
+    /// `atomic_exchange`, `atomic_fetch_*`,
+    /// `atomic_compare_exchange_strong`). `args` holds the pointer
+    /// plus the operation's value / expected / desired operands;
+    /// `ty` is the result type (the pointee type for the value-
+    /// producing forms, `int` for the predicate and store forms).
+    /// The walker lowers each kind to load / store / RMW on the
+    /// pointee width.
+    Atomic {
+        kind: AtomicKind,
+        args: Vec<ExprId>,
+        /// Pointee type of the first argument -- drives the load /
+        /// store width. Distinct from `ty` because the store and
+        /// compare-exchange forms have a result type (`void` / `int`)
+        /// that differs from the operand width.
+        elem_ty: i64,
         ty: i64,
     },
     /// `(type){ initializer-list }` -- C99 6.5.2.5 compound
@@ -775,7 +818,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::PostInc { ty, .. }
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. } => f(ty),
+        | Expr::Intrinsic { ty, .. }
+        | Expr::Atomic { ty, .. } => f(ty),
         Expr::Cast { to_ty, .. } => f(to_ty),
         Expr::CompoundLiteral { ty, init, .. } => {
             f(ty);

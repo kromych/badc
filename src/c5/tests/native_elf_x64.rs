@@ -422,6 +422,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("indirect_struct_return_outptr.c", 0),
     ("bitfield_incdec.c", 0),
     ("c11_atomic_specifier.c", 0),
+    ("c11_atomic_ops.c", 0),
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),

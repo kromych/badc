@@ -14,7 +14,7 @@ use super::super::codegen::Target;
 use super::super::ir::{BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{Expr, ExprId, Stmt, StmtId, UnOp};
+use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
 
 /// Diagnostic for a shape the walker can't lower yet. Carries
 /// enough context to point at the offending AST node so the
@@ -2337,6 +2337,7 @@ impl<'a> Walker<'a> {
                     Expr::CompoundLiteral { ty, .. } => *ty,
                     Expr::StrLit { ty, .. } => *ty,
                     Expr::Intrinsic { ty, .. } => *ty,
+                    Expr::Atomic { ty, .. } => *ty,
                 };
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
@@ -2614,6 +2615,93 @@ impl<'a> Walker<'a> {
                     return Ok(b.mark_f32(v));
                 }
                 Ok(v)
+            }
+            Expr::Atomic {
+                kind,
+                args,
+                elem_ty,
+                ..
+            } => {
+                let kind = *kind;
+                let elem_ty = *elem_ty;
+                let args = args.clone();
+                self.walk_atomic(b, kind, &args, elem_ty)
+            }
+        }
+    }
+
+    /// Lower a C11 7.17 atomic operation to ordinary load / store /
+    /// read-modify-write on the pointee width. A naturally-aligned
+    /// scalar load and store is already atomic on the supported
+    /// targets, so `atomic_load` / `atomic_store` carry full
+    /// semantics. The read-modify-write and compare-exchange forms
+    /// lower to a non-atomic load-op-store sequence: correct for a
+    /// single thread of execution but not yet inter-thread atomic.
+    // TODO: emit the target's atomic read-modify-write (x86 lock
+    // prefix / xchg / cmpxchg, AArch64 LSE or load-exclusive /
+    // store-exclusive) for the RMW and compare-exchange forms.
+    fn walk_atomic(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        kind: AtomicKind,
+        args: &[ExprId],
+        elem_ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let load_kind = load_kind_for(elem_ty, self.target);
+        let store_kind = store_kind_for(elem_ty, self.target);
+        let addr = self.walk_expr_rvalue(b, args[0])?;
+        match kind {
+            AtomicKind::Load => Ok(b.load(addr, load_kind)),
+            AtomicKind::Store => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                b.store(addr, value, store_kind);
+                // Used in statement position; the value is discarded.
+                Ok(b.imm(0))
+            }
+            AtomicKind::Exchange
+            | AtomicKind::FetchAdd
+            | AtomicKind::FetchSub
+            | AtomicKind::FetchAnd
+            | AtomicKind::FetchOr
+            | AtomicKind::FetchXor => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let old = b.load(addr, load_kind);
+                let new = match kind {
+                    AtomicKind::Exchange => value,
+                    AtomicKind::FetchAdd => b.binop(BinOp::Add, old, value),
+                    AtomicKind::FetchSub => b.binop(BinOp::Sub, old, value),
+                    AtomicKind::FetchAnd => b.binop(BinOp::And, old, value),
+                    AtomicKind::FetchOr => b.binop(BinOp::Or, old, value),
+                    AtomicKind::FetchXor => b.binop(BinOp::Xor, old, value),
+                    _ => unreachable!(),
+                };
+                b.store(addr, new, store_kind);
+                // C11 7.17.7: the prior value of the object.
+                Ok(old)
+            }
+            AtomicKind::CompareExchangeStrong => {
+                // C11 7.17.7.4. Branchless: a select via a 0/-1 mask
+                // keeps the lowering free of basic-block management.
+                // When the comparison fails the back-stores rewrite the
+                // same bytes, a no-op for a single thread.
+                let exp_addr = self.walk_expr_rvalue(b, args[1])?;
+                let desired = self.walk_expr_rvalue(b, args[2])?;
+                let cur = b.load(addr, load_kind);
+                let ecur = b.load(exp_addr, load_kind);
+                let eq = b.binop(BinOp::Eq, cur, ecur);
+                let zero = b.imm(0);
+                let mask = b.binop(BinOp::Sub, zero, eq); // 0 or -1
+                // *p     = eq ? desired : cur
+                let cxd = b.binop(BinOp::Xor, cur, desired);
+                let sel_p = b.binop(BinOp::And, cxd, mask);
+                let new_p = b.binop(BinOp::Xor, cur, sel_p);
+                b.store(addr, new_p, store_kind);
+                // *expected = eq ? *expected : cur
+                let cxe = b.binop(BinOp::Xor, cur, ecur);
+                let sel_e = b.binop(BinOp::And, cxe, mask);
+                let new_e = b.binop(BinOp::Xor, cur, sel_e);
+                b.store(exp_addr, new_e, store_kind);
+                Ok(eq)
             }
         }
     }
@@ -3377,7 +3465,8 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::PostInc { ty, .. }
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. } => Some(*ty),
+        | Expr::Intrinsic { ty, .. }
+        | Expr::Atomic { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),
@@ -3513,6 +3602,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::Comma { .. } => "Comma",
         Expr::Intrinsic { .. } => "Intrinsic",
         Expr::ShortCircuit { .. } => "ShortCircuit",
+        Expr::Atomic { .. } => "Atomic",
     }
 }
 

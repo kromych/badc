@@ -169,6 +169,67 @@ impl Compiler {
         ty
     }
 
+    /// Parse a C11 7.17 atomic builtin call. The opening `(` has
+    /// already been consumed. The first operand is the atomic-object
+    /// pointer; its pointee type sets the operand width. The result
+    /// type follows C11 7.17.7: the pointee value for the load /
+    /// exchange / fetch forms, `int` for compare-exchange (the
+    /// predicate) and for store (used in statement position).
+    fn parse_atomic_builtin(
+        &mut self,
+        kind: super::super::ast::AtomicKind,
+        id_idx: usize,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{AtomicKind, Expr};
+        let fn_name = self.symbols[id_idx].name.clone();
+        let want = atomic_arity(kind);
+        let mut args: Vec<super::super::ast::ExprId> = Vec::new();
+        // First operand: the atomic-object pointer.
+        self.expr(Token::Assign as i64)?;
+        let ptr_ty = self.ty;
+        if let Some(a) = self.ast_acc {
+            args.push(a);
+        }
+        if !is_pointer_ty(ptr_ty) {
+            return Err(self.compile_err(format!(
+                "`{fn_name}` first argument must be a pointer to the atomic object"
+            )));
+        }
+        let elem_ty = ptr_ty - Ty::Ptr as i64;
+        while args.len() < want {
+            if self.lex.tk != ',' {
+                return Err(self.compile_err(format!("`{fn_name}` takes {want} arguments")));
+            }
+            self.next()?;
+            self.expr(Token::Assign as i64)?;
+            if let Some(a) = self.ast_acc {
+                args.push(a);
+            }
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(format!("`{fn_name}` takes {want} arguments")));
+        }
+        self.next()?;
+        self.mark_emit_other();
+        let result_ty = match kind {
+            AtomicKind::Store | AtomicKind::CompareExchangeStrong => Ty::Int as i64,
+            _ => elem_ty,
+        };
+        self.ty = result_ty;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Atomic {
+                kind,
+                args,
+                elem_ty,
+                ty: result_ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        Ok(())
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
@@ -276,13 +337,24 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // Intrinsic call: the identifier was registered via
-                // `#pragma intrinsic("name")`. Each intrinsic has
-                // its own fixed arity (alloca / __c5_aarch64_setjmp
-                // take one; __c5_aarch64_longjmp takes two) and the
-                // call site lowering produces an `Inst::Intrinsic`
-                // with the operand layout each lowering expects.
-                if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
+                // C11 7.17 atomic operation. These are compiler
+                // builtins (the <stdatomic.h> macros forward to them),
+                // not library functions, so they are recognized by
+                // name with no declaration -- unless the name is bound
+                // to a real function, in which case the call is left to
+                // the normal path.
+                let atomic_kind = if self.symbols[id_idx].class != Token::Fun as i64
+                    && self.symbols[id_idx].class != Token::Sys as i64
+                {
+                    atomic_kind_from_name(&self.symbols[id_idx].name)
+                } else {
+                    None
+                };
+                if let Some(akind) = atomic_kind {
+                    self.parse_atomic_builtin(akind, id_idx)?;
+                } else if let Some(&intrinsic_id) =
+                    self.pp_intrinsics.get(&self.symbols[id_idx].name)
+                {
                     let fn_name = self.symbols[id_idx].name.clone();
                     // `__builtin_trap()` is the only nullary intrinsic;
                     // every other one needs at least one argument.
@@ -3275,5 +3347,36 @@ impl Compiler {
             self.pending.index_stride = head;
             self.pending.index_strides_tail.extend_from_slice(tail);
         }
+    }
+}
+
+/// Map a C11 7.17 atomic generic-function name to its operation
+/// kind. Only the non-`_explicit` forms are recognized; the
+/// `_explicit` variants carry a memory-order argument c5 does not
+/// model. Returns `None` for any other name.
+fn atomic_kind_from_name(name: &str) -> Option<super::super::ast::AtomicKind> {
+    use super::super::ast::AtomicKind;
+    Some(match name {
+        "atomic_load" => AtomicKind::Load,
+        "atomic_store" => AtomicKind::Store,
+        "atomic_exchange" => AtomicKind::Exchange,
+        "atomic_fetch_add" => AtomicKind::FetchAdd,
+        "atomic_fetch_sub" => AtomicKind::FetchSub,
+        "atomic_fetch_and" => AtomicKind::FetchAnd,
+        "atomic_fetch_or" => AtomicKind::FetchOr,
+        "atomic_fetch_xor" => AtomicKind::FetchXor,
+        "atomic_compare_exchange_strong" => AtomicKind::CompareExchangeStrong,
+        _ => return None,
+    })
+}
+
+/// Argument count for each atomic operation: the object pointer
+/// plus the operation's value / expected / desired operands.
+fn atomic_arity(kind: super::super::ast::AtomicKind) -> usize {
+    use super::super::ast::AtomicKind;
+    match kind {
+        AtomicKind::Load => 1,
+        AtomicKind::CompareExchangeStrong => 3,
+        _ => 2,
     }
 }

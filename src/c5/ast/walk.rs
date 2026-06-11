@@ -1647,7 +1647,11 @@ impl<'a> Walker<'a> {
                     } = self.ast.expr(*callee)
                     && *class == Token::Fun as i64
                 {
-                    let result_slot = b.alloc_synthetic_local();
+                    // The callee writes the whole struct through the
+                    // out-pointer, so the result temp must hold
+                    // `sizeof(struct)` bytes, not a single slot.
+                    let result_size = self.struct_size(*ty);
+                    let result_slot = b.alloc_synthetic_struct(result_size);
                     // Spill the out-pointer through an int-typed
                     // temp so the codegen routes it via the host
                     // int arg register, matching the way FP and
@@ -2044,13 +2048,42 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                // Host-ABI out-pointer struct return through a function
+                // pointer (SysV x86_64 > 16 bytes, Win64 aggregates outside
+                // {1,2,4,8} bytes). Mirror the direct-call path: allocate
+                // the result temp, pass its address as a hidden first
+                // integer argument, and yield the temp's address; the
+                // callee writes the struct through the pointer and returns
+                // it. An out-pointer-returning function uses the all-integer
+                // cdecl (its prologue skips the FP bank), so the call is
+                // non-variadic with FP mask 0.
+                if matches!(
+                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                    crate::c5::compiler::StructReturnAbi::OutPtr
+                ) {
+                    // The callee writes the whole struct through the
+                    // out-pointer, so the result temp must hold
+                    // `sizeof(struct)` bytes.
+                    let result_size = self.struct_size(*ty);
+                    let result_slot = b.alloc_synthetic_struct(result_size);
+                    let addr = b.local_addr(result_slot);
+                    let temp = b.alloc_synthetic_local();
+                    b.store_local(temp, addr, super::super::ir::StoreKind::I64);
+                    let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
+                    let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                        alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
+                    all_args.push(out_arg);
+                    all_args.extend_from_slice(&arg_vals);
+                    let fixed = all_args.len();
+                    b.call_indirect(target, all_args, false, fixed, false, 0);
+                    return Ok(b.local_addr(result_slot));
+                }
                 // Host-ABI aggregate return through a function pointer:
                 // mirror the direct-call path. Reserve the result temp and
                 // tag the call so the codegen reads the eightbytes from
                 // x0/x1 (<= 16 bytes) or has the callee write through x8
                 // (> 16 bytes on aarch64); the VM copies the returned
-                // struct into the temp. The OutPtr class (Win64, SysV
-                // > 16 bytes) is not yet wired for indirect calls.
+                // struct into the temp.
                 let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
                 | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
                     crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)

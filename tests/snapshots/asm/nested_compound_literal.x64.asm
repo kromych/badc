@@ -245,9 +245,9 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0xb8(%rbp), %rdi
+               	leaq	-0xc0(%rbp), %rdi
                	callq	<addr>
-               	leaq	-0xb8(%rbp), %rax
+               	leaq	-0xc0(%rbp), %rax
                	leaq	-0x60(%rbp), %rcx
                	pushq	%r11
                	movq	(%rax), %r11

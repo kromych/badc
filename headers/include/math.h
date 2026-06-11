@@ -46,6 +46,12 @@
 #pragma binding(libc::rint,      "_rint")
 #pragma binding(libc::lround,    "_lround")
 #pragma binding(libc::llround,   "_llround")
+#pragma binding(libc::lrint,     "_lrint")
+#pragma binding(libc::llrint,    "_llrint")
+#pragma binding(libc::cbrt,      "_cbrt")
+#pragma binding(libc::log1p,     "_log1p")
+#pragma binding(libc::expm1,     "_expm1")
+#pragma binding(libc::remainder, "_remainder")
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
@@ -67,6 +73,10 @@
 #pragma binding(libc::fmaxf,  "_fmaxf")
 #pragma binding(libc::nearbyintf, "_nearbyintf")
 #pragma binding(libc::rintf,      "_rintf")
+#pragma binding(libc::cbrtf,      "_cbrtf")
+#pragma binding(libc::log1pf,     "_log1pf")
+#pragma binding(libc::expm1f,     "_expm1f")
+#pragma binding(libc::remainderf, "_remainderf")
 #endif
 
 #ifdef __linux__
@@ -100,6 +110,12 @@
 #pragma binding(libm::rint,      "rint")
 #pragma binding(libm::lround,    "lround")
 #pragma binding(libm::llround,   "llround")
+#pragma binding(libm::lrint,     "lrint")
+#pragma binding(libm::llrint,    "llrint")
+#pragma binding(libm::cbrt,      "cbrt")
+#pragma binding(libm::log1p,     "log1p")
+#pragma binding(libm::expm1,     "expm1")
+#pragma binding(libm::remainder, "remainder")
 // C99 7.12 single-precision variants.
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
@@ -119,6 +135,10 @@
 #pragma binding(libm::fmaxf,  "fmaxf")
 #pragma binding(libm::nearbyintf, "nearbyintf")
 #pragma binding(libm::rintf,      "rintf")
+#pragma binding(libm::cbrtf,      "cbrtf")
+#pragma binding(libm::log1pf,     "log1pf")
+#pragma binding(libm::expm1f,     "expm1f")
+#pragma binding(libm::remainderf, "remainderf")
 #endif
 
 #ifdef _WIN32
@@ -170,6 +190,12 @@
 #pragma binding(ucrtbase::rint,      "rint")
 #pragma binding(ucrtbase::lround,    "lround")
 #pragma binding(ucrtbase::llround,   "llround")
+#pragma binding(ucrtbase::lrint,     "lrint")
+#pragma binding(ucrtbase::llrint,    "llrint")
+#pragma binding(ucrtbase::cbrt,      "cbrt")
+#pragma binding(ucrtbase::log1p,     "log1p")
+#pragma binding(ucrtbase::expm1,     "expm1")
+#pragma binding(ucrtbase::remainder, "remainder")
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
@@ -192,6 +218,10 @@
 #pragma binding(ucrtbase::fmaxf,  "fmaxf")
 #pragma binding(ucrtbase::nearbyintf, "nearbyintf")
 #pragma binding(ucrtbase::rintf,      "rintf")
+#pragma binding(ucrtbase::cbrtf,      "cbrtf")
+#pragma binding(ucrtbase::log1pf,     "log1pf")
+#pragma binding(ucrtbase::expm1f,     "expm1f")
+#pragma binding(ucrtbase::remainderf, "remainderf")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -295,6 +325,16 @@ double nearbyint(double x);
 double rint(double x);
 long lround(double x);
 long long llround(double x);
+// C99 7.12.9.5: lrint / llrint round to the nearest integer using the
+// current rounding mode. 7.12.7.1 cbrt: cube root. 7.12.6.9 / 7.12.6.3
+// log1p(x) = log(1+x), expm1(x) = exp(x)-1, accurate near zero.
+// 7.12.10.2 remainder: IEEE remainder of x/y.
+long lrint(double x);
+long long llrint(double x);
+double cbrt(double x);
+double log1p(double x);
+double expm1(double x);
+double remainder(double x, double y);
 double fabs(double x);
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
@@ -353,6 +393,10 @@ float fminf(float x, float y);
 float fmaxf(float x, float y);
 float nearbyintf(float x);
 float rintf(float x);
+float cbrtf(float x);
+float log1pf(float x);
+float expm1f(float x);
+float remainderf(float x, float y);
 
 // C99 7.12.13.1: fma(x, y, z) = x*y + z computed with a single
 // rounding of the infinitely precise result. Tagged as an intrinsic so

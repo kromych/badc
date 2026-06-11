@@ -359,6 +359,22 @@ impl Preprocessor {
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
         let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        // GCC bit-count builtins are available with no header (they are
+        // compiler builtins, not library functions), matching gcc/clang.
+        // The call-site lowering in the walker expands each to a portable
+        // shift / mask sequence.
+        let mut intrinsics: alloc::collections::BTreeMap<String, i64> =
+            alloc::collections::BTreeMap::new();
+        for (name, kind) in [
+            ("__builtin_clz", super::op::Intrinsic::Clz),
+            ("__builtin_ctz", super::op::Intrinsic::Ctz),
+            ("__builtin_popcount", super::op::Intrinsic::Popcount),
+            ("__builtin_clzll", super::op::Intrinsic::Clzll),
+            ("__builtin_ctzll", super::op::Intrinsic::Ctzll),
+            ("__builtin_popcountll", super::op::Intrinsic::Popcountll),
+        ] {
+            intrinsics.insert(name.to_string(), kind as i64);
+        }
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // common implementation-defined extensions used throughout
         // real-world C source for hints the c5 dialect doesn't act
@@ -456,7 +472,7 @@ impl Preprocessor {
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
-            intrinsics: alloc::collections::BTreeMap::new(),
+            intrinsics,
         }
     }
 

@@ -302,6 +302,8 @@ impl Compiler {
                     let trap_id = crate::c5::op::Intrinsic::Trap as i64;
                     let intr_kind = crate::c5::op::Intrinsic::from_i64(intrinsic_id);
                     let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
+                    let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
+                    let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -354,6 +356,30 @@ impl Compiler {
                             Ty::Float as i64
                         } else {
                             Ty::Double as i64
+                        };
+                        self.expr(Token::Assign as i64)?;
+                        if let Some(child) = self.ast_acc {
+                            let pos = self.ast_src_pos();
+                            let cast_id = self.ast.push_expr(
+                                super::super::ast::Expr::Cast {
+                                    child,
+                                    to_ty: elem_ty,
+                                },
+                                pos,
+                            );
+                            ast_intrinsic_args.push(cast_id);
+                        }
+                    } else if is_int_bit_unary {
+                        // __builtin_clz / ctz / popcount (+ ll forms) --
+                        // one integer argument. Cast to the unsigned form
+                        // of the operation width so the value reaches the
+                        // walker zero-extended (clz / popcount count over
+                        // the full width). The `ll` forms are 64-bit, the
+                        // rest 32-bit.
+                        let elem_ty = if is_bit_unary_64 {
+                            Ty::LongLong as i64 | super::types::UNSIGNED_BIT
+                        } else {
+                            Ty::Int as i64 | super::types::UNSIGNED_BIT
                         };
                         self.expr(Token::Assign as i64)?;
                         if let Some(child) = self.ast_acc {
@@ -515,6 +541,10 @@ impl Compiler {
                         } else {
                             Ty::Double as i64
                         };
+                    } else if is_int_bit_unary {
+                        // C99 has no such builtin; GCC defines the result
+                        // type as `int` for every form.
+                        self.ty = Ty::Int as i64;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }

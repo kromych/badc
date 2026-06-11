@@ -412,6 +412,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("array_of_struct_brace_elision.c", 0),
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),
+    ("builtin_bit_count.c", 0),
     ("anon_union_init.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),

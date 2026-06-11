@@ -1566,6 +1566,17 @@ fn run_intrinsic(
         // the native targets; the interpreter cannot continue past it,
         // so it surfaces as a runtime failure.
         Intrinsic::Trap => Err(C5Error::Runtime("__builtin_trap".to_string())),
+        // The integer bit-count builtins are lowered to a portable
+        // shift / mask sequence in the walker; they never reach the VM
+        // as an `Inst::Intrinsic`.
+        Intrinsic::Clz
+        | Intrinsic::Ctz
+        | Intrinsic::Popcount
+        | Intrinsic::Clzll
+        | Intrinsic::Ctzll
+        | Intrinsic::Popcountll => Err(C5Error::Runtime(
+            "vm_ssa: bit-count builtin reached the intrinsic dispatch".to_string(),
+        )),
     }
 }
 

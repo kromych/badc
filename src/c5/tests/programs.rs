@@ -224,6 +224,14 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn builtin_bit_count() {
+    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
+    // portable shift / mask sequence; results match hand-computed
+    // values on every lane including the interpreter.
+    assert_eq!(run_fixture("builtin_bit_count.c"), 0);
+}
+
+#[test]
 fn scanf_fscanf_binding() {
     // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
     // from <stdio.h>; the calls are guarded so the interp lane never

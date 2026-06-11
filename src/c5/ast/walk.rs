@@ -2511,6 +2511,23 @@ impl<'a> Walker<'a> {
                     }
                     return Ok(v);
                 }
+                // The integer bit-count builtins lower to a portable
+                // shift / mask sequence here rather than a dedicated
+                // instruction, so the result is identical across the
+                // interpreter and every target. clz / ctz at zero are
+                // undefined in GCC; this lowering returns the bit width.
+                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                    && i.is_int_bit_unary()
+                {
+                    use super::super::op::Intrinsic as I;
+                    let x = arg_vals[0];
+                    let w64 = i.is_bit_unary_64();
+                    return Ok(match i {
+                        I::Clz | I::Clzll => lower_clz(b, x, w64),
+                        I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
+                        _ => lower_popcount(b, x, w64),
+                    });
+                }
                 // The unary FP math intrinsics produce an FP value; tag the
                 // single-precision forms so the codegen picks the f32
                 // instruction and width.
@@ -3057,6 +3074,94 @@ fn is_bool_scalar(ty: i64) -> bool {
 /// `pub(super)`-visible to the parser module only; the walker
 /// keeps a local copy to avoid coupling to the compiler module.
 const UNSIGNED_BIT: i64 = 1 << 30;
+
+// Portable lowering of the GCC bit-count builtins (`__builtin_clz` /
+// `ctz` / `popcount` and the 64-bit `ll` forms). Each expands to a
+// branchless shift / mask sequence over the SSA builder so the result
+// matches across the interpreter and every target without a dedicated
+// instruction. `w64` selects the 64-bit forms; the rest operate on the
+// low 32 bits (the operand reaches here zero-extended from the parser's
+// unsigned cast).
+
+type Bld = super::super::codegen::ssa_build::SsaBuilder;
+type Val = super::super::ir::ValueId;
+
+/// Count set bits via the standard SWAR reduction. Right shifts are
+/// logical (`BinOp::Shru`) so the masks see clean bits regardless of
+/// the operand's sign. The result is at most the bit width, so the
+/// final `& 0x7f` extracts it.
+fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let su = BinOp::Shru;
+    let and = BinOp::And;
+    if w64 {
+        let t = b.binop_imm(su, x, 1);
+        let t = b.binop_imm(and, t, 0x5555_5555_5555_5555u64 as i64);
+        let a = b.binop(BinOp::Sub, x, t);
+        let lo = b.binop_imm(and, a, 0x3333_3333_3333_3333u64 as i64);
+        let hi = b.binop_imm(su, a, 2);
+        let hi = b.binop_imm(and, hi, 0x3333_3333_3333_3333u64 as i64);
+        let a = b.binop(BinOp::Add, lo, hi);
+        let s = b.binop_imm(su, a, 4);
+        let a = b.binop(BinOp::Add, a, s);
+        let a = b.binop_imm(and, a, 0x0f0f_0f0f_0f0f_0f0fu64 as i64);
+        let s = b.binop_imm(su, a, 8);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 16);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 32);
+        let a = b.binop(BinOp::Add, a, s);
+        b.binop_imm(and, a, 0x7f)
+    } else {
+        let x = b.binop_imm(and, x, 0xffff_ffff);
+        let t = b.binop_imm(su, x, 1);
+        let t = b.binop_imm(and, t, 0x5555_5555);
+        let a = b.binop(BinOp::Sub, x, t);
+        let lo = b.binop_imm(and, a, 0x3333_3333);
+        let hi = b.binop_imm(su, a, 2);
+        let hi = b.binop_imm(and, hi, 0x3333_3333);
+        let a = b.binop(BinOp::Add, lo, hi);
+        let s = b.binop_imm(su, a, 4);
+        let a = b.binop(BinOp::Add, a, s);
+        let a = b.binop_imm(and, a, 0x0f0f_0f0f);
+        let s = b.binop_imm(su, a, 8);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 16);
+        let a = b.binop(BinOp::Add, a, s);
+        b.binop_imm(and, a, 0x7f)
+    }
+}
+
+/// Count leading zeros: smear the highest set bit down to fill the low
+/// bits, then `width - popcount`. At zero the smear stays zero and the
+/// result is the bit width.
+fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let su = BinOp::Shru;
+    let or = BinOp::Or;
+    let t = b.binop_imm(su, x, 1);
+    let mut s = b.binop(or, x, t);
+    for sh in [2, 4, 8, 16] {
+        let t = b.binop_imm(su, s, sh);
+        s = b.binop(or, s, t);
+    }
+    if w64 {
+        let t = b.binop_imm(su, s, 32);
+        s = b.binop(or, s, t);
+    }
+    let pc = lower_popcount(b, s, w64);
+    let width = b.imm(if w64 { 64 } else { 32 });
+    b.binop(BinOp::Sub, width, pc)
+}
+
+/// Count trailing zeros as `popcount((x - 1) & ~x)`: `x - 1` turns the
+/// trailing zeros into ones and clears the lowest set bit, and `~x`
+/// keeps only those positions. At zero the mask is all-ones and the
+/// result is the bit width.
+fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let xm1 = b.binop_imm(BinOp::Sub, x, 1);
+    let notx = b.binop_imm(BinOp::Xor, x, -1);
+    let m = b.binop(BinOp::And, xm1, notx);
+    lower_popcount(b, m, w64)
+}
 
 /// Struct-type band base + stride. Mirrors
 /// `compiler::types::{STRUCT_BASE, STRUCT_STRIDE}` so the walker

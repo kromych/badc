@@ -107,6 +107,21 @@ pub enum Intrinsic {
     Ceilf = 18,
     Trunc = 19,
     Truncf = 20,
+    /// `__builtin_clz(x)` / `__builtin_clzll(x)` -- count leading zero
+    /// bits of a 32-bit / 64-bit unsigned value. `__builtin_ctz` /
+    /// `__builtin_ctzll` count trailing zeros; `__builtin_popcount` /
+    /// `__builtin_popcountll` count set bits. The result is `int`. The
+    /// value at zero is undefined for clz / ctz (GCC); the walker's
+    /// branchless lowering returns the bit width there. Lowered in the
+    /// walker to a portable shift / mask / add sequence rather than a
+    /// dedicated instruction, so the behavior is identical across the
+    /// interpreter and every target.
+    Clz = 21,
+    Ctz = 22,
+    Popcount = 23,
+    Clzll = 24,
+    Ctzll = 25,
+    Popcountll = 26,
 }
 
 impl Intrinsic {
@@ -132,8 +147,38 @@ impl Intrinsic {
             18 => Some(Intrinsic::Ceilf),
             19 => Some(Intrinsic::Trunc),
             20 => Some(Intrinsic::Truncf),
+            21 => Some(Intrinsic::Clz),
+            22 => Some(Intrinsic::Ctz),
+            23 => Some(Intrinsic::Popcount),
+            24 => Some(Intrinsic::Clzll),
+            25 => Some(Intrinsic::Ctzll),
+            26 => Some(Intrinsic::Popcountll),
             _ => None,
         }
+    }
+
+    /// Integer bit-count builtins: one integer argument, an `int`
+    /// result, lowered in the walker to a portable shift / mask
+    /// sequence. The `ll` forms operate on 64 bits, the rest on 32.
+    pub fn is_int_bit_unary(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Clz
+                | Intrinsic::Ctz
+                | Intrinsic::Popcount
+                | Intrinsic::Clzll
+                | Intrinsic::Ctzll
+                | Intrinsic::Popcountll
+        )
+    }
+
+    /// True for the 64-bit (`ll`) bit-count forms; the rest operate
+    /// on a 32-bit value.
+    pub fn is_bit_unary_64(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Clzll | Intrinsic::Ctzll | Intrinsic::Popcountll
+        )
     }
 
     /// Unary FP math intrinsics: one floating argument, a floating

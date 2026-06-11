@@ -231,6 +231,13 @@ fn nested_runtime_init() {
 }
 
 #[test]
+fn fn_type_typedef_field() {
+    // Struct field that is a pointer to a function-type typedef returning
+    // a struct, called through the field; the call yields the struct.
+    assert_eq!(run_fixture("fn_type_typedef_field.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return() {
     // A struct returned by value from a call through a function pointer
     // follows the same return ABI as a direct call.

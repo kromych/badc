@@ -1887,8 +1887,28 @@ impl Compiler {
                 // `self.ty`. A non-pointer here is not a valid callee;
                 // fall back to int.
                 let callee_fp_ty = self.ty;
+                // The call result strips the pointer levels that form the
+                // function-pointer chain. A plain function pointer needs
+                // one level removed. A pointer-to-function-pointer -- e.g.
+                // a `typedef RET F(args); ... F *m;` member, where the
+                // function-type typedef already encodes one pointer level
+                // and the `*` adds another -- needs the whole chain
+                // (`fn_ptr_chain_depth + 1`) removed so the result is RET,
+                // not an intermediate pointer. Restricted to a struct
+                // callee (the case that otherwise reaches an assignment
+                // type error) and capped by the actual pointer depth so a
+                // stale chain count cannot over-strip.
+                let chain = self.pending.fn_ptr_chain_depth;
+                let strip = if chain > 0
+                    && is_struct_ty(callee_fp_ty)
+                    && struct_ptr_depth(callee_fp_ty) > chain
+                {
+                    chain + 1
+                } else {
+                    1
+                };
                 let indirect_ret_ty = if is_pointer_ty(callee_fp_ty) {
-                    callee_fp_ty - Ty::Ptr as i64
+                    callee_fp_ty - strip * Ty::Ptr as i64
                 } else {
                     Ty::Int as i64
                 };

@@ -1209,6 +1209,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("zero_length_array.c", 0),
     ("nested_compound_literal.c", 0),
     ("indirect_struct_return.c", 0),
+    ("nested_runtime_init.c", 0),
     ("anon_union_init.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),

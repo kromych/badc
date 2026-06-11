@@ -224,6 +224,13 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn nested_runtime_init() {
+    // C99 6.7.8p13: a nested struct/union member with non-constant
+    // initializers stores each field at runtime at the member's offset.
+    assert_eq!(run_fixture("nested_runtime_init.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return() {
     // A struct returned by value from a call through a function pointer
     // follows the same return ABI as a direct call.

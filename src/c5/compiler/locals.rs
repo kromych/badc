@@ -1337,10 +1337,24 @@ impl Compiler {
                     self.compile_err("non-constant array-field initializer not yet supported")
                 );
             }
+            // A nested struct / union member initialized by a brace list,
+            // or a compound literal naming the member's type (C99
+            // 6.5.2.5), recurses into per-field runtime stores at the
+            // member's offset (C99 6.7.8p13). The recursion handles a
+            // union the same way -- its fields share offset 0.
+            self.skip_opt_compound_literal_cast()?;
             if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
-                return Err(self.compile_err(
-                    "non-constant nested-struct-field initializer not yet supported",
-                ));
+                let nested_sid = struct_id_of(field.ty);
+                self.emit_struct_local_init_runtime_at(
+                    local_val,
+                    extra_offset + field.offset as i64,
+                    nested_sid,
+                )?;
+                pos = field_idx + 1;
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
             }
             // Scalar / pointer field. Address = &local +
             // extra_offset + field.offset; push, evaluate the

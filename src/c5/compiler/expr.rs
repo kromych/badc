@@ -1550,10 +1550,36 @@ impl Compiler {
             let _ = pre_addr_ty;
             self.ty += Ty::Ptr as i64;
             if is_struct_ty(pre_addr_ty) && struct_ptr_depth(pre_addr_ty) == 0 {
-                // Struct value -- the parser already left the
-                // address in `a` (no final-load Li). `&s` just
-                // raises the type by one pointer level; no IR
-                // change needed.
+                // Struct value -- the parser already left the address
+                // in `a` (no final-load Li), so the bytecode path needs
+                // no change. Record the pointer result type in the
+                // dual-emit AST by wrapping the operand in
+                // `Expr::Unary { op: AddrOf, ty: struct* }`, so a
+                // consumer (e.g. a variadic argument) distinguishes a
+                // struct pointer from a by-value struct. The walker's
+                // AddrOf arm takes the child's lvalue address, which for
+                // a struct lvalue is its rvalue, leaving the value
+                // unchanged. Limit the wrap to the lvalue forms
+                // `walk_expr_lvalue` handles; a struct rvalue with no
+                // lvalue (compound literal, call result) keeps the
+                // address-as-value representation and its struct type.
+                let wrappable = match self.ast_acc {
+                    Some(id) => matches!(
+                        self.ast.expr(id),
+                        super::super::ast::Expr::Ident { .. }
+                            | super::super::ast::Expr::Member { .. }
+                            | super::super::ast::Expr::Index { .. }
+                            | super::super::ast::Expr::Binary { .. }
+                            | super::super::ast::Expr::Unary {
+                                op: super::super::ast::UnOp::Deref,
+                                ..
+                            }
+                    ),
+                    None => false,
+                };
+                if wrappable {
+                    self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+                }
             } else if self.pop_trailing_scalar_load() {
                 // Scalar / pointer lvalue: dropped the trailing
                 // load so what's left is the address-producing op.

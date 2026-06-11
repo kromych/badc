@@ -1334,7 +1334,7 @@ impl Compiler {
     /// Helper for the unary arms: wraps the accumulator with the
     /// given `UnOp` and replaces it. Drops the node if the
     /// accumulator is empty (the operand wasn't AST-wired yet).
-    fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
+    pub(super) fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
         let Some(child) = self.ast_acc.take() else {
             return;
         };

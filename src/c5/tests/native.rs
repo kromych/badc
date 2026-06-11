@@ -392,6 +392,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("libc_math_libm.c", 0),
     ("libc_math_hyperbolic.c", 0),
     ("libc_math_special.c", 0),
+    ("libc_math_nextafter.c", 0),
     ("long_double_libc_return.c", 0),
     ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),

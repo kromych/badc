@@ -45,6 +45,8 @@
 #pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
+#pragma binding(libc::nextafter, "_nextafter")
+#pragma binding(libc::ilogb,     "_ilogb")
 #pragma binding(libc::hypot, "_hypot")
 #pragma binding(libc::fmin,  "_fmin")
 #pragma binding(libc::fmax,  "_fmax")
@@ -67,6 +69,8 @@
 #pragma binding(libc::powf,   "_powf")
 #pragma binding(libc::roundf, "_roundf")
 #pragma binding(libc::fmodf,  "_fmodf")
+#pragma binding(libc::nextafterf, "_nextafterf")
+#pragma binding(libc::ilogbf,     "_ilogbf")
 #pragma binding(libc::sinf,   "_sinf")
 #pragma binding(libc::cosf,   "_cosf")
 #pragma binding(libc::tanf,   "_tanf")
@@ -121,6 +125,8 @@
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
+#pragma binding(libm::nextafter, "nextafter")
+#pragma binding(libm::ilogb,     "ilogb")
 #pragma binding(libm::hypot, "hypot")
 #pragma binding(libm::fmin,  "fmin")
 #pragma binding(libm::fmax,  "fmax")
@@ -141,6 +147,8 @@
 #pragma binding(libm::powf,   "powf")
 #pragma binding(libm::roundf, "roundf")
 #pragma binding(libm::fmodf,  "fmodf")
+#pragma binding(libm::nextafterf, "nextafterf")
+#pragma binding(libm::ilogbf,     "ilogbf")
 #pragma binding(libm::sinf,   "sinf")
 #pragma binding(libm::cosf,   "cosf")
 #pragma binding(libm::tanf,   "tanf")
@@ -186,6 +194,9 @@
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::modf,  "modf")
+// msvcrt.dll exports the legacy underscored `_nextafter`; ilogb and the
+// single-precision forms only landed in the Universal CRT, bound below.
+#pragma binding(msvcrt::nextafter, "_nextafter")
 // msvcrt.dll exports the legacy underscored `_hypot`; the C99
 // `fmin` / `fmax` (and the single-precision forms) only landed in the
 // Universal CRT, bound below.
@@ -207,6 +218,9 @@
 // divergences turn up under the TODO marker.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
+#pragma binding(ucrtbase::ilogb,      "ilogb")
+#pragma binding(ucrtbase::nextafterf, "nextafterf")
+#pragma binding(ucrtbase::ilogbf,     "ilogbf")
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
 #pragma binding(ucrtbase::fmax,  "fmax")
@@ -431,6 +445,10 @@ double frexp(double x, int *exp);
 // C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional
 // parts.
 double modf(double x, double *iptr);
+// C99 7.12.11.3: nextafter(x, y) is the next representable value after
+// x toward y. 7.12.6.5: ilogb(x) is the integer exponent of x.
+double nextafter(double x, double y);
+int ilogb(double x);
 // C99 7.12.9.8: trunc rounds toward zero.
 double trunc(double x);
 
@@ -448,6 +466,8 @@ float roundf(float x);
 float truncf(float x);
 float fabsf(float x);
 float fmodf(float x, float y);
+float nextafterf(float x, float y);
+int ilogbf(float x);
 float sinf(float x);
 float cosf(float x);
 float tanf(float x);

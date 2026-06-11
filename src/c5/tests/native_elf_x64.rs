@@ -293,6 +293,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("libc_math_libm.c", 0),
     ("libc_math_hyperbolic.c", 0),
     ("libc_math_special.c", 0),
+    ("libc_math_nextafter.c", 0),
     ("pragma_entrypoint.c", 23),
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),

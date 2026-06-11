@@ -387,6 +387,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("libc_fp_classify.c", 0),
     ("libc_fileno_isblank.c", 0),
     ("libc_math_minmax.c", 0),
+    ("libc_math_round.c", 0),
     ("long_double_libc_return.c", 0),
     ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),

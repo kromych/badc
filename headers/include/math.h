@@ -42,6 +42,10 @@
 #pragma binding(libc::hypot, "_hypot")
 #pragma binding(libc::fmin,  "_fmin")
 #pragma binding(libc::fmax,  "_fmax")
+#pragma binding(libc::nearbyint, "_nearbyint")
+#pragma binding(libc::rint,      "_rint")
+#pragma binding(libc::lround,    "_lround")
+#pragma binding(libc::llround,   "_llround")
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
@@ -61,6 +65,8 @@
 #pragma binding(libc::hypotf, "_hypotf")
 #pragma binding(libc::fminf,  "_fminf")
 #pragma binding(libc::fmaxf,  "_fmaxf")
+#pragma binding(libc::nearbyintf, "_nearbyintf")
+#pragma binding(libc::rintf,      "_rintf")
 #endif
 
 #ifdef __linux__
@@ -90,6 +96,10 @@
 #pragma binding(libm::hypot, "hypot")
 #pragma binding(libm::fmin,  "fmin")
 #pragma binding(libm::fmax,  "fmax")
+#pragma binding(libm::nearbyint, "nearbyint")
+#pragma binding(libm::rint,      "rint")
+#pragma binding(libm::lround,    "lround")
+#pragma binding(libm::llround,   "llround")
 // C99 7.12 single-precision variants.
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
@@ -107,6 +117,8 @@
 #pragma binding(libm::hypotf, "hypotf")
 #pragma binding(libm::fminf,  "fminf")
 #pragma binding(libm::fmaxf,  "fmaxf")
+#pragma binding(libm::nearbyintf, "nearbyintf")
+#pragma binding(libm::rintf,      "rintf")
 #endif
 
 #ifdef _WIN32
@@ -154,6 +166,10 @@
 #pragma binding(ucrtbase::pow,   "pow")
 #pragma binding(ucrtbase::fmin,  "fmin")
 #pragma binding(ucrtbase::fmax,  "fmax")
+#pragma binding(ucrtbase::nearbyint, "nearbyint")
+#pragma binding(ucrtbase::rint,      "rint")
+#pragma binding(ucrtbase::lround,    "lround")
+#pragma binding(ucrtbase::llround,   "llround")
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
@@ -174,6 +190,8 @@
 #pragma binding(ucrtbase::hypotf, "hypotf")
 #pragma binding(ucrtbase::fminf,  "fminf")
 #pragma binding(ucrtbase::fmaxf,  "fmaxf")
+#pragma binding(ucrtbase::nearbyintf, "nearbyintf")
+#pragma binding(ucrtbase::rintf,      "rintf")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -268,6 +286,15 @@ double pow(double base, double exp);
 double floor(double x);
 double ceil(double x);
 double round(double x);
+// C99 7.12.9.3 / 7.12.9.4: nearbyint / rint round to an integer value
+// in floating-point format using the current rounding mode (rint may
+// raise the inexact exception, nearbyint does not). 7.12.9.7: lround /
+// llround round to the nearest integer, halfway cases away from zero,
+// and return a long / long long.
+double nearbyint(double x);
+double rint(double x);
+long lround(double x);
+long long llround(double x);
 double fabs(double x);
 double fmod(double x, double y);
 // C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
@@ -324,6 +351,8 @@ float acosf(float x);
 float hypotf(float x, float y);
 float fminf(float x, float y);
 float fmaxf(float x, float y);
+float nearbyintf(float x);
+float rintf(float x);
 
 // C99 7.12.13.1: fma(x, y, z) = x*y + z computed with a single
 // rounding of the infinitely precise result. Tagged as an intrinsic so

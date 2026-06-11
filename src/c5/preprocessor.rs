@@ -2926,8 +2926,15 @@ fn parse_directive(rest: &str) -> Directive<'_> {
 /// `/` and `\` separators. Used to resolve a quoted include against
 /// the including file's directory.
 fn include_parent_dir(filename: &str) -> Option<alloc::string::String> {
-    let cut = filename.rfind(['/', '\\'])?;
-    Some(filename[..cut].to_string())
+    // A bare filename (no directory component) names a file in the
+    // current working directory, so a quoted include in it searches the
+    // cwd. Return an empty directory; `find_include` joins that as a
+    // cwd-relative name. `None` would skip the source-directory step and
+    // miss a same-directory header.
+    match filename.rfind(['/', '\\']) {
+        Some(cut) => Some(filename[..cut].to_string()),
+        None => Some(alloc::string::String::new()),
+    }
 }
 
 /// Split off the leading identifier in `s`, returning `(ident,
@@ -4410,5 +4417,21 @@ int x_2 = __COUNTER__;
         // same way -- so an unknown name no-ops cleanly.
         let out = process("#include \"not-a-real-header.h\"\nint main() {}\n");
         assert!(out.contains("int main()"));
+    }
+
+    #[test]
+    fn include_parent_dir_resolves_bare_filename_to_cwd() {
+        // A bare source filename names a file in the current directory,
+        // so a quoted include in it must search the cwd (empty dir,
+        // joined cwd-relative by find_include), not be skipped.
+        assert_eq!(super::include_parent_dir("src.c"), Some(String::new()));
+        assert_eq!(
+            super::include_parent_dir("dir/src.c"),
+            Some("dir".to_string())
+        );
+        assert_eq!(
+            super::include_parent_dir("/abs/dir/src.c"),
+            Some("/abs/dir".to_string())
+        );
     }
 }

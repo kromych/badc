@@ -78,6 +78,24 @@ final import set; binary integer literals (`0b...` / `0B...`,
 C23 / GCC extension) with the same suffix-letter handling
 as hex and decimal constants.
 
+The common GCC builtins are available with no header (compiler
+builtins, not library functions): `__builtin_clz` / `ctz` /
+`popcount` and their `ll` forms, `__builtin_bswap16` / `32` /
+`64`, `__builtin_expect`, `__builtin_unreachable`,
+`__builtin_frame_address(0)`, `__builtin_trap`, and
+`__builtin_alloca`. The bit-count and byte-swap builtins lower
+to a portable shift / mask sequence; `frame_address(0)` reads
+the frame pointer. GCC zero-length arrays (`T x[0]`) are
+accepted as flexible array members. A struct passed or returned
+by value follows the host ABI between c5 functions, including a
+struct returned through a function pointer (register classes:
+<= 16 bytes on AAPCS64 / System V, the AAPCS64 x8 indirect
+class for larger aggregates). A compound literal may be nested
+inside another aggregate initializer (`(Outer){(Inner){...},
+...}`), and a nested struct / union member may carry
+non-constant initializers. `<stdio.h>` exposes the `scanf` /
+`fscanf` / `sscanf` family (C99 7.19.6).
+
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
 extend (matching clang/gcc), unsigned divide / modulo,

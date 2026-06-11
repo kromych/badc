@@ -359,10 +359,12 @@ impl Preprocessor {
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
         let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
-        // GCC bit-count builtins are available with no header (they are
-        // compiler builtins, not library functions), matching gcc/clang.
-        // The call-site lowering in the walker expands each to a portable
-        // shift / mask sequence.
+        // GCC bit-count / byte-swap builtins are available with no header
+        // (they are compiler builtins, not library functions), matching
+        // gcc/clang. The call-site lowering in the walker expands each to a
+        // portable shift / mask sequence. __builtin_unreachable marks a
+        // point control must not reach; it lowers to the trap intrinsic so
+        // a reached unreachable aborts rather than continuing.
         let mut intrinsics: alloc::collections::BTreeMap<String, i64> =
             alloc::collections::BTreeMap::new();
         for (name, kind) in [
@@ -372,6 +374,10 @@ impl Preprocessor {
             ("__builtin_clzll", super::op::Intrinsic::Clzll),
             ("__builtin_ctzll", super::op::Intrinsic::Ctzll),
             ("__builtin_popcountll", super::op::Intrinsic::Popcountll),
+            ("__builtin_bswap16", super::op::Intrinsic::Bswap16),
+            ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
+            ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
+            ("__builtin_unreachable", super::op::Intrinsic::Trap),
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
@@ -394,6 +400,18 @@ impl Preprocessor {
                 },
             );
         }
+        // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
+        // evaluates to its first operand. The dialect does not consume the
+        // hint, so it expands to the operand. Defined here (not via a
+        // header) to match gcc/clang, where it needs no include.
+        fn_macros.insert(
+            "__builtin_expect".to_string(),
+            FnMacro {
+                params: alloc::vec!["x".to_string(), "c".to_string()],
+                body: "(x)".to_string(),
+                is_variadic: false,
+            },
+        );
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),

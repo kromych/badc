@@ -2528,6 +2528,17 @@ impl<'a> Walker<'a> {
                         _ => lower_popcount(b, x, w64),
                     });
                 }
+                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                    && i.is_bswap()
+                {
+                    use super::super::op::Intrinsic as I;
+                    let bytes = match i {
+                        I::Bswap16 => 2,
+                        I::Bswap64 => 8,
+                        _ => 4,
+                    };
+                    return Ok(lower_bswap(b, arg_vals[0], bytes));
+                }
                 // The unary FP math intrinsics produce an FP value; tag the
                 // single-precision forms so the codegen picks the f32
                 // instruction and width.
@@ -3161,6 +3172,33 @@ fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
     let notx = b.binop_imm(BinOp::Xor, x, -1);
     let m = b.binop(BinOp::And, xm1, notx);
     lower_popcount(b, m, w64)
+}
+
+/// Reverse the low `n` bytes of `x`: extract each byte with a logical
+/// shift and mask, shift it to the mirrored position, and or the bytes
+/// together. `n` is 2, 4, or 8.
+fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
+    let mut acc: Option<Val> = None;
+    for i in 0..n {
+        let src_shift = i * 8;
+        let dst_shift = (n - 1 - i) * 8;
+        let shifted = if src_shift == 0 {
+            x
+        } else {
+            b.binop_imm(BinOp::Shru, x, src_shift)
+        };
+        let byte = b.binop_imm(BinOp::And, shifted, 0xff);
+        let placed = if dst_shift == 0 {
+            byte
+        } else {
+            b.binop_imm(BinOp::Shl, byte, dst_shift)
+        };
+        acc = Some(match acc {
+            None => placed,
+            Some(a) => b.binop(BinOp::Or, a, placed),
+        });
+    }
+    acc.unwrap_or(x)
 }
 
 /// Struct-type band base + stride. Mirrors

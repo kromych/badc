@@ -240,6 +240,12 @@ fn zero_length_array() {
 }
 
 #[test]
+fn builtin_bswap_expect() {
+    // GCC __builtin_bswap16/32/64, __builtin_expect, __builtin_unreachable.
+    assert_eq!(run_fixture("builtin_bswap_expect.c"), 0);
+}
+
+#[test]
 fn builtin_bit_count() {
     // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
     // portable shift / mask sequence; results match hand-computed

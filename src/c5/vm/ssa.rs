@@ -1574,8 +1574,11 @@ fn run_intrinsic(
         | Intrinsic::Popcount
         | Intrinsic::Clzll
         | Intrinsic::Ctzll
-        | Intrinsic::Popcountll => Err(C5Error::Runtime(
-            "vm_ssa: bit-count builtin reached the intrinsic dispatch".to_string(),
+        | Intrinsic::Popcountll
+        | Intrinsic::Bswap16
+        | Intrinsic::Bswap32
+        | Intrinsic::Bswap64 => Err(C5Error::Runtime(
+            "vm_ssa: bit builtin reached the intrinsic dispatch".to_string(),
         )),
     }
 }

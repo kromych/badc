@@ -6283,11 +6283,19 @@ fn emit_intrinsic(
             }
             emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)
         }
-        I::Clz | I::Ctz | I::Popcount | I::Clzll | I::Ctzll | I::Popcountll => {
-            // The integer bit-count builtins are lowered to a portable
-            // shift / mask sequence in the walker; they never reach
+        I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64 => {
+            // The integer bit-count and byte-swap builtins are lowered to a
+            // portable shift / mask sequence in the walker; they never reach
             // codegen as an `Inst::Intrinsic`.
-            bail_msg("intrinsic: bit-count builtin reached codegen");
+            bail_msg("intrinsic: bit builtin reached codegen");
             false
         }
     }

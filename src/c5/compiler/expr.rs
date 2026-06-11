@@ -304,6 +304,7 @@ impl Compiler {
                     let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
                     let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
                     let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
+                    let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
                     let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
                         alloc::vec::Vec::new();
                     if intrinsic_id == trap_id {
@@ -369,14 +370,21 @@ impl Compiler {
                             );
                             ast_intrinsic_args.push(cast_id);
                         }
-                    } else if is_int_bit_unary {
-                        // __builtin_clz / ctz / popcount (+ ll forms) --
-                        // one integer argument. Cast to the unsigned form
-                        // of the operation width so the value reaches the
-                        // walker zero-extended (clz / popcount count over
-                        // the full width). The `ll` forms are 64-bit, the
-                        // rest 32-bit.
-                        let elem_ty = if is_bit_unary_64 {
+                    } else if is_int_bit_unary || is_bswap {
+                        // __builtin_clz / ctz / popcount (+ ll forms) and
+                        // __builtin_bswap16 / 32 / 64 -- one integer argument.
+                        // Cast to the unsigned form of the operation width so
+                        // the value reaches the walker zero-extended (clz /
+                        // popcount count over the full width; bswap reverses
+                        // exactly that many bytes).
+                        let elem_ty = if is_bswap {
+                            let base = match intr_kind {
+                                Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
+                                Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
+                                _ => Ty::Int as i64,
+                            };
+                            base | super::types::UNSIGNED_BIT
+                        } else if is_bit_unary_64 {
                             Ty::LongLong as i64 | super::types::UNSIGNED_BIT
                         } else {
                             Ty::Int as i64 | super::types::UNSIGNED_BIT
@@ -545,6 +553,14 @@ impl Compiler {
                         // C99 has no such builtin; GCC defines the result
                         // type as `int` for every form.
                         self.ty = Ty::Int as i64;
+                    } else if is_bswap {
+                        // GCC types the result as the unsigned operand
+                        // width: uint16_t / uint32_t / uint64_t.
+                        self.ty = match intr_kind {
+                            Some(crate::c5::op::Intrinsic::Bswap16) => Ty::Short as i64,
+                            Some(crate::c5::op::Intrinsic::Bswap64) => Ty::LongLong as i64,
+                            _ => Ty::Int as i64,
+                        } | super::types::UNSIGNED_BIT;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }

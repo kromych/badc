@@ -122,6 +122,13 @@ pub enum Intrinsic {
     Clzll = 24,
     Ctzll = 25,
     Popcountll = 26,
+    /// `__builtin_bswap16` / `bswap32` / `bswap64` -- reverse the byte
+    /// order of a 16- / 32- / 64-bit value. The result type matches the
+    /// operand width. Lowered in the walker to a portable shift / mask /
+    /// or sequence rather than a dedicated instruction.
+    Bswap16 = 27,
+    Bswap32 = 28,
+    Bswap64 = 29,
 }
 
 impl Intrinsic {
@@ -153,8 +160,20 @@ impl Intrinsic {
             24 => Some(Intrinsic::Clzll),
             25 => Some(Intrinsic::Ctzll),
             26 => Some(Intrinsic::Popcountll),
+            27 => Some(Intrinsic::Bswap16),
+            28 => Some(Intrinsic::Bswap32),
+            29 => Some(Intrinsic::Bswap64),
             _ => None,
         }
+    }
+
+    /// Byte-swap builtins: one integer argument, a result of the same
+    /// width, lowered in the walker to a portable shift / mask sequence.
+    pub fn is_bswap(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Bswap16 | Intrinsic::Bswap32 | Intrinsic::Bswap64
+        )
     }
 
     /// Integer bit-count builtins: one integer argument, an `int`

@@ -150,6 +150,7 @@ typedef struct __c5_fpos_t fpos_t;
 // `FILE *` stream. Used by archive / pipe consumers that get a
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "_fdopen")
+#pragma binding(libc::fileno,    "_fileno")
 #endif
 
 #ifdef __linux__
@@ -210,6 +211,7 @@ typedef struct __c5_fpos_t fpos_t;
 // `FILE *` stream. Used by archive / pipe consumers that get a
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "fdopen")
+#pragma binding(libc::fileno,    "fileno")
 #endif
 
 #ifdef _WIN32
@@ -373,6 +375,7 @@ typedef struct __c5_fpos_t fpos_t;
 // POSIX-style `fdopen` -- msvcrt only exposes the underscored
 // form, so the portable spelling binds to the same entry point.
 #pragma binding(msvcrt::fdopen,         "_fdopen")
+#pragma binding(msvcrt::fileno,         "_fileno")
 #pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
@@ -406,6 +409,8 @@ FILE *freopen(char *path, char *mode, FILE *stream);
 int fclose(FILE *stream);
 int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);
+// POSIX.1: the integer file descriptor underlying a stream.
+int fileno(FILE *stream);
 int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);

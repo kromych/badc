@@ -32,6 +32,9 @@
 #pragma binding(libc::asinh, "_asinh")
 #pragma binding(libc::acosh, "_acosh")
 #pragma binding(libc::atanh, "_atanh")
+#pragma binding(libc::tgamma, "_tgamma")
+#pragma binding(libc::erf,    "_erf")
+#pragma binding(libc::erfc,   "_erfc")
 #pragma binding(libc::ldexp, "_ldexp")
 // C99 7.12 declares `ldexpl` as the long-double form of `ldexp`.
 // c5 aliases `long double` to `double` for storage, so the value
@@ -74,6 +77,9 @@
 #pragma binding(libc::asinhf, "_asinhf")
 #pragma binding(libc::acoshf, "_acoshf")
 #pragma binding(libc::atanhf, "_atanhf")
+#pragma binding(libc::tgammaf, "_tgammaf")
+#pragma binding(libc::erff,    "_erff")
+#pragma binding(libc::erfcf,   "_erfcf")
 #pragma binding(libc::hypotf, "_hypotf")
 #pragma binding(libc::fminf,  "_fminf")
 #pragma binding(libc::fmaxf,  "_fmaxf")
@@ -108,6 +114,9 @@
 #pragma binding(libm::asinh, "asinh")
 #pragma binding(libm::acosh, "acosh")
 #pragma binding(libm::atanh, "atanh")
+#pragma binding(libm::tgamma, "tgamma")
+#pragma binding(libm::erf,    "erf")
+#pragma binding(libm::erfc,   "erfc")
 #pragma binding(libm::ldexp, "ldexp")
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
@@ -142,6 +151,9 @@
 #pragma binding(libm::asinhf, "asinhf")
 #pragma binding(libm::acoshf, "acoshf")
 #pragma binding(libm::atanhf, "atanhf")
+#pragma binding(libm::tgammaf, "tgammaf")
+#pragma binding(libm::erff,    "erff")
+#pragma binding(libm::erfcf,   "erfcf")
 #pragma binding(libm::hypotf, "hypotf")
 #pragma binding(libm::fminf,  "fminf")
 #pragma binding(libm::fmaxf,  "fmaxf")
@@ -211,9 +223,15 @@
 #pragma binding(ucrtbase::asinh,  "asinh")
 #pragma binding(ucrtbase::acosh,  "acosh")
 #pragma binding(ucrtbase::atanh,  "atanh")
+#pragma binding(ucrtbase::tgamma, "tgamma")
+#pragma binding(ucrtbase::erf,    "erf")
+#pragma binding(ucrtbase::erfc,   "erfc")
 #pragma binding(ucrtbase::asinhf, "asinhf")
 #pragma binding(ucrtbase::acoshf, "acoshf")
 #pragma binding(ucrtbase::atanhf, "atanhf")
+#pragma binding(ucrtbase::tgammaf, "tgammaf")
+#pragma binding(ucrtbase::erff,    "erff")
+#pragma binding(ucrtbase::erfcf,   "erfcf")
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
@@ -384,6 +402,10 @@ double tanh(double x);
 double asinh(double x);
 double acosh(double x);
 double atanh(double x);
+// C99 7.12.8.3 / 7.12.8.1 / 7.12.8.2: gamma and error functions.
+double tgamma(double x);
+double erf(double x);
+double erfc(double x);
 // C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
 double ldexp(double x, int exp);
 // C99 7.12.6.13: scalbn / scalbln compute x * FLT_RADIX^n; with the
@@ -436,6 +458,9 @@ float acosf(float x);
 float asinhf(float x);
 float acoshf(float x);
 float atanhf(float x);
+float tgammaf(float x);
+float erff(float x);
+float erfcf(float x);
 float hypotf(float x, float y);
 float fminf(float x, float y);
 float fmaxf(float x, float y);

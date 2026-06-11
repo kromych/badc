@@ -1444,6 +1444,13 @@ impl Compiler {
                         // stay zero.
                         if self.lex.tk == Token::Assign {
                             self.next()?;
+                            // A file-scope aggregate may be initialised by a
+                            // compound literal naming its own type (C99
+                            // 6.5.2.5): `static T g = (T){ ... };`. Drop the
+                            // redundant `(T)` so the brace dispatch below sees
+                            // `{ ... }`. A scalar `(int){5}` falls through to
+                            // parse_global_initializer's single-value path.
+                            self.skip_opt_compound_literal_cast()?;
                             if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
                                     return Err(self.compile_err(

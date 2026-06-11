@@ -1056,6 +1056,46 @@ impl Compiler {
         Ok(())
     }
 
+    /// C99 6.5.2.5: an initializer element may be written as a compound
+    /// literal `(Type){ ... }`. When it appears as an aggregate member's
+    /// value the cast type names the member's own type, so the `(Type)`
+    /// prefix is redundant; consume it and leave the `{ ... }` for the
+    /// brace path to handle as a nested initializer. Returns true when a
+    /// cast was skipped. The lexer is restored when the `(` opens an
+    /// ordinary parenthesised expression or a scalar cast instead.
+    pub(super) fn skip_opt_compound_literal_cast(&mut self) -> Result<bool, C5Error> {
+        if self.lex.tk != '(' {
+            return Ok(false);
+        }
+        let snap = self.lex.snapshot();
+        self.next()?; // consume `(`
+        if !self.lex_is_type_start() {
+            self.lex.restore(snap);
+            return Ok(false);
+        }
+        // Skip the balanced token run to the matching `)`. The type name
+        // plus any abstract declarator (pointers, array brackets) is a
+        // no-op here; only the following `{` decides a compound literal.
+        let mut depth: i64 = 1;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?; // consume the matching `)`
+                    break;
+                }
+            }
+            self.next()?;
+        }
+        if self.lex.tk == '{' {
+            return Ok(true);
+        }
+        self.lex.restore(snap);
+        Ok(false)
+    }
+
     /// Fill the fields of a struct from the current brace-list position.
     /// With `braced` true the caller has already consumed the opening
     /// `{` and consumes the matching `}` after this returns; the loop
@@ -1132,6 +1172,10 @@ impl Compiler {
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
             let field_base = (var_offset as usize) + field.offset;
+            // A member value written as a compound literal `(Type){ ... }`
+            // (C99 6.5.2.5) names the member's own type; drop the cast so
+            // the brace paths below treat it as a nested `{ ... }`.
+            self.skip_opt_compound_literal_cast()?;
             // Three field shapes get nested `{ ... }` initializers:
             //   * array field (`T xs[N]`)
             //   * value-typed nested struct

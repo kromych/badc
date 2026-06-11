@@ -224,6 +224,14 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn nested_compound_literal() {
+    // C99 6.5.2.5 compound literal nested inside another aggregate
+    // initializer; the inner cast names the member type and is dropped
+    // so the brace list initializes the member directly.
+    assert_eq!(run_fixture("nested_compound_literal.c"), 0);
+}
+
+#[test]
 fn zero_length_array() {
     // GCC zero-length array `T x[0]` as a struct's trailing member,
     // treated as a flexible array member (zero storage, real bytes

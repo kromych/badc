@@ -13,6 +13,9 @@
 #define _C5_INTTYPES_H
 
 #include <stdint.h>
+// 7.8.2.3 / 7.8.2.4 route through the `long long` conversions in
+// <stdlib.h>; intmax_t is a 64-bit long long in this dialect.
+#include <stdlib.h>
 
 // 7.8.1 -- printf conversion specifiers.
 
@@ -185,18 +188,30 @@
 #define SCNxMAX    "llx"
 #define SCNxPTR    "llx"
 
-// 7.8.2 -- intmax_t arithmetic helpers. Declared so user code that
-// reaches for them compiles; the runtime routes through the
-// existing `long long` libc surface.
+// 7.8.2 -- intmax_t arithmetic helpers. imaxabs / imaxdiv reduce to a
+// sign test and the / and % operators (the quotient truncates toward
+// zero per 6.5.5p6); strtoimax / strtoumax forward to the long long
+// conversions, intmax_t being a 64-bit long long here.
 
 typedef struct {
     intmax_t quot;
     intmax_t rem;
 } imaxdiv_t;
 
-intmax_t  imaxabs(intmax_t j);
-imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom);
-intmax_t  strtoimax(const char *nptr, char **endptr, int base);
-uintmax_t strtoumax(const char *nptr, char **endptr, int base);
+static inline intmax_t imaxabs(intmax_t j) {
+    return j < 0 ? -j : j;
+}
+static inline imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom) {
+    imaxdiv_t r;
+    r.quot = numer / denom;
+    r.rem = numer % denom;
+    return r;
+}
+static inline intmax_t strtoimax(const char *nptr, char **endptr, int base) {
+    return strtoll((char *)nptr, endptr, base);
+}
+static inline uintmax_t strtoumax(const char *nptr, char **endptr, int base) {
+    return strtoull((char *)nptr, endptr, base);
+}
 
 #endif /* _C5_INTTYPES_H */

@@ -179,6 +179,16 @@ double strtof(char *s, char **endp);
 long double strtold(char *s, char **endp);
 #endif
 int abs(int x);
+// C99 7.20.6.1: absolute value of a long / long long. Provided inline
+// rather than through a libc binding because the result reduces to a
+// sign test. Undefined when the value is not representable (LONG_MIN /
+// LLONG_MIN), as the standard specifies.
+static inline long labs(long x) {
+    return x < 0 ? -x : x;
+}
+static inline long long llabs(long long x) {
+    return x < 0 ? -x : x;
+}
 // C99 7.20.6.2: integer division yielding quotient and remainder
 // together. The quotient is truncated toward zero (C99 6.5.5p6) and
 // quot * denom + rem == numer, so these reduce to the / and %

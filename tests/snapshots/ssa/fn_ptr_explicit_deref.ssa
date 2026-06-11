@@ -1,6 +1,6 @@
-; --- SSA dump (ok=true) ent_pc=0 ---
+; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=real_fn
-fn ent_pc=0 n_params=1 variadic=false locals=0
+fn ent_pc=3 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -11,13 +11,13 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
     v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
     terminator Return(v6)   (exit_acc=v6)
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=main
-fn ent_pc=1 n_params=0 variadic=false locals=8
+fn ent_pc=4 n_params=0 variadic=false locals=8
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmCode(ent_pc=0)                                -> x0
+    v1   ImmCode(ent_pc=3)                                -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I64 }        -> -
     v3   Imm(40)                                          -> x7
     v4   LoadLocal { off=-1, kind=I64 }                   -> x0

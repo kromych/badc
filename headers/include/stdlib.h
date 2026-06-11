@@ -62,8 +62,6 @@
 #pragma binding(libc::mkstemp, "_mkstemp")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
-#pragma binding(libc::div,     "_div")
-#pragma binding(libc::ldiv,    "_ldiv")
 #pragma binding(libc::random,  "_random")
 #pragma binding(libc::srandom, "_srandom")
 #endif
@@ -107,8 +105,6 @@
 #pragma binding(libc::mkstemp, "mkstemp")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
-#pragma binding(libc::div,     "div")
-#pragma binding(libc::ldiv,    "ldiv")
 #pragma binding(libc::random,  "random")
 #pragma binding(libc::srandom, "srandom")
 #endif
@@ -183,6 +179,42 @@ double strtof(char *s, char **endp);
 long double strtold(char *s, char **endp);
 #endif
 int abs(int x);
+// C99 7.20.6.2: integer division yielding quotient and remainder
+// together. The quotient is truncated toward zero (C99 6.5.5p6) and
+// quot * denom + rem == numer, so these reduce to the / and %
+// operators. Provided inline rather than through a libc binding
+// because the result is a small aggregate returned by value, which c5
+// marshals through its own struct-return path.
+typedef struct {
+    int quot;
+    int rem;
+} div_t;
+typedef struct {
+    long quot;
+    long rem;
+} ldiv_t;
+typedef struct {
+    long long quot;
+    long long rem;
+} lldiv_t;
+static inline div_t div(int n, int d) {
+    div_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
+static inline ldiv_t ldiv(long n, long d) {
+    ldiv_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
+static inline lldiv_t lldiv(long long n, long long d) {
+    lldiv_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
 // C99 7.20.4: abort / exit / _Exit do not return to the caller.
 // `_Noreturn` lets the reachability analysis treat a call as not
 // reaching its continuation.

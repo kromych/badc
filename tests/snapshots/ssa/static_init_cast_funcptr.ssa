@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v29  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1
     v30  Binop { op=add, lhs=v27, rhs=v29 }               -> x1
     v31  LoadIndexed { base=v27, index=v1, scale=8, kind=I64 } -> x6
-    v32  CallExt { binding_idx=76, args=[v14, v31], fp_arg_mask=0x0 } -> x0
+    v32  CallExt { binding_idx=74, args=[v14, v31], fp_arg_mask=0x0 } -> x0
     v33  Imm(0)                                           -> x1
     v34  LoadLocal { off=-4, kind=I64 }                   -> x1
     terminator Bz { cond=v32, target=b4, fall=b3 }   (exit_acc=v32)
@@ -59,9 +59,9 @@ fn ent_pc=0 n_params=1 variadic=false locals=6
     v45  Binop { op=add, lhs=v3, rhs=v44 }                -> x0
     v46  LoadIndexed { base=v3, index=v1, scale=8, kind=I64 } -> x0
     terminator Return(v46)   (exit_acc=v46)
-; --- SSA dump (ok=true) ent_pc=1 ---
+; --- SSA dump (ok=true) ent_pc=4 ---
 ; name=real_double
-fn ent_pc=1 n_params=1 variadic=false locals=0
+fn ent_pc=4 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -72,9 +72,9 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
     v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
     terminator Return(v6)   (exit_acc=v6)
-; --- SSA dump (ok=true) ent_pc=2 ---
+; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=real_negate
-fn ent_pc=2 n_params=1 variadic=false locals=0
+fn ent_pc=5 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -83,9 +83,9 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x0
     terminator Return(v4)   (exit_acc=v4)
-; --- SSA dump (ok=true) ent_pc=3 ---
+; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=main
-fn ent_pc=3 n_params=0 variadic=false locals=9
+fn ent_pc=6 n_params=0 variadic=false locals=9
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -169,9 +169,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=9
     v54  CallExt { binding_idx=0, args=[v53], fp_arg_mask=0x0 } -> x0
     v55  Imm(0)                                           -> x0
     terminator Return(v55)   (exit_acc=v55)
-; --- SSA dump (ok=true) ent_pc=4 ---
+; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=__c5_sys_atoi
-fn ent_pc=4 n_params=1 variadic=false locals=0
+fn ent_pc=7 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -

@@ -289,6 +289,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// symbol.
     pub fn_ptr_indirection: Option<i64>,
 
+    /// Set when the base type of the declarator currently being parsed
+    /// came from a function-TYPE typedef (`typedef RET F(args)`), so the
+    /// declarator absorbs the first `*` (it forms the pointer-to-function
+    /// the typedef already half-encodes). Consumed and cleared by
+    /// `parse_declarator`.
+    pub base_is_function_type: bool,
+
     /// Override stride for the next `[i]` postfix index. When we
     /// load the address of a 2D-array variable (`T xs[N][M]`),
     /// the first subscript should scale the index by
@@ -474,6 +481,7 @@ impl Default for Pending {
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
+            base_is_function_type: false,
             index_stride: 0,
             index_strides_tail: Vec::new(),
             end_of_expr_stride: 0,

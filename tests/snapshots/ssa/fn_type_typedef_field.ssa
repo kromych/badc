@@ -1,5 +1,5 @@
-fn_type_typedef_field.c:26: warning: incompatible struct types in assignment (lhs=struct __anon_struct_0**, rhs=int*)
-fn_type_typedef_field.c:34: warning: incompatible struct types in assignment (lhs=struct __anon_struct_0**, rhs=int*)
+fn_type_typedef_field.c:26: warning: incompatible struct types in assignment (lhs=struct __anon_struct_0*, rhs=int*)
+fn_type_typedef_field.c:34: warning: incompatible struct types in assignment (lhs=struct __anon_struct_0*, rhs=int*)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=make
 fn ent_pc=0 n_params=1 variadic=false locals=2

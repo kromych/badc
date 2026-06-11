@@ -67,10 +67,28 @@ impl Compiler {
         // declarator carries explicit fn-pointer shape rather
         // than inheriting from the base type), so we update
         // pending only when leading `*`s actually accumulated.
+        // A function-TYPE typedef (`typedef RET F(args)`) pre-decays to a
+        // function pointer (`RET` + one pointer level). The first `*` in
+        // `F *p` forms that pointer-to-function rather than adding a
+        // level, so the object is a function pointer, not a pointer to
+        // one. Absorb the first `*`: drop one pointer level from the type
+        // and count it as zero for the indirection. A later `*` (`F **p`)
+        // adds normally. Consumed here so it does not leak to the next
+        // declarator.
+        let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        self.pending.base_is_function_type = false;
+        if absorb_fn_type_ptr {
+            ty -= Ty::Ptr as i64;
+        }
         if leading_ptr_count > 0
             && let Some(fpi) = self.pending.fn_ptr_indirection
         {
-            self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
+            let added = if absorb_fn_type_ptr {
+                leading_ptr_count - 1
+            } else {
+                leading_ptr_count
+            };
+            self.pending.fn_ptr_indirection = Some(fpi + added);
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly

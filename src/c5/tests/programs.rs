@@ -231,6 +231,13 @@ fn nested_runtime_init() {
 }
 
 #[test]
+fn fn_type_typedef_local() {
+    // A pointer to a function-type typedef is a function pointer (one
+    // level), distinct from a pointer to a function-pointer typedef.
+    assert_eq!(run_fixture("fn_type_typedef_local.c"), 0);
+}
+
+#[test]
 fn fn_type_typedef_field() {
     // Struct field that is a pointer to a function-type typedef returning
     // a struct, called through the field; the call yields the struct.

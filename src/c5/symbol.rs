@@ -122,6 +122,14 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+    /// True for a typedef of a function TYPE (`typedef RET F(args)`),
+    /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
+    /// type encoding pre-decays both to a function pointer (`RET` plus
+    /// one pointer level), so they are otherwise indistinguishable; a
+    /// declarator needs the distinction because `F *p` over a function
+    /// type forms the pointer-to-function (a function pointer) while
+    /// `F *p` over a function pointer is a pointer to one.
+    pub is_function_type: bool,
 
     /// Set on a `Token::Fun` symbol whose declared return type
     /// was bare `void`. The type encoding (`type_`) still records

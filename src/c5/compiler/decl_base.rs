@@ -291,6 +291,8 @@ impl Compiler {
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                self.pending.base_is_function_type =
+                    self.symbols[self.lex.curr_id_idx].is_function_type;
                 // A function-pointer typedef records the pointed-to
                 // function's prototype; carry it to the bound
                 // declarator so an indirect call through the variable

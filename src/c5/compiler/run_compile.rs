@@ -161,6 +161,8 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.base_is_function_type =
+                        self.symbols[self.lex.curr_id_idx].is_function_type;
                     // A function-pointer typedef records the pointed-to
                     // function's prototype (`params` + `is_variadic`).
                     // Carry it to the bound declarator so an indirect
@@ -316,15 +318,19 @@ impl Compiler {
                     // parsing). For a typedef there's no body to put
                     // those locals into scope for, so we restore each
                     // param's shadowed binding right after.
-                    let (typedef_ty, typedef_fpi, typedef_params) =
+                    let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
                         if self.lex.tk == '(' && preconsumed_params.is_none() {
                             self.next()?; // consume `(`
                             let pp = self.parse_function_params()?;
                             for &p in &pp.indices {
                                 Self::restore_shadowed_symbol(&mut self.symbols[p]);
                             }
+                            // `typedef RET NAME(args);` -- a function TYPE.
+                            // The type is pre-decayed to a function pointer
+                            // (`RET` + one pointer level); the flag lets a
+                            // later `NAME *p` declarator absorb the first `*`.
                             let fty = ty + Ty::Ptr as i64;
-                            (fty, 1i64, Some(pp))
+                            (fty, 1i64, Some(pp), true)
                         } else if let Some(pp) = preconsumed_params {
                             // `typedef RET (*NAME)(args);`: the `(*NAME)`
                             // nested declarator already consumed the
@@ -336,9 +342,9 @@ impl Compiler {
                             for &p in &pp.indices {
                                 Self::restore_shadowed_symbol(&mut self.symbols[p]);
                             }
-                            (ty, fn_ptr_indirection, Some(pp))
+                            (ty, fn_ptr_indirection, Some(pp), false)
                         } else {
-                            (ty, fn_ptr_indirection, None)
+                            (ty, fn_ptr_indirection, None, false)
                         };
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
@@ -358,6 +364,7 @@ impl Compiler {
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
+                    self.symbols[id_idx].is_function_type = typedef_is_fn_type;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }

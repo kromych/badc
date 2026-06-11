@@ -15,8 +15,6 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.lo	<addr>
                	b	<addr>
@@ -35,22 +33,16 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.lo	<addr>
                	b	<addr>
                	mov	x17, #0xfffe            // =65534
                	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.eq	<addr>
                	b	<addr>
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
-               	movk	x17, #0xffff, lsl #32
-               	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	b.eq	<addr>
                	b	<addr>

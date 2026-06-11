@@ -12,7 +12,9 @@ Disassembly of section .text:
 
 <u32>:
                	movl	%edi, %eax
-               	cmpq	$-0x2, %rax
+               	movl	$0xfffffffe, %r13d      # imm = 0xFFFFFFFE
+               	movq	%rax, %rcx
+               	cmpq	%r13, %rax
                	jb	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
@@ -28,13 +30,17 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$-0x1, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	movq	%rax, %rcx
+               	cmpq	%r13, %rax
                	jb	<addr>
                	jmp	<addr>
-               	cmpq	$-0x2, %rax
+               	movl	$0xfffffffe, %r13d      # imm = 0xFFFFFFFE
+               	cmpq	%r13, %rax
                	je	<addr>
                	jmp	<addr>
-               	cmpq	$-0x1, %rax
+               	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
+               	cmpq	%r13, %rax
                	je	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -187,3 +193,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

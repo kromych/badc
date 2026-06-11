@@ -942,11 +942,27 @@ impl<'a> Walker<'a> {
                 // the comparison so an unsigned discriminant with the
                 // high bit set still sorts correctly.
                 let deflt = default_blk.unwrap_or(after_blk);
-                let disc_unsigned = expr_ty(self.ast.expr(*disc))
-                    .map(|t| t & UNSIGNED_BIT != 0)
-                    .unwrap_or(false);
+                let disc_ty = expr_ty(self.ast.expr(*disc)).unwrap_or(Ty::Int as i64);
+                let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
                 let mut sorted = cases.clone();
                 if disc_unsigned {
+                    // C99 6.8.4.2p1 + p5: the controlling expression is
+                    // integer-promoted, then each case label is converted to
+                    // that promoted type. A 4-byte unsigned controlling type
+                    // (`unsigned int`, and `unsigned long` on LLP64) promotes
+                    // to itself, so a negative label wraps modulo 2^32 and
+                    // must match the zero-extended discriminant -- mask it to
+                    // 32 bits. An 8-byte unsigned type keeps the full-width
+                    // value, which already matches. (Sub-`int` unsigned types
+                    // promote to signed `int`, so a negative label stays
+                    // negative and never matches a zero-extended value; those
+                    // are reported as unsigned by `disc_ty` but take the plain
+                    // path here with no masking.)
+                    if type_size_bytes(disc_ty, self.target) == 4 {
+                        for c in sorted.iter_mut() {
+                            c.0 = (c.0 as u32) as i64;
+                        }
+                    }
                     sorted.sort_by_key(|p| p.0 as u64);
                 } else {
                     sorted.sort_by_key(|p| p.0);

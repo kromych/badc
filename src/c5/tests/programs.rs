@@ -316,6 +316,12 @@ fn math_classify() {
 }
 
 #[test]
+fn switch_unsigned_negative_case() {
+    // C99 6.8.4.2: case labels convert to the promoted controlling type.
+    assert_eq!(run_fixture("switch_unsigned_negative_case.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

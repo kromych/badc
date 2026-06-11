@@ -66,8 +66,6 @@ Disassembly of section .text:
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d16, x0
                	fcvt	s0, d16
-               	sub	x1, x29, #0x8
-               	str	s0, [x1]
                	mov	x1, #0x3fd0000000000000 // =4598175219545276416
                	fmov	d16, x1
                	sub	x17, x29, #0x10
@@ -76,35 +74,29 @@ Disassembly of section .text:
                	fmov	d16, x1
                	sub	x17, x29, #0x18
                	str	d16, [x17]
-               	sub	x1, x29, #0x20
-               	str	s0, [x1]
                	mov	x2, #0x1                // =1
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
-               	fcvt	d0, s0
+               	fcvt	d1, s0
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d1, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x2, #0x0                // =0
                	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
+               	ldr	d1, [x16]
                	mov	x0, #0x3fd0000000000000 // =4598175219545276416
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d1, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x2, #0x0                // =0
                	sub	x16, x29, #0x18
-               	ldr	d0, [x16]
+               	ldr	d1, [x16]
                	mov	x0, #0x4039000000000000 // =4627730092099895296
                	fmov	d17, x0
-               	fcmp	d0, d17
+               	fcmp	d1, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x2, #0x0                // =0
-               	sub	x16, x29, #0x20
-               	ldr	s0, [x16]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fcvt	d0, s0
                	fmov	d17, x0

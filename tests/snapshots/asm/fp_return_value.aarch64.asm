@@ -69,10 +69,6 @@ Disassembly of section .text:
                	fdiv	d1, d1, d17
                	fcvt	s1, d1
                	fadd	s0, s0, s1
-               	sub	x0, x29, #0x10
-               	str	s0, [x0]
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fcvt	d0, s0
                	fmov	d17, x0

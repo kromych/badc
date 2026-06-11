@@ -77,8 +77,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	movq	%rcx, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
-               	leaq	-0x18(%rbp), %rax
-               	movss	%xmm0, (%rax,%riz)
+               	movss	%xmm0, -0x18(%rbp,%riz)
                	jmp	<addr>
                	movslq	%r12d, %rax
                	cmpq	$0x4, %rax

@@ -148,9 +148,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	sqrtss	%xmm0, %xmm0
-               	leaq	-0x38(%rbp), %rax
-               	movss	%xmm0, (%rax,%riz)
-               	movss	-0x38(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -172,9 +169,6 @@ Disassembly of section .text:
                	movl	$0x7fffffff, %r10d      # imm = 0x7FFFFFFF
                	movq	%r10, %xmm15
                	andpd	%xmm15, %xmm0
-               	leaq	-0x40(%rbp), %rcx
-               	movss	%xmm0, (%rcx,%riz)
-               	movss	-0x40(%rbp,%riz), %xmm0
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -206,9 +200,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	roundss	$0x9, %xmm0, %xmm0
-               	leaq	-0x50(%rbp), %rax
-               	movss	%xmm0, (%rax,%riz)
-               	movss	-0x50(%rbp,%riz), %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -225,9 +216,6 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm0
                	roundss	$0xa, %xmm0, %xmm0
-               	leaq	-0x58(%rbp), %rax
-               	movss	%xmm0, (%rax,%riz)
-               	movss	-0x58(%rbp,%riz), %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	cvtss2sd	%xmm0, %xmm0
                	movq	%rax, %xmm15
@@ -250,10 +238,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
                	movq	%xmm0, %rax
-               	leaq	-0x60(%rbp), %rcx
                	movq	%rax, %xmm14
                	cvtsd2ss	%xmm14, %xmm15
-               	movss	%xmm15, (%rcx,%riz)
+               	movss	%xmm15, -0x60(%rbp,%riz)
                	movss	-0x60(%rbp,%riz), %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	cvtss2sd	%xmm0, %xmm0

@@ -375,7 +375,6 @@ pub(crate) fn walk_function(
         // 4-byte narrow-storage local (`local_slot < 0`).
         let is_float = stripped == crate::c5::token::Ty::Float as i64;
         if is_float {
-            let dst = b.local_addr(local_slot);
             if !is_variadic && !ret_outptr && param_in_fp_reg(i) {
                 // The argument arrives at single precision in an FP
                 // argument register (C99 6.2.5p10). Seed an FP
@@ -383,10 +382,11 @@ pub(crate) fn walk_function(
                 // into the local with `StoreKind::F32`. The value never
                 // round-trips through the positive c5 cdecl cell, so
                 // that cell stays unobserved and the prologue's spill of
-                // it is elided.
+                // it is elided. A direct `StoreLocal` (not the
+                // address-taken form) keeps the slot mem2reg-promotable.
                 let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F32);
                 b.mark_f32(pr);
-                b.store(dst, pr, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, pr, super::super::ir::StoreKind::F32);
             } else if b.param_fp_mask() != 0 {
                 // Host-stack-overflow `float` parameter (more than eight
                 // preceding FP parameters) under the FP-register ABI: the
@@ -395,7 +395,7 @@ pub(crate) fn walk_function(
                 // narrow back into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
                 let val = b.load_local(arg_slot, super::super::ir::LoadKind::F32);
-                b.store(dst, val, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
             } else {
                 // Variadic / struct-returning callees keep the c5 cdecl
                 // shape: the caller widened the `float` to an 8-byte
@@ -404,7 +404,7 @@ pub(crate) fn walk_function(
                 // `StoreKind::F32` into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
                 let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-                b.store(dst, val, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
             }
         }
     }
@@ -1083,15 +1083,10 @@ impl<'a> Walker<'a> {
                     return Ok(());
                 }
                 let kind = store_kind_for(ty, self.target);
-                // Integer widths fuse into a single `StoreLocal`;
-                // `F32` routes through `LocalAddr` + `Store` because
-                // the per-arch `StoreLocal` keeps the value in a GPR.
-                if matches!(kind, super::super::ir::StoreKind::F32) {
-                    let addr = b.local_addr(slot);
-                    b.store(addr, v, kind);
-                } else {
-                    b.store_local(slot, v, kind);
-                }
+                // A direct `StoreLocal` keeps the slot mem2reg-promotable.
+                // The `F32` s-view store is narrowed by the per-arch emit
+                // when the value is still double.
+                b.store_local(slot, v, kind);
                 Ok(())
             }
             super::super::ast::LocalInit::Aggregate {
@@ -1532,22 +1527,27 @@ impl<'a> Walker<'a> {
                 }
                 // Local-target shortcut: a Token::Loc-class Ident
                 // lvalue lowers to a single `StoreLocal` instead of
-                // `LocalAddr` + `Store`. `F32` keeps the value in an
-                // FP register, which the per-arch `StoreLocal` does
-                // not store, so it stays on the `LocalAddr` + `Store`
-                // path.
+                // `LocalAddr` + `Store`, keeping the slot mem2reg-
+                // promotable. The `F32` s-view is narrowed below before
+                // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
-                if !matches!(kind, StoreKind::F32)
-                    && let Expr::Ident {
-                        class,
-                        val,
-                        is_thread_local: false,
-                        ..
-                    } = self.ast.expr(*lhs)
+                if let Expr::Ident {
+                    class,
+                    val,
+                    is_thread_local: false,
+                    ..
+                } = self.ast.expr(*lhs)
                     && *class == Token::Loc as i64
                 {
                     let slot = *val;
-                    let value = self.walk_expr_rvalue(b, *rhs)?;
+                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
+                    // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned
+                    // to a `float` object is narrowed to single precision;
+                    // the assignment expression's value is the converted
+                    // (f32) value.
+                    if matches!(kind, StoreKind::F32) {
+                        value = b.fp_narrow_to_f32(value);
+                    }
                     b.store_local(slot, value, kind);
                     return Ok(value);
                 }

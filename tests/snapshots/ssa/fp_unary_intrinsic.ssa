@@ -145,39 +145,38 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
   block 24  start_pc=0
     v92  Imm(4611686018427387904)                         -> x0
     v93  FpCast { kind=F64ToF32, value=v92 }              -> d0 [f32]
-    v94  LocalAddr(-2)                                    -> x0
-    v95  Store { addr=v94, disp=0, value=v93, kind=F32 }  -> -
-    v96  Imm(4625196817309499392)                         -> x0
-    v97  Fneg(v96)                                        -> d0
-    v98  FpCast { kind=F64ToF32, value=v97 }              -> d0 [f32]
-    v99  Intrinsic { kind=14, args=[v98] }                -> d0 [f32]
-    v100 Intrinsic { kind=12, args=[v99] }                -> d0 [f32]
-    v101 Imm(4616189618054758400)                         -> x0
-    v102 FpCast { kind=F32ToF64, value=v100 }             -> d0
-    v103 Binop { op=fne, lhs=v102, rhs=v101 }             -> x0
-    terminator Bz { cond=v103, target=b26, fall=b25 }   (exit_acc=v103)
+    v94  Imm(0)                                           -> x0
+    v95  Imm(4625196817309499392)                         -> x0
+    v96  Fneg(v95)                                        -> d1
+    v97  FpCast { kind=F64ToF32, value=v96 }              -> d1 [f32]
+    v98  Intrinsic { kind=14, args=[v97] }                -> d1 [f32]
+    v99  Intrinsic { kind=12, args=[v98] }                -> d1 [f32]
+    v100 Imm(4616189618054758400)                         -> x0
+    v101 FpCast { kind=F32ToF64, value=v99 }              -> d1
+    v102 Binop { op=fne, lhs=v101, rhs=v100 }             -> x0
+    terminator Bz { cond=v102, target=b26, fall=b25 }   (exit_acc=v102)
   block 25  start_pc=0
-    v104 Imm(10)                                          -> x0
-    terminator Return(v104)   (exit_acc=v104)
+    v103 Imm(10)                                          -> x0
+    terminator Return(v103)   (exit_acc=v103)
   block 26  start_pc=0
-    v105 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
-    v106 Binop { op=fmul, lhs=v105, rhs=v105 }            -> d0 [f32]
-    v107 Intrinsic { kind=12, args=[v106] }               -> d0 [f32]
-    v108 Imm(4606281698874543309)                         -> x0
-    v109 FpCast { kind=F32ToF64, value=v107 }             -> d0
-    v110 Binop { op=fadd, lhs=v109, rhs=v108 }            -> d0
-    v111 FpCast { kind=F64ToF32, value=v110 }             -> d0 [f32]
-    v112 Intrinsic { kind=16, args=[v111] }               -> d0 [f32]
-    v113 Imm(4611686018427387904)                         -> x0
-    v114 FpCast { kind=F32ToF64, value=v112 }             -> d0
-    v115 Binop { op=fne, lhs=v114, rhs=v113 }             -> x0
-    terminator Bz { cond=v115, target=b28, fall=b27 }   (exit_acc=v115)
+    v104 LoadLocal { off=-2, kind=F32 }                   -> d1 [f32]
+    v105 Binop { op=fmul, lhs=v93, rhs=v93 }              -> d0 [f32]
+    v106 Intrinsic { kind=12, args=[v105] }               -> d0 [f32]
+    v107 Imm(4606281698874543309)                         -> x0
+    v108 FpCast { kind=F32ToF64, value=v106 }             -> d0
+    v109 Binop { op=fadd, lhs=v108, rhs=v107 }            -> d0
+    v110 FpCast { kind=F64ToF32, value=v109 }             -> d0 [f32]
+    v111 Intrinsic { kind=16, args=[v110] }               -> d0 [f32]
+    v112 Imm(4611686018427387904)                         -> x0
+    v113 FpCast { kind=F32ToF64, value=v111 }             -> d0
+    v114 Binop { op=fne, lhs=v113, rhs=v112 }             -> x0
+    terminator Bz { cond=v114, target=b28, fall=b27 }   (exit_acc=v114)
   block 27  start_pc=0
-    v116 Imm(11)                                          -> x0
-    terminator Return(v116)   (exit_acc=v116)
+    v115 Imm(11)                                          -> x0
+    terminator Return(v115)   (exit_acc=v115)
   block 28  start_pc=0
-    v117 Imm(0)                                           -> x0
-    terminator Return(v117)   (exit_acc=v117)
+    v116 Imm(0)                                           -> x0
+    terminator Return(v116)   (exit_acc=v116)
   block 29  start_pc=0
     terminator Jmp(b14)
   block 30  start_pc=0

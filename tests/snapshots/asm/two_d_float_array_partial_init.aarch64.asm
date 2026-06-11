@@ -79,8 +79,8 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	fmov	d16, x1
                	fcvt	s0, d16
-               	sub	x0, x29, #0x18
-               	str	s0, [x0]
+               	sub	x17, x29, #0x18
+               	str	s0, [x17]
                	b	<addr>
                	sxtw	x0, w21
                	cmp	x0, #0x4

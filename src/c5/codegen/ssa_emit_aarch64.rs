@@ -4043,8 +4043,92 @@ fn emit_store_local(
     scratch: &ScratchPool,
 ) -> bool {
     if matches!(kind, StoreKind::F32) {
-        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
-        return false;
+        // `float` local store. A single-precision value (C99 6.3.1.8)
+        // is already an f32 in the s-view (`str s`, no narrow); a wider
+        // f64 value narrows via `fcvt Sd, Dn` first. Mirrors the
+        // `Store` F32 path so a mem2reg-promoted slot round-trips
+        // identically to the prior address-taken `LocalAddr + Store`.
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        // `str s` takes the byte offset scaled by 4; the slot offset is
+        // 4-aligned. A displacement past the unsigned-offset range falls
+        // back to materialising the address in a scratch register.
+        let store_to_slot = |code: &mut Vec<u8>, sn: u8| -> bool {
+            let bytes = local_slot_off(off, frame);
+            if let Ok(disp) = i32::try_from(bytes)
+                && disp >= 0
+                && (disp as u32).is_multiple_of(4)
+                && (disp as u32) < 16380
+            {
+                emit(
+                    code,
+                    super::aarch64::enc_str_s_imm(sn, Reg(29), disp as u32),
+                );
+                true
+            } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+                false
+            } else {
+                emit(
+                    code,
+                    super::aarch64::enc_str_s_imm(sn, scratch.secondary, 0),
+                );
+                true
+            }
+        };
+        if alloc.is_f32(value) {
+            let sn = match materialize_fp_f32(code, value_place, SCRATCH_FP0, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("StoreLocal F32: value not fp reg / spill");
+                    return false;
+                }
+            };
+            if !store_to_slot(code, sn) {
+                return false;
+            }
+            if let Some(rd) = fp_reg(dst) {
+                if rd != sn {
+                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                }
+            } else if let Place::Spill(slot) = dst {
+                emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
+            }
+            return true;
+        }
+        // Wider f64 value: narrow into SCRATCH_FP1 (outside the d0..d15
+        // pool) so an allocator-held source d-reg whose f64 value is
+        // still live is not clobbered by the S-view write.
+        let dn = match value_place {
+            Place::FpReg(r) => r,
+            Place::IntReg(_) | Place::Spill(_) => {
+                let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                emit(code, enc_fmov_x_to_d(SCRATCH_FP0, rs));
+                SCRATCH_FP0
+            }
+            Place::None => {
+                bail_msg("StoreLocal F32: value None");
+                return false;
+            }
+        };
+        emit(code, super::aarch64::enc_fcvt_s_d(SCRATCH_FP1, dn));
+        if !store_to_slot(code, SCRATCH_FP1) {
+            return false;
+        }
+        if let Some(rd) = fp_reg(dst) {
+            if rd != dn {
+                emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+                emit(code, enc_fmov_x_to_d(rd, scratch.primary));
+            }
+        } else if let Place::Spill(slot) = dst {
+            emit_sp_str_d_auto(code, dn, spill_off(frame, slot));
+        }
+        return true;
     }
     if matches!(kind, StoreKind::F64) {
         // `double` local store: a single 8-byte FP store; no narrow.

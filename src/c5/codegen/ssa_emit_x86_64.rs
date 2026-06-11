@@ -3318,10 +3318,6 @@ fn emit_store_local(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> bool {
-    if matches!(kind, StoreKind::F32) {
-        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
-        return false;
-    }
     let disp = match i32::try_from(local_slot_off(off, func, frame, abi)) {
         Ok(v) => v,
         Err(_) => {
@@ -3329,6 +3325,35 @@ fn emit_store_local(
             return false;
         }
     };
+    if matches!(kind, StoreKind::F32) {
+        // `float` local store. A single-precision value (C99 6.3.1.8)
+        // writes directly via `movss`; a wider f64 value (a `double`
+        // assigned to a `float` the walker didn't pre-narrow) narrows
+        // via `cvtsd2ss` first. Mirrors the `Store` F32 path so a
+        // mem2reg-promoted slot round-trips identically to the prior
+        // address-taken `LocalAddr + Store` form.
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
+            bail_msg("StoreLocal F32: value not fp reg / spill / int reg");
+            return false;
+        };
+        if alloc.is_f32(value) {
+            emit_movss_mem_xmm(code, Reg::RBP, disp, dn);
+        } else {
+            emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
+            emit_movss_mem_xmm(code, Reg::RBP, disp, SCRATCH_XMM15);
+        }
+        match dst {
+            Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
+            Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
+            _ => {}
+        }
+        return true;
+    }
     if matches!(kind, StoreKind::F64) {
         // `double` local store: a single 8-byte FP move; no narrow.
         // The accumulator (dst) keeps the same FP value per the c5

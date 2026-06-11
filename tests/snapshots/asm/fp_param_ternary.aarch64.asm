@@ -64,18 +64,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	str	s0, [x1]
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	sub	x0, x29, #0x10
                	str	s0, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fneg	s0, s0
                	sub	x0, x29, #0x10
                	str	s0, [x0]
@@ -90,48 +84,27 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	str	s0, [x1]
-               	sub	x1, x29, #0x10
-               	fmov	d0, d1
-               	str	s0, [x1]
                	mov	x17, #0x1               // =1
                	and	x1, x0, x17
                	cbz	x1, <addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	sub	x1, x29, #0x28
                	str	s0, [x1]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fneg	s0, s0
                	sub	x1, x29, #0x28
                	str	s0, [x1]
                	sub	x16, x29, #0x28
                	ldr	s0, [x16]
-               	sub	x1, x29, #0x18
-               	str	s0, [x1]
                	mov	x17, #0x2               // =2
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
                	sub	x0, x29, #0x30
-               	str	s0, [x0]
+               	str	s1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
-               	fneg	s0, s0
+               	fneg	s1, s1
                	sub	x0, x29, #0x30
-               	str	s0, [x0]
+               	str	s1, [x0]
                	sub	x16, x29, #0x30
-               	ldr	s0, [x16]
-               	sub	x0, x29, #0x20
-               	str	s0, [x0]
-               	sub	x16, x29, #0x18
-               	ldr	s0, [x16]
-               	sub	x16, x29, #0x20
                	ldr	s1, [x16]
                	fadd	s0, s0, s1
                	add	sp, sp, #0x30

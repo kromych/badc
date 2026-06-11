@@ -99,6 +99,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::vfprintf,  "_vfprintf")
 #pragma binding(libc::vsprintf,  "_vsprintf")
 #pragma binding(libc::vsnprintf, "_vsnprintf")
+#pragma binding(libc::scanf,     "_scanf")
+#pragma binding(libc::fscanf,    "_fscanf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::fopen,     "_fopen")
 #pragma binding(libc::freopen,   "_freopen")
@@ -163,6 +165,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::vfprintf,  "vfprintf")
 #pragma binding(libc::vsprintf,  "vsprintf")
 #pragma binding(libc::vsnprintf, "vsnprintf")
+#pragma binding(libc::scanf,     "scanf")
+#pragma binding(libc::fscanf,    "fscanf")
 #pragma binding(libc::sscanf,    "sscanf")
 #pragma binding(libc::fopen,     "fopen")
 #pragma binding(libc::freopen,   "freopen")
@@ -243,6 +247,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
 #pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
+#pragma binding(msvcrt::scanf,     "scanf")
+#pragma binding(msvcrt::fscanf,    "fscanf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
@@ -401,6 +407,10 @@ int snprintf(char *buf, int size, char *fmt, ...);
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
 int _snprintf(char *buf, int size, char *fmt, ...);
 int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+// C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
+// and from a stream. The string sibling sscanf reads from a buffer.
+int scanf(char *fmt, ...);
+int fscanf(FILE *stream, char *fmt, ...);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by

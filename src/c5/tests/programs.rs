@@ -224,6 +224,14 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn scanf_fscanf_binding() {
+    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
+    // from <stdio.h>; the calls are guarded so the interp lane never
+    // reaches their (unimplemented) CallExt and never blocks on stdin.
+    assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+}
+
+#[test]
 fn anon_union_init() {
     // C11 6.7.2.1p13: an anonymous union is one positional slot in a
     // brace initializer; an anonymous struct contributes one per member.

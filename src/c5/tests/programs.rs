@@ -322,6 +322,12 @@ fn switch_unsigned_negative_case() {
 }
 
 #[test]
+fn enum_bitfield_unsigned() {
+    // C99 6.7.2.1/6.7.2.2: a non-negative enum bitfield reads unsigned.
+    assert_eq!(run_fixture("enum_bitfield_unsigned.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

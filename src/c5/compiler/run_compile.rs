@@ -42,6 +42,10 @@ impl Compiler {
                 continue;
             }
             let mut bt = Ty::Int as i64;
+            // Set when the base type is an `enum`; recorded on a
+            // typedef so an enum bitfield declared through it reads
+            // unsigned.
+            let mut base_is_enum = false;
             // Reset the bare-`void` side channel for this
             // declaration. Set further down if the base-type loop
             // matches `Token::Void`; consumed by the function-decl
@@ -141,6 +145,7 @@ impl Compiler {
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
+                base_is_enum = true;
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 // Aggregate (struct or union) declaration. Three
                 // shapes:
@@ -364,6 +369,7 @@ impl Compiler {
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
+                    self.symbols[id_idx].is_enum_typedef = base_is_enum;
                     self.symbols[id_idx].is_function_type = typedef_is_fn_type;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;

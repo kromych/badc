@@ -155,6 +155,12 @@ pub(crate) struct Symbol {
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
 
+    /// True for a typedef whose base type is an `enum`. The base
+    /// collapses to `int`, but an enum bitfield reads as unsigned, so
+    /// a field declared with this typedef plus a bitfield width needs
+    /// the unsigned (zero-extending) extraction.
+    pub is_enum_typedef: bool,
+
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`

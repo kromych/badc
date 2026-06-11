@@ -543,6 +543,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("signal_sig_t.c", 0),
     ("math_classify.c", 0),
     ("switch_unsigned_negative_case.c", 0),
+    ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),

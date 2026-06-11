@@ -159,6 +159,11 @@ impl Compiler {
             }
             let saw_long = long_count >= 1;
             let saw_long_long = long_count >= 2;
+            // Set when the field's base type is an `enum` (directly or
+            // through an enum typedef). An enum bitfield reads as
+            // unsigned, so a value with the field's high bit set
+            // zero-extends rather than sign-extends.
+            let mut field_base_is_enum = false;
             let field_base = if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {
@@ -268,8 +273,12 @@ impl Compiler {
                 if self.lex.tk == '{' {
                     self.parse_enum_body(&tag_name)?;
                 }
+                field_base_is_enum = true;
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {
+                if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
+                    field_base_is_enum = true;
+                }
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
@@ -463,7 +472,8 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
+                let (id_idx, mut field_ty, mut field_array_size) =
+                    self.parse_declarator(field_base)?;
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -523,6 +533,14 @@ impl Compiler {
                         return Err(self.compile_err(format!("bitfield width {n} exceeds 64")));
                     }
                     bit_width = n as u32;
+                    // C99 6.7.2.1: an enum bitfield reads as unsigned (a
+                    // non-negative enum's underlying type is unsigned),
+                    // so the extraction zero-extends. A full-width enum
+                    // field keeps `int`; only the sub-word bitfield case
+                    // changes.
+                    if field_base_is_enum {
+                        field_ty |= UNSIGNED_BIT;
+                    }
                     if is_union {
                         field_offset = 0;
                         bit_offset = 0;

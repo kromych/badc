@@ -474,6 +474,62 @@ impl Compiler {
                     let slots = self.struct_flat_init_slots(sid).max(1);
                     items.div_ceil(slots) as i64
                 };
+                // C99 6.7.8p13: an automatic-storage struct array may
+                // carry non-constant element initializers (`&local`, a
+                // call, an indexed read). The constant stage-into-data +
+                // Mcpy path below cannot represent those, so route to the
+                // per-element runtime store path the known-size branch
+                // uses. Mirrors the `struct V xs[N] = { ... }` handling.
+                if self.struct_init_needs_runtime()? {
+                    self.symbols[loc_idx].array_size = count;
+                    self.loc_offs += self.local_storage_slots(ty, count);
+                    self.symbols[loc_idx].val = -self.loc_offs;
+                    if self.loc_offs > self.max_loc_offs {
+                        self.max_loc_offs = self.loc_offs;
+                    }
+                    let local_val = self.symbols[loc_idx].val;
+                    let var_name = self.symbols[loc_idx].name.clone();
+                    // Zero the whole slot (6.7.8p19 omitted-entries rule),
+                    // then overlay each element's explicit fields.
+                    let zero_off = self.data.len();
+                    for _ in 0..(count as usize * elem_size) {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(local_val, zero_off, count as usize * elem_size);
+                    self.next()?; // consume outer `{`
+                    let mut i: i64 = 0;
+                    while self.lex.tk != '}' {
+                        if i >= count {
+                            return Err(self.compile_err(format!(
+                                "too many initializers for array `{}` ({} > {})",
+                                var_name,
+                                i + 1,
+                                count
+                            )));
+                        }
+                        if self.lex.tk != '{' {
+                            // Brace elision (6.7.8p20) is supported on the
+                            // constant path only; a non-constant element
+                            // still requires its braces. TODO: thread an
+                            // elided variant through
+                            // emit_struct_local_init_runtime_at.
+                            return Err(self.compile_err(
+                                "a struct-array element with a non-constant initializer requires braces",
+                            ));
+                        }
+                        self.emit_struct_local_init_runtime_at(
+                            local_val,
+                            i * elem_size as i64,
+                            sid,
+                        )?;
+                        i += 1;
+                        if self.lex.tk == ',' {
+                            self.next()?;
+                        }
+                    }
+                    self.next()?; // consume outer `}`
+                    return Ok(());
+                }
                 let staged_off = self.data.len();
                 self.next()?;
                 for _ in 0..(count * elem_size as i64) {

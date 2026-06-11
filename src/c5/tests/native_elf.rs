@@ -454,6 +454,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("extern_incomplete_struct_completion.c", 0),
     ("const_member_address_init.c", 0),
     ("array_of_struct_brace_elision.c", 0),
+    ("local_struct_array_runtime_init.c", 0),
     ("anon_union_init.c", 0),
     ("builtin_trap.c", 0),
     ("struct_multi_byval.c", 0),

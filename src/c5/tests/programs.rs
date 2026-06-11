@@ -216,6 +216,14 @@ fn array_of_struct_brace_elision() {
 }
 
 #[test]
+fn local_struct_array_runtime_init() {
+    // C99 6.7.8p13: a deferred-size automatic array of structs whose
+    // element field takes the address of a local routes to per-element
+    // runtime stores instead of the constant stage-into-data path.
+    assert_eq!(run_fixture("local_struct_array_runtime_init.c"), 0);
+}
+
+#[test]
 fn anon_union_init() {
     // C11 6.7.2.1p13: an anonymous union is one positional slot in a
     // brace initializer; an anonymous struct contributes one per member.

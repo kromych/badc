@@ -39,6 +39,9 @@
 #pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
+#pragma binding(libc::hypot, "_hypot")
+#pragma binding(libc::fmin,  "_fmin")
+#pragma binding(libc::fmax,  "_fmax")
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
@@ -55,6 +58,9 @@
 #pragma binding(libc::atan2f, "_atan2f")
 #pragma binding(libc::asinf,  "_asinf")
 #pragma binding(libc::acosf,  "_acosf")
+#pragma binding(libc::hypotf, "_hypotf")
+#pragma binding(libc::fminf,  "_fminf")
+#pragma binding(libc::fmaxf,  "_fmaxf")
 #endif
 
 #ifdef __linux__
@@ -81,6 +87,9 @@
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
+#pragma binding(libm::hypot, "hypot")
+#pragma binding(libm::fmin,  "fmin")
+#pragma binding(libm::fmax,  "fmax")
 // C99 7.12 single-precision variants.
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
@@ -95,6 +104,9 @@
 #pragma binding(libm::atan2f, "atan2f")
 #pragma binding(libm::asinf,  "asinf")
 #pragma binding(libm::acosf,  "acosf")
+#pragma binding(libm::hypotf, "hypotf")
+#pragma binding(libm::fminf,  "fminf")
+#pragma binding(libm::fmaxf,  "fmaxf")
 #endif
 
 #ifdef _WIN32
@@ -118,6 +130,10 @@
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::modf,  "modf")
+// msvcrt.dll exports the legacy underscored `_hypot`; the C99
+// `fmin` / `fmax` (and the single-precision forms) only landed in the
+// Universal CRT, bound below.
+#pragma binding(msvcrt::hypot, "_hypot")
 
 // msvcrt.dll's transcendental implementations underflow
 // aggressively and diverge from C99 at IEEE-754 edges:
@@ -136,6 +152,8 @@
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
 #pragma binding(ucrtbase::pow,   "pow")
+#pragma binding(ucrtbase::fmin,  "fmin")
+#pragma binding(ucrtbase::fmax,  "fmax")
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
@@ -153,6 +171,9 @@
 #pragma binding(ucrtbase::atan2f, "atan2f")
 #pragma binding(ucrtbase::asinf,  "asinf")
 #pragma binding(ucrtbase::acosf,  "acosf")
+#pragma binding(ucrtbase::hypotf, "hypotf")
+#pragma binding(ucrtbase::fminf,  "fminf")
+#pragma binding(ucrtbase::fmaxf,  "fmaxf")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -196,6 +217,12 @@ double ceil(double x);
 double round(double x);
 double fabs(double x);
 double fmod(double x, double y);
+// C99 7.12.7.3: hypot(x, y) = sqrt(x*x + y*y) without overflow for
+// representable results. C99 7.12.12.2 / 7.12.12.1: fmin / fmax return
+// the lesser / greater operand, treating a single NaN as missing data.
+double hypot(double x, double y);
+double fmin(double x, double y);
+double fmax(double x, double y);
 double sin(double x);
 double cos(double x);
 double tan(double x);
@@ -241,6 +268,9 @@ float atanf(float x);
 float atan2f(float y, float x);
 float asinf(float x);
 float acosf(float x);
+float hypotf(float x, float y);
+float fminf(float x, float y);
+float fmaxf(float x, float y);
 
 // C99 7.12.13.1: fma(x, y, z) = x*y + z computed with a single
 // rounding of the infinitely precise result. Tagged as an intrinsic so

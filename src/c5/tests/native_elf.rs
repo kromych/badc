@@ -326,6 +326,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("size_t_via_stdio.c", 3),
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
+    ("libc_math_minmax.c", 0),
     ("pragma_entrypoint.c", 23),
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),

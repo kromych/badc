@@ -13,6 +13,11 @@
 
 typedef int sig_atomic_t;
 
+// BSD / POSIX handler type: the disposition passed to and returned by
+// `signal()`. Provided as a common extension; matches the host's
+// `void (*)(int)`.
+typedef void (*sig_t)(int);
+
 // Disposition values. Pass these to `signal()`'s second argument.
 // `SIG_ERR` is the failure return value, not a disposition.
 #define SIG_DFL  ((void (*)(int))0)

@@ -304,6 +304,12 @@ fn compound_assign_int_fp() {
 }
 
 #[test]
+fn signal_sig_t() {
+    // POSIX `sig_t` handler type in <signal.h>.
+    assert_eq!(run_fixture("signal_sig_t.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

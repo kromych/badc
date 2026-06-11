@@ -126,7 +126,11 @@ def sync_linux(box: Box, github_token: str) -> int:
 
 
 def remote_run_linux(box: Box, github_token: str) -> int:
+    # `set -o pipefail` so a failing build / test / demo propagates its
+    # exit status through the `| tail` truncation; without it the pipe
+    # exits with tail's status (0) and a red lane reports green.
     inner = (
+        f"set -o pipefail && "
         f"cd {box.remote_path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
         f"cargo build --release --locked --features full 2>&1 | tail -3 && "

@@ -378,6 +378,10 @@ impl Preprocessor {
             ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
             ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
             ("__builtin_unreachable", super::op::Intrinsic::Trap),
+            (
+                "__builtin_frame_address",
+                super::op::Intrinsic::FrameAddress,
+            ),
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }

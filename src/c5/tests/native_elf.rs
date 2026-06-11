@@ -458,6 +458,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
     ("builtin_bswap_expect.c", 0),
+    ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
     ("nested_compound_literal.c", 0),
     ("indirect_struct_return.c", 0),

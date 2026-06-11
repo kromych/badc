@@ -6307,6 +6307,17 @@ fn emit_intrinsic(
             }
             emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)
         }
+        I::FrameAddress => {
+            // __builtin_frame_address(0): the current frame pointer (rbp).
+            // The level argument is ignored; only level 0 is supported.
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("FrameAddress: dst not int reg / spill");
+                return false;
+            };
+            emit_mov_rr(code, rd, Reg::RBP);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount

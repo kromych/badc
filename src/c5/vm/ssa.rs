@@ -1566,6 +1566,15 @@ fn run_intrinsic(
         // the native targets; the interpreter cannot continue past it,
         // so it surfaces as a runtime failure.
         Intrinsic::Trap => Err(C5Error::Runtime("__builtin_trap".to_string())),
+        Intrinsic::FrameAddress => {
+            // The interpreter has no native frame pointer; return this
+            // frame's base in the byte arena. It is non-zero, stable
+            // within a frame, and distinct across nested calls -- enough
+            // for a stack-depth comparison. (The arena grows up, so a
+            // deeper frame has a larger address than on a native stack.)
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
         // The integer bit-count builtins are lowered to a portable
         // shift / mask sequence in the walker; they never reach the VM
         // as an `Inst::Intrinsic`.

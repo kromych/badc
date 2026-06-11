@@ -2926,6 +2926,22 @@ fn emit_intrinsic(
             }
             true
         }
+        I::FrameAddress => {
+            // __builtin_frame_address(0): the current frame pointer (x29).
+            // The level argument (args[0]) is ignored; only level 0 is
+            // supported. Materialise through scratch when the dst spilled.
+            let rd = match dst {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => Reg(16),
+                _ => {
+                    bail_msg("FrameAddress: dst not int reg / spill");
+                    return false;
+                }
+            };
+            emit(code, enc_add_imm(rd, Reg(29), 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
         I::Clz
         | I::Ctz
         | I::Popcount

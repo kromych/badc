@@ -129,6 +129,11 @@ pub enum Intrinsic {
     Bswap16 = 27,
     Bswap32 = 28,
     Bswap64 = 29,
+    /// `__builtin_frame_address(0)` -- the current frame pointer (x29 /
+    /// rbp), returned as a `void *`. Only level 0 is supported; a
+    /// non-zero level (a caller's frame) is not. Used for stack-depth /
+    /// stack-overflow checks.
+    FrameAddress = 30,
 }
 
 impl Intrinsic {
@@ -163,6 +168,7 @@ impl Intrinsic {
             27 => Some(Intrinsic::Bswap16),
             28 => Some(Intrinsic::Bswap32),
             29 => Some(Intrinsic::Bswap64),
+            30 => Some(Intrinsic::FrameAddress),
             _ => None,
         }
     }

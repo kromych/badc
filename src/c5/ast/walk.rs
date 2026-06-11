@@ -1773,6 +1773,25 @@ impl<'a> Walker<'a> {
                         } else {
                             args.len()
                         };
+                        // C99 6.5.2.2 + the host ABI: a struct passed as
+                        // a variadic argument rides by value -- its
+                        // eightbyte occupies the save area / stack slot
+                        // `va_arg` reads -- not via the c5 address-as-
+                        // value pointer that `walk_expr_rvalue` left in
+                        // `arg_vals`. Replace each small struct variadic
+                        // argument's address with its loaded eightbyte.
+                        // A struct larger than one eightbyte is left on
+                        // the address path. TODO: pass its second
+                        // eightbyte.
+                        for i in fixed_args..args.len() {
+                            if let Some(aty) = expr_ty(self.ast.expr(args[i]))
+                                && is_struct_ty(aty)
+                                && struct_ptr_depth(aty) == 0
+                                && self.struct_size(aty) <= 8
+                            {
+                                arg_vals[i] = b.load(arg_vals[i], super::super::ir::LoadKind::I64);
+                            }
+                        }
                         // macOS arm64's variadic ABI (Apple "Writing
                         // ARM64 Code for Apple Platforms") passes the
                         // named arguments per AAPCS64 6.4.1 (int bank +

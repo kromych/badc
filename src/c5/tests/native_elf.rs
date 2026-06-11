@@ -273,6 +273,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("switch_binary_search.c", 0),
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),
+    ("variadic_struct_arg.c", 18),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),

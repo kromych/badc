@@ -1014,6 +1014,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("branch_relaxation.c", 21),
     ("float_register_resident.c", 45),
     ("variadic_struct_arg.c", 18),
+    ("variadic_struct_arg_16b.c", 51),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),

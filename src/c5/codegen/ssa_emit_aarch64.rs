@@ -2294,6 +2294,14 @@ fn emit_va_arg_aapcs64(
     // argument to an eightbyte; a double overflow argument occupies one).
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
+    // A by-value aggregate (integer class) spans `ceil(size/8)` eightbytes
+    // in consecutive integer registers / overflow slots, so the cursor
+    // advances by that span rather than a single eightbyte. A scalar's
+    // size is at most 8, leaving the advance unchanged.
+    let size = (descriptor & 0xffff) as u32;
+    let slot_bytes = (size + 7) & !7u32;
+    let reg_advance = if is_fp { reg_step } else { slot_bytes.max(8) };
+    let stack_advance = if is_fp { 8 } else { slot_bytes.max(8) };
     let dst_reg = if let Place::IntReg(r) = dst {
         Some(r)
     } else {
@@ -2312,10 +2320,10 @@ fn emit_va_arg_aapcs64(
     // borrow = top ; borrow = top + offs (the argument address).
     emit(code, enc_ldr_imm(borrow, ap, top_field));
     emit(code, enc_add_reg(borrow, borrow, scratch.primary));
-    // x16 = offs + reg_step (the next offset) ; write it back (32-bit).
+    // x16 = offs + advance (the next offset) ; write it back (32-bit).
     emit(
         code,
-        enc_add_imm(scratch.primary, scratch.primary, reg_step),
+        enc_add_imm(scratch.primary, scratch.primary, reg_advance),
     );
     emit(code, enc_str32_imm(scratch.primary, ap, off_field));
     // Land the address uniformly in x16.
@@ -2326,9 +2334,9 @@ fn emit_va_arg_aapcs64(
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
     code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
-    // x16 = __stack ; borrow = __stack + 8 (next cursor) ; write back.
+    // x16 = __stack ; borrow = __stack + advance (next cursor) ; write back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
-    emit(code, enc_add_imm(borrow, scratch.primary, 8));
+    emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
     emit(code, enc_str_imm(borrow, ap, 0));
     // --- done: x16 holds the argument address. ---
     let done_lbl = code.len();
@@ -2559,18 +2567,20 @@ fn emit_intrinsic(
             // Windows arm64 (`variadic_int_only`), both of which lay
             // variadic arguments at 8-byte stride (the incoming stack,
             // respectively the gr-save area + stack overflow). args[0] =
-            // &ap.
-            let va_stride: u32 = 8;
-            // `__builtin_va_arg(self, descriptor)`: args[0] is the
-            // va_list-storage address, args[1] the packed
-            // `(kind << 16) | size` type descriptor. These stack-based
-            // ABIs (macOS arm64, Windows aarch64, the Linux aarch64
-            // c5-internal cdecl) walk a single region at a fixed stride,
-            // so the kind descriptor is unused; only args[0] matters.
+            // &ap, args[1] = the packed `(kind << 16) | size` descriptor.
+            // A scalar occupies one eightbyte; a by-value aggregate spans
+            // `ceil(size/8)` consecutive eightbytes, so the cursor
+            // advances by the aggregate's eightbyte span. va_arg returns
+            // the slot address; the caller's load / Mcpy reads `size`
+            // bytes from it.
             if args.is_empty() {
                 bail_msg("VaArg: expected at least the ap argument");
                 return false;
             }
+            let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
+                Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
+                _ => 8,
+            };
             let ap_place = alloc
                 .places
                 .get(args[0] as usize)

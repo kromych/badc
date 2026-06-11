@@ -266,6 +266,7 @@ fn switch_statement() {
     assert_eq!(run_fixture("branch_relaxation.c"), 21);
     assert_eq!(run_fixture("float_register_resident.c"), 45);
     assert_eq!(run_fixture("variadic_struct_arg.c"), 18);
+    assert_eq!(run_fixture("variadic_struct_arg_16b.c"), 51);
 }
 
 #[test]

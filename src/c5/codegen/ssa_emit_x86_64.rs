@@ -5193,6 +5193,11 @@ fn emit_call(
     ret_slot_local: i64,
     func: &FunctionSsa,
 ) -> bool {
+    // Resolve the call's struct arguments once. With no tagged
+    // aggregate this is empty and `plan_call_args_aggs` reduces to the
+    // scalar `plan_call_args` placement, so every branch can run the
+    // aggregate planner uniformly.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     if callee_is_variadic && abi.position_indexed_args {
         // Win64 host variadic ABI (Microsoft x64 calling convention):
         // the first four arguments (named and variadic) ride
@@ -5205,8 +5210,10 @@ fn emit_call(
         // integer side (position-indexed int registers, then stack).
         // This is the same marshal `emit_call_ext` performs for a
         // libc variadic call; Win64 sets `variadic_zero_xmm_count`
-        // false, so no `al` is emitted.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        // false, so no `al` is emitted. A by-value aggregate argument
+        // the classifier tagged rides through `plan_call_args_aggs`.
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit_sub_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -5254,8 +5261,11 @@ fn emit_call(
         // xmm0..xmm7), so `plan_call_args` places floating-point
         // arguments in the FP bank. `al` carries the number of XMM
         // argument registers used so the callee prologue's guarded XMM
-        // save runs only when needed.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        // save runs only when needed. A by-value aggregate argument the
+        // classifier tagged (a 9-16 byte variadic struct spans two
+        // eightbytes, all-or-nothing) rides through `plan_call_args_aggs`.
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         let xmm_used = plan
             .placements
             .iter()
@@ -5319,7 +5329,6 @@ fn emit_call(
     // argument types (set by the walker) rather than register
     // placement, since a floating-point constant rides an integer
     // register as its `Imm` bit pattern.
-    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
@@ -5769,7 +5778,20 @@ fn emit_va_arg_sysv(
     } else {
         ap
     };
-    let (off_disp, bound, step): (i32, i32, i32) = if is_fp { (4, 176, 16) } else { (0, 48, 8) };
+    // A by-value integer-class aggregate spans `ceil(size/8)` eightbytes
+    // in consecutive gp save-area slots (System V AMD64 3.5.7); it rides
+    // the register save area only if all its eightbytes fit
+    // (`gp_offset + aligned <= 48`), else the whole aggregate sits in the
+    // overflow area. A scalar's aligned size is 8, leaving the bound and
+    // step at their single-eightbyte values. Floating-point arguments are
+    // single doubles (the classifier declines HFAs), so they keep the
+    // 16-byte fp-slot step and 176-byte bound.
+    let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
+    let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
+        (4, 176, 16)
+    } else {
+        (0, 48 - (aligned - 8), aligned)
+    };
     // r10 = current offset (gp_offset or fp_offset, a u32 field; the
     // 32-bit load zero-extends into r10). The whole sequence touches
     // only r10 and r13 -- both reserved outside the allocator's banks --
@@ -5794,11 +5816,12 @@ fn emit_va_arg_sysv(
     let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
     code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
     // r10 = overflow_arg_area (at [ap + 8]) = the argument slot, then
-    // bump it in memory by 8. The overflow area uses an 8-byte stride
-    // for every argument class (System V AMD64 3.5.7 rounds each to an
-    // eightbyte; a `double` overflow argument still occupies one).
+    // bump it in memory by the argument's eightbyte span. System V AMD64
+    // 3.5.7 rounds each overflow argument to an eightbyte; a scalar or a
+    // `double` occupies one, a by-value aggregate `ceil(size/8)`.
+    let ov_step = if is_fp { 8 } else { aligned };
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    super::x86_64::emit_add_mem64_imm32(code, ap, 8, 8);
+    super::x86_64::emit_add_mem64_imm32(code, ap, 8, ov_step);
     // --- done: r10 holds the argument address; deliver it to dst. ---
     let done = code.len();
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;

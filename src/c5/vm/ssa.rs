@@ -704,6 +704,38 @@ fn finish_agg_return(
     Ok(dst as i64)
 }
 
+/// Build the callee's flat argument list. A variadic by-value
+/// aggregate (`arg_aggs[i]` set, `i` past the fixed parameters) is
+/// expanded into its eightbytes so the callee's `va_arg`, which
+/// advances by the aggregate's span, reads them contiguously. A fixed
+/// struct parameter stays its source address; `run_func`'s
+/// `param_aggs` scatter copies it into the body local.
+fn collect_call_args(
+    frame: &Frame<'_>,
+    mem: &Memory,
+    args: &[ValueId],
+    arg_aggs: &[Option<u32>],
+    fixed_args: usize,
+) -> Result<alloc::vec::Vec<i64>, C5Error> {
+    let mut out = alloc::vec::Vec::with_capacity(args.len());
+    for (i, &a) in args.iter().enumerate() {
+        let val = frame.regs[a as usize];
+        if i >= fixed_args
+            && let Some(Some(idx)) = arg_aggs.get(i).copied()
+        {
+            let size = frame.func.agg_descs[idx as usize].size as usize;
+            let mut off = 0usize;
+            while off < size {
+                out.push(load_from_memory(mem, (val as usize) + off, LoadKind::I64)?);
+                off += 8;
+            }
+            continue;
+        }
+        out.push(val);
+    }
+    Ok(out)
+}
+
 fn run_inst<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
@@ -902,6 +934,8 @@ fn run_inst<H: Host>(
         Inst::Call {
             target_pc,
             args,
+            fixed_args,
+            arg_aggs,
             ret_agg,
             ret_slot_local,
             ..
@@ -909,10 +943,7 @@ fn run_inst<H: Host>(
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
+            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
@@ -920,6 +951,8 @@ fn run_inst<H: Host>(
         Inst::CallIndirect {
             target,
             args,
+            fixed_args,
+            arg_aggs,
             ret_agg,
             ret_slot_local,
             ..
@@ -945,10 +978,7 @@ fn run_inst<H: Host>(
                     "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
                 ))
             })?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
+            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
             frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
@@ -1468,17 +1498,17 @@ fn run_intrinsic(
         Intrinsic::VaArg => {
             // `__builtin_va_arg(self, descriptor)` returns the cursor's
             // current value (the address of the next variadic slot) and
-            // advances `*self` by 8 -- the c5 stack-slot width. The
-            // caller emits the matching `Inst::Load` to materialise the
-            // value. `args[1]` is the packed `(kind << 16) | size` type
-            // descriptor; the flat single-region VM model walks one
-            // cursor regardless of kind, so it is ignored here. The VM
-            // interprets programs compiled for the host target, whose
-            // `<stdarg.h>` selects the cursor `va_list` for every host
-            // that runs this interpreter.
+            // advances `*self` by the argument's eightbyte span. A
+            // scalar occupies one eightbyte; a by-value aggregate spans
+            // `ceil(size/8)`, matching how the caller laid it down in the
+            // flat single-region va_list. `args[1]` is the packed
+            // `(kind << 16) | size` type descriptor.
+            let descriptor = args.get(1).map(|&a| frame.regs[a as usize]).unwrap_or(0);
+            let size = descriptor & 0xffff;
+            let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
-            store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;
+            store_to_memory(mem, ap_addr, cursor + stride, StoreKind::I64)?;
             frame.regs[v as usize] = cursor;
             Ok(())
         }

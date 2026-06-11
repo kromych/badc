@@ -1783,13 +1783,52 @@ impl<'a> Walker<'a> {
                         // A struct larger than one eightbyte is left on
                         // the address path. TODO: pass its second
                         // eightbyte.
-                        for i in fixed_args..args.len() {
-                            if let Some(aty) = expr_ty(self.ast.expr(args[i]))
-                                && is_struct_ty(aty)
-                                && struct_ptr_depth(aty) == 0
-                                && self.struct_size(aty) <= 8
-                            {
-                                arg_vals[i] = b.load(arg_vals[i], super::super::ir::LoadKind::I64);
+                        // Host-ABI aggregate arguments (AAPCS64 6.8.2 /
+                        // System V 3.2.3): tag each by-value struct argument
+                        // with its layout so the caller marshals it into the
+                        // argument registers / stack slots the callee reads.
+                        // A fixed parameter classifies by its declared type;
+                        // a variadic argument by its own type. A variadic
+                        // struct of at most one eightbyte rides as a single
+                        // loaded integer in the variadic slot (C99 6.5.2.2);
+                        // a larger aggregate routes through the host-ABI
+                        // placement so `plan_call_args_aggs` lays its
+                        // eightbytes down all-or-nothing and the callee's
+                        // `va_arg` reads them contiguously. Inert on ABIs /
+                        // sizes the classifier declines.
+                        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                        {
+                            let nparams = self.symbols[*sym as usize].params.len();
+                            for i in 0..arg_vals.len() {
+                                let agg_ty = if i < nparams {
+                                    Some(self.symbols[*sym as usize].params[i])
+                                } else {
+                                    match expr_ty(self.ast.expr(args[i])) {
+                                        Some(aty)
+                                            if is_struct_ty(aty)
+                                                && struct_ptr_depth(aty) == 0
+                                                && self.struct_size(aty) <= 8 =>
+                                        {
+                                            arg_vals[i] = b
+                                                .load(arg_vals[i], super::super::ir::LoadKind::I64);
+                                            None
+                                        }
+                                        other => other,
+                                    }
+                                };
+                                let Some(ty_tag) = agg_ty else {
+                                    continue;
+                                };
+                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                    self.structs,
+                                    self.target,
+                                    ty_tag,
+                                ) {
+                                    if arg_aggs.is_empty() {
+                                        arg_aggs = alloc::vec![None; arg_vals.len()];
+                                    }
+                                    arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                                }
                             }
                         }
                         // macOS arm64's variadic ABI (Apple "Writing
@@ -1828,6 +1867,9 @@ impl<'a> Walker<'a> {
                                     fp_arg_mask,
                                 )
                             };
+                            if !arg_aggs.is_empty() {
+                                b.set_call_arg_aggs(call, arg_aggs);
+                            }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
@@ -1870,6 +1912,9 @@ impl<'a> Walker<'a> {
                                     fp_arg_mask,
                                 )
                             };
+                            if !arg_aggs.is_empty() {
+                                b.set_call_arg_aggs(call, arg_aggs);
+                            }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
@@ -1912,32 +1957,6 @@ impl<'a> Walker<'a> {
                         } else {
                             eff_fp_arg_mask
                         };
-                        // Host-ABI struct arguments (AAPCS64 6.8.2): tag
-                        // each by-value aggregate argument with its
-                        // layout so the caller marshals it into argument
-                        // registers and the callee reads it from the
-                        // matching body local. The callee, being
-                        // non-struct-returning (the struct-return early
-                        // branch above handles that case), classifies its
-                        // parameters the same way. Inert on ABIs / sizes
-                        // the classifier declines (`host_abi_agg_desc`
-                        // returns `None`).
-                        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-                        {
-                            let params = &self.symbols[*sym as usize].params;
-                            for i in 0..arg_vals.len().min(params.len()) {
-                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
-                                    self.structs,
-                                    self.target,
-                                    params[i],
-                                ) {
-                                    if arg_aggs.is_empty() {
-                                        arg_aggs = alloc::vec![None; arg_vals.len()];
-                                    }
-                                    arg_aggs[i] = Some(b.intern_agg_desc(desc));
-                                }
-                            }
-                        }
                         // C99 6.2.5p10: a call to a function whose
                         // return type is a floating-point scalar
                         // yields its value in the FP return register.

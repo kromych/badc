@@ -379,12 +379,23 @@ pub(super) fn plan_call_args_aggs(
     let mut stack_used: u32 = 0;
     for i in 0..arg_count {
         // Aggregate argument: classify into registers / by-reference
-        // / by-stack per the host ABI. Variadic aggregate arguments
-        // are out of scope here (handled by the scalar path until
-        // the variadic-struct phase), so this branch only fires for
-        // fixed arguments the walker tagged.
+        // / by-stack per the host ABI. A variadic aggregate on the
+        // macOS AAPCS64 variadic ABI rides the overflow stack like
+        // every other variadic argument (the callee's va_arg reads it
+        // from there); on the register-save variadic ABIs it stays in
+        // the argument registers and the callee spills them to its
+        // save area.
         if let Some(Some(agg)) = aggs.get(i) {
             let aligned = (agg.size + 7) & !7;
+            if i >= fixed_args && abi.variadic_on_stack {
+                let off = stack_used;
+                stack_used += aligned;
+                placements.push(ArgPlacement::StructStack {
+                    off,
+                    size: agg.size,
+                });
+                continue;
+            }
             // Win64 (Microsoft x64) places arguments positionally: each
             // argument, including an aggregate, occupies the single
             // register slot for its position rather than a separate

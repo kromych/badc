@@ -325,10 +325,6 @@
 #define M_E  2.71828182845904523536
 #endif
 
-int isnan(double x);
-int isinf(double x);
-int isfinite(double x);
-
 // C99 7.12.3.1: floating-point category codes returned by fpclassify.
 // The values are an implementation choice; user code compares against
 // the names.
@@ -359,6 +355,18 @@ static inline int fpclassify(double x) {
         return man == 0 ? FP_INFINITE : FP_NAN;
     }
     return FP_NORMAL;
+}
+// C99 7.12.3.4 / 7.12.3.3 / 7.12.3.2. Defined in terms of fpclassify so
+// they need no math-library call. A float argument widens to double
+// exactly, so the double form covers both.
+static inline int isnan(double x) {
+    return fpclassify(x) == FP_NAN;
+}
+static inline int isinf(double x) {
+    return fpclassify(x) == FP_INFINITE;
+}
+static inline int isfinite(double x) {
+    return fpclassify(x) >= FP_ZERO;
 }
 static inline int signbit(double x) {
     union {

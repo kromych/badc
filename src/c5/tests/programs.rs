@@ -310,6 +310,12 @@ fn signal_sig_t() {
 }
 
 #[test]
+fn math_classify() {
+    // C99 7.12.3: isnan / isinf / isfinite classify a floating value.
+    assert_eq!(run_fixture("math_classify.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

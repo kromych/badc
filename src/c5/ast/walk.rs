@@ -2443,7 +2443,22 @@ impl<'a> Walker<'a> {
                         | BinOp::Shru
                 );
                 let new_val =
-                    if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
+                    if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                        && !is_floating_scalar(*ty)
+                    {
+                        // C99 6.5.16.2: an integer lvalue with a floating
+                        // operand. The operation runs in the floating common
+                        // type; convert the loaded integer up, apply the op,
+                        // then convert the result back to the lvalue's
+                        // integer type before the store.
+                        let lv = b.fp_cast(super::super::ir::FpCastKind::IntToFp, old);
+                        let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                        if b.is_f32(rv) {
+                            rv = b.fp_widen_to_f64(rv);
+                        }
+                        let res = b.binop(*op, lv, rv);
+                        b.fp_cast(super::super::ir::FpCastKind::FpToInt, res)
+                    } else if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
                         // C99 6.5.16.2: `E1 op= E2` computes `E1 op E2` in
                         // the operands' common type, then converts to E1's
                         // type. `old` (the lvalue) is `float` when the store

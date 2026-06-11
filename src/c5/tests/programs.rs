@@ -296,6 +296,14 @@ fn inline_asm_hint() {
 }
 
 #[test]
+fn compound_assign_int_fp() {
+    // C99 6.5.16.2: an integer lvalue with a floating rhs in a
+    // compound assignment performs the operation in floating point
+    // and converts the result back to the integer type.
+    assert_eq!(run_fixture("compound_assign_int_fp.c"), 0);
+}
+
+#[test]
 fn indirect_struct_return_outptr() {
     // A struct returned through a function pointer in the out-pointer
     // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is

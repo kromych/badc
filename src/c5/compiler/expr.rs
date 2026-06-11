@@ -2243,6 +2243,12 @@ impl Compiler {
                 let lhs_ty = self.ty;
                 self.expr(Token::Assign as i64)?;
                 let pre_scale_rhs_ast = self.ast_acc;
+                // Captured before any conversion cast rewrites
+                // `self.ty`: drives the FP-vs-integer opcode choice
+                // below when the lvalue is integer but the rhs is
+                // floating (C99 6.5.16.2 performs the operation in the
+                // common type).
+                let rhs_is_fp = is_floating_scalar(self.ty);
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -2280,7 +2286,7 @@ impl Compiler {
                 // E2` and the result is converted back to E1's
                 // type, so an integer RHS must be widened to
                 // double before the FP op runs.
-                if lhs_is_fp || is_floating_scalar(self.ty) {
+                if lhs_is_fp {
                     self.require_both_float(lhs_ty, "compound assign")?;
                     // `require_both_float` wrapped `ast_acc` in
                     // an `Expr::Cast` (via the dual-emit hook in
@@ -2289,31 +2295,37 @@ impl Compiler {
                     // the FP binop.
                     compound_rhs_ast = self.ast_acc.or(compound_rhs_ast);
                 }
+                // An integer lvalue with a floating rhs keeps the rhs
+                // unchanged; the walker loads the lvalue, converts it
+                // to the floating common type, applies the FP op, and
+                // converts the result back to the lvalue's integer
+                // type (C99 6.5.16.2).
+                let op_is_fp = lhs_is_fp || rhs_is_fp;
                 use super::super::ir::BinOp as B;
                 let bop = match binop {
                     x if x == Token::AddOp as i64 => {
-                        if lhs_is_fp {
+                        if op_is_fp {
                             B::Fadd
                         } else {
                             B::Add
                         }
                     }
                     x if x == Token::SubOp as i64 => {
-                        if lhs_is_fp {
+                        if op_is_fp {
                             B::Fsub
                         } else {
                             B::Sub
                         }
                     }
                     x if x == Token::MulOp as i64 => {
-                        if lhs_is_fp {
+                        if op_is_fp {
                             B::Fmul
                         } else {
                             B::Mul
                         }
                     }
                     x if x == Token::DivOp as i64 => {
-                        if lhs_is_fp {
+                        if op_is_fp {
                             B::Fdiv
                         } else if is_unsigned_ty(lhs_ty) {
                             B::Divu

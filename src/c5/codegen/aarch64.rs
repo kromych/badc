@@ -1540,7 +1540,8 @@ pub(super) fn lower(
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(
-                    "ssa emit (aarch64): function at ent_pc {ent_pc} contains an op outside the implemented subset",
+                    "ssa emit (aarch64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",
+                    func_ssa.name,
                 ),
             )));
         }

@@ -206,6 +206,59 @@ int isnan(double x);
 int isinf(double x);
 int isfinite(double x);
 
+// C99 7.12.3.1: floating-point category codes returned by fpclassify.
+// The values are an implementation choice; user code compares against
+// the names.
+#ifndef FP_NAN
+#define FP_NAN 0
+#define FP_INFINITE 1
+#define FP_ZERO 2
+#define FP_SUBNORMAL 3
+#define FP_NORMAL 4
+#endif
+
+// C99 7.12.3.1 / 7.12.3.6 / 7.12.11.1: classify, test the sign, and
+// copy the sign by inspecting the IEEE-754 binary64 fields directly,
+// so they need no math-library call. copysignf reuses the double form;
+// a float magnitude widens to double exactly.
+static inline int fpclassify(double x) {
+    union {
+        double d;
+        unsigned long long u;
+    } a;
+    a.d = x;
+    unsigned long long exp = (a.u >> 52) & 0x7ff;
+    unsigned long long man = a.u & 0xfffffffffffffULL;
+    if (exp == 0) {
+        return man == 0 ? FP_ZERO : FP_SUBNORMAL;
+    }
+    if (exp == 0x7ff) {
+        return man == 0 ? FP_INFINITE : FP_NAN;
+    }
+    return FP_NORMAL;
+}
+static inline int signbit(double x) {
+    union {
+        double d;
+        unsigned long long u;
+    } a;
+    a.d = x;
+    return (int)(a.u >> 63);
+}
+static inline double copysign(double x, double y) {
+    union {
+        double d;
+        unsigned long long u;
+    } ax, ay;
+    ax.d = x;
+    ay.d = y;
+    ax.u = (ax.u & 0x7fffffffffffffffULL) | (ay.u & 0x8000000000000000ULL);
+    return ax.d;
+}
+static inline float copysignf(float x, float y) {
+    return (float) copysign((double) x, (double) y);
+}
+
 double sqrt(double x);
 double log(double x);
 double log10(double x);

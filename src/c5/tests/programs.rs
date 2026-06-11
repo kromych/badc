@@ -268,6 +268,7 @@ fn switch_statement() {
     assert_eq!(run_fixture("variadic_struct_arg.c"), 18);
     assert_eq!(run_fixture("variadic_struct_arg_16b.c"), 51);
     assert_eq!(run_fixture("libc_div.c"), 0);
+    assert_eq!(run_fixture("libc_fp_classify.c"), 0);
 }
 
 #[test]

@@ -224,6 +224,14 @@ fn local_struct_array_runtime_init() {
 }
 
 #[test]
+fn zero_length_array() {
+    // GCC zero-length array `T x[0]` as a struct's trailing member,
+    // treated as a flexible array member (zero storage, real bytes
+    // follow the fixed part).
+    assert_eq!(run_fixture("zero_length_array.c"), 0);
+}
+
+#[test]
 fn builtin_bit_count() {
     // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
     // portable shift / mask sequence; results match hand-computed

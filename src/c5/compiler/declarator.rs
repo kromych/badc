@@ -276,7 +276,7 @@ impl Compiler {
                 // `#define`s the preprocessor folded into the
                 // source token stream).
                 let n = self.parse_constant_int()?;
-                if n <= 0 {
+                if n < 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {n})"))
                     );
@@ -285,7 +285,12 @@ impl Compiler {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                array_size = n;
+                // `T x[0]` -- a GCC zero-length array. It behaves like a
+                // C99 6.7.2.1 flexible array member (`T x[]`): zero size,
+                // valid as a struct/union's trailing member with storage
+                // allocated past the fixed part. Route it through the same
+                // `array_size = -1` sentinel.
+                array_size = if n == 0 { -1 } else { n };
             }
             // Trailing dimensions for N-dim arrays. c5 stores
             // `array_size = product(dims)` (total element count),

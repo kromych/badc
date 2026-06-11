@@ -30,7 +30,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=5
   block 4  start_pc=0
     v17  Imm(4607182418800017408)                         -> x7
     v18  Imm(53)                                          -> x6
-    v19  CallExt { binding_idx=50, args=[v17, v18], fp_arg_mask=0x1 } -> x0
+    v19  CallExt { binding_idx=53, args=[v17, v18], fp_arg_mask=0x1 } -> x0
     v20  StoreLocal { off=-3, value=v19, kind=F64 }       -> -
     v21  LoadLocal { off=-3, kind=F64 }                   -> d0
     v22  Imm(4845873199050653696)                         -> x0

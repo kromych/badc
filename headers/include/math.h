@@ -29,6 +29,9 @@
 #pragma binding(libc::sinh,  "_sinh")
 #pragma binding(libc::cosh,  "_cosh")
 #pragma binding(libc::tanh,  "_tanh")
+#pragma binding(libc::asinh, "_asinh")
+#pragma binding(libc::acosh, "_acosh")
+#pragma binding(libc::atanh, "_atanh")
 #pragma binding(libc::ldexp, "_ldexp")
 // C99 7.12 declares `ldexpl` as the long-double form of `ldexp`.
 // c5 aliases `long double` to `double` for storage, so the value
@@ -68,6 +71,9 @@
 #pragma binding(libc::atan2f, "_atan2f")
 #pragma binding(libc::asinf,  "_asinf")
 #pragma binding(libc::acosf,  "_acosf")
+#pragma binding(libc::asinhf, "_asinhf")
+#pragma binding(libc::acoshf, "_acoshf")
+#pragma binding(libc::atanhf, "_atanhf")
 #pragma binding(libc::hypotf, "_hypotf")
 #pragma binding(libc::fminf,  "_fminf")
 #pragma binding(libc::fmaxf,  "_fmaxf")
@@ -99,6 +105,9 @@
 #pragma binding(libm::sinh,  "sinh")
 #pragma binding(libm::cosh,  "cosh")
 #pragma binding(libm::tanh,  "tanh")
+#pragma binding(libm::asinh, "asinh")
+#pragma binding(libm::acosh, "acosh")
+#pragma binding(libm::atanh, "atanh")
 #pragma binding(libm::ldexp, "ldexp")
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
@@ -130,6 +139,9 @@
 #pragma binding(libm::atan2f, "atan2f")
 #pragma binding(libm::asinf,  "asinf")
 #pragma binding(libm::acosf,  "acosf")
+#pragma binding(libm::asinhf, "asinhf")
+#pragma binding(libm::acoshf, "acoshf")
+#pragma binding(libm::atanhf, "atanhf")
 #pragma binding(libm::hypotf, "hypotf")
 #pragma binding(libm::fminf,  "fminf")
 #pragma binding(libm::fmaxf,  "fmaxf")
@@ -196,6 +208,12 @@
 #pragma binding(ucrtbase::log1p,     "log1p")
 #pragma binding(ucrtbase::expm1,     "expm1")
 #pragma binding(ucrtbase::remainder, "remainder")
+#pragma binding(ucrtbase::asinh,  "asinh")
+#pragma binding(ucrtbase::acosh,  "acosh")
+#pragma binding(ucrtbase::atanh,  "atanh")
+#pragma binding(ucrtbase::asinhf, "asinhf")
+#pragma binding(ucrtbase::acoshf, "acoshf")
+#pragma binding(ucrtbase::atanhf, "atanhf")
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
@@ -353,6 +371,10 @@ double acos(double x);
 double sinh(double x);
 double cosh(double x);
 double tanh(double x);
+// C99 7.12.5.1-3: inverse hyperbolic functions.
+double asinh(double x);
+double acosh(double x);
+double atanh(double x);
 // C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
 double ldexp(double x, int exp);
 // C99 7.12 long-double form. c5 aliases long double to double, so
@@ -388,6 +410,9 @@ float atanf(float x);
 float atan2f(float y, float x);
 float asinf(float x);
 float acosf(float x);
+float asinhf(float x);
+float acoshf(float x);
+float atanhf(float x);
 float hypotf(float x, float y);
 float fminf(float x, float y);
 float fmaxf(float x, float y);

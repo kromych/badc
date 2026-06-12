@@ -1707,10 +1707,20 @@ impl<'a> Walker<'a> {
                     // `param_fp_mask` because the hidden out-pointer
                     // shifts every parameter cell), so its arguments
                     // ride the integer bank: `fp_arg_mask` is 0.
-                    // A struct-returning callee is non-variadic (it
-                    // keeps the c5 cdecl shape with the hidden
-                    // out-pointer), so every argument is fixed.
-                    let fixed_args = all_args.len();
+                    // The hidden out-pointer is a fixed argument. A
+                    // variadic struct-returning callee (e.g. a printf-style
+                    // error helper returning a 16-byte value) still passes
+                    // its variadic tail on the host stack, so fixed_args
+                    // counts the out-pointer plus the callee's named
+                    // parameters; the emit detects the variadic callee from
+                    // its target and places `args[fixed_args..]` per the
+                    // host variadic ABI. A non-variadic callee keeps every
+                    // argument fixed.
+                    let fixed_args = if self.fun_is_variadic(*sym) {
+                        1 + self.fun_fixed_args(*sym)
+                    } else {
+                        all_args.len()
+                    };
                     if target_pc == 0 {
                         let _ = b.call_extern(*sym, all_args, fixed_args, false, 0);
                     } else {

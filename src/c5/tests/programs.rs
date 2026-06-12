@@ -80,6 +80,14 @@ fn aggregate_init_struct_member_copy() {
 }
 
 #[test]
+fn variadic_union_struct_return() {
+    // A variadic function returning an out-pointer-classified struct
+    // (one with a floating-point member) must still place its variadic
+    // tail on the host stack.
+    assert_eq!(run_fixture("variadic_union_struct_return.c"), 0);
+}
+
+#[test]
 fn variadic_struct_return() {
     // A variadic function returning a struct by value: the call must
     // recover the result registers into the caller's temp.

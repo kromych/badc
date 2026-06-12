@@ -97,6 +97,14 @@ fn union_fp_member_regs_return() {
 }
 
 #[test]
+fn fn_ptr_float_return() {
+    // C99 6.2.5p10 / 6.3.1.8: a call through a function pointer with a
+    // `float` return type yields a single-precision value; the indirect
+    // result must be tagged f32 so the store does not narrow it twice.
+    assert_eq!(run_fixture("fn_ptr_float_return.c"), 0);
+}
+
+#[test]
 fn variadic_struct_return() {
     // A variadic function returning a struct by value: the call must
     // recover the result registers into the caller's temp.

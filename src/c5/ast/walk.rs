@@ -2194,6 +2194,13 @@ impl<'a> Walker<'a> {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
                     }
+                    // A `float`-returning callee yields a single-precision
+                    // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
+                    // store reads the s-register view instead of narrowing
+                    // the d-register a second time.
+                    if is_float_ty(*ty) {
+                        return Ok(b.mark_f32(call));
+                    }
                     return Ok(call);
                 }
                 // Register-save host variadic ABI (System V AMD64 on Linux
@@ -2226,6 +2233,13 @@ impl<'a> Walker<'a> {
                     if let Some((ridx, slot)) = ret_temp {
                         b.set_call_ret_agg(call, ridx, slot);
                         return Ok(b.local_addr(slot));
+                    }
+                    // A `float`-returning callee yields a single-precision
+                    // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
+                    // store reads the s-register view instead of narrowing
+                    // the d-register a second time.
+                    if is_float_ty(*ty) {
+                        return Ok(b.mark_f32(call));
                     }
                     return Ok(call);
                 }
@@ -2283,6 +2297,13 @@ impl<'a> Walker<'a> {
                 if let Some((ridx, slot)) = ret_temp {
                     b.set_call_ret_agg(call, ridx, slot);
                     return Ok(b.local_addr(slot));
+                }
+                // A `float`-returning callee yields a single-precision value
+                // (C99 6.2.5p10 / 6.3.1.8); tag it so the result store reads
+                // the s-register view instead of narrowing the d-register a
+                // second time.
+                if is_float_ty(*ty) {
+                    return Ok(b.mark_f32(call));
                 }
                 Ok(call)
             }

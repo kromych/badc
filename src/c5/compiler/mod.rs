@@ -379,6 +379,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// instead of applying the default argument promotions. `None` when
     /// the prototype carries no types (an empty parameter list).
     pub fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    /// Parameter type tags of the function pointer that an in-progress
+    /// postfix indirect call (`tbl[i](args)`, `(*fp)(args)`) will call.
+    /// The flat type tag in the accumulator carries only the callee's
+    /// return type, not its parameter list, so this side-channel ferries
+    /// the parameters from the producing symbol (a function-pointer array
+    /// element or a dereferenced function-pointer variable) to the call's
+    /// argument loop, which narrows each argument to its declared type
+    /// (C99 6.5.2.2p7) the same way the direct-identifier call path does.
+    /// Set at the array-decay and identifier-load sites, preserved across
+    /// a subscript index parse, cleared at a `.`/`->` field access and at
+    /// each statement boundary so it cannot reach an unrelated call.
+    pub indirect_callee_params: Option<alloc::vec::Vec<i64>>,
     /// Set while parsing a function-pointer declarator's parameter list.
     /// The parameters form a prototype: their names are irrelevant, so
     /// `parse_function_params` records each type without binding the name
@@ -504,6 +516,7 @@ impl Default for Pending {
             typedef_base_array_size: 0,
             typedef_fn_proto: None,
             fn_ptr_param_types: None,
+            indirect_callee_params: None,
             parsing_fn_ptr_proto: false,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,

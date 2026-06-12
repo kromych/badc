@@ -338,6 +338,14 @@ fn fn_type_typedef_field() {
 }
 
 #[test]
+fn fn_ptr_float_arg_narrow() {
+    // A double-typed argument narrows to a float parameter through a
+    // subscripted dispatch table and a dereferenced function pointer
+    // (C99 6.5.2.2p7), matching the direct-identifier call path.
+    assert_eq!(run_fixture("fn_ptr_float_arg_narrow.c"), 0);
+}
+
+#[test]
 fn struct_array_elided_runtime() {
     // C99 6.7.8p20 brace elision for a struct-array element with a
     // non-constant initializer (runtime per-field stores).

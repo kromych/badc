@@ -663,6 +663,11 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
+        // Function-pointer callee parameters captured for a postfix
+        // indirect call never span a statement: drop any left set by a
+        // producer whose call did not consume them so they cannot reach an
+        // unrelated call in a later statement.
+        self.pending.indirect_callee_params = None;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.labels.push(name.clone());

@@ -1110,6 +1110,15 @@ impl Compiler {
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                 let is_array_var = self.symbols[id_idx].array_size != 0;
+                // A function-pointer variable carries its callee parameter
+                // types so the dereferenced-call shape `(*fp)(args)` (which
+                // reaches the postfix path rather than the direct-identifier
+                // call path) narrows each argument to its declared type.
+                // Only a function pointer carries params on a Loc / Glo
+                // symbol; the array case is handled at its decay below.
+                if !is_array_var && !is_struct_value && !self.symbols[id_idx].params.is_empty() {
+                    self.pending.indirect_callee_params = Some(self.symbols[id_idx].params.clone());
+                }
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
                 // load. Bump the type by one pointer level so
@@ -1169,6 +1178,14 @@ impl Compiler {
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     let dims = self.symbols[id_idx].array_dims.clone();
                     self.seed_multi_dim_strides(&dims, elem_size);
+                    // A function-pointer array element keeps the element's
+                    // parameter types so a following `arr[i](args)` narrows
+                    // each argument to its declared type. Empty params means
+                    // the element is not a prototyped function pointer.
+                    if !self.symbols[id_idx].params.is_empty() {
+                        self.pending.indirect_callee_params =
+                            Some(self.symbols[id_idx].params.clone());
+                    }
                 } else if is_struct_value {
                     if identifier_is_local {
                         // Struct value rvalue: the symbol's
@@ -2061,6 +2078,18 @@ impl Compiler {
                 // (left-to-right eval), then we push them
                 // right-to-left so the first arg ends up on top of
                 // the c5 stack.
+                //
+                // The callee's parameter types, ferried from the
+                // producing function-pointer symbol, drive the same
+                // C99 6.5.2.2p7 assignment conversion the direct-call
+                // path applies: each argument narrows / widens to its
+                // declared parameter type before the store. Without it
+                // a `double`-typed argument (a `float` literal is typed
+                // `double` in the accumulator) reaches a `float`
+                // parameter unconverted and the callee reads the wrong
+                // half of the FP register.
+                let callee_params = self.pending.indirect_callee_params.take();
+                let mut arg_idx: usize = 0;
                 while self.lex.tk != ')' {
                     self.loc_offs += 1;
                     if self.loc_offs > self.max_loc_offs {
@@ -2070,8 +2099,14 @@ impl Compiler {
                     self.emit_lea(temp_off);
                     self.ast_psh();
                     self.expr(Token::Assign as i64)?;
+                    if let Some(params) = &callee_params
+                        && arg_idx < params.len()
+                    {
+                        self.convert_assign_rhs(params[arg_idx]);
+                    }
                     indirect_arg_ids.push(self.ast_acc);
                     self.ast_assign();
+                    arg_idx += 1;
                     if self.lex.tk == ',' {
                         self.next()?;
                     }
@@ -2960,9 +2995,15 @@ impl Compiler {
                 let multi_dim_stride = self.pending.index_stride;
                 let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
                 self.pending.index_stride = 0;
+                // The element subscripted by `arr[i]` keeps the array
+                // element's callee parameters captured at the array decay;
+                // the index expression is a separate evaluation that must
+                // not consume or clear them. Park them across the parse.
+                let saved_callee_params = self.pending.indirect_callee_params.take();
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
                 let idx_ast = self.ast_acc;
+                self.pending.indirect_callee_params = saved_callee_params;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -3055,6 +3096,13 @@ impl Compiler {
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.
+                // A function-pointer struct field does not yet carry its
+                // parameter types (StructField has no parameter list), so a
+                // following `s.fp(args)` cannot narrow its arguments. Drop
+                // any callee parameters captured by an earlier producer so
+                // they do not reach this call. TODO: store a function-pointer
+                // field's parameter types and set them here.
+                self.pending.indirect_callee_params = None;
                 let obj_ast = self.ast_acc;
                 let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {

@@ -556,6 +556,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
+    ("fn_ptr_float_arg_narrow.c", 0),
     ("struct_array_elided_runtime.c", 0),
     ("fn_type_typedef_field.c", 0),
     ("fn_type_typedef_local.c", 0),

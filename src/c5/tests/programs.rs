@@ -80,6 +80,13 @@ fn aggregate_init_struct_member_copy() {
 }
 
 #[test]
+fn bitfield_mixed_base_packing() {
+    // C99 6.7.2.1p11: adjacent bitfields of different base types share a
+    // storage unit when the bits fit (the gcc/clang layout).
+    assert_eq!(run_fixture("bitfield_mixed_base_packing.c"), 0);
+}
+
+#[test]
 fn computed_goto() {
     // GCC labels-as-values: `&&label` address, `goto *expr` indirect
     // branch, with a runtime label table, a back edge, and a scalar

@@ -95,19 +95,16 @@ impl Compiler {
         // exceeds the running max. The final struct alignment is
         // capped at 8 because the rest of c5's IR slots at 8.
         let mut struct_align: usize = 1;
-        // Bit-packing state for contiguous bitfields. When
-        // `bf_active` is true, `bf_storage_offset` is the byte
-        // offset of the current storage unit, `bf_unit_size` is
-        // the unit's width in bytes (the bitfield's base type
-        // size per C99 6.7.2.1p11), and `bf_next_bit` is the
-        // next free bit position within it. A non-bitfield
-        // field, a bitfield with a different base size, or a
-        // bitfield that doesn't fit in the remaining bits closes
-        // the unit.
+        // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
+        // is the next free bit position measured from the start of the
+        // aggregate; the run begins at `offset * 8` when `bf_active`
+        // turns true. Each bitfield is placed at the cursor and bumped
+        // to the next storage-unit boundary of its declared type only
+        // when it would otherwise straddle one (the SysV AMD64 / AAPCS64
+        // rule gcc and clang follow), so a smaller-typed bitfield can
+        // share the bits left in a larger-typed neighbour's unit.
         let mut bf_active = false;
-        let mut bf_storage_offset: usize = 0;
-        let mut bf_unit_size: usize = 0;
-        let mut bf_next_bit: u32 = 0;
+        let mut bf_bit_cursor: usize = 0;
         while self.lex.tk != '}' {
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
@@ -441,29 +438,31 @@ impl Compiler {
                 };
 
                 if let Some(width) = anon_bitfield_width {
-                    let field_unit_size = self.size_of_type(field_base).max(1);
-                    let unit_capacity_bits = (field_unit_size as u32) * 8;
+                    let unit = self.size_of_type(field_base).max(1);
                     if width == 0 {
                         // C99 6.7.2.1p11: a width-zero bitfield aligns
                         // the next field to the start of the next
                         // storage unit of the bitfield's base type.
-                        if bf_active && !is_union {
-                            offset = bf_storage_offset + bf_unit_size;
+                        if !is_union {
+                            if !bf_active {
+                                bf_bit_cursor = offset * 8;
+                            }
+                            bf_bit_cursor = round_up(bf_bit_cursor, unit * 8);
+                            offset = offset.max(bf_bit_cursor / 8);
                         }
                         bf_active = false;
                     } else if !is_union {
-                        let need_new_unit = !bf_active
-                            || bf_unit_size != field_unit_size
-                            || bf_next_bit + width > unit_capacity_bits;
-                        if need_new_unit {
-                            offset = round_up(offset, field_unit_size);
-                            bf_storage_offset = offset;
-                            offset += field_unit_size;
-                            bf_next_bit = 0;
-                            bf_unit_size = field_unit_size;
-                            bf_active = true;
+                        place_bitfield(
+                            &mut offset,
+                            &mut bf_active,
+                            &mut bf_bit_cursor,
+                            unit,
+                            width,
+                        );
+                        let a = unit.min(8);
+                        if a > struct_align {
+                            struct_align = a;
                         }
-                        bf_next_bit += width;
                     }
                     if self.lex.tk == ',' {
                         self.next()?;
@@ -514,6 +513,10 @@ impl Compiler {
                 // inside an active run.
                 let mut bit_width: u32 = 0;
                 let mut bit_offset: u32 = 0;
+                // Storage-unit width (bytes) the extraction reads for a
+                // bitfield; the declared type's size. Zero for a
+                // non-bitfield field.
+                let mut bit_unit: usize = 0;
                 let field_offset: usize;
                 if self.lex.tk == ':' {
                     if field_array_size != 0 {
@@ -544,31 +547,29 @@ impl Compiler {
                     if is_union {
                         field_offset = 0;
                         bit_offset = 0;
+                        bit_unit = self.size_of_type(field_ty).max(1);
                     } else {
                         // C99 6.7.2.1p11 / p13: the bitfield's
                         // addressable storage unit is implementation
-                        // defined; c5 sizes it at the bitfield's
-                        // base type. Consecutive bitfields share a
-                        // unit only when their base sizes match and
-                        // the new field fits in the remaining bits;
-                        // otherwise the old unit closes and a new
-                        // one starts.
-                        let field_unit_size = self.size_of_type(field_ty);
-                        let unit_capacity_bits = (field_unit_size as u32) * 8;
-                        let need_new_unit = !bf_active
-                            || bf_unit_size != field_unit_size
-                            || bf_next_bit + bit_width > unit_capacity_bits;
-                        if need_new_unit {
-                            offset = round_up(offset, field_unit_size.max(1));
-                            bf_storage_offset = offset;
-                            offset += field_unit_size;
-                            bf_next_bit = 0;
-                            bf_unit_size = field_unit_size;
-                            bf_active = true;
+                        // defined. Place it at the running bit cursor,
+                        // its addressable unit sized at the declared
+                        // type; bump to the next such unit only when it
+                        // would straddle one.
+                        let unit = self.size_of_type(field_ty).max(1);
+                        let (foff, boff) = place_bitfield(
+                            &mut offset,
+                            &mut bf_active,
+                            &mut bf_bit_cursor,
+                            unit,
+                            bit_width,
+                        );
+                        field_offset = foff;
+                        bit_offset = boff;
+                        bit_unit = unit;
+                        let a = unit.min(8);
+                        if a > struct_align {
+                            struct_align = a;
                         }
-                        field_offset = bf_storage_offset;
-                        bit_offset = bf_next_bit;
-                        bf_next_bit += bit_width;
                     }
                 } else {
                     // Regular (non-bitfield) field. Seal any pending
@@ -631,7 +632,7 @@ impl Compiler {
                     array_dims: field_array_dims,
                     bit_offset,
                     bit_width,
-                    bit_unit_size: if bit_width > 0 { bf_unit_size as u8 } else { 0 },
+                    bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
                     anon_union_group: 0,
                 });
@@ -672,4 +673,34 @@ impl Compiler {
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
     }
+}
+
+/// Place a bitfield of declared-type size `unit` bytes and `width` bits
+/// at the running `bit_cursor` (bit position from the aggregate start),
+/// bumping it to the next `unit`-byte storage-unit boundary only when
+/// the field would otherwise straddle one (the SysV AMD64 / AAPCS64
+/// rule). Begins the run at `offset * 8` when not already `active`,
+/// advances `offset` to the highest byte the run reaches, and returns
+/// the field's `(byte offset of its addressable unit, bit offset within
+/// that unit)`.
+fn place_bitfield(
+    offset: &mut usize,
+    active: &mut bool,
+    bit_cursor: &mut usize,
+    unit: usize,
+    width: u32,
+) -> (usize, u32) {
+    if !*active {
+        *bit_cursor = *offset * 8;
+        *active = true;
+    }
+    let unit_bits = unit * 8;
+    if *bit_cursor % unit_bits + width as usize > unit_bits {
+        *bit_cursor = round_up(*bit_cursor, unit_bits);
+    }
+    let field_offset = (*bit_cursor / unit_bits) * unit;
+    let bit_offset = (*bit_cursor % unit_bits) as u32;
+    *bit_cursor += width as usize;
+    *offset = (*offset).max(bit_cursor.div_ceil(8));
+    (field_offset, bit_offset)
 }

@@ -11,35 +11,23 @@ Disassembly of section .text:
                	ud2
 
 <make>:
-               	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
-               	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %rax
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	pushq	%rax
-               	movq	(%rdx), %rax
-               	movq	%rax, (%rcx)
-               	movq	0x8(%rdx), %rax
-               	movq	%rax, 0x8(%rcx)
-               	popq	%rax
-               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rax
+               	leaq	<rip>, %rcx
                	pushq	%r11
                	movq	(%rcx), %r11
                	movq	%r11, (%rax)
                	movq	0x8(%rcx), %r11
                	movq	%r11, 0x8(%rax)
                	popq	%r11
+               	leaq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
+               	movq	(%rcx), %rax
+               	movq	0x8(%rcx), %rdx
                	addq	$0x10, %rsp
                	popq	%rbp
-               	popq	%r11
-               	addq	$0x10, %rsp
-               	pushq	%r11
                	retq
 
 <main>:
@@ -245,8 +233,9 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
-               	leaq	-0xc0(%rbp), %rdi
                	callq	<addr>
+               	movq	%rax, -0xc0(%rbp)
+               	movq	%rdx, -0xb8(%rbp)
                	leaq	-0xc0(%rbp), %rax
                	leaq	-0x60(%rbp), %rcx
                	pushq	%r11

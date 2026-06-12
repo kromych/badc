@@ -33,12 +33,15 @@ and 6.8.6.4p3 "no value" enforced); IEEE 754 single-
 precision `float` (4-byte storage) and double-precision
 `double` (8-byte); decimal and C99 6.4.4.2 hexadecimal
 (`0x1.8p3`) floating constants; wide string / character
-literals (`L"..."` / `L'...'`, UTF-16 storage); pointers, arrays, multi-dim arrays,
+literals (`L"..."` / `L'...'`; `wchar_t` is 4-byte `int` on
+macOS / Linux and 2-byte UTF-16 on Windows, matching each host);
+pointers, arrays, multi-dim arrays,
 function pointers and chains thereof; `struct` / `union` /
 `enum` / `typedef`, bitfields (signed and unsigned, sign-
-extending read per C99 6.7.2.1p4, adjacent same-base-type
-fields sharing a storage unit of `sizeof(base_type)` per
-C99 6.7.2.1p11), `#pragma pack(N)`, anonymous struct / union
+extending read per C99 6.7.2.1p4, adjacent fields packed into a
+shared storage unit by a running bit cursor with the straddle
+rule per C99 6.7.2.1p11, including fields of different base
+types), `#pragma pack(N)`, anonymous struct / union
 members; struct designated initializers (`{.x = 1}`) at file
 and function scope, including non-constant runtime values;
 array designated initializers (`[N] = ...`); partial brace
@@ -202,19 +205,23 @@ slot per address-taken import), and all three object writers
 it blocks is a static dispatch table of libc functions (math
 expression evaluators, scripting glue).
 
-### libc `struct`-by-value ABI, severity 2
+### `struct`-by-value through a `#pragma binding` import, severity 4
 
-`div(...)`, `gmtime(...)`, and other libc functions that take
-or return a struct by value are rejected at compile time (the
-diagnostic names the call). c5's own struct calling convention
-passes every struct argument by the source's address and returns
-every struct through a hidden out-pointer prepended to the
-argument list, regardless of the struct's size. SysV / Win64 /
-AAPCS64 instead pack a small struct (typically <= 16 bytes) into
-argument / result registers, so c5's convention cannot call a
-host function that takes or returns a struct by value. c5-to-c5
-struct pass / return works (see `tests/fixtures/c/
-struct_by_value_param.c` and `struct_by_value_return.c`).
+A struct passed or returned by value follows the host ABI for
+c5-to-c5 calls and for regular `extern` declarations, including
+the inline libc wrappers in the bundled headers: `div(...)`
+returns its `div_t` in the result registers, and a <= 16-byte
+struct argument or return rides the argument / result registers
+(System V AMD64 rax/rdx and the integer arg registers, AAPCS64
+x0/x1, the AAPCS64 x8 indirect class for larger aggregates). The
+remaining gap is a struct passed or returned by value across a
+`#pragma binding` import (a `Token::Sys` symbol): the call is
+rejected at compile time (the diagnostic names the argument or
+call) because the address-as-value internal convention reaches
+those symbols before the host-ABI packing. Pass `&s` or use a
+pointer-returning variant. c5-to-c5 struct pass / return works
+(see `tests/fixtures/c/struct_by_value_param.c`,
+`struct_by_value_return.c`, and `union_fp_member_regs_return.c`).
 
 ### `long double` is 8-byte FP64 in c5 storage, severity 5
 
@@ -341,7 +348,8 @@ C11+ features showing up in modern code:
 
 ## Roadmap
 
-1. libc `struct`-by-value ABI bridge.
+1. `struct`-by-value across a `#pragma binding` import
+   (the host-ABI packing reaches `Token::Sys` symbols).
 2. Abstract function-pointer declarator in `sizeof`.
 3. Brace-wrapped string initializer for `char` arrays
    (`char a[N] = {"abc"}` / `(char[N]){"abc"}`).

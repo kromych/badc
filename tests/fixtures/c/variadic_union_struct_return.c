@@ -1,12 +1,11 @@
-// A variadic function returning a struct that contains a floating-point
-// member keeps the out-pointer return convention (the host-ABI FP-bank
-// return path is not implemented). The hidden out-pointer is a fixed
-// argument, but the variadic tail must still ride the host stack: the
-// out-pointer call path previously treated every argument as fixed, so
-// the variadic arguments were placed in registers and the callee's
-// va_start read past them. The shape mirrors a printf-style helper that
-// returns a 16-byte tagged value (a union plus a tag), as quickjs's
-// error throwers do.
+// A variadic function returning a 16-byte struct whose first eightbyte is
+// a union overlapping a double with an int/pointer returns in the integer
+// result registers (the eightbyte classifies as INTEGER) while the
+// variadic tail rides the host stack. The register-return recovery and the
+// stack-placed variadic arguments must both be correct: a prior version
+// placed the variadic arguments in registers, so the callee's va_start read
+// past them. The shape mirrors a printf-style helper returning a tagged
+// value (a union plus a tag), as quickjs's error throwers do.
 
 #include <stdarg.h>
 #include <string.h>

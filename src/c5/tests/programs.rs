@@ -81,10 +81,19 @@ fn aggregate_init_struct_member_copy() {
 
 #[test]
 fn variadic_union_struct_return() {
-    // A variadic function returning an out-pointer-classified struct
-    // (one with a floating-point member) must still place its variadic
-    // tail on the host stack.
+    // A variadic function returning a 16-byte struct whose first eightbyte
+    // is a union overlapping a double with an int/pointer returns in the
+    // integer result registers while its variadic tail rides the host
+    // stack.
     assert_eq!(run_fixture("variadic_union_struct_return.c"), 0);
+}
+
+#[test]
+fn union_fp_member_regs_return() {
+    // C99 6.7.2.1 / System V AMD64 3.2.3 / AAPCS64 6.9: a 16-byte struct
+    // whose first eightbyte overlaps a double with an int/pointer member
+    // returns in the integer result registers, not through an out-pointer.
+    assert_eq!(run_fixture("union_fp_member_regs_return.c"), 0);
 }
 
 #[test]

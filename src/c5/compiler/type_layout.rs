@@ -441,10 +441,19 @@ pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) 
     let align = (structs[id].align.max(1)) as u32;
     let mut fields = Vec::new();
     flatten_struct_fields(structs, target, id, 0, &mut fields);
-    // Integer-class only; floating-point / homogeneous-FP aggregates
-    // keep the out-pointer convention until the host-ABI FP-bank
-    // return path lands. TODO: HFA / mixed int+FP returns.
-    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+    // A <=16B aggregate whose eightbyte/HFA classification places any unit
+    // in a floating-point return register (a pure-FP eightbyte on System V,
+    // an HFA on AAPCS64) keeps the out-pointer convention: the emit path
+    // returns aggregate units only through integer registers. An eightbyte
+    // shared by integer and FP members (a union overlapping a double with an
+    // int/pointer) classifies as Integer and returns in the integer
+    // registers, bit-for-bit. TODO: FP-bank aggregate returns.
+    let returns_in_fp = matches!(
+        crate::c5::codegen::abi_classify::classify_aggregate(size, align, &fields, target.abi(), true),
+        crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
+            if c.contains(&crate::c5::codegen::abi_classify::RegClass::Sse)
+    );
+    if returns_in_fp {
         return StructReturnAbi::OutPtr;
     }
     let desc = AggDesc {

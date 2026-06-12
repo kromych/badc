@@ -1134,6 +1134,16 @@ impl<'a> Walker<'a> {
                     } else {
                         b.binop_imm(BinOp::Add, base, elem.offset)
                     };
+                    // C99 6.7.8p13: a struct/union member initialized by a
+                    // single expression of compatible type copies the
+                    // source's bytes. `v` is the source address (the
+                    // walker's address-as-value routing for struct rvalues),
+                    // so this needs an Mcpy, not a scalar store.
+                    if is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0 {
+                        let size = self.struct_size(elem.ty);
+                        b.mcpy(addr, v, size);
+                        continue;
+                    }
                     let kind = store_kind_for(elem.ty, self.target);
                     b.store(addr, v, kind);
                 }

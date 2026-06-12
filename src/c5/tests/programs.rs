@@ -72,6 +72,14 @@ fn local_aggregate_runtime_init() {
 }
 
 #[test]
+fn aggregate_init_struct_member_copy() {
+    // C99 6.7.8p13: a struct member of an automatic aggregate initialized
+    // by a non-constant struct expression (subscript, deref, by-value
+    // parameter) copies the source's bytes, not its address.
+    assert_eq!(run_fixture("aggregate_init_struct_member_copy.c"), 0);
+}
+
+#[test]
 fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.

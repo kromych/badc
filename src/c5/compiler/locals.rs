@@ -1174,8 +1174,10 @@ impl Compiler {
     /// staged-zeroes prelude, so omitted fields stay at the
     /// implicit `= 0` per 6.7.8p19.
     ///
-    /// Nested array fields, nested struct values, bitfields, and
-    /// string-literal char-array fields aren't supported yet --
+    /// A struct/union member initialized by a single compatible
+    /// struct expression copies the source's bytes (walker Mcpy);
+    /// a brace list for such a member recurses. Nested array
+    /// fields and non-constant bitfields aren't supported yet --
     /// the constant-staging path already handles them and this
     /// helper only fires when at least one entry is non-constant.
     /// A caller that hits one of those shapes in a non-constant
@@ -1366,6 +1368,19 @@ impl Compiler {
             }
             self.ast_psh();
             self.expr(Token::Assign as i64)?;
+            // C99 6.7.8p13: a struct/union member may be initialized by a
+            // single expression of compatible struct/union type; the
+            // walker copies its bytes (Mcpy). A scalar value for a struct
+            // member would be brace elision into the member's sub-fields
+            // (6.7.8p20), which the non-constant store path doesn't model.
+            if is_struct_ty(field.ty)
+                && struct_ptr_depth(field.ty) == 0
+                && !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0)
+            {
+                return Err(self.compile_err(
+                    "brace elision into a non-constant struct member is not supported",
+                ));
+            }
             let field_ast = self.ast_acc;
             self.ast_assign();
             if let Some(value) = field_ast {

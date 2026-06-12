@@ -433,6 +433,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_arg_by_stack.c", 0),
     ("wide_char_utf8.c", 0),
     ("local_aggregate_runtime_init.c", 0),
+    ("aggregate_init_struct_member_copy.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("designator_override_and_braced_string.c", 0),

@@ -355,6 +355,13 @@ impl Compiler {
             // `(*kf)(...)` is lowered as `Load { kind = result_tag }` and
             // dereferences the function pointer's bit pattern.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            // Capture the function-pointer prototype before the initializer
+            // is parsed: an initializer cast (`= (void *)f`) runs a base-type
+            // parse that clears these pending fields, so a variadic
+            // fn-pointer declared with an initializer would otherwise lose
+            // its prototype and emit the indirect call as non-variadic.
+            let fnptr_proto = self.pending.typedef_fn_proto.take();
+            let fnptr_param_types = self.pending.fn_ptr_param_types.take();
             // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes
             // its dimension only when the declarator stayed at
             // the typedef's element type. A `*` in the declarator
@@ -435,8 +442,7 @@ impl Compiler {
             // the host variadic ABI. Only variadic prototypes are
             // recorded (see the equivalent site in
             // `parse_function_body_local_decl`).
-            let fnptr_proto = self.pending.typedef_fn_proto.take();
-            if let Some(types) = self.pending.fn_ptr_param_types.take() {
+            if let Some(types) = fnptr_param_types {
                 self.symbols[loc_idx].params = types;
                 self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
             } else if let Some((proto_fixed, true)) = fnptr_proto {

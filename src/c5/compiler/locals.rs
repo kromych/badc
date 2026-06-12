@@ -119,6 +119,13 @@ impl Compiler {
             // decay (C99 6.3.2.1p4) as a no-op rather than a
             // through-pointer load.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            // Capture the function-pointer prototype before the initializer
+            // is parsed: an initializer cast (`= (void *)f`) runs a base-type
+            // parse that clears these pending fields, so reading them after
+            // `allocate_local_with_init` would lose a variadic fn-pointer's
+            // prototype and emit the indirect call as non-variadic.
+            let fnptr_proto = self.pending.typedef_fn_proto.take();
+            let fnptr_param_types = self.pending.fn_ptr_param_types.take();
             // Array typedef carries its dimension when the
             // declarator stayed at the typedef's element type --
             // i.e., no `[N]` brackets and no leading `*`. A
@@ -240,8 +247,7 @@ impl Compiler {
             // argument as fixed regardless, and synthesising
             // placeholder parameter types would feed the call-site
             // argument type-check a spurious mismatch.
-            let fnptr_proto = self.pending.typedef_fn_proto.take();
-            if let Some(types) = self.pending.fn_ptr_param_types.take() {
+            if let Some(types) = fnptr_param_types {
                 self.symbols[loc_idx].params = types;
                 self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
             } else if let Some((proto_fixed, true)) = fnptr_proto {

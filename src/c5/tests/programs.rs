@@ -114,6 +114,14 @@ fn fn_ptr_float_arg() {
 }
 
 #[test]
+fn variadic_fn_ptr_init() {
+    // C99 6.5.2.2: a variadic function pointer declared with an initializer
+    // (or via a typedef) keeps its variadic prototype, so an indirect call
+    // places the variadic arguments per the host variadic ABI.
+    assert_eq!(run_fixture("variadic_fn_ptr_init.c"), 0);
+}
+
+#[test]
 fn variadic_struct_return() {
     // A variadic function returning a struct by value: the call must
     // recover the result registers into the caller's temp.

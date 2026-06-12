@@ -83,6 +83,7 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	movl	$0x1, %edx
                	movq	%r12, %r11
+               	movb	$0x0, %al
                	callq	*%r11
                	testq	%rax, %rax
                	je	<addr>
@@ -226,4 +227,3 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, (%rax)

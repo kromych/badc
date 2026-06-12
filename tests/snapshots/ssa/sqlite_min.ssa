@@ -66,7 +66,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=36
     v47  Imm(2)                                           -> x6
     v48  Imm(1)                                           -> x2
     v49  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v50  CallIndirect { target=v11, args=[v46, v47, v48], callee_variadic=false, fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v50  CallIndirect { target=v11, args=[v46, v47, v48], callee_variadic=true, fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x0
     v51  BinopI { op=ne, lhs=v50, rhs_imm=0 }             -> x0
     terminator Bz { cond=v51, target=b8, fall=b7 }   (exit_acc=v51)
   block 7  start_pc=0

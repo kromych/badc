@@ -99,14 +99,7 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	mov	x2, #0x1                // =1
                	mov	x9, x21
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
                	blr	x9
-               	add	sp, sp, #0x30
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

@@ -160,6 +160,7 @@ impl SsaBuilder {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -416,6 +417,25 @@ impl SsaBuilder {
         let id = self.push(Inst::ImmCode(target_pc));
         self.pure_cache.insert(PureKey::ImmCode(target_pc), id);
         id
+    }
+
+    /// `Inst::BlockAddr` -- the code address of a basic block in
+    /// this function (GCC `&&label`). Records `block` as a computed-
+    /// goto successor so the CFG treats every `goto *` as branching
+    /// to it. Not CSE'd: distinct `&&label` sites must stay separate
+    /// defs so the allocator keeps each live as needed.
+    pub(crate) fn block_addr(&mut self, block: BlockId) -> ValueId {
+        if !self.func.computed_goto_targets.contains(&block) {
+            self.func.computed_goto_targets.push(block);
+        }
+        self.push(Inst::BlockAddr(block))
+    }
+
+    /// Close the current block with `Terminator::GotoIndirect`
+    /// (GCC `goto *expr`); `target` holds the destination code
+    /// address.
+    pub(crate) fn goto_indirect(&mut self, target: ValueId) {
+        self.close(Terminator::GotoIndirect { target }, target);
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.

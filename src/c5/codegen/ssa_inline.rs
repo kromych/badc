@@ -79,6 +79,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
                 say("TailExt terminator");
                 return false;
             }
+            Terminator::GotoIndirect { .. } => {
+                // A computed goto's successors are the function's
+                // address-taken label blocks; splicing the body into a
+                // caller would shift those block ids. Keep it out of line.
+                say("GotoIndirect terminator");
+                return false;
+            }
             Terminator::Jmp(_)
             | Terminator::FallThrough(_)
             | Terminator::Bz { .. }
@@ -243,6 +250,7 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
@@ -374,6 +382,9 @@ fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
             *cond = map_v(*cond, remap);
         }
+        Terminator::GotoIndirect { target } => {
+            *target = map_v(*target, remap);
+        }
         Terminator::Return(v) => {
             *v = map_v(*v, remap);
         }
@@ -444,6 +455,9 @@ fn splice_multi_block(
             },
             Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
             Terminator::TailExt(x) => Terminator::TailExt(x),
+            Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
+                target: map_v(target, remap),
+            },
         }
     };
 
@@ -632,6 +646,9 @@ fn splice_multi_block(
                 Terminator::Jmp(postfix_id)
             }
             Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
+            Terminator::GotoIndirect { .. } => {
+                unreachable!("filter rejects GotoIndirect")
+            }
         };
         let exit_acc = if cblock.exit_acc != NO_VALUE {
             map_v(cblock.exit_acc, &callee_remap)
@@ -697,6 +714,7 @@ fn splice_multi_block(
         param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
         indirect_result_slot: original.indirect_result_slot,
+        computed_goto_targets: original.computed_goto_targets,
     };
 }
 
@@ -1008,6 +1026,12 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
                 .iter()
                 .any(|inst| matches!(inst, Inst::Phi { .. }))
             {
+                continue;
+            }
+            // Skip a caller with a computed goto: splicing a callee
+            // shifts the caller's block ids, which `Inst::BlockAddr`
+            // and computed_goto_targets reference directly.
+            if !caller.computed_goto_targets.is_empty() {
                 continue;
             }
             let before = caller.insts.len();

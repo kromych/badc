@@ -1221,6 +1221,16 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Goto(label), pos)
     }
 
+    /// Push a `Stmt::GotoIndirect` (GCC `goto *expr;`).
+    pub(super) fn ast_emit_goto_indirect(
+        &mut self,
+        target: super::super::ast::ExprId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::GotoIndirect(target), pos)
+    }
+
     /// Push a `Stmt::Labeled` wrapping the just-parsed body.
     pub(super) fn ast_emit_labeled(
         &mut self,

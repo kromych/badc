@@ -1647,6 +1647,26 @@ impl Compiler {
                 self.pending.last_array_decay_size = 0;
                 self.pending.last_array_decay_bytes = 0;
             }
+        } else if self.lex.tk == Token::Lan {
+            // GCC labels-as-values: `&&label` yields the address of a
+            // local label as a `void *`. The label may be defined later
+            // in the function (forward reference); `ast_label_by_name`
+            // interns it and the walker resolves it to the block.
+            self.next()?; // consume `&&`
+            if self.lex.tk != Token::Id {
+                return Err(self.compile_err("label name expected after `&&`"));
+            }
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.next()?;
+            let label = self.ast_label_by_name(&name);
+            let pos = self.ast_src_pos();
+            let id = self
+                .ast
+                .push_expr(super::super::ast::Expr::LabelAddr(label), pos);
+            self.ast_acc = Some(id);
+            // GCC types `&&label` as `void *`; c5 encodes a void
+            // pointer as `char *` (Ty::Char + Ty::Ptr).
+            self.ty = Ty::Char as i64 + Ty::Ptr as i64;
         } else if self.lex.tk == Token::AndOp {
             self.next()?;
             self.expr(Token::Inc as i64)?;

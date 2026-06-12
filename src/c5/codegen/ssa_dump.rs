@@ -85,6 +85,7 @@ fn fmt_inst(inst: &Inst) -> String {
         Imm(v) => format!("Imm({v})"),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
+        BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
         Load { addr, disp, kind } => format!(
@@ -236,6 +237,7 @@ fn fmt_terminator(t: Terminator) -> String {
         Terminator::Return(v) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::FallThrough(b) => format!("FallThrough(b{b})"),
+        Terminator::GotoIndirect { target } => format!("GotoIndirect(v{target})"),
     }
 }
 

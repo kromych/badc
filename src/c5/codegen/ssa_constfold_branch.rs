@@ -26,6 +26,12 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
 }
 
 fn run_one(func: &mut FunctionSsa) {
+    // Skip computed-goto functions: branch folding may drop or
+    // renumber blocks, invalidating `Inst::BlockAddr` / the
+    // computed_goto_targets block ids.
+    if !func.computed_goto_targets.is_empty() {
+        return;
+    }
     for block in func.blocks.iter_mut() {
         let new_term = match block.terminator {
             Terminator::Bz {
@@ -84,6 +90,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

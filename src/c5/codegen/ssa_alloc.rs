@@ -675,6 +675,9 @@ fn verify_allocation(
                 Terminator::Return(v) if (*v as usize) < used.len() => {
                     used[*v as usize] = true;
                 }
+                Terminator::GotoIndirect { target } if (*target as usize) < used.len() => {
+                    used[*target as usize] = true;
+                }
                 _ => {}
             }
         }
@@ -943,6 +946,7 @@ fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
             super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
+            super::super::ir::Terminator::GotoIndirect { target } => bump_into(&mut counts, target),
             _ => {}
         }
     }
@@ -998,6 +1002,7 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::AllocaInit(_)
@@ -1101,7 +1106,9 @@ pub(super) fn produces_value(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
+        Imm(_) | ImmData(_) | ImmCode(_) | BlockAddr(_) | LocalAddr(_) | TlsAddr(_) => {
+            ResultKind::Int
+        }
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
@@ -1614,7 +1621,10 @@ fn extend_last_use_across_blocks(func: &FunctionSsa, last_use: &mut [u32]) {
         for b in (0..nblocks).rev() {
             let base = b * words;
             scratch.iter_mut().for_each(|w| *w = 0);
-            for s in super::ssa_mem2reg::successors(&func.blocks[b].terminator) {
+            for s in super::ssa_mem2reg::successors(
+                &func.blocks[b].terminator,
+                &func.computed_goto_targets,
+            ) {
                 let sb = s as usize * words;
                 for w in 0..words {
                     scratch[w] |= live_in[sb + w];
@@ -2321,6 +2331,7 @@ int main(void) { return 0; }
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

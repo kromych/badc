@@ -80,6 +80,14 @@ fn aggregate_init_struct_member_copy() {
 }
 
 #[test]
+fn computed_goto() {
+    // GCC labels-as-values: `&&label` address, `goto *expr` indirect
+    // branch, with a runtime label table, a back edge, and a scalar
+    // target.
+    assert_eq!(run_fixture("computed_goto.c"), 0);
+}
+
+#[test]
 fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.

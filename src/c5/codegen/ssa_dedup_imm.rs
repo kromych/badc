@@ -135,6 +135,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
@@ -217,6 +218,7 @@ mod tests {
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
             indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

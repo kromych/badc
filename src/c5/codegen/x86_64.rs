@@ -1338,6 +1338,17 @@ pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
     emit_byte(code, modrm(0b11, 2, target.lo()));
 }
 
+/// `JMP r64` -- indirect branch through a register (GCC computed
+/// goto). Same `FF` opcode family as the indirect `CALL` above; only
+/// the ModR/M `/4` extension changes (4 = JMP, 2 = CALL).
+pub(super) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
+    if target.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 4, target.lo()));
+}
+
 /// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
 /// through a memory operand. Encoding: `FF /2` with ModR/M
 /// `mod=00 reg=2 r/m=101` (the RIP-relative addressing form,

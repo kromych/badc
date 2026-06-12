@@ -949,6 +949,7 @@ fn emit_phi_predecessor_moves(
             fall_through,
             ..
         } => alloc::vec![target, fall_through],
+        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
         Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
     };
     for succ in succs {
@@ -1726,6 +1727,11 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // GCC `&&label`: each `Inst::BlockAddr` emits a `lea rd, [rip+disp32]`
+    // placeholder; `(lea_start, target_block)` is resolved against the
+    // final `block_offsets` after the relaxation passes settle (only the
+    // disp32 is patched, so the destination register need not be saved).
+    let mut block_addr_fixups: Vec<(usize, u32)> = Vec::new();
     // Branch relaxation. The block loop runs once with every local
     // branch in the rel32 long form (`branch_short` empty), then, when
     // `relax_branches` finds shortenable branches, once more with the
@@ -1749,6 +1755,8 @@ pub(super) fn emit_function(
         // matching `Inst::Intrinsic(Alloca)`. Zero means the
         // function doesn't use alloca.
         let mut current_alloca_top: u32 = 0;
+        // Re-collected each relaxation pass; resolved after the loop.
+        block_addr_fixups.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             block_offsets[block_idx] = code.len();
@@ -1785,6 +1793,29 @@ pub(super) fn emit_function(
                     continue;
                 }
                 super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+                // GCC `&&label`: materialize the block's address with a
+                // PC-relative lea. Handled here (not emit_inst) because the
+                // disp32 resolves against this function's local
+                // block_offsets once every block is laid out -- walker IR
+                // leaves block.start_pc at 0, so the writer's pc_to_native
+                // path can't be used.
+                if let Inst::BlockAddr(tb) = inst {
+                    let Some(rd) = int_or_spill_dst(place) else {
+                        bail_msg("BlockAddr: dst not int reg / spill");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    };
+                    let lea_start = code.len();
+                    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+                    block_addr_fixups.push((lea_start, *tb));
+                    spill_dst_to_slot(code, place, rd, frame);
+                    continue;
+                }
                 let data_fixups_pre_inst = data_fixups.len();
                 if !emit_inst(
                     code,
@@ -2026,6 +2057,27 @@ pub(super) fn emit_function(
                         );
                     }
                 }
+                Terminator::GotoIndirect { target } => {
+                    // GCC computed goto: branch to the code address in
+                    // `target` (materialized by Inst::BlockAddr) via
+                    // `jmp r64`.
+                    let tplace = alloc
+                        .places
+                        .get(target as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
+                        bail_msg("GotoIndirect: target Place not int reg / spill");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    };
+                    super::x86_64::emit_jmp_r(code, rt);
+                }
                 Terminator::TailExt(binding_idx) => {
                     // The parser emits `Terminator::TailExt` for the
                     // sys-trampoline bodies: the matching indirect
@@ -2091,6 +2143,28 @@ pub(super) fn emit_function(
             }
         }
         break 'emit;
+    }
+
+    // Patch each `&&label` lea against its block's final offset. The
+    // disp32 sits 3 bytes into the 7-byte lea and is measured from the
+    // byte after the instruction (`lea_start + LEA_RIP32_LEN`).
+    for (lea_start, target_block) in &block_addr_fixups {
+        let target_off = block_offsets[*target_block as usize] as i64;
+        let rel = target_off - (*lea_start as i64 + super::x86_64::LEA_RIP32_LEN as i64);
+        let imm = match i32::try_from(rel) {
+            Ok(v) => v,
+            Err(_) => {
+                bail_msg("BlockAddr: lea disp32 out of range");
+                code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                return false;
+            }
+        };
+        code[*lea_start + 3..*lea_start + 7].copy_from_slice(&imm.to_le_bytes());
     }
 
     // Patch recorded branches. The displacement is measured from the
@@ -2927,6 +3001,9 @@ fn emit_inst(
         Inst::ImmCode(target_ent_pc) => {
             emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
         }
+        // Inst::BlockAddr is handled in emit_function's block loop
+        // (it needs the local block_offsets table for its PC-relative
+        // lea fixup), so it never reaches emit_inst.
         Inst::Mcpy {
             dst: d,
             src: s,
@@ -3027,6 +3104,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::Imm(_) => "Imm",
         Inst::ImmData(_) => "ImmData",
         Inst::ImmCode(_) => "ImmCode",
+        Inst::BlockAddr(_) => "BlockAddr",
         Inst::LocalAddr(_) => "LocalAddr",
         Inst::TlsAddr(_) => "TlsAddr",
         Inst::Load { .. } => "Load",

@@ -50,6 +50,13 @@ pub(crate) enum Inst {
     /// records a pending func-fixup so the writer can patch
     /// against the callee's body offset.
     ImmCode(usize),
+    /// Address of a basic block within the current function, as a
+    /// code pointer (GCC labels-as-values, `&&label`). The per-arch
+    /// lowering materializes the block's native address with a
+    /// PC-relative placeholder resolved against `pc_to_native` once
+    /// the block offsets are final. The value is only stored, loaded,
+    /// compared, and used as the operand of `Terminator::GotoIndirect`.
+    BlockAddr(BlockId),
     /// Address of a local or parameter slot relative to the
     /// frame pointer. N is the c5-slot index; locals are
     /// negative, params >= 2.
@@ -424,6 +431,12 @@ pub(crate) enum Terminator {
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
+    /// Indirect branch to a code address held in `target` (GCC
+    /// computed goto, `goto *expr`). The set of possible successor
+    /// blocks is the function's `computed_goto_targets` (every block
+    /// whose address is taken via `&&label`); the CFG treats this as
+    /// a branch to all of them.
+    GotoIndirect { target: ValueId },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the
@@ -591,4 +604,10 @@ pub(crate) struct FunctionSsa {
     /// writes the result through it. `0` when the function does not
     /// return through x8.
     pub indirect_result_slot: i64,
+    /// Successor blocks of every `Terminator::GotoIndirect` in this
+    /// function: each block whose address is taken via `&&label`
+    /// (GCC computed goto). The CFG, liveness, and the allocator
+    /// treat an indirect branch as a branch to all of these. Empty
+    /// for functions with no computed goto.
+    pub computed_goto_targets: Vec<BlockId>,
 }

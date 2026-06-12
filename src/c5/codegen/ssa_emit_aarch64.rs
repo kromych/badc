@@ -50,13 +50,13 @@ use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
-    enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br,
-    enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d,
-    enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x,
-    enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldp_post,
-    enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
-    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_msub,
-    enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
+    enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
+    enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d,
+    enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
+    enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
+    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
+    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
     enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
     enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
@@ -794,6 +794,10 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // GCC `&&label`: each `Inst::BlockAddr` emits an `ADR rd, .`
+    // placeholder; `(site, target_block, rd)` is resolved against the
+    // final `block_offsets` once every block has been laid out.
+    let mut block_addr_fixups: Vec<(usize, BlockId, Reg)> = Vec::new();
     // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
     // and read by `Inst::Intrinsic { kind: Alloca }`; zero
     // means the function doesn't use alloca.
@@ -824,6 +828,37 @@ pub(super) fn emit_function(
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            // GCC `&&label`: materialize the block's address with a
+            // PC-relative ADR. Handled here (not emit_inst) because the
+            // fixup resolves against this function's local block_offsets
+            // once every block is laid out -- walker IR leaves
+            // block.start_pc at 0, so the pc_to_native path can't be used.
+            if let Inst::BlockAddr(tb) = inst {
+                let rd = match int_or_spill_scratch(place, &scratch) {
+                    Some(r) => r,
+                    None => {
+                        bail("BlockAddr: dst not int reg / spill", v, place);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                let adr_site = code.len();
+                emit(code, enc_adr(rd, 0));
+                block_addr_fixups.push((adr_site, *tb, rd));
+                if let Place::Spill(slot) = place {
+                    let sp_off = spill_off(frame, slot);
+                    emit_sp_str_x_auto(code, rd, sp_off);
+                }
+                continue;
+            }
             let data_fixups_pre_inst = data_fixups.len();
             if !emit_inst(
                 code,
@@ -1072,6 +1107,33 @@ pub(super) fn emit_function(
                     emit(code, enc_b(0));
                 }
             }
+            Terminator::GotoIndirect { target } => {
+                // GCC computed goto: branch to the code address in
+                // `target` (materialized by Inst::BlockAddr). Move it
+                // into a register and `br`.
+                let tplace = alloc
+                    .places
+                    .get(target as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let rt = match materialize_int(code, tplace, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        bail("GotoIndirect: target Place not int", target, tplace);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                emit(code, enc_br(rt));
+            }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
                 // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
@@ -1096,6 +1158,27 @@ pub(super) fn emit_function(
                 super::aarch64::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
         }
+    }
+    // Patch each `&&label` ADR against its block's final offset.
+    for (site, target_block, rd) in &block_addr_fixups {
+        let target_off = block_offsets[*target_block as usize] as i64;
+        let rel = target_off - *site as i64;
+        // ADR has a signed 21-bit byte immediate (+/-1 MiB).
+        if !(-(1 << 20)..(1 << 20)).contains(&rel) {
+            bail_msg("BlockAddr: ADR target out of +/-1MiB range");
+            code.truncate(snapshot);
+            fixups.truncate(fixups_snapshot);
+            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+            data_fixups.truncate(data_fixups_snapshot);
+            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+            tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+            macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+            return false;
+        }
+        let word = enc_adr(*rd, rel as i32);
+        code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
     }
     // Patch the recorded branches.
     for fx in &branch_fixups {
@@ -1791,6 +1874,9 @@ fn emit_inst(
             }
             true
         }
+        // Inst::BlockAddr is handled in emit_function's block loop
+        // (it needs the local block_offsets table for its PC-relative
+        // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
         Inst::Load { addr, disp, kind } => emit_load(
             code,
@@ -5313,6 +5399,7 @@ fn emit_phi_predecessor_moves(
             fall_through,
             ..
         } => alloc::vec![target, fall_through],
+        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
         Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
     };
     for succ in succs {

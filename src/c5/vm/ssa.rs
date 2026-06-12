@@ -668,6 +668,13 @@ fn run_func<H: Host>(
             Terminator::FallThrough(target) => {
                 frame.block_idx = target as usize;
             }
+            Terminator::GotoIndirect { target } => {
+                // `target` holds a label-address token produced by
+                // Inst::BlockAddr (CODE_ADDR_TAG | block index). Mask the
+                // tag to recover the destination block index.
+                let tok = frame.regs[target as usize];
+                frame.block_idx = (tok & !CODE_ADDR_TAG) as usize;
+            }
             Terminator::TailExt(_) => {
                 break Err(C5Error::Runtime(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
@@ -760,6 +767,14 @@ fn run_inst<H: Host>(
             // Code pointers don't map to bytes; tag with
             // `CODE_ADDR_TAG` so `CallIndirect` recognises them.
             frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
+            return Ok(());
+        }
+        Inst::BlockAddr(b) => {
+            // Label address (GCC `&&label`). Tag the block index as a
+            // code pointer so it is non-zero (truthy, like a real label
+            // address) and distinct from a data address; GotoIndirect
+            // masks the tag back off to recover the block index.
+            frame.regs[v as usize] = CODE_ADDR_TAG | (*b as i64);
             return Ok(());
         }
         Inst::LocalAddr(off) => {

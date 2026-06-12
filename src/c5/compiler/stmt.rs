@@ -779,21 +779,34 @@ impl Compiler {
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
             self.next()?;
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err("expected identifier after goto"));
+            if self.lex.tk == Token::MulOp {
+                // GCC computed goto: `goto *expr;` branches to the
+                // label address that `expr` evaluates to.
+                self.next()?; // consume '*'
+                self.parse_full_expr()?;
+                let target = self.ast_acc;
+                self.flush_pending_stores();
+                self.consume(b';', "semicolon expected after computed goto")?;
+                if let Some(t) = target {
+                    self.ast_emit_goto_indirect(t);
+                }
+            } else {
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("expected identifier after goto"));
+                }
+                let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+
+                self.flush_pending_stores();
+
+                if !self.labels.iter().any(|n| n == &target_name) {
+                    self.unresolved_gotos.push(target_name.clone());
+                }
+
+                self.consume(b';', "semicolon expected after goto")?;
+                let label = self.ast_label_by_name(&target_name);
+                self.ast_emit_goto(label);
             }
-            let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.next()?;
-
-            self.flush_pending_stores();
-
-            if !self.labels.iter().any(|n| n == &target_name) {
-                self.unresolved_gotos.push(target_name.clone());
-            }
-
-            self.consume(b';', "semicolon expected after goto")?;
-            let label = self.ast_label_by_name(&target_name);
-            self.ast_emit_goto(label);
         } else if self.lex.tk == Token::Break {
             self.next()?;
             if self.loop_break_depth == 0 {

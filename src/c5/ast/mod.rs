@@ -176,6 +176,9 @@ pub(crate) enum Expr {
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
     /// instead.
     Unary { op: UnOp, child: ExprId, ty: i64 },
+    /// `&&label` -- GCC labels-as-values. The address of a local
+    /// label as a `void *`, consumed by `Stmt::GotoIndirect`.
+    LabelAddr(LabelId),
     /// `lhs op rhs`. C99 6.5 operator-by-operator semantics; `op`
     /// is already the post-usual-arithmetic-conversion variant
     /// the parser picked (e.g. `Add` vs `Fadd`).
@@ -375,6 +378,9 @@ pub(crate) enum Stmt {
     Return(Option<ExprId>),
     /// `goto label;` (C99 6.8.6.1).
     Goto(LabelId),
+    /// `goto *expr;` -- GCC computed goto. `target` evaluates to a
+    /// label address produced by `Expr::LabelAddr`.
+    GotoIndirect(ExprId),
     /// `label: body` (C99 6.8.1) -- the goto target.
     Labeled { label: LabelId, body: StmtId },
     /// Inline assembly. `text` is the assembler source; `clobbers`
@@ -830,6 +836,8 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
             }
         }
         Expr::Sizeof(_) => {}
+        // No `ty` field; `&&label` is always a `void *`.
+        Expr::LabelAddr(_) => {}
     }
 }
 

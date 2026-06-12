@@ -901,6 +901,13 @@ impl<'a> Walker<'a> {
                 b.jmp(target);
                 Ok(true)
             }
+            Stmt::GotoIndirect(target) => {
+                // GCC `goto *expr;`: evaluate the label-address operand
+                // and close the block with an indirect branch.
+                let v = self.walk_expr_rvalue(b, *target)?;
+                b.goto_indirect(v);
+                Ok(true)
+            }
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
                 // C99 6.8.1: a labeled statement is reachable from
@@ -2364,6 +2371,10 @@ impl<'a> Walker<'a> {
                     Expr::StrLit { ty, .. } => *ty,
                     Expr::Intrinsic { ty, .. } => *ty,
                     Expr::Atomic { ty, .. } => *ty,
+                    // `&&label` is a `void *` (char-pointer encoding).
+                    Expr::LabelAddr(_) => {
+                        crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
+                    }
                 };
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
@@ -2656,6 +2667,13 @@ impl<'a> Walker<'a> {
                     return Ok(b.mark_f32(v));
                 }
                 Ok(v)
+            }
+            Expr::LabelAddr(label) => {
+                // GCC `&&label`: materialize the address of the label's
+                // block as a code pointer. block_addr records the block
+                // as a computed-goto successor.
+                let blk = self.block_for_label(b, *label);
+                Ok(b.block_addr(blk))
             }
             Expr::Atomic {
                 kind,
@@ -3511,6 +3529,10 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),
+        // `&&label` is a `void *` (char-pointer encoding).
+        Expr::LabelAddr(_) => {
+            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
+        }
     }
 }
 
@@ -3644,6 +3666,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::Intrinsic { .. } => "Intrinsic",
         Expr::ShortCircuit { .. } => "ShortCircuit",
         Expr::Atomic { .. } => "Atomic",
+        Expr::LabelAddr(_) => "LabelAddr",
     }
 }
 

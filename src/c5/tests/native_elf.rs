@@ -436,6 +436,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
+    ("flex_array_member_sizing.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("designator_override_and_braced_string.c", 0),

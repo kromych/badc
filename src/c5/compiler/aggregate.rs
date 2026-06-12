@@ -105,6 +105,13 @@ impl Compiler {
         // share the bits left in a larger-typed neighbour's unit.
         let mut bf_active = false;
         let mut bf_bit_cursor: usize = 0;
+        // Set once any field is declared. The empty-aggregate floor to
+        // 1 byte below applies only to a truly fieldless `struct {}`; an
+        // aggregate with members whose sizes sum to 0 (flexible /
+        // zero-length arrays, or nested size-0 aggregates) has size 0
+        // (gcc / clang), and flooring it would add a spurious byte that
+        // mis-pads any enclosing aggregate.
+        let mut saw_field = false;
         while self.lex.tk != '}' {
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
@@ -395,6 +402,7 @@ impl Compiler {
                         } else {
                             inner_field.anon_union_group
                         };
+                        saw_field = true;
                         self.structs[struct_id].fields.push(StructField {
                             name: inner_field.name,
                             offset: base_offset + inner_field.offset,
@@ -623,6 +631,7 @@ impl Compiler {
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
+                saw_field = true;
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
@@ -669,7 +678,12 @@ impl Compiler {
         // every other struct's size is whatever the field cursor
         // ended up at, rounded to the struct's own alignment.
         let total = round_up(offset, struct_align);
-        self.structs[struct_id].size = total.max(1);
+        // A genuinely empty aggregate floors at 1 byte so `struct *p`
+        // has a meaningful sizeof for pointer arithmetic (matching GCC's
+        // empty-struct extension); an aggregate with a flexible-array
+        // member legitimately has size 0 when nothing precedes it (gcc /
+        // clang) and must not be floored.
+        self.structs[struct_id].size = if saw_field { total } else { total.max(1) };
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
     }

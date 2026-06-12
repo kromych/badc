@@ -80,6 +80,13 @@ fn aggregate_init_struct_member_copy() {
 }
 
 #[test]
+fn flex_array_member_sizing() {
+    // C99 6.7.2.1p18: a flexible/zero-length array member contributes no
+    // storage; an aggregate built only from such members has size 0.
+    assert_eq!(run_fixture("flex_array_member_sizing.c"), 0);
+}
+
+#[test]
 fn bitfield_mixed_base_packing() {
     // C99 6.7.2.1p11: adjacent bitfields of different base types share a
     // storage unit when the bits fit (the gcc/clang layout).

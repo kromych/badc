@@ -1067,6 +1067,12 @@ impl Compiler {
             } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 needs_runtime = true;
                 saw_any = true;
+            } else if self.lex.tk == Token::Lan {
+                // `&&label` (GCC labels as values): the block address is
+                // not known until the function is emitted, so the element
+                // is filled by a runtime store rather than a constant.
+                needs_runtime = true;
+                saw_any = true;
             } else {
                 saw_any = true;
             }

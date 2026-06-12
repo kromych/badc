@@ -637,6 +637,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("computed_goto.c", 0),
+    ("label_addr_array_init.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
     ("variadic_struct_return.c", 0),

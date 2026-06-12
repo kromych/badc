@@ -151,6 +151,14 @@ fn computed_goto() {
 }
 
 #[test]
+fn label_addr_array_init() {
+    // A `&&label` element in an array initializer fills the slot with a
+    // runtime store (the block address is not a compile-time constant),
+    // indexed by a computed goto.
+    assert_eq!(run_fixture("label_addr_array_init.c"), 0);
+}
+
+#[test]
 fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.

@@ -306,6 +306,13 @@ impl Compiler {
 
         if self.lex.tk == Token::Assign {
             self.next()?;
+            // A `&&label` element (GCC labels as values) is a block address
+            // known only once the function is emitted, so a static array
+            // carrying one is left zero in the data image and filled by
+            // runtime stores at the declaration point.
+            if self.lex.tk == '{' && self.array_init_has_label_addr()? {
+                return self.emit_static_array_init_runtime(loc_idx, ty, array_size);
+            }
             if array_size == -1 {
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     // Static-local of struct array, deferred size:
@@ -421,6 +428,110 @@ impl Compiler {
             }
         }
 
+        Ok(())
+    }
+
+    /// True if the brace-list array initializer at the current `{`
+    /// contains a `&&label` element at the top level. Restores the
+    /// lexer so the caller re-parses the list from the `{`.
+    pub(super) fn array_init_has_label_addr(&mut self) -> Result<bool, C5Error> {
+        debug_assert!(self.lex.tk == '{');
+        let snap = self.lex.snapshot();
+        let data_snap = self.data.len();
+        self.next()?; // consume `{`
+        let mut depth: i64 = 1;
+        let mut found = false;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '{' {
+                depth += 1;
+            } else if self.lex.tk == '}' {
+                depth -= 1;
+            } else if self.lex.tk == Token::Lan {
+                found = true;
+                break;
+            }
+            self.next()?;
+        }
+        self.lex.restore(snap);
+        self.data.truncate(data_snap);
+        Ok(found)
+    }
+
+    /// Fill a static-local array whose initializer contains a `&&label`
+    /// element with runtime stores at the declaration point. The data
+    /// image holds zeros; each element is parsed through the expression
+    /// grammar (so `&&label` yields a block-address node) and stored into
+    /// `arr[i]` via an `Expr::Assign` statement the walker lowers to a
+    /// global address store. A constant element is stored the same way.
+    pub(super) fn emit_static_array_init_runtime(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        array_size: i64,
+    ) -> Result<(), C5Error> {
+        let elem_size = self.size_of_type(ty) as i64;
+        let count = if array_size > 0 {
+            array_size
+        } else {
+            // Deferred size: count the elements and reserve zeroed storage.
+            let (c, _) = self.scan_array_init()?;
+            self.align_data_to_8();
+            let off = self.data.len() as i64;
+            self.symbols[loc_idx].val = off;
+            self.symbols[loc_idx].array_size = c;
+            for _ in 0..(c * elem_size) {
+                self.data.push(0);
+            }
+            while !self.data.len().is_multiple_of(8) {
+                self.data.push(0);
+            }
+            c
+        };
+        debug_assert!(self.lex.tk == '{');
+        self.next()?; // consume `{`
+        // The array Ident decays to its base address; the index is the
+        // element's byte offset, matching the walker's pre-scaled
+        // `Expr::Index` convention.
+        let arr_ty = ty + Ty::Ptr as i64;
+        let mut i: i64 = 0;
+        while self.lex.tk != '}' {
+            if i >= count {
+                return Err(self.compile_err(format!(
+                    "too many initializers for `{}`",
+                    self.symbols[loc_idx].name
+                )));
+            }
+            self.expr(Token::Assign as i64)?;
+            if let Some(rhs) = self.ast_acc.take() {
+                let array_id = self.ast_emit_ident(loc_idx as u32, arr_ty);
+                let idx_id = self.ast_emit_int_lit(i * elem_size, Ty::Int as i64);
+                let pos = self.ast_src_pos();
+                let index_id = self.ast.push_expr(
+                    super::super::ast::Expr::Index {
+                        array: array_id,
+                        idx: idx_id,
+                        ty,
+                    },
+                    pos,
+                );
+                let assign_id = self.ast.push_expr(
+                    super::super::ast::Expr::Assign {
+                        lhs: index_id,
+                        rhs,
+                        ty,
+                    },
+                    pos,
+                );
+                self.ast
+                    .push_stmt(super::super::ast::Stmt::Expr(assign_id), pos);
+            }
+            i += 1;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        self.ast_acc = None;
         Ok(())
     }
 

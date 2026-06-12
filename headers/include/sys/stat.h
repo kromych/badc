@@ -13,6 +13,9 @@
 #ifndef _C5_SYS_STAT_H
 #define _C5_SYS_STAT_H
 
+// `struct timespec` for the nanosecond timestamp fields below.
+#include <time.h>
+
 // `struct stat` is a write-target for libc's `stat`/`lstat`/
 // `fstat` family. Field offsets differ wildly across platforms
 // and are NOT just sizes -- libc fills bytes at specific
@@ -71,14 +74,26 @@ struct stat {
     int             st_gid;            /* offset 20, 4 bytes */
     int             st_rdev;           /* offset 24, 4 bytes */
     int             __pad28;           /* offset 28, 4 bytes */
-    long            st_atime;          /* offset 32 (timespec.tv_sec)  */
-    long            st_atimensec;      /* offset 40 (timespec.tv_nsec) */
-    long            st_mtime;          /* offset 48 */
-    long            st_mtimensec;      /* offset 56 */
-    long            st_ctime;          /* offset 64 */
-    long            st_ctimensec;      /* offset 72 */
-    long            st_birthtime;      /* offset 80 */
-    long            st_birthtimensec;  /* offset 88 */
+    // The nanosecond timestamp fields, named both as a timespec
+    // (st_atimespec, BSD) and as the historical flat tv_sec / tv_nsec
+    // pair (st_atime / st_atimensec). The union overlays the two views
+    // at the same 16-byte offset.
+    union {
+        struct timespec st_atimespec; /* offset 32 */
+        struct { long st_atime; long st_atimensec; };
+    };
+    union {
+        struct timespec st_mtimespec; /* offset 48 */
+        struct { long st_mtime; long st_mtimensec; };
+    };
+    union {
+        struct timespec st_ctimespec; /* offset 64 */
+        struct { long st_ctime; long st_ctimensec; };
+    };
+    union {
+        struct timespec st_birthtimespec; /* offset 80 */
+        struct { long st_birthtime; long st_birthtimensec; };
+    };
     long            st_size;           /* offset 96, 8 bytes */
     long            st_blocks;         /* offset 104, 8 bytes */
     int             st_blksize;        /* offset 112, 4 bytes */
@@ -106,12 +121,18 @@ struct stat {
     long st_size;            /* offset  48, 8 bytes */
     long st_blksize;         /* offset  56, 8 bytes */
     long st_blocks;          /* offset  64, 8 bytes */
-    long st_atime;           /* offset  72, timespec.tv_sec */
-    long st_atimensec;       /* offset  80 */
-    long st_mtime;           /* offset  88 */
-    long st_mtimensec;       /* offset  96 */
-    long st_ctime;           /* offset 104 */
-    long st_ctimensec;       /* offset 112 */
+    union {
+        struct timespec st_atim; /* offset  72 */
+        struct { long st_atime; long st_atimensec; };
+    };
+    union {
+        struct timespec st_mtim; /* offset  88 */
+        struct { long st_mtime; long st_mtimensec; };
+    };
+    union {
+        struct timespec st_ctim; /* offset 104 */
+        struct { long st_ctime; long st_ctimensec; };
+    };
     long __unused0;          /* offset 120 */
     long __unused1;          /* offset 128 */
     long __unused2;          /* offset 136 */
@@ -134,12 +155,18 @@ struct stat {
     int  st_blksize;         /* offset  56, 4 bytes */
     int  __pad2;             /* offset  60, 4 bytes */
     long st_blocks;          /* offset  64, 8 bytes */
-    long st_atime;           /* offset  72 */
-    long st_atimensec;       /* offset  80 */
-    long st_mtime;           /* offset  88 */
-    long st_mtimensec;       /* offset  96 */
-    long st_ctime;           /* offset 104 */
-    long st_ctimensec;       /* offset 112 */
+    union {
+        struct timespec st_atim; /* offset  72 */
+        struct { long st_atime; long st_atimensec; };
+    };
+    union {
+        struct timespec st_mtim; /* offset  88 */
+        struct { long st_mtime; long st_mtimensec; };
+    };
+    union {
+        struct timespec st_ctim; /* offset 104 */
+        struct { long st_ctime; long st_ctimensec; };
+    };
     int  __unused0;          /* offset 120 */
     int  __unused1;          /* offset 124 */
     char __pad[64];
@@ -158,12 +185,18 @@ struct stat {
     long st_size;
     long st_blksize;
     long st_blocks;
-    long st_atime;
-    long st_atimensec;
-    long st_mtime;
-    long st_mtimensec;
-    long st_ctime;
-    long st_ctimensec;
+    union {
+        struct timespec st_atim;
+        struct { long st_atime; long st_atimensec; };
+    };
+    union {
+        struct timespec st_mtim;
+        struct { long st_mtime; long st_mtimensec; };
+    };
+    union {
+        struct timespec st_ctim;
+        struct { long st_ctime; long st_ctimensec; };
+    };
     char __pad[128];
 };
 #endif

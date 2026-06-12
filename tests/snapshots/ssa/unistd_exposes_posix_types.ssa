@@ -1,6 +1,6 @@
 unistd_exposes_posix_types.c:14: warning: unused variable `n`
-unistd_exposes_posix_types.c:18: warning: unused variable `uid`
 unistd_exposes_posix_types.c:19: warning: unused variable `gid`
+unistd_exposes_posix_types.c:18: warning: unused variable `uid`
 unistd_exposes_posix_types.c:15: warning: unused variable `sz`
 unistd_exposes_posix_types.c:16: warning: unused variable `off`
 unistd_exposes_posix_types.c:17: warning: unused variable `pid`

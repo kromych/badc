@@ -1158,6 +1158,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("stat_timespec.c", 0),
     // sprintf 2-fixed + 4-variadic; the JIT shares the lowering
     // with the AOT backends so this guards both at once.
     ("variadic_sprintf.c", 0),

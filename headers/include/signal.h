@@ -40,6 +40,7 @@ typedef void (*sig_t)(int);
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::signal,      "_signal")
 #pragma binding(libc::raise,       "_raise")
+#pragma binding(libc::kill,        "_kill")
 #pragma binding(libc::sigaction,   "_sigaction")
 #pragma binding(libc::sigemptyset, "_sigemptyset")
 #pragma binding(libc::sigfillset,  "_sigfillset")
@@ -49,6 +50,7 @@ typedef void (*sig_t)(int);
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::signal,      "signal")
 #pragma binding(libc::raise,       "raise")
+#pragma binding(libc::kill,        "kill")
 #pragma binding(libc::sigaction,   "sigaction")
 #pragma binding(libc::sigemptyset, "sigemptyset")
 #pragma binding(libc::sigfillset,  "sigfillset")
@@ -62,6 +64,7 @@ typedef void (*sig_t)(int);
 
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
+int kill(int pid, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
 // POSIX `sigset_t` is an opaque bag of bits; size differs per

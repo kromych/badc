@@ -53,6 +53,9 @@
 #pragma binding(libc::pipe,      "_pipe")
 #pragma binding(libc::fork,      "_fork")
 #pragma binding(libc::execvp,    "_execvp")
+#pragma binding(libc::execve,    "_execve")
+#pragma binding(libc::setgid,    "_setgid")
+#pragma binding(libc::setuid,    "_setuid")
 #pragma binding(libc::_exit,     "__exit")
 #pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
@@ -117,6 +120,9 @@
 #pragma binding(libc::pipe,      "pipe")
 #pragma binding(libc::fork,      "fork")
 #pragma binding(libc::execvp,    "execvp")
+#pragma binding(libc::execve,    "execve")
+#pragma binding(libc::setgid,    "setgid")
+#pragma binding(libc::setuid,    "setuid")
 #pragma binding(libc::_exit,     "_exit")
 #pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
@@ -199,6 +205,9 @@ int dup2(int oldfd, int newfd);
 int pipe(int *fds);
 int fork();
 int execvp(char *file, char **argv);
+int execve(char *path, char **argv, char **envp);
+int setgid(int gid);
+int setuid(int uid);
 // `_exit` skips the libc atexit / fflush chain. Programs use it
 // after a failed exec in the child branch of fork+exec to avoid
 // running the parent's exit handlers a second time.

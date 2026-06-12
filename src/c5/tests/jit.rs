@@ -1156,6 +1156,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // Multi-arg dlsym call path: pthread_create + pthread_join.
     // POSIX-only fixture; the JIT is gated to POSIX hosts already.
     ("pthread_create.c", 11),
+    ("pthread_cond_timedwait.c", 0),
     // sprintf 2-fixed + 4-variadic; the JIT shares the lowering
     // with the AOT backends so this guards both at once.
     ("variadic_sprintf.c", 0),

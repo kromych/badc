@@ -393,6 +393,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("computed_goto.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),
+    ("variadic_struct_return.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("designator_override_and_braced_string.c", 0),

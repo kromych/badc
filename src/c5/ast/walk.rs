@@ -1907,6 +1907,19 @@ impl<'a> Walker<'a> {
                             if !arg_aggs.is_empty() {
                                 b.set_call_arg_aggs(call, arg_aggs);
                             }
+                            if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                            | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty,
+                                )
+                            {
+                                let ridx = b.intern_agg_desc(desc.clone());
+                                let slot = b.alloc_synthetic_struct(desc.size as i64);
+                                b.set_call_ret_agg(call, ridx, slot);
+                                return Ok(b.local_addr(slot));
+                            }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
@@ -1951,6 +1964,19 @@ impl<'a> Walker<'a> {
                             };
                             if !arg_aggs.is_empty() {
                                 b.set_call_arg_aggs(call, arg_aggs);
+                            }
+                            if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                            | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty,
+                                )
+                            {
+                                let ridx = b.intern_agg_desc(desc.clone());
+                                let slot = b.alloc_synthetic_struct(desc.size as i64);
+                                b.set_call_ret_agg(call, ridx, slot);
+                                return Ok(b.local_addr(slot));
                             }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));

@@ -5314,6 +5314,19 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
         }
+        // A variadic callee may still return a <=16-byte aggregate by
+        // value in rax:rdx; store it into the caller's result temp, as
+        // the non-variadic path below does. Without this the struct
+        // result is dropped (the scalar bridge leaves the slot unwritten).
+        if let Some(ai) = ret_agg {
+            let size = agg_descs[ai as usize].size;
+            let base = local_slot_off(ret_slot_local, func, frame, abi);
+            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+            if size > 8 {
+                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+            }
+            return true;
+        }
         // c5 internal call return convention: an integer / pointer
         // result lives in rax, a floating-point result in xmm0 (C99
         // 6.2.5p10).
@@ -5371,6 +5384,19 @@ fn emit_call(
         super::x86_64::emit_call_rel32(code, 0);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        // A variadic callee may still return a <=16-byte aggregate by
+        // value in rax:rdx; store it into the caller's result temp, as
+        // the non-variadic path below does. Without this the struct
+        // result is dropped (the scalar bridge leaves the slot unwritten).
+        if let Some(ai) = ret_agg {
+            let size = agg_descs[ai as usize].size;
+            let base = local_slot_off(ret_slot_local, func, frame, abi);
+            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+            if size > 8 {
+                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+            }
+            return true;
         }
         // c5 internal call return convention: an integer / pointer
         // result lives in rax, a floating-point result in xmm0 (C99

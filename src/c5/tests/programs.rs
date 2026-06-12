@@ -80,6 +80,13 @@ fn aggregate_init_struct_member_copy() {
 }
 
 #[test]
+fn variadic_struct_return() {
+    // A variadic function returning a struct by value: the call must
+    // recover the result registers into the caller's temp.
+    assert_eq!(run_fixture("variadic_struct_return.c"), 0);
+}
+
+#[test]
 fn flex_array_member_sizing() {
     // C99 6.7.2.1p18: a flexible/zero-length array member contributes no
     // storage; an aggregate built only from such members has size 0.

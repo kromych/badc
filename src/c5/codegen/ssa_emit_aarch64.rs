@@ -3313,6 +3313,12 @@ fn emit_call(
         if !marshal_args(code, &plan, args, alloc, scratch, frame) {
             return false;
         }
+        // A variadic callee may still return an aggregate by value; load
+        // the indirect-result pointer into x8 for a >16-byte return and
+        // recover the eightbytes from x0/x1 afterwards, as the
+        // non-variadic path does. Without this the struct result is
+        // dropped (the scalar bridge leaves the result slot unwritten).
+        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
         fixups.push(Fixup {
             native_offset: code.len(),
             target_ent_pc: target_pc,
@@ -3322,7 +3328,16 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        move_call_result(code, dst, frame, fp_return);
+        finish_call_result(
+            code,
+            ret_agg,
+            ret_slot_off,
+            agg_descs,
+            dst,
+            frame,
+            scratch,
+            fp_return,
+        );
         return true;
     }
     // Every aarch64 variadic callee is marshaled by a host-ABI branch

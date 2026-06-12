@@ -178,32 +178,60 @@ read-modify-write forms inter-thread atomic needs the target's
 atomic instructions (x86 `lock` prefix / `xchg` / `cmpxchg`,
 AArch64 LSE or load-exclusive / store-exclusive).
 
-### Address of a dynamically-imported function on native targets, severity 3
+### Address of a single-precision intrinsic math function, severity 5
 
-Taking the address of a function resolved through a `#pragma
-binding` import (a libc / libm symbol such as `fabs`, `sin`,
-`memcpy`) is unsupported when emitting a native binary, in both
-data and code:
+Taking the address of an imported function -- in a static
+initializer or a scalar assignment, and calling through the
+pointer -- works on every native target (Mach-O / ELF / PE,
+both architectures) for ordinary libc / libm symbols (`sin`,
+`cos`, `memcpy`, `strlen`) and for the double-precision math
+functions that lower to a single FP instruction (`fabs`,
+`sqrt`, `floor`, `ceil`, `trunc`), which carry a `#pragma
+binding` so their address resolves to a real symbol.
+
+The remaining gap is the single-precision variants `fabsf`,
+`sqrtf`, `floorf`, `ceilf`, `truncf`: a direct call lowers to
+one FP instruction through the intrinsic, so they carry no
+library symbol, and taking their address in a native build
+fails to link:
 
 ```c
-typedef double (*fn1)(double);
-static fn1 table[] = { fabs, sin, cos };   // error: undefined reference to `fabs` (data initializer)
-fn1 p = fabs;                              // error: undefined reference to `fabs`
+typedef float (*ff)(float);
+static ff t[] = { fabsf };   // error: undefined reference to `fabsf` (data initializer)
 ```
 
-The native path lowers a *call* to an imported function to a
-PLT-relative call resolved by the per-import trampoline, but it
-does not materialize the import's *address* as a value: the
-operand decays to a plain global-undef symbol that the linker
-cannot place. The address of a c5-*defined* function in the same
-position works (it resolves against the merged Text section);
-only dynamic imports diverge. The interpreter and JIT resolve the
-address at run time, so this is native-only. Fixing it spans
-codegen (emit an address-of-import relocation), the linker (a GOT
-slot per address-taken import), and all three object writers
-(Mach-O / ELF / PE) across both architectures. The common idiom
-it blocks is a static dispatch table of libc functions (math
-expression evaluators, scripting glue).
+The interpreter and JIT resolve the address at run time, so
+this is native-only. Binding these symbols (as the double-
+precision functions are bound) resolves the address, but a
+single-precision call *through* the resulting pointer hits the
+function-pointer `float` ABI gap below, so the binding alone
+does not make the address usable.
+
+### `float` argument or return through a function pointer, severity 4
+
+c5 carries no per-parameter type on a function-pointer type:
+the prototype-level dialect does not distinguish `float` from
+`double`. A direct call narrows each argument to the callee's
+declared parameter type and widens the result from the callee's
+return type, so a `float`-by-value call is single-precision
+end to end. A call through a function pointer has no parameter
+types to narrow to, so it applies the C99 6.5.2.2p6 default
+argument promotions as if the callee were unprototyped: a
+`float` argument is widened to `double` before the call and a
+`float` result is read back as `double`. The callee reads the
+single-precision view of the register and sees the wrong bits:
+
+```c
+static int t2i(float x) { return (int)x; }
+int (*p)(float) = t2i;
+int r = p(7.5f);   // r == 0, not 7
+```
+
+`double` arguments and returns through a function pointer are
+correct (the 8-byte value matches). The fix is to record the
+pointed-to function's parameter and return types on the
+function-pointer type so the indirect call narrows / widens the
+same way a direct call does.
 
 ### `struct`-by-value through a `#pragma binding` import, severity 4
 

@@ -409,6 +409,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // anyway, so dlopen(NULL) finds pthread_create in our scope.
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
+    ("posix_os_headers.c", 0),
     // sprintf 2-fixed + 4-variadic; cross-checks the ABI's
     // variadic packing on Linux AAPCS64 (where it stays in
     // registers, unlike macOS).

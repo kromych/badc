@@ -102,6 +102,16 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/wait.h",
         include_str!("../../headers/include/sys/wait.h"),
     ),
+    (
+        "sys/ioctl.h",
+        include_str!("../../headers/include/sys/ioctl.h"),
+    ),
+    (
+        "sys/time.h",
+        include_str!("../../headers/include/sys/time.h"),
+    ),
+    ("termios.h", include_str!("../../headers/include/termios.h")),
+    ("poll.h", include_str!("../../headers/include/poll.h")),
     ("strings.h", include_str!("../../headers/include/strings.h")),
     ("libgen.h", include_str!("../../headers/include/libgen.h")),
     ("glob.h", include_str!("../../headers/include/glob.h")),

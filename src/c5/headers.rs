@@ -112,6 +112,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("termios.h", include_str!("../../headers/include/termios.h")),
     ("poll.h", include_str!("../../headers/include/poll.h")),
+    (
+        "malloc/malloc.h",
+        include_str!("../../headers/include/malloc/malloc.h"),
+    ),
     ("strings.h", include_str!("../../headers/include/strings.h")),
     ("libgen.h", include_str!("../../headers/include/libgen.h")),
     ("glob.h", include_str!("../../headers/include/glob.h")),

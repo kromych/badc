@@ -364,6 +364,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
     ("stat_timespec.c", 0),
+    ("malloc_size.c", 0),
     // sprintf 2-fixed + 4-variadic; SysV passes variadic in
     // registers but the call still needs `xor eax, eax` so AL
     // signals "no XMM regs used" -- the ABI plan's

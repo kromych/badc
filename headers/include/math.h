@@ -73,6 +73,14 @@
 // C99 7.12 single-precision variants. Each takes and returns `float`;
 // the FP-register ABI narrows the argument and the call-return bridge
 // recovers the single-precision result.
+// sqrtf / fabsf / floorf / ceilf / truncf lower a direct call to a
+// single FP instruction below; the binding exists so taking the
+// function's address resolves to a real callable symbol.
+#pragma binding(libc::sqrtf,  "_sqrtf")
+#pragma binding(libc::fabsf,  "_fabsf")
+#pragma binding(libc::floorf, "_floorf")
+#pragma binding(libc::ceilf,  "_ceilf")
+#pragma binding(libc::truncf, "_truncf")
 #pragma binding(libc::logf,   "_logf")
 #pragma binding(libc::log10f, "_log10f")
 #pragma binding(libc::expf,   "_expf")
@@ -156,6 +164,14 @@
 #pragma binding(libm::ceil,  "ceil")
 #pragma binding(libm::trunc, "trunc")
 // C99 7.12 single-precision variants.
+// sqrtf / fabsf / floorf / ceilf / truncf lower a direct call to a
+// single FP instruction below; the binding exists so taking the
+// function's address resolves to a real callable symbol.
+#pragma binding(libm::sqrtf,  "sqrtf")
+#pragma binding(libm::fabsf,  "fabsf")
+#pragma binding(libm::floorf, "floorf")
+#pragma binding(libm::ceilf,  "ceilf")
+#pragma binding(libm::truncf, "truncf")
 #pragma binding(libm::logf,   "logf")
 #pragma binding(libm::log10f, "log10f")
 #pragma binding(libm::expf,   "expf")
@@ -274,7 +290,15 @@
 // C99 7.12 single-precision variants. The Universal CRT exports these
 // `f`-suffixed entry points (the legacy msvcrt.dll does not). The forms
 // with a single FP instruction (sqrtf, fabsf, floorf, ceilf, truncf)
-// lower via `#pragma intrinsic` below and need no binding.
+// lower a direct call via `#pragma intrinsic` below; the binding exists
+// so taking the function's address resolves to a real callable symbol.
+// `fabsf` is an MSVC compiler intrinsic that neither msvcrt.dll nor
+// ucrtbase.dll exports, so its address has no library symbol to resolve
+// to on Windows; only its direct (instruction) call is available here.
+#pragma binding(ucrtbase::sqrtf,  "sqrtf")
+#pragma binding(ucrtbase::floorf, "floorf")
+#pragma binding(ucrtbase::ceilf,  "ceilf")
+#pragma binding(ucrtbase::truncf, "truncf")
 #pragma binding(ucrtbase::logf,   "logf")
 #pragma binding(ucrtbase::log10f, "log10f")
 #pragma binding(ucrtbase::expf,   "expf")

@@ -127,49 +127,39 @@ fn ent_pc=13 n_params=0 variadic=false locals=14
     terminator Return(v80)   (exit_acc=v80)
 ; --- SSA dump (ok=true) ent_pc=14 ---
 ; name=__c5_sys_sqrt
-fn ent_pc=14 n_params=1 variadic=false locals=0
+fn ent_pc=14 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x7
-    v2   CallExt { binding_idx=42, args=[v1], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator TailExt(42)
 ; --- SSA dump (ok=true) ent_pc=15 ---
 ; name=__c5_sys_fabs
-fn ent_pc=15 n_params=1 variadic=false locals=0
+fn ent_pc=15 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x7
-    v2   CallExt { binding_idx=43, args=[v1], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator TailExt(43)
 ; --- SSA dump (ok=true) ent_pc=16 ---
 ; name=__c5_sys_floor
-fn ent_pc=16 n_params=1 variadic=false locals=0
+fn ent_pc=16 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x7
-    v2   CallExt { binding_idx=44, args=[v1], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator TailExt(44)
 ; --- SSA dump (ok=true) ent_pc=17 ---
 ; name=__c5_sys_ceil
-fn ent_pc=17 n_params=1 variadic=false locals=0
+fn ent_pc=17 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x7
-    v2   CallExt { binding_idx=45, args=[v1], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator TailExt(45)
 ; --- SSA dump (ok=true) ent_pc=18 ---
 ; name=__c5_sys_trunc
-fn ent_pc=18 n_params=1 variadic=false locals=0
+fn ent_pc=18 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LoadLocal { off=2, kind=I64 }                    -> x7
-    v2   CallExt { binding_idx=46, args=[v1], fp_arg_mask=0x0 } -> x0
-    terminator Return(v2)   (exit_acc=v2)
+    terminator TailExt(46)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

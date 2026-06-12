@@ -180,8 +180,23 @@ impl Compiler {
                     // named-parameter count. Subsequent signatures
                     // (function-returning-fp shapes) keep skipping.
                     if !saw_fn_signature {
-                        let (fixed, variadic) = self.skip_balanced_parens_capturing_proto()?;
-                        self.pending.typedef_fn_proto = Some((fixed, variadic));
+                        // Capture the pointee signature's parameter types (not
+                        // just the count) so an indirect call through the
+                        // pointer narrows each argument to its declared
+                        // parameter type instead of applying the default
+                        // argument promotions. parse_function_params binds
+                        // each named parameter as a Loc symbol; restore the
+                        // shadowed bindings since a fn-pointer declarator has
+                        // no body to scope them.
+                        let saved_proto = self.pending.parsing_fn_ptr_proto;
+                        self.pending.parsing_fn_ptr_proto = true;
+                        let pp = self.parse_function_params()?;
+                        self.pending.parsing_fn_ptr_proto = saved_proto;
+                        for &pidx in &pp.indices {
+                            Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
+                        }
+                        self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
+                        self.pending.fn_ptr_param_types = Some(pp.types);
                     } else {
                         self.skip_balanced_parens_after_open()?;
                     }

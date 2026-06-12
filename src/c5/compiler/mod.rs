@@ -373,6 +373,19 @@ pub(in crate::c5::compiler) struct Pending {
     /// arm64 variadic ABI). `None` for non-fn-pointer base types.
     /// Cleared by every base-type parse.
     pub typedef_fn_proto: Option<(usize, bool)>,
+    /// The pointed-to function's parameter type tags, captured by the
+    /// fn-pointer declarator alongside `typedef_fn_proto`. Lets an
+    /// indirect call narrow each argument to its declared parameter type
+    /// instead of applying the default argument promotions. `None` when
+    /// the prototype carries no types (an empty parameter list).
+    pub fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    /// Set while parsing a function-pointer declarator's parameter list.
+    /// The parameters form a prototype: their names are irrelevant, so
+    /// `parse_function_params` records each type without binding the name
+    /// (a named parameter that shadows an enclosing function's parameter --
+    /// a callback type nested in another prototype -- must not trip the
+    /// duplicate-parameter check).
+    pub parsing_fn_ptr_proto: bool,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -490,6 +503,8 @@ impl Default for Pending {
             init_target_array_size: 0,
             typedef_base_array_size: 0,
             typedef_fn_proto: None,
+            fn_ptr_param_types: None,
+            parsing_fn_ptr_proto: false,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field

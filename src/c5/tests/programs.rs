@@ -105,6 +105,15 @@ fn fn_ptr_float_return() {
 }
 
 #[test]
+fn fn_ptr_float_arg() {
+    // C99 6.5.2.2p7: a float argument through a function pointer is
+    // converted to the pointer's declared parameter type, not promoted to
+    // double. Covers a fn-pointer variable, typedef, and a callback
+    // parameter whose own parameter name shadows the enclosing prototype.
+    assert_eq!(run_fixture("fn_ptr_float_arg.c"), 0);
+}
+
+#[test]
 fn variadic_struct_return() {
     // A variadic function returning a struct by value: the call must
     // recover the result registers into the caller's temp.

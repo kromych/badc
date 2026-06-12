@@ -643,6 +643,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_union_struct_return.c", 0),
     ("union_fp_member_regs_return.c", 0),
     ("fn_ptr_float_return.c", 0),
+    ("fn_ptr_float_arg.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("designator_override_and_braced_string.c", 0),

@@ -171,12 +171,15 @@ impl Compiler {
                     // A function-pointer typedef records the pointed-to
                     // function's prototype (`params` + `is_variadic`).
                     // Carry it to the bound declarator so an indirect
-                    // call through the variable can split fixed vs
+                    // call through the variable narrows each argument to
+                    // its declared parameter type and splits fixed vs
                     // variadic arguments per the host variadic ABI.
                     self.pending.typedef_fn_proto = Some((
                         self.symbols[self.lex.curr_id_idx].params.len(),
                         self.symbols[self.lex.curr_id_idx].is_variadic,
                     ));
+                    self.pending.fn_ptr_param_types =
+                        Some(self.symbols[self.lex.curr_id_idx].params.clone());
                 }
                 // C99 6.7.7 paragraph 3: a typedef whose alias is
                 // an array contributes its dimension to the
@@ -270,7 +273,11 @@ impl Compiler {
                 // places every argument as fixed regardless, and
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
-                if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+                let fnptr_proto = self.pending.typedef_fn_proto.take();
+                if let Some(types) = self.pending.fn_ptr_param_types.take() {
+                    self.symbols[id_idx].params = types;
+                    self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+                } else if let Some((proto_fixed, true)) = fnptr_proto {
                     self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
                     self.symbols[id_idx].is_variadic = true;
                 }
@@ -381,13 +388,16 @@ impl Compiler {
                         self.pending.typedef_fn_proto.take()
                     {
                         // `typedef RET (*NAME)(args)`: the declarator
-                        // captured the pointee signature's prototype
-                        // (c5 otherwise skips it). Record the
-                        // named-parameter count and variadic-ness so a
-                        // fn-pointer variable declared through the
-                        // typedef can split fixed vs variadic arguments
-                        // per the host variadic ABI.
-                        self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                        // captured the pointee signature's prototype.
+                        // Record the parameter types (so a fn-pointer
+                        // variable declared through the typedef narrows
+                        // each argument to its declared type) and the
+                        // variadic-ness.
+                        self.symbols[id_idx].params = self
+                            .pending
+                            .fn_ptr_param_types
+                            .take()
+                            .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                         self.symbols[id_idx].is_variadic = proto_variadic;
                     }
                     if self.lex.tk == ',' {

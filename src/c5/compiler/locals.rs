@@ -240,7 +240,11 @@ impl Compiler {
             // argument as fixed regardless, and synthesising
             // placeholder parameter types would feed the call-site
             // argument type-check a spurious mismatch.
-            if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+            let fnptr_proto = self.pending.typedef_fn_proto.take();
+            if let Some(types) = self.pending.fn_ptr_param_types.take() {
+                self.symbols[loc_idx].params = types;
+                self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+            } else if let Some((proto_fixed, true)) = fnptr_proto {
                 self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
                 self.symbols[loc_idx].is_variadic = true;
             }

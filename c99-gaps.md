@@ -202,36 +202,10 @@ static ff t[] = { fabsf };   // error: undefined reference to `fabsf` (data init
 
 The interpreter and JIT resolve the address at run time, so
 this is native-only. Binding these symbols (as the double-
-precision functions are bound) resolves the address, but a
-single-precision call *through* the resulting pointer hits the
-function-pointer `float` ABI gap below, so the binding alone
-does not make the address usable.
-
-### `float` argument or return through a function pointer, severity 4
-
-c5 carries no per-parameter type on a function-pointer type:
-the prototype-level dialect does not distinguish `float` from
-`double`. A direct call narrows each argument to the callee's
-declared parameter type and widens the result from the callee's
-return type, so a `float`-by-value call is single-precision
-end to end. A call through a function pointer has no parameter
-types to narrow to, so it applies the C99 6.5.2.2p6 default
-argument promotions as if the callee were unprototyped: a
-`float` argument is widened to `double` before the call and a
-`float` result is read back as `double`. The callee reads the
-single-precision view of the register and sees the wrong bits:
-
-```c
-static int t2i(float x) { return (int)x; }
-int (*p)(float) = t2i;
-int r = p(7.5f);   // r == 0, not 7
-```
-
-`double` arguments and returns through a function pointer are
-correct (the 8-byte value matches). The fix is to record the
-pointed-to function's parameter and return types on the
-function-pointer type so the indirect call narrows / widens the
-same way a direct call does.
+precision functions are bound) resolves the address and makes
+the pointer callable, since a `float` argument or return
+through a function pointer is now narrowed to the pointee's
+declared type.
 
 ### `struct`-by-value through a `#pragma binding` import, severity 4
 

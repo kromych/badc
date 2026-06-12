@@ -25,18 +25,29 @@
 struct __c5_DIR { char __opaque[256]; };
 typedef struct __c5_DIR DIR;
 
-// `struct dirent` -- the per-entry shape returned by `readdir`.
-// Real layouts vary (BSD: 4-byte d_fileno + len + type + name; glibc:
-// 8-byte d_ino + d_off + len + type + name). We expose the fields
-// programs actually inspect, plus a wide d_name buffer that covers
-// every platform's PATH_MAX.
+// `struct dirent` -- the per-entry shape returned by `readdir`. The
+// field layout up to d_name must match the platform libc byte-for-byte,
+// since libc writes into the buffer it returns and programs read d_name
+// at its real offset. macOS (64-bit inode) places d_name at offset 21;
+// glibc at offset 19.
+#ifdef __APPLE__
 struct dirent {
-    int  d_ino;
-    int  d_off;
-    int  d_reclen;
-    int  d_type;
-    char d_name[1024];
+    unsigned long  d_ino;     /* offset  0 */
+    unsigned long  d_seekoff; /* offset  8 */
+    unsigned short d_reclen;  /* offset 16 */
+    unsigned short d_namlen;  /* offset 18 */
+    unsigned char  d_type;    /* offset 20 */
+    char d_name[1024];        /* offset 21 */
 };
+#else
+struct dirent {
+    unsigned long  d_ino;     /* offset  0 */
+    long           d_off;     /* offset  8 */
+    unsigned short d_reclen;  /* offset 16 */
+    unsigned char  d_type;    /* offset 18 */
+    char d_name[1024];        /* offset 19 */
+};
+#endif
 
 #define DT_UNKNOWN 0
 #define DT_FIFO    1

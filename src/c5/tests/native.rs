@@ -567,6 +567,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("pthread_create.c", 11),
     ("pthread_cond_timedwait.c", 0),
     ("posix_os_headers.c", 0),
+    ("dirent_readdir.c", 0),
     ("stat_timespec.c", 0),
     ("malloc_size.c", 0),
     // sprintf with two fixed args + four variadic. macOS arm64

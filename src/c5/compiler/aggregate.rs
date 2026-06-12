@@ -414,6 +414,7 @@ impl Compiler {
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
+                            params: inner_field.params,
                             anon_union_group: group,
                         });
                     }
@@ -506,6 +507,11 @@ impl Compiler {
                 // `typedef struct { ... } T;` as a fn-pointer
                 // alias.
                 let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                // Capture the function-pointer field's parameter prototype
+                // (set by the same declarator branch) so a later
+                // `s.fp(args)` narrows its arguments. Always consume the
+                // side-channel so it cannot leak to the next field.
+                let field_params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
@@ -643,6 +649,7 @@ impl Compiler {
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
+                    params: field_params,
                     anon_union_group: 0,
                 });
 

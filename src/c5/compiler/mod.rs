@@ -122,6 +122,14 @@ pub struct StructField {
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
+    /// Parameter type tags of a function-pointer field, captured from
+    /// the field declarator's prototype (mirrors `Symbol::params`).
+    /// Empty for a non-function-pointer field or one declared without a
+    /// prototype. A `s.fp(args)` / `s->fp(args)` call reads this to
+    /// narrow each argument to its declared parameter type (C99
+    /// 6.5.2.2p7), matching the direct-identifier and array-element
+    /// call paths.
+    pub params: Vec<i64>,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer

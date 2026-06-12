@@ -3096,13 +3096,6 @@ impl Compiler {
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.
-                // A function-pointer struct field does not yet carry its
-                // parameter types (StructField has no parameter list), so a
-                // following `s.fp(args)` cannot narrow its arguments. Drop
-                // any callee parameters captured by an earlier producer so
-                // they do not reach this call. TODO: store a function-pointer
-                // field's parameter types and set them here.
-                self.pending.indirect_callee_params = None;
                 let obj_ast = self.ast_acc;
                 let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {
@@ -3139,6 +3132,18 @@ impl Compiler {
                         ))
                     })?
                     .clone();
+
+                // A function-pointer field carries its callee parameter
+                // types so a following `s.fp(args)` / `s->fp(args)` narrows
+                // each argument to its declared type (C99 6.5.2.2p7). A
+                // non-function-pointer field has empty params and clears the
+                // channel so a stale producer's parameters cannot reach an
+                // unrelated call.
+                self.pending.indirect_callee_params = if field.params.is_empty() {
+                    None
+                } else {
+                    Some(field.params.clone())
+                };
 
                 if field.offset > 0 {
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Add, field.offset as i64);

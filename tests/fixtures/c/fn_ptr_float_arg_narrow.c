@@ -4,10 +4,11 @@
 // literal is typed double in the accumulator, so without the narrowing
 // the callee reads the wrong half of the FP register and computes on 0.
 //
-// The direct-identifier call path already narrows; this covers the two
+// The direct-identifier call path already narrows; this covers the
 // postfix shapes whose callee parameter types are carried from the
-// producing symbol: a function-pointer array element (`tbl[i](x)`) and a
-// dereferenced function-pointer variable (`(*fp)(x)`).
+// producing symbol: a function-pointer array element (`tbl[i](x)`), a
+// dereferenced function-pointer variable (`(*fp)(x)`), and a
+// function-pointer struct field (`s.fp(x)` / `s->fp(x)`).
 
 static float scale2(float x) { return x * 2.0f; }
 static float negf(float x) { return -x; }
@@ -35,6 +36,18 @@ int main(void) {
     // that the narrowing path does not corrupt an already-float value.
     float v = 7.0f;
     if (tbl[0](v) != 14.0f) return 6;
+
+    // Function-pointer struct fields, called through a value and a
+    // pointer (the vtable shape).
+    struct Ops {
+        float (*g)(float);
+        float (*add)(float, float);
+    };
+    struct Ops ops = { scale2, addf };
+    struct Ops *po = &ops;
+    if (ops.g(3.0f) != 6.0f) return 7;
+    if (po->g(3.0f) != 6.0f) return 8;
+    if (po->add(1.5f, 2.0f) != 3.5f) return 9;
 
     return 0;
 }

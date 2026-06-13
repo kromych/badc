@@ -302,6 +302,7 @@ def main() -> int:
     fixtures = [
         "fib.c",
         "qsort.c",
+        "sieve.c",
         "crypto.c",
         "compress.c",
         "stb.c",

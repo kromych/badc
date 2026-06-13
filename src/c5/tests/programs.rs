@@ -159,6 +159,13 @@ fn label_addr_array_init() {
 }
 
 #[test]
+fn sieve_of_eratosthenes() {
+    // Dense array write/read loop with a multiplicative inner stride;
+    // the prime count below 100000 checks the result.
+    assert_eq!(run_fixture("sieve_of_eratosthenes.c"), 0);
+}
+
+#[test]
 fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.

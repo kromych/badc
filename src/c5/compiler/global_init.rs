@@ -408,11 +408,30 @@ impl Compiler {
             let stripped = var_ty & !UNSIGNED_BIT;
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
-        if var_is_float
-            && (self.lex.tk == Token::FloatNum
-                || (self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit())
-                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?))
-        {
+        // A float literal, a parenthesised float expression, or either of
+        // those behind a leading unary sign signals a float-valued
+        // initializer that must route through the f64 folder rather than
+        // the integer evaluator (whose `value as f64` would coerce a
+        // float result to an integer first). `-INFINITY` expands to
+        // `-(1.0e+308 * 10.0)`, so the sign precedes a parenthesised
+        // float expression.
+        let init_is_float = if !var_is_float {
+            false
+        } else if self.lex.tk == Token::FloatNum {
+            true
+        } else if self.lex.tk == '(' {
+            self.contents_until_close_paren_have_float_pub()?
+        } else if self.lex.tk == Token::SubOp || self.lex.tk == Token::AddOp {
+            let snap = self.lex.snapshot();
+            self.next()?;
+            let ahead = self.lex.tk == Token::FloatNum
+                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?);
+            self.lex.restore(snap);
+            ahead
+        } else {
+            false
+        };
+        if init_is_float {
             let bits = self.parse_const_float_expr()?;
             // A `float` slot is 4 bytes: narrow the f64 constant to
             // the f32 pattern, otherwise the low 4 bytes of the f64

@@ -166,6 +166,13 @@ fn sieve_of_eratosthenes() {
 }
 
 #[test]
+fn static_neg_infinity_init() {
+    // `-INFINITY` in a static initializer folds in f64, not coerced to an
+    // integer; covers scalar, struct, and union members.
+    assert_eq!(run_fixture("static_neg_infinity_init.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

@@ -675,6 +675,24 @@ impl Compiler {
                 super::super::token::describe(self.lex.tk)
             )));
         }
+        // Signed parenthesized float expression: `-(1.0e+308 * 10.0)`,
+        // the expansion of `-INFINITY`. The `-FloatNum` / `+FloatNum`
+        // cases above only fire when a digit follows the sign; a sign
+        // before a parenthesized float expression needs the f64 folder,
+        // which applies the sign itself. The integer fallback would
+        // coerce the float result to an `i64` and store a garbage bit
+        // pattern.
+        if self.lex.tk == Token::SubOp || self.lex.tk == Token::AddOp {
+            let snap = self.lex.snapshot();
+            self.next()?; // consume the sign
+            let signed_float_paren =
+                self.lex.tk == '(' && self.contents_until_close_paren_have_float()?;
+            self.lex.restore(snap);
+            if signed_float_paren {
+                let bits = self.parse_const_float_expr()?;
+                return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
+            }
+        }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
         // static initializer. After consuming `(`, peek the next
         // token: if it starts a type, treat as a cast and recurse on

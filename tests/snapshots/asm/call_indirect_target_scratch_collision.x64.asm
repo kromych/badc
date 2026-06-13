@@ -73,6 +73,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -119,3 +120,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

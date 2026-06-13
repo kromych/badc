@@ -41,7 +41,7 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
-               	mov	x21, x0
+               	sxtw	x21, w0
                	adrp	x0, <page>
                	add	x0, x0, #0x24c
                	mov	x1, #0x5                // =5
@@ -52,6 +52,7 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
+               	sxtw	x0, w0
                	sxtw	x1, w21
                	sxtw	x0, w0
                	mul	x0, x1, x0

@@ -983,6 +983,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
         Inst::Imm(_)
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::Load { .. }
@@ -1002,6 +1003,7 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
         | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
@@ -1106,9 +1108,8 @@ pub(super) fn produces_value(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | BlockAddr(_) | LocalAddr(_) | TlsAddr(_) => {
-            ResultKind::Int
-        }
+        Imm(_) | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
+        | TlsAddr(_) => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.

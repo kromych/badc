@@ -2007,6 +2007,7 @@ pub(super) fn lower(
             instr_offset: f.instr_offset,
             import_index: f.import_index,
             is_tail: f.is_tail,
+            is_addr: f.is_addr,
         })
         .collect();
     // Final-image output emits one PLT trampoline per import at
@@ -2068,6 +2069,25 @@ pub(super) fn lower(
             adrp_offset: instr_offset,
             target_native_offset: target,
         });
+    }
+
+    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
+    // local-image path resolve to the import's PLT trampoline, the
+    // same stub a call to the import reaches. The trampoline offset
+    // is known once `emit_plt_trampolines` has run; a `FuncFixup`
+    // routes the `lea`'s disp32 through the writer's func-fixup pass
+    // exactly like a function-pointer literal. Relocatable output
+    // (empty `plt_trampoline_offsets`) emits the reloc via
+    // `reloc_call_sites` instead.
+    if native.output_kind != super::OutputKind::Relocatable {
+        for fx in &plt_call_fixups {
+            if fx.is_addr {
+                func_fixups.push(FuncFixup {
+                    adrp_offset: fx.instr_offset,
+                    target_native_offset: plt_trampoline_offsets[fx.import_index],
+                });
+            }
+        }
     }
 
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
@@ -2195,6 +2215,13 @@ pub(super) struct PltCallFixup {
     /// Both are 5 bytes, both use the same disp32 measurement
     /// origin (one byte past the instruction).
     pub(super) is_tail: bool,
+    /// `true` -> the site is a `LEA r, [rip+disp32]` that takes
+    /// the import's address (`Inst::ImmExtCode`, `&strcmp`) rather
+    /// than a CALL/JMP that transfers control. The disp32 still
+    /// resolves to the import's shared stub, but it sits three
+    /// bytes past `instr_offset` (REX + opcode + modrm) instead of
+    /// one, and `is_tail` is irrelevant.
+    pub(super) is_addr: bool,
 }
 
 /// Append one PLT trampoline per import. Each trampoline is a
@@ -2245,6 +2272,13 @@ fn apply_plt_call_fixups(
                 trampoline_offsets.len()
             )))
         })?;
+        if fx.is_addr {
+            // Address-of sites (`lea` taking the import's address)
+            // resolve through a `FuncFixup` to the trampoline offset
+            // in the local-image path, so the writer's func-fixup
+            // pass patches them. Nothing to do here.
+            continue;
+        }
         let after = fx.instr_offset + REL32_INSTR_LEN;
         let rel32 = (tramp_off as i64 - after as i64) as i32;
         // Opcode byte at instr_offset: 0xE8 (CALL rel32) or

@@ -484,6 +484,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("function_type_typedef_declaration.c", 0),
     ("float_increment_decrement.c", 0),
     ("addr_of_libm_import.c", 0),
+    ("addr_of_libc_strcmp.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),
     ("struct_array_elided_runtime.c", 0),

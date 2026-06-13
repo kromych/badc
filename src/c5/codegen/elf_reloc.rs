@@ -708,6 +708,22 @@ pub(super) fn write_relocatable(
                 )));
             }
         };
+        // An address-of site (`&strcmp`, `Inst::ImmExtCode`) is a
+        // page-relative address materialization, not a control
+        // transfer: `lea reg, [rip+disp32]` on x86_64, `adrp + add`
+        // on aarch64. It uses the same relocation shape as a data
+        // reference but against the import's external symbol; the
+        // linker's PLT pass resolves the symbol to its shared stub.
+        if site.is_addr {
+            emit_addr_fixup_relocs(
+                machine_for_rela,
+                &mut rela_bytes,
+                site.instr_offset as u64,
+                sym_idx,
+                0,
+            );
+            continue;
+        }
         // x86_64 CALL/JMP rel32 is 5 bytes: opcode + 4-byte
         // disp32. The relocation applies to the disp32 field at
         // `instr_offset + 1`. ELF spec for `R_X86_64_PLT32`

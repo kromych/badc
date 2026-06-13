@@ -2275,7 +2275,7 @@ impl<'a> Walker<'a> {
                     if is_float_ty(*ty) {
                         return Ok(b.mark_f32(call));
                     }
-                    return Ok(call);
+                    return Ok(extend_scalar_call_result(b, call, *ty, self.target));
                 }
                 // Register-save host variadic ABI (System V AMD64 on Linux
                 // x86_64, AAPCS64 on Linux aarch64): a variadic callee
@@ -2315,7 +2315,7 @@ impl<'a> Walker<'a> {
                     if is_float_ty(*ty) {
                         return Ok(b.mark_f32(call));
                     }
-                    return Ok(call);
+                    return Ok(extend_scalar_call_result(b, call, *ty, self.target));
                 }
                 // A function-pointer callee whose register/stack
                 // placement would interleave keeps the all-integer c5
@@ -2379,7 +2379,7 @@ impl<'a> Walker<'a> {
                 if is_float_ty(*ty) {
                     return Ok(b.mark_f32(call));
                 }
-                Ok(call)
+                Ok(extend_scalar_call_result(b, call, *ty, self.target))
             }
             Expr::Member {
                 obj,
@@ -3221,6 +3221,13 @@ impl<'a> Walker<'a> {
             } else {
                 Ok(b.imm_code(live_val as usize))
             }
+        } else if *class == Token::Sys as i64 {
+            // Address of a dynamically-imported function (`&strcmp`,
+            // `fp = strcmp`). The Ident's `val` is the binding's flat
+            // index across all `#pragma binding(...)` directives, the
+            // same value `Inst::CallExt` carries. The address resolves
+            // to the import's shared PLT stub.
+            Ok(b.imm_ext_code(*val))
         } else {
             Err(WalkError::UnknownSymbolClass {
                 sym: *sym,
@@ -3316,6 +3323,11 @@ impl<'a> Walker<'a> {
             } else {
                 Ok(b.imm_code(val as usize))
             }
+        } else if class == Token::Sys as i64 {
+            // Bare imported-function rvalue (`fp = strcmp`). `val` is
+            // the binding index; the address resolves to the import's
+            // shared PLT stub. See `address_of_ident`.
+            Ok(b.imm_ext_code(val))
         } else if class == Token::Num as i64 {
             // Enum constants and `#define`-via-const-decl idioms
             // both surface as `Token::Num`-class symbols; `val`
@@ -3535,6 +3547,48 @@ fn is_float_ty(ty: i64) -> bool {
 /// nonzero scalar becomes 1).
 fn is_bool_scalar(ty: i64) -> bool {
     (ty & !UNSIGNED_BIT) == Ty::Bool as i64
+}
+
+/// Sign- or zero-extend a scalar call result to the full 64-bit
+/// accumulator per its declared return type. A c5-compiled callee
+/// already returns a 64-bit-correct value, and a direct libc call
+/// (`Inst::CallExt`) is widened in the emitter from the binding's
+/// return type. A call through a function pointer to a host library
+/// routine has neither: the routine leaves only its natural-width
+/// register set (`strcmp` returns a 32-bit result in `eax` with
+/// undefined high bits), so a call through an `int (*)()` pointer
+/// must widen the result before the caller reads it at 64 bits
+/// (C99 6.3.1.1 / 6.5.2.2). Idempotent for an already-extended
+/// value. Floating-point, pointer, `_Bool`, struct, and full-width
+/// integer results are left unchanged.
+fn extend_scalar_call_result(
+    b: &mut super::super::codegen::ssa_build::SsaBuilder,
+    v: super::super::ir::ValueId,
+    ty: i64,
+    target: Target,
+) -> super::super::ir::ValueId {
+    use super::super::ir::BinOp;
+    let stripped = ty & !UNSIGNED_BIT;
+    let rs = type_size_bytes(ty, target);
+    if is_floating_scalar(ty)
+        || is_pointer_ty(ty)
+        || stripped == Ty::Bool as i64
+        || !(rs == 1 || rs == 2 || rs == 4)
+    {
+        return v;
+    }
+    if (ty & UNSIGNED_BIT) != 0 {
+        let mask: i64 = match rs {
+            1 => 0xff,
+            2 => 0xffff,
+            _ => 0xffff_ffff,
+        };
+        b.binop_imm(BinOp::And, v, mask)
+    } else {
+        let bits = 64i64 - (rs as i64) * 8;
+        let shifted = b.binop_imm(BinOp::Shl, v, bits);
+        b.binop_imm(BinOp::Shr, shifted, bits)
+    }
 }
 
 /// `Token::Ty` unsigned-bit position. The compiler-side helper is

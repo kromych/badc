@@ -25,6 +25,12 @@ use super::super::ir::{
 const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
+/// `Inst::ImmExtCode` results carry this bit so `Inst::CallIndirect`
+/// routes a call through an imported-function address (`&strcmp`)
+/// to the libc dispatch by binding index rather than looking up a
+/// c5 function body. The low bits hold the binding index.
+const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
+
 /// Byte-addressed memory backing the SSA-VM. Layout:
 ///
 ///   bytes[0..data_end]              -- read-only data segment
@@ -769,6 +775,14 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
             return Ok(());
         }
+        Inst::ImmExtCode(binding_idx) => {
+            // Address of an imported function (`&strcmp`). The VM has
+            // no native code for libc, so the pointer carries the
+            // binding index under `IMPORT_ADDR_TAG`; `CallIndirect`
+            // routes it to the libc dispatch.
+            frame.regs[v as usize] = IMPORT_ADDR_TAG | *binding_idx;
+            return Ok(());
+        }
         Inst::BlockAddr(b) => {
             // Label address (GCC `&&label`). Tag the block index as a
             // code pointer so it is non-zero (truthy, like a real label
@@ -973,6 +987,21 @@ fn run_inst<H: Host>(
             ..
         } => {
             let raw = frame.regs[*target as usize];
+            // A call through the address of an imported function
+            // (`Inst::ImmExtCode`, `fp = strcmp; fp(...)`) carries the
+            // binding index under `IMPORT_ADDR_TAG`; dispatch it the
+            // same way `Inst::CallExt` resolves a libc binding.
+            if raw & IMPORT_ADDR_TAG != 0 {
+                let binding_idx = raw & !IMPORT_ADDR_TAG;
+                let name = prog.binding_name(binding_idx)?;
+                let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
+                for &a in args {
+                    arg_vals.push(frame.regs[a as usize]);
+                }
+                let ret = dispatch_callext(name, &arg_vals, mem, host)?;
+                frame.regs[v as usize] = ret;
+                return Ok(());
+            }
             // Code pointers may be tagged two ways: SSA-VM bit 62
             // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
             // form `with_host` writes when it patches the data

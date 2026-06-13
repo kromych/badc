@@ -41,11 +41,13 @@ Disassembly of section .text:
                	movl	$0x1, %edi
                	movq	%r12, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	%rbx, %rax
                	movslq	%eax, %rbx
                	movl	$0x2, %edi
                	movq	%r12, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	%rax, %rbx
                	jmp	<addr>
                	testq	%rcx, %rcx
@@ -57,6 +59,7 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	movq	%rcx, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	%rax, %rbx
                	jmp	<addr>
                	leaq	-<rip>, %rax       # <addr>
@@ -67,6 +70,7 @@ Disassembly of section .text:
                	movl	$0x4, %edi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	%rbx, %rax
                	movslq	%eax, %rax
                	cmpq	$0x19a, %rax            # imm = 0x19A

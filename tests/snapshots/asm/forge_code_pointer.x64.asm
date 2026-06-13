@@ -18,7 +18,9 @@ Disassembly of section .text:
                	xorq	%rdi, %rdi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

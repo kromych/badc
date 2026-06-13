@@ -1252,10 +1252,17 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             parked_back.push(reloc.clone());
             continue;
         }
-        if reloc.rtype != R_AARCH64_CALL26 {
+        // CALL26 reaches the stub as a branch; the address-of pair
+        // (`adrp` + `add`, `R_AARCH64_ADR_PREL_PG_HI21` +
+        // `R_AARCH64_ADD_ABS_LO12_NC`) materializes the stub's
+        // address for `&import`. Both need one stub per import.
+        if reloc.rtype != R_AARCH64_CALL26
+            && reloc.rtype != R_AARCH64_ADR_PREL_PG_HI21
+            && reloc.rtype != R_AARCH64_ADD_ABS_LO12_NC
+        {
             return Err(err(&format!(
                 "emit_aarch64_plt: pending reloc at text[{:#x}] has rtype {} \
-                 (only R_AARCH64_CALL26 supported on aarch64)",
+                 (only CALL26 / ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC supported on aarch64)",
                 reloc.text_offset, reloc.rtype,
             )));
         }
@@ -1286,9 +1293,32 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             .get(&reloc.import_index)
             .copied()
             .expect("every reloc has a tramp entry from pass 1");
-        // CALL26 wants the absolute target; `patch_aarch64_call26`
-        // computes `(target - site) >> 2` internally.
-        patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?;
+        match reloc.rtype {
+            // CALL26 is PC-relative, so the stub's `merged.text`
+            // offset patches in directly regardless of where the
+            // text segment lands in vmaddr space.
+            R_AARCH64_CALL26 => {
+                patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?
+            }
+            // The address-of pair (`adrp` + `add`) is page-relative,
+            // so its immediates depend on the stub's final vmaddr,
+            // which the per-format writer assigns later (the text
+            // segment is not page-aligned on Mach-O / PE). Re-park
+            // the pair as a Text-section reference to the stub
+            // offset; `synth_fixups` projects it into a `FuncFixup`
+            // the writer resolves against the real vmaddr, exactly
+            // like a function-pointer literal.
+            R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC => {
+                parked_back.push(PendingImportReloc {
+                    text_offset: reloc.text_offset,
+                    import_index: usize::MAX,
+                    rtype: reloc.rtype,
+                    addend: tramp as i64,
+                    target_section: NativeSymSection::Text,
+                });
+            }
+            _ => unreachable!("pass 1 rejected every other rtype"),
+        }
     }
 
     merged.pending_imports = parked_back;

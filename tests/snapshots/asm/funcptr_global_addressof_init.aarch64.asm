@@ -30,6 +30,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
+               	sxtw	x0, w0
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -47,6 +48,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
+               	sxtw	x0, w0
                	cmp	x0, #0x15
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

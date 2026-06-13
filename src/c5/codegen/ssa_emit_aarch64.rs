@@ -1874,6 +1874,36 @@ fn emit_inst(
             }
             true
         }
+        Inst::ImmExtCode(binding_idx) => {
+            // `adrp rd, page; add rd, rd, lo12` taking the address
+            // of a dynamically-imported function. The pair resolves
+            // to the import's shared stub via an `is_addr` PLT-call
+            // fixup, so `&strcmp` yields the stub address.
+            let rd = match int_or_spill_scratch(dst, scratch) {
+                Some(r) => r,
+                None => return false,
+            };
+            let import_index = match imports.index_of_binding(*binding_idx) {
+                Some(i) => i,
+                None => {
+                    bail_msg("ImmExtCode: binding index has no resolved import");
+                    return false;
+                }
+            };
+            plt_call_fixups.push(super::aarch64::PltCallFixup {
+                instr_offset: code.len(),
+                import_index,
+                is_tail: false,
+                is_addr: true,
+            });
+            emit(code, enc_adrp(rd, 0));
+            emit(code, enc_add_imm(rd, rd, 0));
+            if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_x_auto(code, rd, sp_off);
+            }
+            true
+        }
         // Inst::BlockAddr is handled in emit_function's block loop
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
@@ -3108,6 +3138,7 @@ fn emit_call_ext(
         instr_offset: code.len(),
         import_index,
         is_tail: false,
+        is_addr: false,
     });
     // BL: non-tail libc call -- the AAPCS64 return goes back
     // into main below for the result handling + `return`
@@ -3144,6 +3175,7 @@ fn emit_call_ext(
             instr_offset: code.len(),
             import_index: trunc_idx,
             is_tail: false,
+            is_addr: false,
         });
         emit(code, enc_bl(0));
     }

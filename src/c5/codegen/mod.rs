@@ -979,15 +979,15 @@ impl ResolvedImports {
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
         for func in &program.finished_functions {
+            // Any `Sys`-class Ident denotes a reference to an
+            // imported function, whether it is the callee of a
+            // `Call` (`strcmp(a, b)`) or has its address taken
+            // (`fp = strcmp`, `&strcmp`, a dispatch-table entry).
+            // The address-of forms lower to `Inst::ImmExtCode` /
+            // a `.data` trampoline and still need a resolved import.
+            // `val` carries the binding's flat index for every form.
             for expr in &func.ast.exprs {
-                let super::ast::Expr::Call { callee, .. } = expr else {
-                    continue;
-                };
-                let callee_idx = *callee as usize;
-                if callee_idx >= func.ast.exprs.len() {
-                    continue;
-                }
-                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
+                let super::ast::Expr::Ident { class, val, .. } = expr else {
                     continue;
                 };
                 if *class != super::token::Token::Sys as i64 {
@@ -1005,6 +1005,14 @@ impl ResolvedImports {
         {
             for inst in &func.insts {
                 if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                    && seen.insert(*binding_idx)
+                {
+                    used.push(*binding_idx);
+                }
+                // An import whose address is taken (`&strcmp`,
+                // `Inst::ImmExtCode`) but never directly called still
+                // needs a resolved import + PLT stub.
+                if let crate::c5::ir::Inst::ImmExtCode(binding_idx) = inst
                     && seen.insert(*binding_idx)
                 {
                     used.push(*binding_idx);
@@ -1468,6 +1476,14 @@ pub(crate) struct RelocCallSite {
     /// in the placeholder bytes the codegen already emitted.
     #[allow(dead_code)]
     pub is_tail: bool,
+    /// `true` for an address-of site (`lea` rip-relative on
+    /// x86_64, `adrp + add` on aarch64) materializing the import's
+    /// stub address (`Inst::ImmExtCode`). The relocatable writer
+    /// emits a PC-relative data reloc (`R_X86_64_PC32` /
+    /// `R_AARCH64_ADR_PREL_PG_HI21` + `R_AARCH64_ADD_ABS_LO12_NC`)
+    /// against the import symbol rather than the call relocation.
+    #[allow(dead_code)]
+    pub is_addr: bool,
 }
 
 /// Cross-TU user-function call site. Same shape as

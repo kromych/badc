@@ -89,6 +89,7 @@ Disassembly of section .text:
                	ldr	x4, [sp, #0x40]
                	blr	x9
                	add	sp, sp, #0x50
+               	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

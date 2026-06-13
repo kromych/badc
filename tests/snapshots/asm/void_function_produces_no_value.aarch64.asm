@@ -95,6 +95,7 @@ Disassembly of section .text:
                	ldr	x1, [sp, #0x10]
                	blr	x9
                	add	sp, sp, #0x20
+               	sxtw	x0, w0
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
@@ -123,6 +124,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
+               	sxtw	x0, w0
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>
@@ -146,6 +148,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
+               	sxtw	x0, w0
                	sxtw	x1, w0
                	cmp	x1, #0x0
                	b.eq	<addr>

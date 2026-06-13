@@ -43,6 +43,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	movq	%rsi, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -71,6 +72,7 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm14, %xmm0
                	movq	%rbx, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -87,6 +89,7 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm14, %xmm0
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -116,6 +119,7 @@ Disassembly of section .text:
                	cvtsd2ss	%xmm14, %xmm0
                	movq	%rbx, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x4, %eax

@@ -1612,6 +1612,7 @@ pub(super) fn lower(
             instr_offset: f.instr_offset,
             import_index: f.import_index,
             is_tail: f.is_tail,
+            is_addr: f.is_addr,
         })
         .collect();
     // Final-image output emits one PLT trampoline per import at
@@ -1673,6 +1674,24 @@ pub(super) fn lower(
             adrp_offset,
             target_native_offset: target,
         });
+    }
+
+    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
+    // local-image path resolve to the import's PLT trampoline, the
+    // same stub a call to the import reaches. A `FuncFixup` routes
+    // the `adrp + add` pair through the writer's func-fixup pass
+    // exactly like a function-pointer literal. Relocatable output
+    // (empty `plt_trampoline_offsets`) emits the reloc via
+    // `reloc_call_sites` instead.
+    if native.output_kind != super::OutputKind::Relocatable {
+        for fx in &plt_call_fixups {
+            if fx.is_addr {
+                func_fixups.push(FuncFixup {
+                    adrp_offset: fx.instr_offset,
+                    target_native_offset: plt_trampoline_offsets[fx.import_index],
+                });
+            }
+        }
     }
 
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
@@ -1820,6 +1839,12 @@ pub(super) struct PltCallFixup {
     /// `BL <tramp>` (call). Both share the same imm26 encoding;
     /// only the link bit at 0x80000000 differs.
     pub(super) is_tail: bool,
+    /// `true` -> the site is an `adrp + add` pair that takes the
+    /// import's address (`Inst::ImmExtCode`, `&strcmp`) rather than
+    /// a BL/B. The pair resolves to the import's shared stub via the
+    /// page-relative reloc rather than the imm26 branch; `is_tail`
+    /// is irrelevant.
+    pub(super) is_addr: bool,
 }
 
 /// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
@@ -1836,6 +1861,7 @@ pub(super) fn emit_got_tail_jump(
         instr_offset: code.len(),
         import_index,
         is_tail: true,
+        is_addr: false,
     });
     emit(code, enc_b(0));
 }
@@ -1876,6 +1902,13 @@ fn apply_plt_call_fixups(
     trampoline_offsets: &[usize],
 ) -> Result<(), C5Error> {
     for fx in fixups {
+        if fx.is_addr {
+            // Address-of sites (`adrp + add` taking the import's
+            // address) resolve through a `FuncFixup` to the
+            // trampoline offset in the local-image path; the writer's
+            // func-fixup pass patches the page-relative pair.
+            continue;
+        }
         let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "PLT call fixup at offset {} references import {} but only \

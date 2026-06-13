@@ -35,36 +35,42 @@ fn ent_pc=2 n_params=0 variadic=false locals=5
     v3   Imm(41)                                          -> x7
     v4   LoadLocal { off=-1, kind=I64 }                   -> x0
     v5   CallIndirect { target=v1, args=[v3], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=42 }             -> x0
-    terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
+    v6   BinopI { op=shl, lhs=v5, rhs_imm=32 }            -> x0
+    v7   BinopI { op=shr, lhs=v6, rhs_imm=32 }            -> x0
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=42 }             -> x0
+    terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
-    v7   Imm(1)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v9   Imm(1)                                           -> x0
+    terminator Return(v9)   (exit_acc=v9)
   block 2  start_pc=0
-    v8   ImmCode(ent_pc=0)                                -> x0
-    v9   Imm(0)                                           -> x0
-    v10  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v10  ImmCode(ent_pc=0)                                -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(7)                                           -> x7
-    v13  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v14  CallIndirect { target=v1, args=[v12], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=8 }             -> x0
-    terminator Bz { cond=v15, target=b4, fall=b3 }   (exit_acc=v15)
+    v12  LoadLocal { off=-2, kind=I64 }                   -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(7)                                           -> x7
+    v15  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v16  CallIndirect { target=v1, args=[v14], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v17  BinopI { op=shl, lhs=v16, rhs_imm=32 }           -> x0
+    v18  BinopI { op=shr, lhs=v17, rhs_imm=32 }           -> x0
+    v19  BinopI { op=ne, lhs=v18, rhs_imm=8 }             -> x0
+    terminator Bz { cond=v19, target=b4, fall=b3 }   (exit_acc=v19)
   block 3  start_pc=0
-    v16  Imm(2)                                           -> x0
-    terminator Return(v16)   (exit_acc=v16)
+    v20  Imm(2)                                           -> x0
+    terminator Return(v20)   (exit_acc=v20)
   block 4  start_pc=0
-    v17  ImmCode(ent_pc=1)                                -> x0
-    v18  Imm(21)                                          -> x7
-    v19  CallIndirect { target=v17, args=[v18], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=42 }            -> x0
-    terminator Bz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
+    v21  ImmCode(ent_pc=1)                                -> x0
+    v22  Imm(21)                                          -> x7
+    v23  CallIndirect { target=v21, args=[v22], callee_variadic=false, fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v24  BinopI { op=shl, lhs=v23, rhs_imm=32 }           -> x0
+    v25  BinopI { op=shr, lhs=v24, rhs_imm=32 }           -> x0
+    v26  BinopI { op=ne, lhs=v25, rhs_imm=42 }            -> x0
+    terminator Bz { cond=v26, target=b6, fall=b5 }   (exit_acc=v26)
   block 5  start_pc=0
-    v21  Imm(3)                                           -> x0
-    terminator Return(v21)   (exit_acc=v21)
+    v27  Imm(3)                                           -> x0
+    terminator Return(v27)   (exit_acc=v27)
   block 6  start_pc=0
-    v22  Imm(0)                                           -> x0
-    terminator Return(v22)   (exit_acc=v22)
+    v28  Imm(0)                                           -> x0
+    terminator Return(v28)   (exit_acc=v28)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1

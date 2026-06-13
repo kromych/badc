@@ -20,13 +20,13 @@ Disassembly of section .text:
                	str	x22, [sp, #0x20]
                	str	x19, [sp, #0x30]
                	adrp	x0, <page>
-               	add	x0, x0, #0x844
+               	add	x0, x0, #0x9f8
                	adrp	x20, <page>
-               	add	x20, x20, #0x84c
+               	add	x20, x20, #0xa04
                	adrp	x21, <page>
-               	add	x21, x21, #0x850
+               	add	x21, x21, #0xa10
                	adrp	x22, <page>
-               	add	x22, x22, #0x854
+               	add	x22, x22, #0xa1c
                	mov	x1, #0x4030000000000000 // =4625196817309499392
                	fmov	d16, x1
                	fcvt	s0, d16
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x848
+               	add	x0, x0, #0xa28
                	mov	x20, #0x400c000000000000 // =4615063718147915776
                	fmov	d16, x20
                	fneg	d0, d16
@@ -317,14 +317,8 @@ Disassembly of section .text:
 <__c5_sys_sqrtf>:
                	b	<addr>
 
-<__c5_sys_fabsf>:
-               	b	<addr>
-
 <__c5_sys_floorf>:
                	b	<addr>
 
 <__c5_sys_ceilf>:
-               	b	<addr>
-
-<__c5_sys_truncf>:
                	b	<addr>

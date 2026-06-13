@@ -120,6 +120,7 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	movb	$0x0, %al
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x23a3, %rax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xc, %eax
@@ -134,6 +135,7 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	movb	$0x0, %al
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x23a3, %rax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xd, %eax
@@ -144,4 +146,3 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

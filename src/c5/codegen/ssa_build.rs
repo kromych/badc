@@ -456,6 +456,14 @@ impl SsaBuilder {
         v
     }
 
+    /// `Inst::ImmExtCode` -- the address of a dynamically-imported
+    /// function (`&strcmp`, `fp = strcmp`). Not CSE'd: every site
+    /// materializes its own address with its own PLT-call fixup, the
+    /// same way each call to an import records its own call site.
+    pub(crate) fn imm_ext_code(&mut self, binding_idx: i64) -> ValueId {
+        self.push(Inst::ImmExtCode(binding_idx))
+    }
+
     /// `Inst::AllocaInit` -- per-function alloca bookkeeping
     /// slot. Slot 0 means "no alloca in this function"; the
     /// per-arch emit short-circuits and writes nothing for the

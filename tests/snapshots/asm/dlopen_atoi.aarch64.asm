@@ -53,7 +53,7 @@ Disassembly of section .text:
                	ldr	x0, [sp]
                	blr	x9
                	add	sp, sp, #0x10
-               	mov	x21, x0
+               	sxtw	x21, w0
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0

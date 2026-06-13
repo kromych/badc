@@ -180,11 +180,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<__c5_sys_pow>:
-               	jmp	<addr>
-
 <__c5_sys_sin>:
                	jmp	<addr>
 
 <__c5_sys_cos>:
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

@@ -2103,6 +2103,7 @@ pub(super) fn emit_function(
                         instr_offset: code.len(),
                         import_index,
                         is_tail: true,
+                        is_addr: false,
                     });
                     super::x86_64::emit_jmp_rel32(code, 0);
                 }
@@ -3004,6 +3005,9 @@ fn emit_inst(
         Inst::ImmCode(target_ent_pc) => {
             emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
         }
+        Inst::ImmExtCode(binding_idx) => {
+            emit_imm_ext_code(code, dst, *binding_idx, plt_call_fixups, imports, frame)
+        }
         // Inst::BlockAddr is handled in emit_function's block loop
         // (it needs the local block_offsets table for its PC-relative
         // lea fixup), so it never reaches emit_inst.
@@ -3107,6 +3111,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::Imm(_) => "Imm",
         Inst::ImmData(_) => "ImmData",
         Inst::ImmCode(_) => "ImmCode",
+        Inst::ImmExtCode(_) => "ImmExtCode",
         Inst::BlockAddr(_) => "BlockAddr",
         Inst::LocalAddr(_) => "LocalAddr",
         Inst::TlsAddr(_) => "TlsAddr",
@@ -5567,6 +5572,7 @@ fn emit_call_ext(
         instr_offset: call_site,
         import_index,
         is_tail: false,
+        is_addr: false,
     });
     super::x86_64::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
@@ -6489,6 +6495,42 @@ fn emit_imm_code(
     };
     let instr_offset = code.len();
     pending_func_fixups.push((instr_offset, target_ent_pc));
+    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::ImmExtCode` -- `lea rd, [rip+disp32]` taking the
+/// address of a dynamically-imported function. The disp32 resolves
+/// to the import's shared stub (the same `jmp [GOT]` a call to the
+/// import reaches), so `&strcmp` yields the stub address. Records an
+/// `is_addr` PLT-call fixup at the `lea`'s instruction offset; the
+/// disp32 sits three bytes in (REX + opcode + modrm).
+fn emit_imm_ext_code(
+    code: &mut Vec<u8>,
+    dst: Place,
+    binding_idx: i64,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("ImmExtCode: dst not int reg / spill");
+        return false;
+    };
+    let import_index = match imports.index_of_binding(binding_idx) {
+        Some(i) => i,
+        None => {
+            bail_msg("ImmExtCode: binding index has no resolved import");
+            return false;
+        }
+    };
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
+        import_index,
+        is_tail: false,
+        is_addr: true,
+    });
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true

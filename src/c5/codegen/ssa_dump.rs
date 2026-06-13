@@ -85,6 +85,7 @@ fn fmt_inst(inst: &Inst) -> String {
         Imm(v) => format!("Imm({v})"),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
+        ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),
         BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),

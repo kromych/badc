@@ -29,7 +29,8 @@ Disassembly of section .text:
                	movl	$0x1a4, %edx            # imm = 0x1A4
                	movq	%rcx, %r11
                	callq	*%r11
-               	movq	%rax, 0x28(%rsp)
+               	movslq	%eax, %r10
+               	movq	%r10, 0x28(%rsp)
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
                	testq	%rax, %rax
@@ -49,6 +50,7 @@ Disassembly of section .text:
                	movl	$0x400, %esi            # imm = 0x400
                	movq	%r15, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -66,6 +68,7 @@ Disassembly of section .text:
                	leaq	-0x108(%rbp), %rsi
                	movq	%r14, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -85,6 +88,7 @@ Disassembly of section .text:
                	movq	%r12, %r11
                	movb	$0x0, %al
                	callq	*%r11
+               	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax

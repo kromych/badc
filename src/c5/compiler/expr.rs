@@ -1032,33 +1032,21 @@ impl Compiler {
                 // the fn-ptr level" for the `*` handler.
                 self.pending.fn_ptr_chain_depth = 0;
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare libc reference -- `fp = readlink;`. There
-                // is no compile-time GOT/IAT address to fold in,
-                // so the value points at a per-Sys trampoline (a
-                // tiny synthetic c5 function that re-dispatches
-                // through `Inst::CallExt`). The walker emits
-                // `Inst::ImmCode` keyed on the trampoline's live
-                // `Symbol::val`, which
-                // [`Self::emit_sys_trampolines`] sets to the
-                // trampoline body's `ent_pc`. The codegen lowers
-                // `Inst::ImmCode` to the right ADRP/ADD
-                // (aarch64) or RIP-relative LEA (x86_64)
-                // pointing at the trampoline.
-                let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
-                // Integer-literal placeholder; the walker reads
-                // the trampoline's live `Symbol::val` through
-                // `imm_code` post-`emit_sys_trampolines` and emits
-                // the matching `Inst::ImmCode`.
+                // Bare imported-function reference -- `fp = strcmp;`.
+                // There is no compile-time address to fold in, so the
+                // walker emits `Inst::ImmExtCode(binding_idx)`; the
+                // codegen materializes the import's shared PLT-stub
+                // address (RIP-relative `lea` on x86_64, `adrp + add`
+                // on aarch64), the same stub a call to the import
+                // reaches. The Sys symbol's `val` is the binding index.
                 self.emit_imm(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
-                // Dual-emit: the trampoline symbol is Token::Fun
-                // class; the walker reads `Symbol::val` live at
-                // walk time (post-`emit_sys_trampolines`) to get
-                // the trampoline's ent_pc. Push an Ident keyed on
-                // the trampoline symbol so wrapping shapes
+                // Dual-emit: push the Sys Ident so wrapping shapes
                 // (static-init, assign, call-arg) see the address
-                // producer on `ast_acc`.
-                self.ast_emit_ident(tr_idx as u32, self.ty);
+                // producer on `ast_acc`. The walker's
+                // `address_of_ident` / `load_ident_rvalue`
+                // `Token::Sys` arm emits the `imm_ext_code(val)`.
+                self.ast_emit_ident(id_idx as u32, self.ty);
                 // Same fn-pointer decay as the `Token::Fun` branch: a
                 // following unary `*` is a no-op.
                 self.pending.fn_ptr_chain_depth = 0;

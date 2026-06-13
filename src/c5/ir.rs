@@ -50,6 +50,18 @@ pub(crate) enum Inst {
     /// records a pending func-fixup so the writer can patch
     /// against the callee's body offset.
     ImmCode(usize),
+    /// Address of a dynamically-imported function, by binding
+    /// index. The operand is the same `Symbol::val` binding index a
+    /// `Terminator::CallExt` carries. The per-arch lowering emits an
+    /// address-materialization placeholder (`lea` rip-relative on
+    /// x86_64, `adrp + add` on aarch64) and records an address-of
+    /// PLT-call fixup so the writer resolves it to the import's
+    /// shared per-import stub (the same `jmp [GOT]` / `adrp+ldr+br`
+    /// stub a call to the import reaches). Taking `&strcmp` therefore
+    /// yields the stub address rather than a per-TU forwarding
+    /// trampoline; the deduped stub forwards every register class
+    /// unchanged so an FP-returning import stays correct.
+    ImmExtCode(i64),
     /// Address of a basic block within the current function, as a
     /// code pointer (GCC labels-as-values, `&&label`). The per-arch
     /// lowering materializes the block's native address with a

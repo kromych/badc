@@ -27,6 +27,7 @@ Disassembly of section .text:
                	movq	(%rbx), %rax
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -41,6 +42,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x15, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -69,3 +71,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

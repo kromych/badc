@@ -20,6 +20,7 @@ Disassembly of section .text:
                	mov	x9, x0
                	blr	x9
                	sxtw	x0, w0
+               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x1                // =1

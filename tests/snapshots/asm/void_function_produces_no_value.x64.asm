@@ -87,6 +87,7 @@ Disassembly of section .text:
                	movl	$0x7, %esi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -106,6 +107,7 @@ Disassembly of section .text:
                	movabsq	$-0x1, %rdi
                	movq	%rbx, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -124,6 +126,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movq	%rbx, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	movslq	%eax, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -154,4 +157,3 @@ Disassembly of section .text:
                	addq	$0x50, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)

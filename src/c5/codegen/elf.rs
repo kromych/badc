@@ -2373,6 +2373,7 @@ mod tests {
                     local_name: "exit".into(),
                     real_symbol: "exit".into(),
                     dylib_index: 0,
+                    flat_lookup: false,
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,

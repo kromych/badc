@@ -92,6 +92,12 @@ pub struct MergedNative {
     /// `dylibs` order; entries from later units that name the
     /// same import are ignored (first writer wins).
     pub import_dylib_map: BTreeMap<String, u32>,
+    /// Import names that resolve through the runtime's flat namespace
+    /// rather than a specific dylib: unresolved `STB_GLOBAL` references
+    /// admitted under `allow_undefined` (a shared library). The
+    /// per-format writer emits each as a flat-lookup Mach-O bind /
+    /// undefined ELF `.dynsym` entry the host supplies at `dlopen`.
+    pub flat_imports: alloc::collections::BTreeSet<String>,
     /// Source-declared export names, unioned across input objects
     /// from each unit's `NT_BADC_EXPORTS` note. The final-image
     /// writer promotes each to the export table when emitting a
@@ -242,6 +248,19 @@ pub struct PendingImportReloc {
 /// callers because every cross-section reference in the
 /// merged output is recorded against a section base.
 pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Error> {
+    link_native_objects_with_options(objs, false)
+}
+
+/// Link with explicit options. `allow_undefined` lets an unresolved
+/// `STB_GLOBAL` reference become a runtime import resolved at load
+/// time (flat-namespace Mach-O bind / undefined ELF `.dynsym` entry)
+/// rather than a link error -- the convention for a shared library
+/// whose external references the host executable supplies through a
+/// `dlopen` global scope.
+pub fn link_native_objects_with_options(
+    objs: &[NativeObject],
+    allow_undefined: bool,
+) -> Result<MergedNative, C5Error> {
     if objs.is_empty() {
         return Err(err("link_native_objects: no input objects"));
     }
@@ -441,6 +460,10 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
     // The final-image writer turns each into a PLT trampoline.
     let mut imports: Vec<String> = Vec::new();
     let mut import_idx_for_name: BTreeMap<String, usize> = BTreeMap::new();
+    // Names admitted as flat-namespace imports under `allow_undefined`
+    // (a shared library's references the host supplies at `dlopen`).
+    let mut flat_imports: alloc::collections::BTreeSet<String> =
+        alloc::collections::BTreeSet::new();
     let record_import = |name: &str,
                          imports: &mut Vec<String>,
                          idx_for_name: &mut BTreeMap<String, usize>|
@@ -568,12 +591,25 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         // supply. STB_WEAK UNDEF entries are
                         // libc imports the dynamic linker
                         // resolves at load time; let them
-                        // through to the PLT pass.
-                        if sym.binding == 1 {
+                        // through to the PLT pass. With
+                        // `allow_undefined` (a shared library), a
+                        // global UNDEF is likewise a load-time
+                        // import: it carries no dylib routing, so
+                        // the per-format writer emits it as a
+                        // flat-namespace bind (Mach-O) / undefined
+                        // `.dynsym` entry (ELF) the host resolves
+                        // through the `dlopen` global scope.
+                        if sym.binding == 1 && !allow_undefined {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
                                 sym.name,
                             )));
+                        }
+                        // A global UNDEF admitted here has no dylib
+                        // routing; mark it flat so the writer emits a
+                        // load-time flat-namespace import.
+                        if sym.binding == 1 {
+                            flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
                         pending_imports.push(PendingImportReloc {
@@ -929,6 +965,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         machine,
         dylibs,
         import_dylib_map,
+        flat_imports,
         exports,
         tls_index_fixups,
         macho_tlv_descriptors,

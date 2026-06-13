@@ -157,6 +157,14 @@ const SDK_MACOS: u32 = 11 << 16;
 
 const BIND_OPCODE_DONE: u8 = 0x00;
 const BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: u8 = 0x10;
+/// Select a special pseudo-dylib by signed immediate. Used for the
+/// flat-namespace lookup ordinal (`BIND_SPECIAL_DYLIB_FLAT_LOOKUP`,
+/// -2), which dyld resolves by searching every loaded image -- the
+/// path a shared library's host-supplied imports take at `dlopen`.
+const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
+/// `BIND_SPECIAL_DYLIB_FLAT_LOOKUP` (-2) in the opcode's signed 4-bit
+/// immediate field.
+const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
@@ -1483,12 +1491,20 @@ fn build_bind_opcodes(
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
-    let mut current_ordinal: Option<u8> = None;
+    // Track the last dylib-selection opcode byte emitted so consecutive
+    // imports from the same source don't repeat it. A flat-lookup import
+    // selects the special pseudo-dylib instead of an LC_LOAD_DYLIB
+    // ordinal.
+    let mut current_selector: Option<u8> = None;
     for (i, imp) in imports.imports.iter().enumerate() {
-        let ordinal = (imp.dylib_index + 1) as u8;
-        if current_ordinal != Some(ordinal) {
-            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (ordinal & 0x0F));
-            current_ordinal = Some(ordinal);
+        let selector = if imp.flat_lookup {
+            BIND_OPCODE_SET_DYLIB_SPECIAL_IMM | BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM
+        } else {
+            BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (((imp.dylib_index + 1) as u8) & 0x0F)
+        };
+        if current_selector != Some(selector) {
+            out.push(selector);
+            current_selector = Some(selector);
         }
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(imp.real_symbol.as_bytes());
@@ -1511,8 +1527,9 @@ fn build_bind_opcodes(
             .position(|d| d.path.contains("libSystem"))
             .map(|i| (i + 1) as u8)
             .unwrap_or(1);
-        if current_ordinal != Some(bootstrap_ordinal) {
-            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (bootstrap_ordinal & 0x0F));
+        let bootstrap_selector = BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (bootstrap_ordinal & 0x0F);
+        if current_selector != Some(bootstrap_selector) {
+            out.push(bootstrap_selector);
         }
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(TLV_BOOTSTRAP_SYMBOL.as_bytes());
@@ -2524,6 +2541,7 @@ mod tests {
                     local_name: "write".into(),
                     real_symbol: "_write".into(),
                     dylib_index: 0,
+                    flat_lookup: false,
                     is_variadic: false,
                     fixed_args: 3,
                     return_type_tag: 0,

@@ -1003,7 +1003,12 @@ fn main() {
         // through the native path: ELF PT_TLS, the PE TLS directory +
         // `_tls_index` note, and the Mach-O TLV descriptors + fixups
         // note.
-        let mut merged = match badc::link_native_objects(&native_objs) {
+        // A shared library may reference symbols the host executable
+        // supplies at `dlopen` time; let an unresolved global become a
+        // load-time import instead of a link error.
+        let allow_undefined = mode == Mode::SharedLibrary;
+        let mut merged = match badc::link_native_objects_with_options(&native_objs, allow_undefined)
+        {
             Ok(m) => m,
             Err(e) => {
                 eprint_diagnostic(format!("badc: {e}"));

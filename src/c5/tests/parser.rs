@@ -457,6 +457,41 @@ fn pragma_export_records_function_on_program() {
 }
 
 #[test]
+fn export_all_functions_exports_non_static() {
+    // The `--export-all` driver flag sets `export_all_functions`, so
+    // every non-static function defined in the unit is exported without
+    // an explicit `#pragma export` -- a runtime `dlopen` consumer
+    // resolves it by name. Applies to shared-library and executable
+    // output on every native target. A `static` function keeps internal
+    // linkage and is not exported.
+    let src = "
+        static int helper() { return 1; }
+        int answer() { return 42 + helper(); }
+        int entry() { return answer(); }
+    ";
+    let opts = crate::c5::compiler::CompileOptions::default()
+        .with_export_all_functions(true)
+        .with_no_entry_point(true);
+    let target = super::super::codegen::Target::default_target();
+    let p = super::Compiler::with_options(super::with_prelude(src), target, opts)
+        .compile()
+        .expect("compile");
+    let names: alloc::vec::Vec<&str> = p.exports.iter().map(|e| e.name.as_str()).collect();
+    assert!(
+        names.contains(&"answer"),
+        "non-static `answer` must export: {names:?}"
+    );
+    assert!(
+        names.contains(&"entry"),
+        "non-static `entry` must export: {names:?}"
+    );
+    assert!(
+        !names.contains(&"helper"),
+        "static `helper` must not export: {names:?}"
+    );
+}
+
+#[test]
 fn pragma_export_with_unknown_name_is_refused() {
     let src = "
         int main() { return 0; }

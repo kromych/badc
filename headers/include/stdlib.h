@@ -60,6 +60,7 @@
 #pragma binding(libc::strtoul, "_strtoul")
 #pragma binding(libc::strtoull, "_strtoull")
 #pragma binding(libc::mkstemp, "_mkstemp")
+#pragma binding(libc::mkstemps, "_mkstemps")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
 #pragma binding(libc::random,  "_random")
@@ -103,6 +104,7 @@
 #pragma binding(libc::strtoul, "strtoul")
 #pragma binding(libc::strtoull, "strtoull")
 #pragma binding(libc::mkstemp, "mkstemp")
+#pragma binding(libc::mkstemps, "mkstemps")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
 #pragma binding(libc::random,  "random")
@@ -280,6 +282,7 @@ int _cwait(int *termstat, int handle, int action);
 char *_fullpath(char *absPath, char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
+int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();

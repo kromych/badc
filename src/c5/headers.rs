@@ -82,6 +82,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("grp.h", include_str!("../../headers/include/grp.h")),
     (
+        "langinfo.h",
+        include_str!("../../headers/include/langinfo.h"),
+    ),
+    (
         "netinet/in.h",
         include_str!("../../headers/include/netinet/in.h"),
     ),

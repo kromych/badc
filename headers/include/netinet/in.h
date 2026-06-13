@@ -65,6 +65,17 @@ struct sockaddr_in6 {
 // the all-zero unspecified address (POSIX guarantees its value), provided here
 // as a const object so callers can take its address without a libc data
 // import.
+
+// An IPv4-mapped IPv6 address is ::ffff:a.b.c.d -- bytes 0..9 zero, 10..11
+// 0xff, the low 4 the IPv4 address.
+#define IN6_IS_ADDR_V4MAPPED(a) ( \
+    ((const unsigned int *)(a))[0] == 0 && \
+    ((const unsigned int *)(a))[1] == 0 && \
+    ((const unsigned char *)(a))[8] == 0 && \
+    ((const unsigned char *)(a))[9] == 0 && \
+    ((const unsigned char *)(a))[10] == 0xff && \
+    ((const unsigned char *)(a))[11] == 0xff)
+
 #define IN6_ARE_ADDR_EQUAL(a, b) ( \
     ((const unsigned int *)(a))[0] == ((const unsigned int *)(b))[0] && \
     ((const unsigned int *)(a))[1] == ((const unsigned int *)(b))[1] && \

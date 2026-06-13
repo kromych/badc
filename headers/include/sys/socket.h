@@ -110,6 +110,8 @@ struct sockaddr_storage {
 #pragma binding(libc::connect,    "_connect")
 #pragma binding(libc::setsockopt, "_setsockopt")
 #pragma binding(libc::getsockopt, "_getsockopt")
+#pragma binding(libc::getpeername, "_getpeername")
+#pragma binding(libc::getsockname, "_getsockname")
 #pragma binding(libc::recv,       "_recv")
 #pragma binding(libc::send,       "_send")
 #pragma binding(libc::shutdown,   "_shutdown")
@@ -136,6 +138,8 @@ struct sockaddr_storage {
 #pragma binding(libc::connect,    "connect")
 #pragma binding(libc::setsockopt, "setsockopt")
 #pragma binding(libc::getsockopt, "getsockopt")
+#pragma binding(libc::getpeername, "getpeername")
+#pragma binding(libc::getsockname, "getsockname")
 #pragma binding(libc::recv,       "recv")
 #pragma binding(libc::send,       "send")
 #pragma binding(libc::shutdown,   "shutdown")
@@ -160,6 +164,8 @@ struct sockaddr_storage {
 #pragma binding(ws2_32::listen,      "listen")
 #pragma binding(ws2_32::accept,      "accept")
 #pragma binding(ws2_32::connect,     "connect")
+#pragma binding(ws2_32::getpeername, "getpeername")
+#pragma binding(ws2_32::getsockname, "getsockname")
 #pragma binding(ws2_32::setsockopt,  "setsockopt")
 #pragma binding(ws2_32::getsockopt,  "getsockopt")
 #pragma binding(ws2_32::recv,        "recv")
@@ -200,3 +206,5 @@ int getsockopt(int fd, int level, int optname, char *optval, int *optlen);
 int recv(int fd, char *buf, int n, int flags);
 int send(int fd, char *buf, int n, int flags);
 int shutdown(int fd, int how);
+int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);

@@ -2260,12 +2260,20 @@ impl Preprocessor {
             self.include_trace
                 .push(format!("{} {}", ".".repeat(depth), name));
         }
-        if self.include_stack.iter().any(|f| f == name) {
+        // A header may legitimately appear more than once on the active
+        // include path: a guard-protected re-include where an inner header
+        // pulls a guarded outer one back in. The include guard skips the body
+        // on the second pass, so this must process normally rather than error.
+        // Bound only the nesting depth so a truly unguarded self-include still
+        // fails fast instead of recursing without limit; C99 5.2.4.1 sets 15
+        // levels as the minimum a translator must support.
+        const MAX_INCLUDE_DEPTH: usize = 200;
+        if self.include_stack.len() >= MAX_INCLUDE_DEPTH {
             let chain = self.include_stack.join(" -> ");
             return Err(C5Error::Compile(super::error::fmt_compile_err(
                 filename,
                 line_no,
-                &format!("cyclic `#include {name}` (chain: {chain} -> {name})"),
+                &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
             )));
         }
         self.include_stack.push(name.to_string());
@@ -3928,6 +3936,42 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn guarded_mutual_include_is_not_cyclic() {
+        // Two headers may include each other when an include guard breaks the
+        // recursion: the second pass over a guarded header skips its body
+        // (C99 6.10.1 / 6.10.2). The preprocessor must process the re-include
+        // rather than reject it as a cycle on the bare observation that the
+        // name is already on the include path.
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("badc_pp_guard_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::File::create(dir.join("a.h"))
+            .unwrap()
+            .write_all(b"#ifndef A_H\n#define A_H\n#include \"b.h\"\nint a_marker;\n#endif\n")
+            .unwrap();
+        std::fs::File::create(dir.join("b.h"))
+            .unwrap()
+            .write_all(b"#ifndef B_H\n#define B_H\n#include \"a.h\"\nint b_marker;\n#endif\n")
+            .unwrap();
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(dir.to_str().unwrap());
+        let out = pp
+            .process("#include \"a.h\"\n")
+            .expect("guarded mutual include must not be reported cyclic");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            out.matches("a_marker").count(),
+            1,
+            "a body included once:\n{out}"
+        );
+        assert_eq!(
+            out.matches("b_marker").count(),
+            1,
+            "b body included once:\n{out}"
+        );
     }
 
     #[test]

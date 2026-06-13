@@ -5607,14 +5607,12 @@ fn emit_call_ext(
         return true;
     }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
-        if ty_helpers::is_float_ty(bare) {
-            // The callee returns single precision in the low 32 bits of
-            // xmm0. The c5 model carries an f32 value in its f64-widened
-            // form (the matching F32 store narrows via cvtsd2ss), so
-            // widen xmm0 to double before routing the result. Lossless:
-            // every float is exactly representable as a double.
-            emit_cvtss2sd(code, Reg::XMM0, Reg::XMM0);
-        }
+        // A float / double result is FP-classed (`Inst::CallExt::fp_return`).
+        // An f32 result is the single in the low 32 bits of xmm0 -- the same
+        // form `FpCast(F64ToF32)` produces and `StoreLocal F32` /
+        // `FpCast(F32ToF64)` consume -- so route it without widening. (The
+        // prior GPR-bridged path widened via cvtss2sd because the
+        // integer-class convention carried the f64-widened bits.)
         match dst {
             Place::FpReg(r) => {
                 if r != Reg::XMM0.0 {
@@ -6806,10 +6804,13 @@ fn emit_return(
         return;
     }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
-    // value's register file is set by its producing instruction, so a
-    // spilled FP result is still delivered through xmm0 rather than
-    // mirrored into rax as an integer.
-    let return_is_fp = matches!(return_place, Place::FpReg(_))
+    // declared return type is authoritative: a bare FP constant
+    // materializes as an integer immediate in a GPR, and any value whose
+    // producing instruction is integer-classed lands in a GPR, yet an
+    // `fp_return` caller reads xmm0. `materialize_fp` reinterprets the
+    // GPR / spill bit pattern into an xmm via `movq` / `movsd`.
+    let return_is_fp = func.ret_is_fp
+        || matches!(return_place, Place::FpReg(_))
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
             && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));

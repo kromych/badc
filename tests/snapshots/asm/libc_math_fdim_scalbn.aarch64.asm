@@ -60,7 +60,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x0, w0
                	bl	<addr>
-               	fmov	x0, d0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -73,7 +72,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x0, w0
                	bl	<addr>
-               	fmov	x0, d0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -87,9 +85,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	fcvt	d0, s0
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
-               	fcvt	s0, d16
+               	fcvt	s0, d0
                	ldr	x19, [sp]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

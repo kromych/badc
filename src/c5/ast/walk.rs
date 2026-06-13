@@ -116,6 +116,7 @@ pub(crate) fn walk_function(
         let idx = b.intern_agg_desc(desc.clone());
         b.set_ret_agg(idx);
     }
+    b.set_ret_is_fp(is_floating_scalar(return_ty));
     // A function returning > 16 bytes saves the incoming x8 result
     // pointer into a dedicated local for the codegen prologue; the
     // `return` lowering writes the value through it.
@@ -2119,8 +2120,17 @@ impl<'a> Walker<'a> {
                         // binding(...)` directives -- exactly
                         // what `Inst::CallExt::binding_idx`
                         // wants. `fp_arg_mask` is the per-arg
-                        // FP-ness bit set we built above.
-                        return Ok(b.call_ext(*val, arg_vals, fp_arg_mask));
+                        // FP-ness bit set we built above. A
+                        // floating-point return is FP-classed (C99
+                        // 6.2.5p10) so the result rides d0 / xmm0
+                        // without a GPR bridge; a `float` result
+                        // additionally carries the f32 tag.
+                        let fp_return = is_floating_scalar(*ty);
+                        let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
+                        if is_float_ty(*ty) {
+                            return Ok(b.mark_f32(call));
+                        }
+                        return Ok(call);
                     }
                 }
                 // Determine the pointed-to function's variadic-ness

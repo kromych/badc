@@ -243,7 +243,10 @@ impl Compiler {
             let arg_vals: alloc::vec::Vec<_> = (0..nargs_ssa)
                 .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
                 .collect();
-            let r = sb.call_ext(binding_idx, arg_vals, 0);
+            // This forwarding body is reached only for non-FP-touching
+            // bindings (the `touches_fp` shapes take the `tail_ext` path
+            // above), so the result is integer-classed.
+            let r = sb.call_ext(binding_idx, arg_vals, 0, false);
             sb.return_(r);
             let mut func = sb.finish();
             // SsaBuilder doesn't know the ent_pc until the

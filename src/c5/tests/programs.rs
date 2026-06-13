@@ -179,6 +179,12 @@ fn sub_word_return_narrow() {
 }
 
 #[test]
+fn fp_const_return() {
+    // A floating-constant return reaches the FP return register (d0/xmm0).
+    assert_eq!(run_fixture("fp_const_return.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

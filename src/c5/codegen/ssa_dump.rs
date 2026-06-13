@@ -177,11 +177,16 @@ fn fmt_inst(inst: &Inst) -> String {
             binding_idx,
             args,
             fp_arg_mask,
-            ..
-        } => format!(
-            "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x} }}",
-            fmt_value_list(args),
-        ),
+            fp_return,
+        } => {
+            // Most external calls are integer-returning; show `fp_return`
+            // only when set so the common case keeps a stable form.
+            let fp = if *fp_return { ", fp_return=true" } else { "" };
+            format!(
+                "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x}{fp} }}",
+                fmt_value_list(args),
+            )
+        }
         TailExt(b) => format!("TailExt({b})"),
         Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
         Intrinsic { kind, args } => format!(

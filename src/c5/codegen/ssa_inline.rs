@@ -713,6 +713,7 @@ fn splice_multi_block(
 
         param_local_slots: original.param_local_slots,
         ret_agg: original.ret_agg,
+        ret_is_fp: original.ret_is_fp,
         indirect_result_slot: original.indirect_result_slot,
         computed_goto_targets: original.computed_goto_targets,
     };

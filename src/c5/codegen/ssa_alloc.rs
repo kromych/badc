@@ -1160,7 +1160,13 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 ResultKind::Int
             }
         }
-        CallExt { .. } => ResultKind::Int,
+        CallExt { fp_return, .. } => {
+            if *fp_return {
+                ResultKind::Fp
+            } else {
+                ResultKind::Int
+            }
+        }
         TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { kind, .. } => {
@@ -2330,6 +2336,7 @@ int main(void) { return 0; }
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
             insts,

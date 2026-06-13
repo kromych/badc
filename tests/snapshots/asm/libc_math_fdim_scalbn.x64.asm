@@ -70,7 +70,6 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
                	popq	%rbp
                	retq
 
@@ -80,7 +79,6 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
                	popq	%rbp
                	retq
 
@@ -92,9 +90,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm0, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm14
-               	cvtsd2ss	%xmm14, %xmm0
+               	cvtsd2ss	%xmm0, %xmm0
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
@@ -252,5 +248,3 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

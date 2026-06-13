@@ -159,6 +159,7 @@ impl SsaBuilder {
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
             ret_agg: None,
+            ret_is_fp: false,
             indirect_result_slot: 0,
             computed_goto_targets: Vec::new(),
         };
@@ -279,6 +280,12 @@ impl SsaBuilder {
         if i < 32 {
             self.func.param_fp_mask |= 1u32 << i;
         }
+    }
+
+    /// Record that the function returns a floating-point scalar. See
+    /// [`FunctionSsa::ret_is_fp`].
+    pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
+        self.func.ret_is_fp = is_fp;
     }
 
     /// The accumulated per-parameter FP mask. See
@@ -954,12 +961,14 @@ impl SsaBuilder {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
+        fp_return: bool,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::CallExt {
             binding_idx,
             args,
             fp_arg_mask,
+            fp_return,
         })
     }
 

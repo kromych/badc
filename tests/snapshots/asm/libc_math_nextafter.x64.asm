@@ -21,10 +21,8 @@ Disassembly of section .text:
                	movq	%rsi, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm14
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b
@@ -45,10 +43,8 @@ Disassembly of section .text:
                	movq	%rsi, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm14
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setae	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -65,10 +61,8 @@ Disassembly of section .text:
                	movq	%rbx, %xmm1
                	xorl	%eax, %eax
                	callq	<addr>
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm14
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setne	%al
                	movzbq	%al, %rax
                	setp	%r10b
@@ -134,10 +128,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	cvtss2sd	%xmm0, %xmm0
-               	movq	%xmm0, %rax
-               	movq	%rax, %xmm14
                	movq	%rbx, %xmm15
-               	ucomisd	%xmm15, %xmm14
+               	ucomisd	%xmm15, %xmm0
                	setbe	%al
                	movzbq	%al, %rax
                	setnp	%r10b

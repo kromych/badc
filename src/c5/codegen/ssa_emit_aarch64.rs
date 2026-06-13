@@ -3141,27 +3141,25 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // FP-returning libc fns hand the result back in d0 on
-    // AAPCS64; bridge it into x0 so the rest of the c5 model
-    // (which reads every return through the integer accumulator
-    // chain) sees the bit pattern. Sub-word integer returns
-    // receive the same signed / unsigned extension sequence on
-    // x0 that the pool path applies.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
-    if returns_fp || imp.returns_long_double {
-        if ty_helpers::is_float_ty(bare) {
-            // A `float`-returning callee leaves single precision in s0
-            // (the low 32 bits of v0; the upper bits are unspecified per
-            // AAPCS64). The c5 model carries an f32 value in a GPR as its
-            // f64-widened bit pattern, so widen s0 to d0 before bridging
-            // into x0. The matching `F32` store narrows it back, which is
-            // lossless because every float is exactly representable as a
-            // double.
-            emit(code, enc_fcvt_d_s(0, 0));
-        }
+    if returns_fp {
+        // A float / double result is FP-classed (`Inst::CallExt::fp_return`)
+        // and already sits in d0 (double) / s0 (single) on AAPCS64. An f32
+        // value is FP-classed as the single in s0 -- the same form
+        // `FpCast(F64ToF32)` produces and `StoreLocal F32` / `FpCast(F32ToF64)`
+        // consume -- so route it into the FP place dst with no widening and
+        // no GPR bridge. (The prior GPR-bridged path widened to d0 because
+        // the integer-class convention carried the f64-widened bits.)
+        move_call_result(code, dst, frame, true);
+        return true;
+    }
+    // Long double is not FP-classed (is_floating_scalar excludes it), so it
+    // is bridged through x0 like an integer return; sub-word integer
+    // returns receive the same sign / zero extension the pool path applies.
+    if imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
         let ext = super::return_extension(return_type_tag, target);
@@ -5999,16 +5997,30 @@ fn emit_return(
         // low 32 bits of d0, which a d-register copy / 8-byte FP load
         // preserves. The value's producing instruction determines the
         // register file even when the allocator spilled it.
-        let returns_fp = (value as usize) < func.insts.len()
-            && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]);
+        let returns_fp = func.ret_is_fp
+            || ((value as usize) < func.insts.len()
+                && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
                 emit(code, super::aarch64::enc_fmov_d_d(0, r));
             }
         } else if returns_fp {
-            if let Place::Spill(slot) = place {
-                let sp_off = spill_off(frame, slot);
-                emit_sp_ldr_d_auto(code, 0, sp_off);
+            // The function returns a floating-point scalar in d0 but the
+            // value is GPR / spill resident -- a bare FP constant
+            // materializes as an integer immediate, and any value whose
+            // producing instruction is integer-classed lands in a GPR.
+            // The 8 bytes hold the f64 bit pattern (the low 32 are an
+            // f32's s0); reinterpret them into d0.
+            match place {
+                Place::Spill(slot) => {
+                    let sp_off = spill_off(frame, slot);
+                    emit_sp_ldr_d_auto(code, 0, sp_off);
+                }
+                _ => {
+                    let src = materialize_int(code, place, scratch.primary, frame)
+                        .unwrap_or(scratch.primary);
+                    emit(code, enc_fmov_x_to_d(0, src));
+                }
             }
         } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
             && src.0 != 0

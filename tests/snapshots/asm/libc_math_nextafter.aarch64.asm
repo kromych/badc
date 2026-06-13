@@ -20,10 +20,8 @@ Disassembly of section .text:
                	fmov	d0, x20
                	fmov	d1, x1
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
                	fmov	d17, x20
-               	fcmp	d16, d17
+               	fcmp	d0, d17
                	cset	x0, ls
                	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
@@ -37,10 +35,8 @@ Disassembly of section .text:
                	fmov	d0, x20
                	fmov	d1, x1
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
                	fmov	d17, x20
-               	fcmp	d16, d17
+               	fcmp	d0, d17
                	cset	x0, ge
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -53,10 +49,8 @@ Disassembly of section .text:
                	fmov	d0, x20
                	fmov	d1, x20
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
                	fmov	d17, x20
-               	fcmp	d16, d17
+               	fcmp	d0, d17
                	cset	x0, ne
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
@@ -113,10 +107,8 @@ Disassembly of section .text:
                	fcvt	s1, d16
                	bl	<addr>
                	fcvt	d0, s0
-               	fmov	x0, d0
-               	fmov	d16, x0
                	fmov	d17, x20
-               	fcmp	d16, d17
+               	fcmp	d0, d17
                	cset	x0, ls
                	cbz	x0, <addr>
                	mov	x0, #0x7                // =7

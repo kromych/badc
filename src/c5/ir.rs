@@ -238,6 +238,11 @@ pub(crate) enum Inst {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
+        /// True when the callee returns a floating-point scalar, so the
+        /// result is delivered in the FP return register (d0 / xmm0) and
+        /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
+        /// without it an FP libc result is force-bridged through a GPR.
+        fp_return: bool,
     },
     /// Tail-jump to an external symbol. Used only as the body
     /// of an address-take trampoline; never has a defined value
@@ -598,6 +603,13 @@ pub(crate) struct FunctionSsa {
     /// `agg_descs[i]` by value through the host ABI; `None` for a
     /// scalar / void return.
     pub ret_agg: Option<u32>,
+    /// True when the function returns a floating-point scalar (C99
+    /// 6.2.5p10): the result is delivered in the FP return register
+    /// (d0 / xmm0). This is the declared-type signal the return emit
+    /// uses; a producing instruction's register file alone is
+    /// insufficient because a bare FP constant materializes as an
+    /// integer immediate in a GPR.
+    pub ret_is_fp: bool,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
     /// larger than 16 bytes. The prologue stores x8 here; the callee

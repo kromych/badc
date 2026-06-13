@@ -88,6 +88,7 @@ struct hostent {
 #pragma binding(libc::gai_strerror, "_gai_strerror")
 #pragma binding(libc::getservbyname,"_getservbyname")
 #pragma binding(libc::gethostbyname,"_gethostbyname")
+#pragma binding(libc::gethostbyaddr,"_gethostbyaddr")
 #endif
 
 #ifdef __linux__
@@ -97,6 +98,7 @@ struct hostent {
 #pragma binding(libc::gai_strerror, "gai_strerror")
 #pragma binding(libc::getservbyname,"getservbyname")
 #pragma binding(libc::gethostbyname,"gethostbyname")
+#pragma binding(libc::gethostbyaddr,"gethostbyaddr")
 #endif
 
 #ifdef _WIN32
@@ -105,6 +107,7 @@ struct hostent {
 #pragma binding(ws2_32::getnameinfo,  "getnameinfo")
 #pragma binding(ws2_32::getservbyname,"getservbyname")
 #pragma binding(ws2_32::gethostbyname,"gethostbyname")
+#pragma binding(ws2_32::gethostbyaddr,"gethostbyaddr")
 #endif
 
 int getaddrinfo(const char *node, const char *service,
@@ -115,3 +118,4 @@ int getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
 const char *gai_strerror(int errcode);
 struct servent *getservbyname(const char *name, const char *proto);
 struct hostent *gethostbyname(const char *name);
+struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);

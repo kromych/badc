@@ -60,6 +60,18 @@ struct sockaddr_in6 {
 };
 #endif
 
+
+// IN6_ARE_ADDR_EQUAL compares two in6_addr by their 16 bytes. in6addr_any is
+// the all-zero unspecified address (POSIX guarantees its value), provided here
+// as a const object so callers can take its address without a libc data
+// import.
+#define IN6_ARE_ADDR_EQUAL(a, b) ( \
+    ((const unsigned int *)(a))[0] == ((const unsigned int *)(b))[0] && \
+    ((const unsigned int *)(a))[1] == ((const unsigned int *)(b))[1] && \
+    ((const unsigned int *)(a))[2] == ((const unsigned int *)(b))[2] && \
+    ((const unsigned int *)(a))[3] == ((const unsigned int *)(b))[3])
+static const struct in6_addr in6addr_any;
+
 #ifdef __APPLE__
 #pragma binding(libc::htons, "_htons")
 #pragma binding(libc::ntohs, "_ntohs")

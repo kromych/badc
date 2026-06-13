@@ -9,6 +9,11 @@
 
 #pragma once
 
+// tcsetattr optional-action values (uniform across targets).
+#define TCSANOW   0
+#define TCSADRAIN 1
+#define TCSAFLUSH 2
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::tcgetattr, "_tcgetattr")

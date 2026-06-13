@@ -450,10 +450,10 @@ fn export_all_executable_exposes_dynamic_symbols() {
                 while img[e] != 0 {
                     e += 1;
                 }
-                if let Ok(s) = core::str::from_utf8(&img[str_off + name_idx..e]) {
-                    if !s.is_empty() {
-                        out.push(s.to_string());
-                    }
+                if let Ok(s) = core::str::from_utf8(&img[str_off + name_idx..e])
+                    && !s.is_empty()
+                {
+                    out.push(s.to_string());
                 }
                 p += 24;
             }

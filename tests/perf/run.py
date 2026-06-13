@@ -207,8 +207,13 @@ def probe_compilers() -> list[Compiler]:
         print(f"info: tcc not at {tcc}; skipping tcc rows", file=sys.stderr)
 
     if shutil.which("clang"):
-        found.append(Compiler("clang -O0", ["clang", "-O0"]))
-        found.append(Compiler("clang -O2", ["clang", "-O2"]))
+        # The FP fixtures and quickjs call libm (pow / fmod / ldexp); on
+        # Linux libm is a separate archive that must be named at link
+        # time, the same reason tcc needs it above. macOS folds it into
+        # libSystem. Without `-lm` clang fails to link quickjs_bench.
+        clang_trailing = ("-lm",) if sys.platform == "linux" else ()
+        found.append(Compiler("clang -O0", ["clang", "-O0"], trailing=clang_trailing))
+        found.append(Compiler("clang -O2", ["clang", "-O2"], trailing=clang_trailing))
 
     if WIN and shutil.which("cl"):
         found.append(

@@ -44,6 +44,7 @@
 #pragma binding(libc::pthread_attr_init,        "_pthread_attr_init")
 #pragma binding(libc::pthread_attr_destroy,     "_pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
+#pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
@@ -82,6 +83,7 @@
 #pragma binding(libc::pthread_attr_init,        "pthread_attr_init")
 #pragma binding(libc::pthread_attr_destroy,     "pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
+#pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_key_create,       "pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
@@ -174,6 +176,7 @@ int pthread_cond_broadcast(char *cond);
 int pthread_attr_init(char *attr);
 int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
+int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_key_create(pthread_key_t *key, int *destructor);
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, char *val);

@@ -712,6 +712,16 @@ impl Compiler {
             self.next()?;
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
+                // The cast type is discarded here rather than bound through a
+                // declarator, so clear the function-type side channels it may
+                // have set. A cast to a function-type-typedef pointer
+                // (`(FnT *)expr`) otherwise leaves base_is_function_type set,
+                // and the next pointer declaration absorbs its `*`.
+                self.pending.base_is_function_type = false;
+                self.pending.bare_function_type_declarator = false;
+                self.pending.fn_ptr_indirection = None;
+                self.pending.typedef_fn_proto = None;
+                self.pending.fn_ptr_param_types = None;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }

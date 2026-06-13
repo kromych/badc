@@ -206,6 +206,13 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn cast_fn_typedef_ptr_in_initializer() {
+    // A cast to a function-type-typedef pointer in an initializer must not
+    // leak the function-type marker to the next declaration (C99 6.5.4).
+    assert_eq!(run_fixture("cast_fn_typedef_ptr_in_initializer.c"), 0);
+}
+
+#[test]
 fn global_init_paren_operand() {
     // C99 6.6: a parenthesised operand + binary operator in a constant
     // initializer folds with full precedence (`(1) << 5`).

@@ -74,6 +74,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("errno.h", include_str!("../../headers/include/errno.h")),
     ("assert.h", include_str!("../../headers/include/assert.h")),
     ("time.h", include_str!("../../headers/include/time.h")),
+    ("utime.h", include_str!("../../headers/include/utime.h")),
     ("dirent.h", include_str!("../../headers/include/dirent.h")),
     ("ftw.h", include_str!("../../headers/include/ftw.h")),
     ("pwd.h", include_str!("../../headers/include/pwd.h")),

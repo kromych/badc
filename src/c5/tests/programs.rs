@@ -206,6 +206,12 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn posix_utime_errno_headers() {
+    // badc bundles POSIX <utime.h> (struct utimbuf) and the ENOTCONN errno.
+    assert_eq!(run_fixture("posix_utime_errno_headers.c"), 0);
+}
+
+#[test]
 fn cast_fn_typedef_ptr_in_initializer() {
     // A cast to a function-type-typedef pointer in an initializer must not
     // leak the function-type marker to the next declaration (C99 6.5.4).

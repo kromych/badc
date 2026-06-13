@@ -59,6 +59,7 @@
 #define ETIMEDOUT 110
 #define ECONNRESET 104
 #define ECONNREFUSED 111
+#define ENOTCONN 107
 #define EWOULDBLOCK EAGAIN
 
 #ifdef __APPLE__

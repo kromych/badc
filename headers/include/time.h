@@ -109,6 +109,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::strftime,      "_strftime")
+#pragma binding(libc::tzset,         "_tzset")
 #endif
 
 #ifdef __linux__
@@ -125,6 +126,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "gmtime_r")
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::strftime,      "strftime")
+#pragma binding(libc::tzset,         "tzset")
 #endif
 
 #ifdef _WIN32
@@ -136,6 +138,7 @@ typedef long clock_t;
 #pragma binding(msvcrt::localtime,"localtime")
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::strftime, "strftime")
+#pragma binding(msvcrt::tzset,    "_tzset")
 // Windows doesn't ship POSIX `clock_gettime` / `gettimeofday`. SQLite
 // has its own Win32-specific code path that calls
 // `GetSystemTimeAsFileTime`; programs that want a portable shape
@@ -160,3 +163,6 @@ struct tm *gmtime_r(int *t, struct tm *result);
 // caller's buffer; returns the buffer pointer or NULL on error.
 char *ctime_r(int *t, char *buf);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);
+// POSIX 7.24.1: initialize the timezone conversion state from the TZ
+// environment variable (or the system default). No arguments, no result.
+void tzset(void);

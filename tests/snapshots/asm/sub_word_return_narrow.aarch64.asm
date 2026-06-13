@@ -14,6 +14,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	lsr	x1, x0, #8
                	lsl	x0, x0, #8
+               	sxtw	x0, w0
                	orr	x0, x1, x0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
@@ -31,6 +32,7 @@ Disassembly of section .text:
 <s16_shift>:
                	sxth	x0, w0
                	lsl	x0, x0, #8
+               	sxtw	x0, w0
                	sxth	x0, w0
                	ret
 
@@ -47,6 +49,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	lsr	x1, x0, #8
                	lsl	x0, x0, #8
+               	sxtw	x0, w0
                	orr	x0, x1, x0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
@@ -73,6 +76,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x140              // =320
                	lsl	x0, x0, #8
+               	sxtw	x0, w0
                	sxth	x0, w0
                	mov	x17, #0x4000            // =16384
                	cmp	x0, x17

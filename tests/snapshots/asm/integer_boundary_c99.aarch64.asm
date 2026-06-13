@@ -1169,6 +1169,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	b	<addr>
                	lsl	x0, x0, #30
+               	sxtw	x0, w0
                	mov	x17, #0x40000000        // =1073741824
                	cmp	x0, x17
                	cset	x0, eq

@@ -167,6 +167,7 @@ Disassembly of section .text:
                	ret
                	mov	x20, #0x1               // =1
                	lsl	x0, x20, #14
+               	sxtw	x0, w0
                	sxth	x0, w0
                	mov	x17, #0x4000            // =16384
                	cmp	x0, x17
@@ -177,6 +178,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x0, x20, #16
+               	sxtw	x0, w0
                	bl	<addr>
                	sxth	x0, w0
                	cmp	x0, #0x0
@@ -187,6 +189,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x0, x20, #15
+               	sxtw	x0, w0
                	bl	<addr>
                	sxth	x0, w0
                	mov	x17, #0x8000            // =32768
@@ -287,6 +290,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	lsl	x0, x1, #15
+               	sxtw	x0, w0
                	mov	x17, #0xffff            // =65535
                	and	x0, x0, x17
                	mov	x17, #0xffff            // =65535

@@ -424,6 +424,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fp_const_return.c", 0),
     ("struct_array_init_from_lvalue.c", 0),
     ("shift_result_type_signedness.c", 0),
+    ("integer_negate_shift_overflow.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),

@@ -72,6 +72,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x0, x0, x17
+               	sxtw	x0, w0
                	ret
 
 <main>:

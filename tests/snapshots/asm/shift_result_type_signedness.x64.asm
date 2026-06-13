@@ -79,6 +79,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x8000, %eax           # imm = 0x8000
                	shlq	$0x10, %rax
+               	movslq	%eax, %rax
                	sarq	$0x10, %rax
                	testq	%rax, %rax
                	jne	<addr>
@@ -91,3 +92,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

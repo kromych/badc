@@ -88,6 +88,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x8000             // =32768
                	lsl	x0, x0, #16
+               	sxtw	x0, w0
                	asr	x0, x0, #16
                	cmp	x0, #0x0
                	b.ne	<addr>

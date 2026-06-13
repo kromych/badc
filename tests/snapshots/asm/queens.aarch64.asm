@@ -38,7 +38,8 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
-               	mul	x6, x3, x17
+               	mul	x3, x3, x17
+               	sxtw	x6, w3
                	sxtw	x3, w4
                	ldrsw	x3, [x0, x3, lsl #2]
                	cmp	x3, x2

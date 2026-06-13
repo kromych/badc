@@ -199,6 +199,13 @@ fn shift_result_type_signedness() {
 }
 
 #[test]
+fn integer_negate_shift_overflow() {
+    // A 32-bit `int` operation that overflows the width (`1<<31`, `-INT_MIN`)
+    // must renormalize before a wider read (C99 6.5.7 / 6.5.3.3p3 / 6.2.5p9).
+    assert_eq!(run_fixture("integer_negate_shift_overflow.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

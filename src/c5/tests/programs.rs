@@ -206,6 +206,13 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn function_type_typedef_declaration() {
+    // C99 6.9.1: a function declared via a function-type typedef (no pointer)
+    // is a function, so a following definition is a redeclaration.
+    assert_eq!(run_fixture("function_type_typedef_declaration.c"), 0);
+}
+
+#[test]
 fn float_increment_decrement() {
     // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
     // 6.5.2.4), prefix yielding the new value and postfix the prior.

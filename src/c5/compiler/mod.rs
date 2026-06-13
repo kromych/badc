@@ -317,6 +317,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// `parse_declarator`.
     pub base_is_function_type: bool,
 
+    /// Set by `parse_declarator` when the declared identifier has a bare
+    /// function type: the base came from a function-TYPE typedef and no
+    /// pointer level was added (`F name`, not `F *name`). Per C99 6.9.1 such
+    /// an identifier is a function declaration, not a function-pointer object.
+    /// Read once by the file-scope declaration path.
+    pub bare_function_type_declarator: bool,
+
     /// Override stride for the next `[i]` postfix index. When we
     /// load the address of a 2D-array variable (`T xs[N][M]`),
     /// the first subscript should scale the index by
@@ -528,6 +535,7 @@ impl Default for Pending {
             fn_params: None,
             fn_ptr_indirection: None,
             base_is_function_type: false,
+            bare_function_type_declarator: false,
             index_stride: 0,
             index_strides_tail: Vec::new(),
             end_of_expr_stride: 0,

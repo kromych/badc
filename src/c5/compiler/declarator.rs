@@ -76,6 +76,12 @@ impl Compiler {
         // adds normally. Consumed here so it does not leak to the next
         // declarator.
         let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        // A function-TYPE typedef used with no pointer level declares the
+        // identifier with function type, i.e. a function declaration (C99
+        // 6.9.1), not a function-pointer object. Flag it for the file-scope
+        // declaration path; `F *p` (a pointer) takes the absorb path above.
+        self.pending.bare_function_type_declarator =
+            self.pending.base_is_function_type && leading_ptr_count == 0;
         self.pending.base_is_function_type = false;
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;

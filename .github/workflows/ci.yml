@@ -906,7 +906,9 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # quickjs_bench builds the full engine four times (badc, badc -O,
+    # clang -O0, clang -O2); allow headroom over the lighter fixtures.
+    timeout-minutes: 15
     # Don't gate CI on perf numbers -- a regression should surface in
     # the job summary but not block the merge. Hard failures from the
     # harness (no compilers found, fixture missing) still fail the job.
@@ -935,6 +937,7 @@ jobs:
           python3 demos/miniz/setup.py
           python3 demos/stb/setup.py
           python3 demos/sqlite3/setup.py
+          python3 demos/quickjs/setup.py
       - name: build tcc for the host
         run: bash tests/perf/build_tcc.sh
       - name: run perf harness + write to job summary

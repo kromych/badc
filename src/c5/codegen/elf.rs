@@ -1170,20 +1170,17 @@ pub(super) fn write(
     } else {
         start_stub_len(machine, use_libc_exit)
     };
-    let exports = if is_shared {
-        &build.exports[..]
-    } else {
-        &[][..]
-    };
+    // A `.dynsym` export entry per `Build::exports` -- a defined
+    // `STB_GLOBAL | STT_FUNC` symbol whose `st_value` is the function's
+    // runtime VA. Shared libraries always export; an executable exports
+    // only under `--export-all` (which populates `build.exports`), the
+    // `-rdynamic` behavior that lets a `dlopen`'d module resolve the
+    // host's symbols from the global scope. An ordinary executable has
+    // no exports, so the tables are unchanged.
+    let exports = &build.exports[..];
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    //
-    // Shared-library output adds one `.dynsym` entry per
-    // `Build::exports` -- defined symbols (`STB_GLOBAL |
-    // STT_FUNC`) with `st_value` set to the function's
-    // runtime VA. For executables `exports` is empty and the
-    // tables look exactly like before.
     let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets) =
         build_dynstr(&build.imports, exports);
     // Compute each export's runtime VA. We fill in the real

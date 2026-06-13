@@ -379,6 +379,106 @@ fn pragma_export_round_trips_into_shared_library() {
 }
 
 #[test]
+fn export_all_executable_exposes_dynamic_symbols() {
+    // The same exports go into an executable's `.dynsym` (the
+    // `-rdynamic` behavior) so a `dlopen`'d module resolves the host's
+    // symbols from the global scope. An `--export-all` executable is
+    // ET_EXEC and carries its exported symbol name; an ordinary
+    // executable does not export it.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let build_exe = |export_all: bool| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions::default().with_export_all_functions(export_all);
+        let program = Compiler::with_options(
+            alloc::format!(
+                "{TEST_PRELUDE}\
+                 int host_api(int x) {{ return x + 1; }}\n\
+                 int main(void) {{ return host_api(0); }}\n"
+            ),
+            Target::LinuxX64,
+            copts,
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("link");
+        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            Target::LinuxX64,
+            None,
+        )
+        .expect("write executable")
+    };
+    // Collect the names in the `.dynsym` (the loader-visible dynamic
+    // symbols) of an ELF64 image. `.symtab` -- where every executable
+    // already carries `host_api` -- is ignored; only a dynamic export
+    // is visible to a `dlopen`'d module.
+    let dynsym_names = |img: &[u8]| -> alloc::vec::Vec<alloc::string::String> {
+        let u32a = |o: usize| u32::from_le_bytes(img[o..o + 4].try_into().unwrap());
+        let u64a = |o: usize| u64::from_le_bytes(img[o..o + 8].try_into().unwrap());
+        let shoff = u64a(0x28) as usize;
+        let shentsize = u16::from_le_bytes(img[0x3a..0x3c].try_into().unwrap()) as usize;
+        let shnum = u16::from_le_bytes(img[0x3c..0x3e].try_into().unwrap()) as usize;
+        let mut out = alloc::vec::Vec::new();
+        for i in 0..shnum {
+            let sh = shoff + i * shentsize;
+            if u32a(sh + 4) != 11 {
+                continue; // SHT_DYNSYM
+            }
+            let off = u64a(sh + 24) as usize;
+            let size = u64a(sh + 32) as usize;
+            let strtab_idx = u32a(sh + 40) as usize;
+            let str_sh = shoff + strtab_idx * shentsize;
+            let str_off = u64a(str_sh + 24) as usize;
+            let mut p = off;
+            while p + 24 <= off + size {
+                let name_idx = u32a(p) as usize;
+                let mut e = str_off + name_idx;
+                while img[e] != 0 {
+                    e += 1;
+                }
+                if let Ok(s) = core::str::from_utf8(&img[str_off + name_idx..e]) {
+                    if !s.is_empty() {
+                        out.push(s.to_string());
+                    }
+                }
+                p += 24;
+            }
+        }
+        out
+    };
+    let exported = build_exe(true);
+    assert_eq!(
+        u16::from_le_bytes(exported[0x10..0x12].try_into().unwrap()),
+        2,
+        "executable must be ET_EXEC"
+    );
+    assert!(
+        dynsym_names(&exported).iter().any(|n| n == "host_api"),
+        "an --export-all executable must export host_api in .dynsym"
+    );
+    assert!(
+        !dynsym_names(&build_exe(false))
+            .iter()
+            .any(|n| n == "host_api"),
+        "an ordinary executable must not export host_api dynamically"
+    );
+}
+
+#[test]
 fn export_all_round_trips_into_shared_library() {
     // `--export-all` (`CompileOptions::export_all_functions`) exports
     // every non-static function without a `#pragma export`. The names

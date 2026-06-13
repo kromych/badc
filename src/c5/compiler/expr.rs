@@ -2583,21 +2583,22 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Shl);
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
-                // integer promotion. `char` / `short` (signed or
-                // unsigned, size 1 or 2) promote to signed `int`.
-                // Wider operands keep their type. For an unsigned
-                // size-4 LHS the result needs a mask back to 32 bits
-                // because bits shifted past bit 31 survive in the
-                // 64-bit accumulator.
+                // integer promotion, not `E2` (the shift count).
+                // `char` / `short` (signed or unsigned, size 1 or 2)
+                // promote to signed `int`; wider operands keep their
+                // type. Set the result type before building the AST
+                // node so it carries the correct signedness -- a later
+                // cast reads the operand's type to decide whether to
+                // sign-extend.
                 let lhs_size = self.size_of_type(t);
-                if lhs_size <= 2 {
-                    self.ty = Ty::Int as i64;
-                } else {
-                    if is_unsigned_ty(t) && lhs_size == 4 {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                    }
+                self.ty = if lhs_size <= 2 { Ty::Int as i64 } else { t };
+                self.ast_binop(crate::c5::ir::BinOp::Shl);
+                // For an unsigned size-4 LHS the result needs a mask
+                // back to 32 bits because bits shifted past bit 31
+                // survive in the 64-bit accumulator.
+                if lhs_size > 2 && is_unsigned_ty(t) && lhs_size == 4 {
+                    self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
                     self.ty = t;
                 }
             } else if self.lex.tk == Token::ShrOp {

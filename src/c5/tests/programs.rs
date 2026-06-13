@@ -192,6 +192,13 @@ fn struct_array_init_from_lvalue() {
 }
 
 #[test]
+fn shift_result_type_signedness() {
+    // `E1 << E2` has the type of the promoted E1, so a cast of the
+    // result sign-extends per the operand's signedness (C99 6.5.7).
+    assert_eq!(run_fixture("shift_result_type_signedness.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

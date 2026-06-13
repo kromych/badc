@@ -512,6 +512,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("sub_word_return_narrow.c", 0),
     ("fp_const_return.c", 0),
     ("struct_array_init_from_lvalue.c", 0),
+    ("shift_result_type_signedness.c", 0),
     ("array_range_designator.c", 0),
     ("bitfield_mixed_base_packing.c", 0),
     ("flex_array_member_sizing.c", 0),

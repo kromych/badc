@@ -91,15 +91,6 @@ indirection as a single scalar on the flat type, so `p` and
 `int (**)(int)` collapse to the same encoding, and the indirect-call result
 type drops the return type's own function-pointer level.
 
-### Windows `&fabsf`, severity 5
-
-`fabsf` is an MSVC compiler intrinsic that neither `msvcrt.dll` nor
-`ucrtbase.dll` exports, so taking its address has no library symbol to
-resolve to on Windows. Its direct (instruction) call works everywhere, and
-the other single-precision intrinsics (`sqrtf`, `floorf`, `ceilf`,
-`truncf`) and all double-precision ones resolve their address on every
-target.
-
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /

@@ -92,6 +92,15 @@ demos/tinycc/*
 !demos/tinycc/smoke.py
 !demos/tinycc/self_host.py
 !demos/tinycc/README.md
+# quickjs -- Fabrice Bellard's JavaScript engine. `setup.py`
+# fetches the pinned upstream archive from the vendor-deps
+# mirror and extracts the qjs sources + the pure-JS test suite;
+# only the runner scripts + the REPL-blob stub are committed.
+demos/quickjs/*
+!demos/quickjs/setup.py
+!demos/quickjs/smoke.py
+!demos/quickjs/repl_stub.c
+!demos/quickjs/README.md
 # lua -- Lua 5.5.0 interpreter + the upstream test suite.
 # `setup.py` fetches the two pinned tarballs from the
 # vendor-deps mirror and extracts the interpreter sources under

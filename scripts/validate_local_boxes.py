@@ -48,6 +48,7 @@ GATING_DEMOS = (
     "demos/monocypher/smoke.py",
     "demos/stb/smoke.py",
     "demos/tweetnacl/smoke.py",
+    "demos/quickjs/smoke.py",
 )
 
 

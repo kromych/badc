@@ -401,6 +401,16 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
+      - name: quickjs smoke (qjs CLI + pure-JS test suite)
+        # Vendored bellard/quickjs compiles + 8-TU links through badc;
+        # the qjs CLI runs QuickJS's own pure-JS test suite (closure,
+        # language, loop, bigint, cyclic_import, std, worker, rw_handler,
+        # builtin --std). The two native-module tests need a runtime
+        # dlopen of a badc-built .so (TODO). Windows is skipped at the
+        # smoke level (quickjs-libc targets a POSIX host).
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python demos/quickjs/smoke.py
       - name: lua smoke (multi-TU + upstream test suite)
         # Vendored Lua 5.5.0 sources compile + multi-TU link
         # through badc, and the curated 24-script `lua-tests`
@@ -816,7 +826,7 @@ jobs:
         run: |
           set -e
           export BADC="$PWD/target/release/badc"
-          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb; do
+          for d in sqlite3 miniz kissfft bzip2 tweetnacl monocypher bearssl lua stb quickjs; do
             echo "::group::$d (N=${{ matrix.pressure }})"
             python "demos/$d/smoke.py"
             echo "::endgroup::"

@@ -184,6 +184,17 @@ SOURCES = [
         upstream_sha="5e47bbfad7db2965d69580e918ee64edeb8d8d32de404b8dae9ce5c6d76a1472",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # QuickJS -- Fabrice Bellard's JavaScript engine. No versioned
+        # release tarball; pin to the github commit. Version embeds the
+        # release date from the upstream VERSION file for provenance.
+        name="quickjs",
+        version="20260604",
+        url="https://github.com/bellard/quickjs/archive/3d5e064e9dd67c70f7962836505a7fa067bf0a4e.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="3d5e064e9dd67c70f7962836505a7fa067bf0a4e",
+        sha_kind="git",
+    ),
 ]
 
 

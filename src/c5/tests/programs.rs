@@ -206,6 +206,12 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn socket_headers_abi() {
+    // Bundled socket headers expose the address structs with the platform ABI.
+    assert_eq!(run_fixture("socket_headers_abi.c"), 0);
+}
+
+#[test]
 fn posix_utime_errno_headers() {
     // badc bundles POSIX <utime.h> (struct utimbuf) and the ENOTCONN errno.
     assert_eq!(run_fixture("posix_utime_errno_headers.c"), 0);

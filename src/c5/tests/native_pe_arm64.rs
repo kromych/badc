@@ -564,6 +564,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
+    ("socket_headers_abi.c", 0),
     ("posix_utime_errno_headers.c", 0),
     ("cast_fn_typedef_ptr_in_initializer.c", 0),
     ("global_init_paren_operand.c", 0),

@@ -4,12 +4,12 @@ typedef_array_comma_list.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x210
@@ -95,9 +95,8 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, #0x250
-               	add	x0, x0, #0x138
                	mov	x1, #0x2a               // =42
-               	str	x1, [x0]
+               	str	x1, [x0, #0x138]
                	adrp	x1, <page>
                	add	x1, x1, #0x450
                	mov	x2, #0xffff             // =65535
@@ -105,7 +104,7 @@ Disassembly of section .text:
                	movk	x2, #0xffff, lsl #32
                	movk	x2, #0xffff, lsl #48
                	str	x2, [x1, #0x1f8]
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, #0x138]
                	cmp	x0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xb                // =11

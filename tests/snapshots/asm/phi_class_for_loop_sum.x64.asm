@@ -4,15 +4,16 @@ phi_class_for_loop_sum.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<test>:
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%eax, %rdx
                	cmpq	%rdi, %rdx
                	jge	<addr>
@@ -27,9 +28,10 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%ecx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0xa, %edi
                	popq	%rbp
                	jmp	<addr>
-               	addb	%al, (%rax)

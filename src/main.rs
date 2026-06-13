@@ -52,6 +52,11 @@ Compile knobs:
   -g, --debug              Emit DWARF debug info. Off by default;
                            adds ~10-30% to the output size.
   -g0, --no-debug          Skip DWARF emission (the default).
+  --freestanding           Do not link the embedded startup runtime.
+                           The image enters at the program's own entry
+                           (`__c5_entry` by default, or the
+                           `#pragma entrypoint` symbol), which the
+                           program must define.
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
@@ -171,6 +176,11 @@ fn main() {
     let mut dump_ssa = false;
     let mut inline_cap: u32 = 64;
     let mut emit_debug_info = false;
+    // Produce a freestanding image: do not link the embedded startup
+    // runtime, and make the program's own entry the image entry
+    // (`__c5_entry` by default, or `#pragma entrypoint`), which the
+    // program must define. Requested only by this flag.
+    let mut freestanding = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -270,6 +280,7 @@ fn main() {
             }
             "--debug" | "-g" => emit_debug_info = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
+            "--freestanding" => freestanding = true,
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
             "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
@@ -776,9 +787,17 @@ fn main() {
         };
         // In-memory variant for the embedded runtime sources
         // below: same compile + emit chain, no filesystem read.
-        let compile_in_memory = |label: &str, src: String| -> Vec<u8> {
+        let compile_in_memory = |label: &str, src: String, extra: &[(&str, &str)]| -> Vec<u8> {
+            // The embedded runtime gates its sections on macros the
+            // driver sets per image: `__BADC_C5_START__` (an entry
+            // stub is emitted), `__BADC_WIN_GUI__` (PE GUI subsystem),
+            // `__BADC_WIN_WIDE__` (`wmain` entry).
+            let mut copts_defines = defines.clone();
+            for (k, v) in extra {
+                copts_defines.push((k.to_string(), v.to_string()));
+            }
             let copts = badc::CompileOptions::default()
-                .with_defines(defines.clone())
+                .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
@@ -829,12 +848,75 @@ fn main() {
                 }
             }
         }
-        // Embedded runtime sources. Compiled in-memory and
-        // appended to `native_objs` so every executable picks
-        // them up; the writer's start stub uses any helper
-        // they define (e.g. `__c5_exit`) when available.
-        for (name, body) in badc::embedded_runtime() {
-            let bytes = compile_in_memory(name, body.to_string());
+        // `--freestanding` drops the embedded startup runtime: the
+        // program's own entry becomes the image entry and the entry
+        // adapter resolves to it. A freestanding build is requested only
+        // by the flag. A program that merely defines `__c5_entry`
+        // without the flag keeps the runtime, so its definition collides
+        // with the runtime's `__c5_entry` -- a duplicate-symbol link
+        // error rather than a silent switch to a freestanding image.
+        //
+        // Without an explicit `#pragma entrypoint`, a freestanding image
+        // enters at `__c5_entry` (the default `main` need not exist).
+        if freestanding && entry_override.is_none() {
+            entry_override = Some("__c5_entry".to_string());
+        }
+        // A freestanding image must supply its own entry symbol; the
+        // embedded runtime that would otherwise define `__c5_entry` is
+        // not linked. Report a missing entry here rather than as a bare
+        // undefined-symbol relocation at link time.
+        if freestanding {
+            let entry = entry_override.as_deref().unwrap_or("__c5_entry");
+            let defined = native_objs.iter().any(|o| {
+                o.symbols
+                    .iter()
+                    .any(|s| s.name == entry && s.section == badc::NativeSymSection::Text)
+            });
+            if !defined {
+                eprint_diagnostic(format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ));
+                std::process::exit(1);
+            }
+        }
+        // The embedded runtime's startup (`__c5_entry`, `__c5_exit`,
+        // `environ`) links only when the writer emits an entry stub --
+        // not into shared libraries, passthrough-entry subsystems
+        // (native / EFI), or freestanding images.
+        let emits_start_stub = mode != Mode::SharedLibrary
+            && !freestanding
+            && !matches!(
+                subsystem_override,
+                Some(
+                    badc::Subsystem::Native
+                        | badc::Subsystem::EfiApplication
+                        | badc::Subsystem::EfiBootServiceDriver
+                        | badc::Subsystem::EfiRuntimeDriver
+                        | badc::Subsystem::EfiRom
+                )
+            );
+        // The single runtime source compiles to nothing unless
+        // `__BADC_C5_START__` is set; the GUI / wide-entry macros
+        // select the matching `__c5_entry` body on Windows.
+        let mut runtime_defines: Vec<(&str, &str)> = Vec::new();
+        if emits_start_stub {
+            runtime_defines.push(("__BADC_C5_START__", "1"));
+            // `__c5_entry` calls this symbol; default `main`,
+            // overridden by `#pragma entrypoint`.
+            runtime_defines.push((
+                "__BADC_ENTRY__",
+                entry_override.as_deref().unwrap_or("main"),
+            ));
+            if subsystem_override == Some(badc::Subsystem::Windows) {
+                runtime_defines.push(("__BADC_WIN_GUI__", "1"));
+            }
+            if entry_override.as_deref() == Some("wmain") {
+                runtime_defines.push(("__BADC_WIN_WIDE__", "1"));
+            }
+        }
+        for (name, body) in badc::embedded_runtime().iter() {
+            let bytes = compile_in_memory(name, body.to_string(), &runtime_defines);
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
@@ -930,6 +1012,28 @@ fn main() {
         } else {
             OutputKind::Executable
         };
+        // A shared library records its own name so a consumer that links
+        // against it by name (PE export-directory Name, Mach-O
+        // LC_ID_DYLIB install name) references the file it loads at
+        // runtime. Use the `-o` basename, or the default output name when
+        // `-o` is absent.
+        let shared_default_path;
+        let shared_lib_name: Option<&str> = if native_output_kind == OutputKind::SharedLibrary {
+            let path: &std::path::Path = match output_path.as_deref() {
+                Some(o) => o,
+                None => {
+                    shared_default_path = default_output_path(
+                        sources.first().map(|s| s.as_str()).unwrap_or("a"),
+                        target,
+                        mode,
+                    );
+                    &shared_default_path
+                }
+            };
+            path.file_name().and_then(|n| n.to_str())
+        } else {
+            None
+        };
         let write_result = badc::write_native_image_from_merged(
             &merged,
             &plt,
@@ -937,6 +1041,7 @@ fn main() {
             subsystem_override,
             native_output_kind,
             target,
+            shared_lib_name,
         );
         let bytes = match write_result {
             Ok(b) => b,
@@ -957,7 +1062,7 @@ fn main() {
                 &default_path
             }
         };
-        write_output(out, &bytes, quiet);
+        write_output(out, &bytes, target, quiet);
         set_executable(out);
         post_write_native(out, target);
         return;
@@ -1049,13 +1154,13 @@ fn main() {
                 std::process::exit(1);
             }
             let bytes = compile_one(&sources[0]);
-            write_output(out, &bytes, quiet);
+            write_output(out, &bytes, target, quiet);
         } else {
             for src_path in sources.iter().take(source_count) {
                 let p = std::path::Path::new(src_path);
                 let out = p.with_extension("o");
                 let bytes = compile_one(src_path);
-                write_output(&out, &bytes, quiet);
+                write_output(&out, &bytes, target, quiet);
             }
         }
         return;
@@ -1187,7 +1292,7 @@ fn main() {
             });
         }
         let blob = badc::write_archive(&members, &sym_index);
-        write_output(&out_path, &blob, quiet);
+        write_output(&out_path, &blob, target, quiet);
         return;
     }
 
@@ -1327,7 +1432,7 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// binary emit, native-binary emit -- so the chatter is uniform.
 /// Routes the info line through `eprint_diagnostic` so the
 /// severity word picks up the green TTY color.
-fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
+fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
         eprint_diagnostic(format!(
             "badc: error: failed to write {}: {e}",
@@ -1336,7 +1441,11 @@ fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
         std::process::exit(1);
     }
     if !quiet {
-        eprint_diagnostic(format!("info: wrote file {}", out.display()));
+        eprint_diagnostic(format!(
+            "info: wrote file {} for target {}",
+            out.display(),
+            target.id_str()
+        ));
     }
 }
 
@@ -1352,44 +1461,38 @@ fn post_write_native(out: &std::path::Path, target: Target) {
             #[cfg(not(target_os = "macos"))]
             {
                 let _ = out;
-                eprintln!(
-                    "badc: produced a Mach-O on a non-macOS host; copy to macOS \
-                     and `codesign --sign - <path>` before running."
+                eprint_diagnostic(
+                    "info: produced a Mach-O on a non-macOS host; copy to macOS \
+                     and `codesign --sign - <path>` before running.",
                 );
             }
         }
         Target::LinuxAarch64 => {
             let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-            eprintln!(
-                "badc: produced a Linux/aarch64 ELF on a different host; \
-                 run it on a Linux/arm64 box, or via Docker `--platform linux/arm64`."
+            eprint_diagnostic(
+                "info: produced a Linux/aarch64 ELF on a different host. It won't run here",
             );
         }
         Target::LinuxX64 => {
             let _ = out;
             #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-            eprintln!(
-                "badc: produced a Linux/x86_64 ELF on a different host; \
-                 run it on a Linux/x64 box, or via Docker `--platform linux/amd64`."
+            eprint_diagnostic(
+                "info: produced a Linux/x86_64 ELF on a different host. It won't run here",
             );
         }
         Target::WindowsX64 => {
             let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
-            eprintln!(
-                "badc: produced a Windows/x86_64 PE on a non-Windows host; \
-                 run it on Windows or under WINE (`wine path.exe`)."
+            eprint_diagnostic(
+                "info: produced a Windows/x86_64 PE on a different host. It won't run here",
             );
         }
         Target::WindowsAarch64 => {
             let _ = out;
             #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
-            eprintln!(
-                "badc: produced a Windows/AArch64 PE on a different host; \
-                 run it on a Windows-on-ARM box. WINE on macOS doesn't \
-                 ship the aarch64-windows DLL set, so local execution \
-                 isn't supported there yet."
+            eprint_diagnostic(
+                "info: produced a Windows/AArch64 PE on a different host. It won't run here",
             );
         }
     }

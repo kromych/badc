@@ -4,12 +4,12 @@ fma_numeric_kernels.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -20,7 +20,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0xd695             // =54933
                	movk	x0, #0xe826, lsl #16
                	movk	x0, #0x2e0b, lsl #32
@@ -32,6 +31,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
+
+<horner>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -43,7 +44,6 @@ Disassembly of section .text:
                	ldr	d1, [x2]
                	sub	x1, x1, #0x2
                	sxtw	x2, w1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x0
                	b.lt	<addr>
@@ -65,6 +65,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<dot3>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -74,7 +76,6 @@ Disassembly of section .text:
                	fmov	d16, x5
                	sub	x17, x29, #0x8
                	str	d16, [x17]
-               	b	<addr>
                	sxtw	x4, w5
                	cmp	x4, #0x3
                	b.ge	<addr>
@@ -106,6 +107,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<rk4_step>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -128,6 +131,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x120
@@ -193,7 +198,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x3
                	b.ge	<addr>
@@ -250,7 +254,6 @@ Disassembly of section .text:
                	fmov	d16, x3
                	sub	x17, x29, #0xf8
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0xf8
                	ldr	d0, [x16]
                	str	d0, [x0]
@@ -325,7 +328,6 @@ Disassembly of section .text:
                	fmov	d17, x1
                	fdiv	d8, d16, d17
                	mov	x20, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x10
                	b.ge	<addr>
@@ -358,7 +360,6 @@ Disassembly of section .text:
                	cset	x0, mi
                	cbz	x0, <addr>
                	fneg	d1, d1
-               	b	<addr>
                	mov	x0, #0xed8d             // =60813
                	movk	x0, #0xa0b5, lsl #16
                	movk	x0, #0xc6f7, lsl #32

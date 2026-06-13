@@ -17,18 +17,28 @@ use super::symbol::Symbol;
 use super::token::{Tok, Token};
 use super::{C5Error, Compiler, Program, Vm};
 
+// These modules emit / link native images (via `emit_native*` and the
+// `link_*` helpers below), which require `native-emit` -- pulled in by
+// `full`. The host-only `--features std` build gates them out.
+#[cfg(feature = "full")]
 mod codegen;
 mod deferred;
+#[cfg(feature = "full")]
 mod dwarf;
 mod intrinsics;
 mod jit;
 mod lexer;
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 mod linker;
+#[cfg(feature = "full")]
 mod native;
+#[cfg(feature = "full")]
 mod native_elf;
+#[cfg(feature = "full")]
 mod native_elf_x64;
+#[cfg(feature = "full")]
 mod native_pe_arm64;
+#[cfg(feature = "full")]
 mod native_pe_x64;
 mod parser;
 mod pointer_tracking;
@@ -89,6 +99,129 @@ pub fn compile_str(src: &str) -> Program {
 /// (or any future prelude-only function) appearing in the output.
 pub fn compile_str_bare(src: &str) -> Program {
     Compiler::new(src.to_string()).compile().unwrap()
+}
+
+/// Link a compiled program against the embedded startup runtime into
+/// a complete, runnable native image, mirroring the CLI's native path
+/// (`emit_native` -> relocatable objects -> `link_native_objects` ->
+/// `write_native_image_from_merged`). The entry stub's `__c5_*`
+/// helpers are defined by the runtime, so the produced executable is
+/// self-sufficient. `subsystem` (from `program.subsystem`) gates the
+/// runtime's console vs GUI startup helpers on Windows.
+///
+/// `program` must have been compiled for `target`. `compile_str` /
+/// `compile_fixture` use `Compiler::new`, which targets the host, so a
+/// test that links for a fixed non-host target (e.g. always
+/// `Target::LinuxX64`) must compile for that target -- via
+/// `Compiler::with_options(..., target, ..)` -- or use a prelude-free
+/// source (`compile_str_bare`). A host/target skew preprocesses the
+/// bundled headers under the wrong OS macros: on a Windows host the
+/// `<stdlib.h>` `_WIN32` branch then contributes an `environ` symbol
+/// that collides with the runtime's when the image is emitted as ELF.
+#[cfg(feature = "full")]
+pub fn link_executable_with_runtime(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        CompileOptions, NativeMachine, OutputKind, embedded_runtime, emit_aarch64_plt,
+        emit_native_with_options, emit_x86_64_plt, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+
+    let mut objs = Vec::new();
+    let prog_bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    objs.push(parse_native_elf(&prog_bytes).map_err(|e| format!("parse program object: {e}"))?);
+
+    // This helper always builds a hosted executable, so the runtime's
+    // startup section is compiled in (`__BADC_C5_START__`).
+    // `__BADC_WIN_GUI__` selects the kernel32 WinMain entry on a PE GUI
+    // subsystem; `__BADC_WIN_WIDE__` selects the `wmain` entry.
+    let mut rt_defines: Vec<(String, String)> =
+        vec![("__BADC_C5_START__".to_string(), "1".to_string())];
+    rt_defines.push((
+        "__BADC_ENTRY__".to_string(),
+        program
+            .entry_name
+            .clone()
+            .unwrap_or_else(|| "main".to_string()),
+    ));
+    if program.subsystem == Some(crate::Subsystem::Windows) {
+        rt_defines.push(("__BADC_WIN_GUI__".to_string(), "1".to_string()));
+    }
+    if program.entry_name.as_deref() == Some("wmain") {
+        rt_defines.push(("__BADC_WIN_WIDE__".to_string(), "1".to_string()));
+    }
+    for (name, body) in embedded_runtime().iter() {
+        let copts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(rt_defines.clone());
+        let rt_program = Compiler::with_options(body.to_string(), target, copts)
+            .compile()
+            .map_err(|e| format!("compile runtime {name}: {e}"))?;
+        let rt_bytes = emit_native_with_options(&rt_program, target, reloc)
+            .map_err(|e| format!("emit runtime {name}: {e}"))?;
+        objs.push(parse_native_elf(&rt_bytes).map_err(|e| format!("parse runtime {name}: {e}"))?);
+    }
+
+    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    let entry_name = program.entry_name.as_deref().unwrap_or("main");
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        entry_name,
+        program.subsystem,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .map_err(|e| format!("write image: {e}"))
+}
+
+/// Link a program that supplies its own `__c5_entry` into a
+/// freestanding executable: the embedded runtime is not linked and the
+/// image entry is `__c5_entry`. Mirrors the CLI path when an input
+/// object defines `__c5_entry`.
+#[cfg(feature = "full")]
+pub fn link_freestanding(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+) -> Result<Vec<u8>, String> {
+    use crate::{
+        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    let mut reloc = opts;
+    reloc.output_kind = OutputKind::Relocatable;
+    let prog_bytes = emit_native_with_options(program, target, reloc)
+        .map_err(|e| format!("emit program object: {e}"))?;
+    let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
+    let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
+    let plt = match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
+        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
+    }
+    .map_err(|e| format!("plt: {e}"))?;
+    write_native_image_from_merged(
+        &merged,
+        &plt,
+        "__c5_entry",
+        program.subsystem,
+        OutputKind::Executable,
+        target,
+        None,
+    )
+    .map_err(|e| format!("write image: {e}"))
 }
 
 /// Compile a fixture with the standard prelude.

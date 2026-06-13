@@ -54,6 +54,17 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
         say("variadic");
         return false;
     }
+    // Host-ABI aggregate metadata does not survive a splice: a struct
+    // parameter has no entry copy in the IR (the callee prologue
+    // scatters its argument registers into a body local, which the
+    // splice cannot reproduce), and a host-ABI struct call in the body
+    // carries `agg_descs` indices that are valid only against this
+    // function's own table. `agg_descs` is non-empty whenever either
+    // is present, so reject such callees outright.
+    if !func.agg_descs.is_empty() {
+        say("host-ABI aggregate metadata");
+        return false;
+    }
     // Multi-block callees are supported when exactly one block
     // terminates in `Return`. Other terminator shapes (Jmp, Bz, Bnz,
     // FallThrough) drive intra-callee control flow; the splice
@@ -66,6 +77,13 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             Terminator::Return(_) => return_blocks += 1,
             Terminator::TailExt(_) => {
                 say("TailExt terminator");
+                return false;
+            }
+            Terminator::GotoIndirect { .. } => {
+                // A computed goto's successors are the function's
+                // address-taken label blocks; splicing the body into a
+                // caller would shift those block ids. Keep it out of line.
+                say("GotoIndirect terminator");
                 return false;
             }
             Terminator::Jmp(_)
@@ -232,6 +250,7 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
@@ -363,6 +382,9 @@ fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
         Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
             *cond = map_v(*cond, remap);
         }
+        Terminator::GotoIndirect { target } => {
+            *target = map_v(*target, remap);
+        }
         Terminator::Return(v) => {
             *v = map_v(*v, remap);
         }
@@ -433,6 +455,9 @@ fn splice_multi_block(
             },
             Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
             Terminator::TailExt(x) => Terminator::TailExt(x),
+            Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
+                target: map_v(target, remap),
+            },
         }
     };
 
@@ -621,6 +646,9 @@ fn splice_multi_block(
                 Terminator::Jmp(postfix_id)
             }
             Terminator::TailExt(_) => unreachable!("filter rejects TailExt"),
+            Terminator::GotoIndirect { .. } => {
+                unreachable!("filter rejects GotoIndirect")
+            }
         };
         let exit_acc = if cblock.exit_acc != NO_VALUE {
             map_v(cblock.exit_acc, &callee_remap)
@@ -676,6 +704,18 @@ fn splice_multi_block(
         extern_tls_refs: Vec::new(),
         f32_values: new_f32,
         param_fp_mask: original.param_fp_mask,
+        // Inlining only splices callees with no aggregate ABI
+        // metadata (see the eligibility guard), so the caller's own
+        // `agg_descs` carry through unchanged and no spliced
+        // instruction references a callee-side index.
+        agg_descs: original.agg_descs,
+        param_aggs: original.param_aggs,
+
+        param_local_slots: original.param_local_slots,
+        ret_agg: original.ret_agg,
+        ret_is_fp: original.ret_is_fp,
+        indirect_result_slot: original.indirect_result_slot,
+        computed_goto_targets: original.computed_goto_targets,
     };
 }
 
@@ -709,7 +749,16 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
             let inlined = match inst {
                 Inst::Call {
                     target_pc, args, ..
-                } => callees.get(target_pc).map(|c| (*c, args)),
+                } => callees
+                    .get(target_pc)
+                    // A call passing fewer arguments than the callee has
+                    // parameters (an argument-count mismatch, e.g. via a
+                    // macro) would leave a callee `ParamRef` with no
+                    // matching argument; inlining it resolves that ref to
+                    // NO_VALUE. Leave such a call un-inlined so the IR
+                    // stays well-formed.
+                    .filter(|c| args.len() >= c.n_params)
+                    .map(|c| (*c, args)),
                 _ => None,
             };
             // Multi-block callees: handled by `splice_multi_block`
@@ -863,6 +912,8 @@ fn inline_caller(caller: &mut FunctionSsa, callees: &BTreeMap<usize, &FunctionSs
                 } = &caller.insts[pc as usize]
                     && let Some(c) = callees.get(target_pc)
                     && c.blocks.len() > 1
+                    // Same argument-count guard as the single-block path.
+                    && args.len() >= c.n_params
                 {
                     hit = Some((b_idx, pc, *c, args.clone()));
                     break 'find;
@@ -976,6 +1027,12 @@ pub(super) fn run(funcs: &mut [FunctionSsa], cap: u32) {
                 .iter()
                 .any(|inst| matches!(inst, Inst::Phi { .. }))
             {
+                continue;
+            }
+            // Skip a caller with a computed goto: splicing a callee
+            // shifts the caller's block ids, which `Inst::BlockAddr`
+            // and computed_goto_targets reference directly.
+            if !caller.computed_goto_targets.is_empty() {
                 continue;
             }
             let before = caller.insts.len();

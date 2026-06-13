@@ -354,7 +354,25 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if func.is_variadic || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+    if func.param_aggs.iter().all(Option::is_none) {
+        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
+    }
+    let aggs: Vec<Option<super::ArgAgg>> = func
+        .param_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &func.agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect();
+    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -369,26 +387,16 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
 /// lowered (the debug assertion fires).
 fn param_reg_stack_split(func: &FunctionSsa, abi: super::Abi) -> (usize, usize) {
     let placements = param_placements(func, abi);
+    // The count of register-passed (non-stack) placements and the count
+    // of stack-passed ones. The entry-spill prologue fills each c5 cdecl
+    // cell by its own placement, so the two need not form a contiguous
+    // register prefix and stack suffix; a by-value aggregate consuming no
+    // argument register (System V MEMORY class) or a Win64 aggregate
+    // overflowing past the positional registers may interleave them.
     let n_reg = placements
         .iter()
         .filter(|p| !matches!(p, super::ArgPlacement::Stack(_)))
         .count();
-    // An interleaved register / stack placement -- the integer bank
-    // exhausted before a trailing floating-point parameter -- does not
-    // fit the contiguous-prefix c5 cdecl cell layout. Fail in every
-    // build rather than emit a prologue that reads parameters from the
-    // wrong cells; the case is unreachable for the parameter lists the
-    // demos and fixtures exercise. TODO: support a non-prefix cell
-    // layout for this shape.
-    assert!(
-        placements[..n_reg]
-            .iter()
-            .all(|p| !matches!(p, super::ArgPlacement::Stack(_)))
-            && placements[n_reg..]
-                .iter()
-                .all(|p| matches!(p, super::ArgPlacement::Stack(_))),
-        "interleaved register / stack parameter placement is not yet supported"
-    );
     (n_reg, placements.len() - n_reg)
 }
 
@@ -941,6 +949,7 @@ fn emit_phi_predecessor_moves(
             fall_through,
             ..
         } => alloc::vec![target, fall_through],
+        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
         Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
     };
     for succ in succs {
@@ -1290,6 +1299,33 @@ fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch
 ///   * Spill sources for `IntReg` placements then materialise
 ///     directly into the target arg register
 ///     (`materialize_int_shifted` writes its load into the dst).
+/// Resolve a call's `arg_aggs` indices into the `ArgAgg` vector the
+/// struct-aware planner consumes; empty when the call passes no
+/// aggregate by value.
+fn build_arg_aggs(
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
+) -> Vec<Option<super::ArgAgg>> {
+    if arg_aggs.iter().all(Option::is_none) {
+        return Vec::new();
+    }
+    arg_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect()
+}
+
 fn marshal_args(
     code: &mut Vec<u8>,
     plan: &super::CallPlan,
@@ -1318,6 +1354,48 @@ fn marshal_args(
                     }
                 };
             emit_mov_mem_r(code, Reg::RSP, off as i32, src);
+        }
+    }
+
+    // Aggregate arguments passed on the outgoing stack (System V AMD64
+    // MEMORY class, > 16 bytes): copy the struct inline to [rsp + off].
+    // The destination is memory and never serves as a move source, but
+    // the struct's base address sits in an argument register that the
+    // register-move phase below overwrites, so this copy runs first
+    // while the base is still live (mirroring the scalar Stack arm).
+    // The address rides SCRATCH_R10, the per-word temp SCRATCH_R13;
+    // both lie outside the allocator pools.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructStack { off, size } = placement {
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                SCRATCH_R10,
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!(
+                        "{site}: by-stack aggregate base not in int reg / spill"
+                    ));
+                    return false;
+                }
+            };
+            if src.0 != SCRATCH_R10.0 {
+                emit_mov_rr(code, SCRATCH_R10, src);
+            }
+            let words = size / 8;
+            for w in 0..words {
+                let o = (w * 8) as i32;
+                emit_mov_r_mem(code, SCRATCH_R13, SCRATCH_R10, o);
+                emit_mov_mem_r(code, Reg::RSP, off as i32 + o, SCRATCH_R13);
+            }
+            for b in (words * 8)..size {
+                let o = b as i32;
+                super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R13, SCRATCH_R10, o);
+                super::x86_64::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, SCRATCH_R13);
+            }
         }
     }
 
@@ -1371,13 +1449,33 @@ fn marshal_args(
         }
     }
 
+    // Integer-register placements plus aggregate base addresses are one
+    // parallel register move (System V AMD64 3.2.3). A scalar `IntReg`
+    // arg moves src->target; a `StructRegs` arg positions its base
+    // address into its own first eightbyte register `regs[0]`, from
+    // which the eightbytes load below (the base register is overwritten
+    // by its own eightbyte last). Routing the base through that per-
+    // aggregate register -- never a shared scratch -- keeps one
+    // aggregate's load from clobbering another's still-pending base.
     let mut int_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::IntReg(r) = placement
-            && let Place::IntReg(s) = arg_place(i)
-            && s != r
-        {
-            int_moves.push((s, r));
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != r
+                {
+                    int_moves.push((s, r));
+                }
+            }
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+                let dst = regs[0].reg;
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != dst
+                {
+                    int_moves.push((s, dst));
+                }
+            }
+            _ => {}
         }
     }
     schedule_int_reg_moves(code, &mut int_moves, SCRATCH_R10);
@@ -1414,6 +1512,55 @@ fn marshal_args(
                     super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg(s));
                 }
             }
+        }
+    }
+
+    // Aggregate bases not already register-resident (spill / computed)
+    // materialise into the aggregate's first eightbyte register, the
+    // same destination the move loop used for the register-resident
+    // case.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement
+            && n > 0
+            && !matches!(arg_place(i), Place::IntReg(_))
+        {
+            let dst = regs[0].reg;
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                Reg(dst),
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!(
+                        "{site}: aggregate base not in int reg / spill"
+                    ));
+                    return false;
+                }
+            };
+            if src.0 != dst {
+                emit_mov_rr(code, Reg(dst), src);
+            }
+        }
+    }
+
+    // Load each aggregate's eightbytes from the base now in `regs[0]`.
+    // High eightbytes first; `regs[0]` (the base) is read last,
+    // overwritten by its own eightbyte. Integer-only (homogeneous
+    // floating-point aggregates excluded upstream).
+    for &placement in plan.placements.iter() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement {
+            debug_assert!(
+                !regs.iter().take(n as usize).any(|c| c.is_fp),
+                "x86_64 marshal: floating-point aggregate eightbyte not supported"
+            );
+            let base = regs[0].reg;
+            for k in (1..n as usize).rev() {
+                emit_mov_r_mem(code, Reg(regs[k].reg), Reg(base), (k as i32) * 8);
+            }
+            emit_mov_r_mem(code, Reg(base), Reg(base), 0);
         }
     }
 
@@ -1580,76 +1727,158 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
-    // Set by `Inst::AllocaInit` (slot != 0) and read by the
-    // matching `Inst::Intrinsic(Alloca)`. Zero means the
-    // function doesn't use alloca.
-    let mut current_alloca_top: u32 = 0;
+    // GCC `&&label`: each `Inst::BlockAddr` emits a `lea rd, [rip+disp32]`
+    // placeholder; `(lea_start, target_block)` is resolved against the
+    // final `block_offsets` after the relaxation passes settle (only the
+    // disp32 is patched, so the destination register need not be saved).
+    let mut block_addr_fixups: Vec<(usize, u32)> = Vec::new();
+    // Branch relaxation. The block loop runs once with every local
+    // branch in the rel32 long form (`branch_short` empty), then, when
+    // `relax_branches` finds shortenable branches, once more with the
+    // rel8 form for those branches. The second pass re-records every
+    // code-offset metadatum (relocations, line rows, pc map) against
+    // the shortened layout, so no recorded offset needs remapping. The
+    // snapshots mark the buffers' lengths after the prologue, where the
+    // re-emitted body begins.
+    let mut branch_short: Vec<bool> = Vec::new();
+    let body_code = code.len();
+    let body_fixups = fixups.len();
+    let body_plt = plt_call_fixups.len();
+    let body_data = data_fixups.len();
+    let body_uext = user_extern_data_refs.len();
+    let body_pending = pending_func_fixups.len();
+    let body_tls = tls_index_fixups.len();
+    let body_line_rows = ssa_line_rows.len();
 
-    for (block_idx, block) in func.blocks.iter().enumerate() {
-        block_offsets[block_idx] = code.len();
-        super::ssa_emit_common::record_block_start_pc(
-            block_idx,
-            block.start_pc,
-            pc_to_native,
-            code.len(),
-        );
-        // Tail-call opportunity: when the block's last instruction is
-        // a direct `Inst::Call` whose result is the same block's
-        // `Terminator::Return` value, lower the call as `marshal_args;
-        // epilogue; jmp target` instead of `call target; capture;
-        // epilogue; ret`. Saves one call+ret pair per recursion level
-        // and removes the post-call rax-to-place mov. See
-        // `detect_tail_call` for the safety preconditions.
-        let tail_call = detect_tail_call(func, block, abi, variadic_targets);
-        for v in block.inst_range.clone() {
-            let inst = &func.insts[v as usize];
-            let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-            if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
-                continue;
+    'emit: loop {
+        // Set by `Inst::AllocaInit` (slot != 0) and read by the
+        // matching `Inst::Intrinsic(Alloca)`. Zero means the
+        // function doesn't use alloca.
+        let mut current_alloca_top: u32 = 0;
+        // Re-collected each relaxation pass; resolved after the loop.
+        block_addr_fixups.clear();
+
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            block_offsets[block_idx] = code.len();
+            super::ssa_emit_common::record_block_start_pc(
+                block_idx,
+                block.start_pc,
+                pc_to_native,
+                code.len(),
+            );
+            // Tail-call opportunity: when the block's last instruction is
+            // a direct `Inst::Call` whose result is the same block's
+            // `Terminator::Return` value, lower the call as `marshal_args;
+            // epilogue; jmp target` instead of `call target; capture;
+            // epilogue; ret`. Saves one call+ret pair per recursion level
+            // and removes the post-call rax-to-place mov. See
+            // `detect_tail_call` for the safety preconditions.
+            let tail_call = detect_tail_call(func, block, abi, variadic_targets);
+            for v in block.inst_range.clone() {
+                let inst = &func.insts[v as usize];
+                let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+                if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                    continue;
+                }
+                // ParamRef already placed by the entry parallel copy.
+                if param_prebatched[v as usize] {
+                    continue;
+                }
+                // The tail-call Call's args setup is folded into the
+                // terminator emit; skip the per-inst emit so we don't
+                // emit the `call` instruction and the post-call capture.
+                if let Some((tail_pc, _, _)) = tail_call
+                    && (v as usize) == tail_pc
+                {
+                    continue;
+                }
+                super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+                // GCC `&&label`: materialize the block's address with a
+                // PC-relative lea. Handled here (not emit_inst) because the
+                // disp32 resolves against this function's local
+                // block_offsets once every block is laid out -- walker IR
+                // leaves block.start_pc at 0, so the writer's pc_to_native
+                // path can't be used.
+                if let Inst::BlockAddr(tb) = inst {
+                    let Some(rd) = int_or_spill_dst(place) else {
+                        bail_msg("BlockAddr: dst not int reg / spill");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    };
+                    let lea_start = code.len();
+                    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+                    block_addr_fixups.push((lea_start, *tb));
+                    spill_dst_to_slot(code, place, rd, frame);
+                    continue;
+                }
+                let data_fixups_pre_inst = data_fixups.len();
+                if !emit_inst(
+                    code,
+                    inst,
+                    v,
+                    place,
+                    func,
+                    alloc,
+                    frame,
+                    abi,
+                    target,
+                    fixups,
+                    plt_call_fixups,
+                    data_fixups,
+                    pending_func_fixups,
+                    imports,
+                    variadic_targets,
+                    tls_index_fixups,
+                    tls_total_size,
+                    &mut current_alloca_top,
+                    &param_from_home,
+                    &param_plan,
+                ) {
+                    #[cfg(feature = "codegen_test")]
+                    if std::env::var("BADC_DUMP_SSA").is_ok() {
+                        eprintln!(
+                            "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
+                            inst, place,
+                        );
+                    }
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+                // Convert the just-emitted ImmData's local `.data`
+                // fixup into a named cross-TU reference when the
+                // value-id appears in `extern_data_names`. See the
+                // matching comment in ssa_emit_aarch64.
+                if let Inst::ImmData(_) = inst
+                    && let Some(name) = extern_data_names.get(&v)
+                    && data_fixups.len() > data_fixups_pre_inst
+                {
+                    let popped = data_fixups.pop().unwrap();
+                    user_extern_data_refs.push(super::UserExternDataRef {
+                        instr_offset: popped.adrp_offset,
+                        symbol_name: name.clone(),
+                    });
+                }
             }
-            // ParamRef already placed by the entry parallel copy.
-            if param_prebatched[v as usize] {
-                continue;
-            }
-            // The tail-call Call's args setup is folded into the
-            // terminator emit; skip the per-inst emit so we don't
-            // emit the `call` instruction and the post-call capture.
-            if let Some((tail_pc, _, _)) = tail_call
-                && (v as usize) == tail_pc
-            {
-                continue;
-            }
-            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
-            let data_fixups_pre_inst = data_fixups.len();
-            if !emit_inst(
+            // Predecessor-exit moves for any phi at every CFG
+            // successor's head. A Return / TailExt block has no
+            // successor; the helper is a no-op there.
+            if !emit_phi_predecessor_moves(
                 code,
-                inst,
-                v,
-                place,
+                block_idx as super::super::ir::BlockId,
                 func,
                 alloc,
                 frame,
-                abi,
-                target,
-                fixups,
-                plt_call_fixups,
-                data_fixups,
-                pending_func_fixups,
-                imports,
-                variadic_targets,
-                tls_index_fixups,
-                tls_total_size,
-                &mut current_alloca_top,
-                &param_from_home,
-                &param_plan,
             ) {
-                #[cfg(feature = "codegen_test")]
-                if std::env::var("BADC_DUMP_SSA").is_ok() {
-                    eprintln!(
-                        "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
-                        inst, place,
-                    );
-                }
                 code.truncate(snapshot);
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1658,57 +1887,139 @@ pub(super) fn emit_function(
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }
-            // Convert the just-emitted ImmData's local `.data`
-            // fixup into a named cross-TU reference when the
-            // value-id appears in `extern_data_names`. See the
-            // matching comment in ssa_emit_aarch64.
-            if let Inst::ImmData(_) = inst
-                && let Some(name) = extern_data_names.get(&v)
-                && data_fixups.len() > data_fixups_pre_inst
-            {
-                let popped = data_fixups.pop().unwrap();
-                user_extern_data_refs.push(super::UserExternDataRef {
-                    instr_offset: popped.adrp_offset,
-                    symbol_name: name.clone(),
-                });
-            }
-        }
-        // Predecessor-exit moves for any phi at every CFG
-        // successor's head. A Return / TailExt block has no
-        // successor; the helper is a no-op there.
-        if !emit_phi_predecessor_moves(
-            code,
-            block_idx as super::super::ir::BlockId,
-            func,
-            alloc,
-            frame,
-        ) {
-            code.truncate(snapshot);
-            fixups.truncate(fixups_snapshot);
-            plt_call_fixups.truncate(plt_call_fixups_snapshot);
-            data_fixups.truncate(data_fixups_snapshot);
-            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-            pending_func_fixups.truncate(pending_func_fixups_snapshot);
-            return false;
-        }
-        match block.terminator {
-            Terminator::Return(v) => {
-                if let Some((tail_pc, target_pc, args)) = tail_call {
-                    let fp_arg_mask = match &func.insts[tail_pc] {
-                        Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
-                        _ => 0,
+            match block.terminator {
+                Terminator::Return(v) => {
+                    if let Some((tail_pc, target_pc, args)) = tail_call {
+                        let fp_arg_mask = match &func.insts[tail_pc] {
+                            Inst::Call { fp_arg_mask, .. } => *fp_arg_mask,
+                            _ => 0,
+                        };
+                        if !emit_tail_call(
+                            code,
+                            target_pc,
+                            args,
+                            alloc,
+                            frame,
+                            abi,
+                            fixups,
+                            func,
+                            fp_arg_mask,
+                        ) {
+                            code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            return false;
+                        }
+                    } else {
+                        emit_return(code, v, alloc, frame, func, abi)
+                    }
+                }
+                Terminator::Jmp(t) => {
+                    // Fall through when the target is the next block in
+                    // layout rather than emitting a jump to it.
+                    if t as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            t,
+                        );
+                    }
+                }
+                Terminator::Bz {
+                    cond,
+                    target,
+                    fall_through,
+                } => {
+                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jcc(cc),
+                            target,
+                        );
+                        if fall_through as usize != block_idx + 1 {
+                            emit_local_branch(
+                                code,
+                                &mut branch_fixups,
+                                &branch_short,
+                                LocalBranchKind::Jmp,
+                                fall_through,
+                            );
+                        }
+                        continue;
+                    }
+                    let cond_place = alloc
+                        .places
+                        .get(cond as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                        bail_msg("Bz: cond Place not int reg / spill / fp");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
                     };
-                    if !emit_tail_call(
+                    // `test rc, rc` sets ZF=1 iff rc==0; je takes the
+                    // branch on ZF=1. Shorter than `cmp rc, 0`.
+                    super::x86_64::emit_test_rr(code, rc, rc);
+                    emit_local_branch(
                         code,
-                        target_pc,
-                        args,
-                        alloc,
-                        frame,
-                        abi,
-                        fixups,
-                        func,
-                        fp_arg_mask,
-                    ) {
+                        &mut branch_fixups,
+                        &branch_short,
+                        LocalBranchKind::Jcc(Cc::E),
+                        target,
+                    );
+                    if fall_through as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            fall_through,
+                        );
+                    }
+                }
+                Terminator::Bnz {
+                    cond,
+                    target,
+                    fall_through,
+                } => {
+                    if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jcc(cc),
+                            target,
+                        );
+                        if fall_through as usize != block_idx + 1 {
+                            emit_local_branch(
+                                code,
+                                &mut branch_fixups,
+                                &branch_short,
+                                LocalBranchKind::Jmp,
+                                fall_through,
+                            );
+                        }
+                        continue;
+                    }
+                    let cond_place = alloc
+                        .places
+                        .get(cond as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                        bail_msg("Bnz: cond Place not int reg / spill / fp");
                         code.truncate(snapshot);
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1716,149 +2027,47 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
-                    }
-                } else {
-                    emit_return(code, v, alloc, frame, func, abi)
-                }
-            }
-            Terminator::Jmp(t) => {
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 1, // rel32 follows the 1-byte opcode
-                    target: t,
-                    kind: LocalBranchKind::Jmp,
-                });
-                super::x86_64::emit_jmp_rel32(code, 0);
-            }
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            } => {
-                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 2,
+                    };
+                    super::x86_64::emit_test_rr(code, rc, rc);
+                    emit_local_branch(
+                        code,
+                        &mut branch_fixups,
+                        &branch_short,
+                        LocalBranchKind::Jcc(Cc::Ne),
                         target,
-                        kind: LocalBranchKind::Jcc(cc),
-                    });
-                    super::x86_64::emit_jcc_rel32(code, cc, 0);
+                    );
                     if fall_through as usize != block_idx + 1 {
-                        branch_fixups.push(BranchFixup {
-                            site: code.len() + 1,
-                            target: fall_through,
-                            kind: LocalBranchKind::Jmp,
-                        });
-                        super::x86_64::emit_jmp_rel32(code, 0);
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            fall_through,
+                        );
                     }
-                    continue;
                 }
-                let cond_place = alloc
-                    .places
-                    .get(cond as usize)
-                    .copied()
-                    .unwrap_or(Place::None);
-                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
-                    bail_msg("Bz: cond Place not int reg / spill / fp");
-                    code.truncate(snapshot);
-                    fixups.truncate(fixups_snapshot);
-                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                    data_fixups.truncate(data_fixups_snapshot);
-                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                    return false;
-                };
-                // `cmp rc, 0` sets ZF=1 iff rc==0; je takes the
-                // branch on ZF=1.
-                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 2, // 0x0F 0x8x + rel32
-                    target,
-                    kind: LocalBranchKind::Jcc(Cc::E),
-                });
-                super::x86_64::emit_jcc_rel32(code, Cc::E, 0);
-                if fall_through as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: fall_through,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            } => {
-                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 2,
-                        target,
-                        kind: LocalBranchKind::Jcc(cc),
-                    });
-                    super::x86_64::emit_jcc_rel32(code, cc, 0);
-                    if fall_through as usize != block_idx + 1 {
-                        branch_fixups.push(BranchFixup {
-                            site: code.len() + 1,
-                            target: fall_through,
-                            kind: LocalBranchKind::Jmp,
-                        });
-                        super::x86_64::emit_jmp_rel32(code, 0);
+                Terminator::FallThrough(t) => {
+                    if t as usize != block_idx + 1 {
+                        emit_local_branch(
+                            code,
+                            &mut branch_fixups,
+                            &branch_short,
+                            LocalBranchKind::Jmp,
+                            t,
+                        );
                     }
-                    continue;
                 }
-                let cond_place = alloc
-                    .places
-                    .get(cond as usize)
-                    .copied()
-                    .unwrap_or(Place::None);
-                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
-                    bail_msg("Bnz: cond Place not int reg / spill / fp");
-                    code.truncate(snapshot);
-                    fixups.truncate(fixups_snapshot);
-                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                    data_fixups.truncate(data_fixups_snapshot);
-                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
-                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                    return false;
-                };
-                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
-                branch_fixups.push(BranchFixup {
-                    site: code.len() + 2,
-                    target,
-                    kind: LocalBranchKind::Jcc(Cc::Ne),
-                });
-                super::x86_64::emit_jcc_rel32(code, Cc::Ne, 0);
-                if fall_through as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: fall_through,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::FallThrough(t) => {
-                if t as usize != block_idx + 1 {
-                    branch_fixups.push(BranchFixup {
-                        site: code.len() + 1,
-                        target: t,
-                        kind: LocalBranchKind::Jmp,
-                    });
-                    super::x86_64::emit_jmp_rel32(code, 0);
-                }
-            }
-            Terminator::TailExt(binding_idx) => {
-                // The parser emits `Terminator::TailExt` for the
-                // sys-trampoline bodies: the matching indirect
-                // call already placed every arg in the host ABI's
-                // argument registers / shadow-space slots, so the
-                // emit just forwards control through the PLT
-                // trampoline and lets the libc fn's `ret` carry
-                // us back to the original caller.
-                let import_index = match imports.index_of_binding(binding_idx) {
-                    Some(i) => i,
-                    None => {
-                        bail_msg("TailExt: no import slot for binding");
+                Terminator::GotoIndirect { target } => {
+                    // GCC computed goto: branch to the code address in
+                    // `target` (materialized by Inst::BlockAddr) via
+                    // `jmp r64`.
+                    let tplace = alloc
+                        .places
+                        .get(target as usize)
+                        .copied()
+                        .unwrap_or(Place::None);
+                    let Some(rt) = materialize_int(code, tplace, SCRATCH_R10, frame) else {
+                        bail_msg("GotoIndirect: target Place not int reg / spill");
                         code.truncate(snapshot);
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1866,28 +2075,86 @@ pub(super) fn emit_function(
                         user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
-                    }
-                };
-                plt_call_fixups.push(PltCallFixup {
-                    instr_offset: code.len(),
-                    import_index,
-                    is_tail: true,
-                });
-                super::x86_64::emit_jmp_rel32(code, 0);
+                    };
+                    super::x86_64::emit_jmp_r(code, rt);
+                }
+                Terminator::TailExt(binding_idx) => {
+                    // The parser emits `Terminator::TailExt` for the
+                    // sys-trampoline bodies: the matching indirect
+                    // call already placed every arg in the host ABI's
+                    // argument registers / shadow-space slots, so the
+                    // emit just forwards control through the PLT
+                    // trampoline and lets the libc fn's `ret` carry
+                    // us back to the original caller.
+                    let import_index = match imports.index_of_binding(binding_idx) {
+                        Some(i) => i,
+                        None => {
+                            bail_msg("TailExt: no import slot for binding");
+                            code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            return false;
+                        }
+                    };
+                    plt_call_fixups.push(PltCallFixup {
+                        instr_offset: code.len(),
+                        import_index,
+                        is_tail: true,
+                    });
+                    super::x86_64::emit_jmp_rel32(code, 0);
+                }
             }
         }
+
+        // First pass emitted every branch long; decide which can shrink and,
+        // if any, reset the body-appended buffers and re-emit. A pass that
+        // finds nothing to shorten produces the final layout.
+        if branch_short.is_empty() {
+            let branches: Vec<(usize, usize, usize)> = branch_fixups
+                .iter()
+                .map(|fx| {
+                    let (opcode_start, long_size) = match fx.kind {
+                        LocalBranchKind::Jmp => (fx.site - 1, 5),
+                        LocalBranchKind::Jcc(_) => (fx.site - 2, 6),
+                    };
+                    (opcode_start, long_size, fx.target as usize)
+                })
+                .collect();
+            branch_short = relax_branches(&branches, &block_offsets);
+            if branch_short.iter().any(|&s| s) {
+                // pc_to_native is index-keyed and overwritten in place by
+                // the second pass, so it needs no reset.
+                code.truncate(body_code);
+                fixups.truncate(body_fixups);
+                plt_call_fixups.truncate(body_plt);
+                data_fixups.truncate(body_data);
+                user_extern_data_refs.truncate(body_uext);
+                pending_func_fixups.truncate(body_pending);
+                tls_index_fixups.truncate(body_tls);
+                ssa_line_rows.truncate(body_line_rows);
+                for b in block_offsets.iter_mut() {
+                    *b = 0;
+                }
+                branch_fixups.clear();
+                continue 'emit;
+            }
+        }
+        break 'emit;
     }
-    // Patch recorded branches. `site` is the byte offset of the
-    // first rel32 byte; rel32 is computed from the byte *after*
-    // the rel32 field (which on x86_64 is `site + 4`).
-    for fx in &branch_fixups {
-        let target_off = block_offsets[fx.target as usize];
-        let next_pc = fx.site + 4;
-        let rel = (target_off as i64) - (next_pc as i64);
+
+    // Patch each `&&label` lea against its block's final offset. The
+    // disp32 sits 3 bytes into the 7-byte lea and is measured from the
+    // byte after the instruction (`lea_start + LEA_RIP32_LEN`).
+    for (lea_start, target_block) in &block_addr_fixups {
+        let target_off = block_offsets[*target_block as usize] as i64;
+        let rel = target_off - (*lea_start as i64 + super::x86_64::LEA_RIP32_LEN as i64);
         let imm = match i32::try_from(rel) {
             Ok(v) => v,
             Err(_) => {
-                bail_msg("branch fixup: rel32 out of range");
+                bail_msg("BlockAddr: lea disp32 out of range");
                 code.truncate(snapshot);
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -1897,9 +2164,48 @@ pub(super) fn emit_function(
                 return false;
             }
         };
-        let bytes = imm.to_le_bytes();
-        code[fx.site..fx.site + 4].copy_from_slice(&bytes);
-        let _ = fx.kind;
+        code[*lea_start + 3..*lea_start + 7].copy_from_slice(&imm.to_le_bytes());
+    }
+
+    // Patch recorded branches. The displacement is measured from the
+    // byte after the displacement field: `site + 1` for the rel8 short
+    // form, `site + 4` for rel32. `relax_branches` guarantees a short
+    // branch's target is within the signed 8-bit range.
+    for fx in &branch_fixups {
+        let target_off = block_offsets[fx.target as usize];
+        if fx.short {
+            let rel = (target_off as i64) - (fx.site as i64 + 1);
+            let imm = match i8::try_from(rel) {
+                Ok(v) => v,
+                Err(_) => {
+                    bail_msg("branch fixup: rel8 out of range");
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+            };
+            code[fx.site] = imm as u8;
+        } else {
+            let rel = (target_off as i64) - (fx.site as i64 + 4);
+            let imm = match i32::try_from(rel) {
+                Ok(v) => v,
+                Err(_) => {
+                    bail_msg("branch fixup: rel32 out of range");
+                    code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    return false;
+                }
+            };
+            code[fx.site..fx.site + 4].copy_from_slice(&imm.to_le_bytes());
+        }
     }
 
     true
@@ -1907,16 +2213,125 @@ pub(super) fn emit_function(
 
 #[derive(Debug, Clone, Copy)]
 struct BranchFixup {
-    /// Byte offset of the rel32 field in `code`.
+    /// Byte offset of the displacement field in `code` (rel8 for a
+    /// short branch, rel32 otherwise).
     site: usize,
     target: super::super::ir::BlockId,
     kind: LocalBranchKind,
+    /// `true` when the branch was emitted in the 2-byte rel8 form.
+    short: bool,
+}
+
+/// Emit a local branch to `target`, choosing the 2-byte rel8 short form
+/// when `branch_short[idx]` is set (idx = this branch's emission index),
+/// and record the fixup. `branch_short` is empty on the first all-long
+/// emission pass and is populated by `relax_branches` for the second.
+fn emit_local_branch(
+    code: &mut alloc::vec::Vec<u8>,
+    branch_fixups: &mut alloc::vec::Vec<BranchFixup>,
+    branch_short: &[bool],
+    kind: LocalBranchKind,
+    target: super::super::ir::BlockId,
+) {
+    let idx = branch_fixups.len();
+    let short = branch_short.get(idx).copied().unwrap_or(false);
+    match kind {
+        LocalBranchKind::Jmp => {
+            // EB cb (rel8) / E9 cd (rel32): displacement follows the
+            // 1-byte opcode in both forms.
+            branch_fixups.push(BranchFixup {
+                site: code.len() + 1,
+                target,
+                kind,
+                short,
+            });
+            if short {
+                super::x86_64::emit_jmp_rel8(code, 0);
+            } else {
+                super::x86_64::emit_jmp_rel32(code, 0);
+            }
+        }
+        LocalBranchKind::Jcc(cc) => {
+            // 7x cb (rel8): displacement at +1. 0F 8x cd (rel32): at +2.
+            let site = if short {
+                code.len() + 1
+            } else {
+                code.len() + 2
+            };
+            branch_fixups.push(BranchFixup {
+                site,
+                target,
+                kind,
+                short,
+            });
+            if short {
+                super::x86_64::emit_jcc_rel8(code, cc, 0);
+            } else {
+                super::x86_64::emit_jcc_rel32(code, cc, 0);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalBranchKind {
     Jmp,
     Jcc(Cc),
+}
+
+/// Decide, per local branch, whether its target is close enough to use
+/// the 2-byte rel8 encoding (`EB`/`7x`) instead of the 5/6-byte rel32
+/// form (`E9`/`0F 8x`).
+///
+/// Each entry of `branches` is `(opcode_start, long_size, target_block)`
+/// in emission order, where `opcode_start` is the all-long byte offset
+/// of the instruction's first byte, `long_size` is 5 (jmp) or 6 (jcc),
+/// and `block_offsets` holds each block's all-long byte offset. Both
+/// short forms are 2 bytes, so a shortened branch removes
+/// `long_size - 2` bytes at its `opcode_start`.
+///
+/// Shortening one branch only reduces the magnitude of every other
+/// branch's displacement, so the shortenable set is a monotone fixpoint:
+/// start all-long and repeatedly mark a branch short once its
+/// displacement -- recomputed against the bytes already removed by the
+/// branches marked short so far -- fits a signed 8-bit field. The check
+/// excludes a forward branch's own saving, so the estimate is never
+/// optimistic: a branch marked short fits in the final layout.
+fn relax_branches(
+    branches: &[(usize, usize, usize)],
+    block_offsets: &[usize],
+) -> alloc::vec::Vec<bool> {
+    let n = branches.len();
+    let mut short = alloc::vec![false; n];
+    loop {
+        // prefix[k] = bytes removed by short branches among branches[0..k].
+        // `opcode_start` is non-decreasing in emission order, so the bytes
+        // removed before an offset are a prefix indexed by partition_point.
+        let mut prefix = alloc::vec![0usize; n + 1];
+        for i in 0..n {
+            prefix[i + 1] = prefix[i] + if short[i] { branches[i].1 - 2 } else { 0 };
+        }
+        let saved_before =
+            |off: usize| -> usize { prefix[branches.partition_point(|b| b.0 < off)] };
+        let mut changed = false;
+        for i in 0..n {
+            if short[i] {
+                continue;
+            }
+            let (opcode_start, _long, target) = branches[i];
+            let instr_end = (opcode_start - saved_before(opcode_start)) + 2;
+            let tgt = block_offsets[target] - saved_before(block_offsets[target]);
+            let rel = tgt as i64 - instr_end as i64;
+            if (-128..=127).contains(&rel) {
+                short[i] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    short
 }
 
 /// Spill the host-ABI argument registers into the c5 cdecl slots
@@ -1991,44 +2406,52 @@ fn emit_prologue(
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 && frame.param_spill_bytes > 0 {
         emit_pop_r(code, Reg::R10);
-        let (elidable, n_reg, n_stack) = param_elidable_mask(func, alloc, abi);
+        let (elidable, _n_reg, _n_stack) = param_elidable_mask(func, alloc, abi);
         let placements = param_placements(func, abi);
-        if n_stack > 0 {
-            let overflow_bytes = (n_stack as u32) * 16;
-            emit_sub_rsp_imm32(code, overflow_bytes);
-            for i in 0..n_stack {
-                let host_off = (overflow_bytes as i32) + (abi.shadow_space as i32) + (i as i32) * 8;
-                emit_mov_r_mem(code, Reg::RAX, Reg::RSP, host_off);
-                emit_mov_mem_r(code, Reg::RSP, (i as i32) * 16, Reg::RAX);
-            }
-        }
-        for i in (0..n_reg).rev() {
-            emit_sub_rsp_imm32(code, 16);
-            // The cell at [rsp + 0] holds the value the body reads
-            // through `LoadLocal { off: i+2 }`. When mem2reg has
-            // promoted the parameter into a register (no LocalAddr,
-            // no live LoadLocal) the cell sits unobserved and the
-            // mov store is dead per C99 6.2.4p2; skip emitting it.
-            // The stack space is still reserved so the surviving
-            // non-elidable parameters keep their fixed offsets.
-            if elidable.get(i).copied().unwrap_or(false) {
-                continue;
-            }
-            // Source the incoming value from the parameter's argument
-            // register per the plan: an integer / pointer parameter from
-            // its integer register (`plan.IntReg`, not `int_arg_regs[i]`
-            // -- an FP parameter earlier in the list consumes an xmm
-            // register and does not shift the integer bank), a floating-
-            // point parameter (always a `double` here -- a `float`
-            // parameter's positive cell is unobserved and elided above)
-            // from its xmm register through a single `movsd`.
+        // One contiguous c5 cdecl cell block, `n_params` 16-byte cells.
+        // Parameter `i` reads its value through `LoadLocal { off: i+2 }`
+        // from cell `[rsp + 16*i]` here (equivalently `[rbp + 16*(i+1)]`
+        // after the frame is established). The incoming argument area --
+        // the caller's outgoing stack, including any shadow space --
+        // begins at `[rsp + cells]`; a stack-passed parameter sits at the
+        // planner's byte offset within it. Filling each cell by its own
+        // placement (rather than as a contiguous register prefix plus a
+        // contiguous stack suffix) lets a register-passed parameter and a
+        // stack-passed one interleave, which happens when a by-value
+        // aggregate that consumes no argument register sits between
+        // register parameters (System V MEMORY class), or when a Win64
+        // aggregate overflows past the four positional registers.
+        let cells = frame.param_spill_bytes;
+        debug_assert_eq!(cells, (func.n_params as u32) * 16);
+        emit_sub_rsp_imm32(code, cells);
+        for i in 0..func.n_params {
+            let cell = (i as i32) * 16;
             match placements.get(i).copied() {
-                Some(super::ArgPlacement::FpReg(x)) => {
-                    emit_movsd_mem_xmm(code, Reg::RSP, 0, Reg(x))
+                // A register parameter whose home cell is unobserved
+                // (mem2reg promoted it, no LocalAddr / live LoadLocal)
+                // has a dead store per C99 6.2.4p2; the cell stays
+                // reserved so the other parameters keep their offsets.
+                Some(super::ArgPlacement::IntReg(r)) => {
+                    if !elidable.get(i).copied().unwrap_or(false) {
+                        emit_mov_mem_r(code, Reg::RSP, cell, Reg(r));
+                    }
                 }
-                Some(super::ArgPlacement::IntReg(r)) => emit_mov_mem_r(code, Reg::RSP, 0, Reg(r)),
-                // Stack-passed or out-of-range: the overflow restripe
-                // above already filled the cell; no register store.
+                Some(super::ArgPlacement::FpReg(x)) => {
+                    if !elidable.get(i).copied().unwrap_or(false) {
+                        emit_movsd_mem_xmm(code, Reg::RSP, cell, Reg(x));
+                    }
+                }
+                // Stack-overflow scalar: restripe from the incoming stack
+                // into the cell. `off` already includes any shadow space.
+                Some(super::ArgPlacement::Stack(off)) => {
+                    let src = (cells as i32) + off as i32;
+                    emit_mov_r_mem(code, Reg::RAX, Reg::RSP, src);
+                    emit_mov_mem_r(code, Reg::RSP, cell, Reg::RAX);
+                }
+                // Aggregate parameters keep a dead cell; their value is
+                // placed later from the argument registers
+                // (`emit_struct_param_scatter`) or copied from the
+                // incoming stack (`emit_struct_stack_param_copy`).
                 _ => {}
             }
         }
@@ -2134,6 +2557,99 @@ fn emit_prologue(
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_mem_r(code, Reg::RSP, off, Reg(r));
+    }
+    emit_struct_param_scatter(code, func, frame, abi);
+    emit_struct_stack_param_copy(code, func, frame, abi);
+}
+
+/// Copy each aggregate parameter the host ABI passes inline on the
+/// stack (System V AMD64 MEMORY class with size > 16, or a Win64
+/// aggregate that overflows past the four positional registers) into its
+/// parser-reserved body local. The caller placed the struct in its
+/// outgoing argument area, which sits above the return address at callee
+/// entry; after the c5 cdecl entry spill (`n_params` 16-byte cells) it is
+/// reachable at `[rbp + 16 + n_params*16 + off]`, where `off` is the
+/// planner's byte offset of the parameter in the outgoing area. The dead
+/// cell the entry spill reserves for the aggregate keeps the slot->cell
+/// map positional; the body reads the struct from the synthetic body
+/// local this copy fills. Runs after the frame is set up, so the
+/// addresses are rbp-relative and SCRATCH_R10 is free.
+fn emit_struct_stack_param_copy(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    if !placements
+        .iter()
+        .any(|p| matches!(p, super::ArgPlacement::StructStack { .. }))
+    {
+        return;
+    }
+    let base = 16 + (func.n_params as i64) * 16;
+    for (i, &placement) in placements.iter().enumerate() {
+        let super::ArgPlacement::StructStack { off, size } = placement else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        let src_off = base + off as i64;
+        let dst_off = local_slot_off(slot, func, frame, abi);
+        let words = (size / 8) as i64;
+        for w in 0..words {
+            let o = w * 8;
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RBP, (src_off + o) as i32);
+            emit_mov_mem_r(code, Reg::RBP, (dst_off + o) as i32, SCRATCH_R10);
+        }
+        for b in (words * 8)..(size as i64) {
+            super::x86_64::emit_movzx_r_mem8(code, SCRATCH_R10, Reg::RBP, (src_off + b) as i32);
+            super::x86_64::emit_mov_mem8_r(code, Reg::RBP, (dst_off + b) as i32, SCRATCH_R10);
+        }
+    }
+}
+
+/// Store each register-passed aggregate parameter's incoming argument
+/// registers into its parser-reserved body local (System V AMD64
+/// 3.2.3). Runs after the frame is established; the argument registers
+/// still hold the caller-supplied values, since nothing between entry
+/// and here clobbers them. The body reads the aggregate from this
+/// local, so the entry argument cell stays unused.
+fn emit_struct_param_scatter(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    for (i, agg) in func.param_aggs.iter().enumerate() {
+        if agg.is_none() {
+            continue;
+        }
+        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        debug_assert!(
+            !regs.iter().take(*n as usize).any(|c| c.is_fp),
+            "x86_64 scatter: floating-point aggregate eightbyte not supported"
+        );
+        let base = local_slot_off(slot, func, frame, abi);
+        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+            let off = (base + (k as i64) * 8) as i32;
+            super::x86_64::emit_mov_mem_r(code, Reg::RBP, off, Reg(cr.reg));
+        }
     }
 }
 
@@ -2440,6 +2956,10 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => emit_call(
             code,
             dst,
@@ -2453,11 +2973,17 @@ fn emit_inst(
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::CallExt {
             binding_idx,
             args,
             fp_arg_mask,
+            ..
         } => emit_call_ext(
             code,
             dst,
@@ -2475,6 +3001,9 @@ fn emit_inst(
         Inst::ImmCode(target_ent_pc) => {
             emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
         }
+        // Inst::BlockAddr is handled in emit_function's block loop
+        // (it needs the local block_offsets table for its PC-relative
+        // lea fixup), so it never reaches emit_inst.
         Inst::Mcpy {
             dst: d,
             src: s,
@@ -2487,6 +3016,9 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => emit_call_indirect(
             code,
             dst,
@@ -2499,6 +3031,10 @@ fn emit_inst(
             abi,
             *fp_return,
             *fp_arg_mask,
+            &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
+            func,
         ),
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
@@ -2568,6 +3104,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::Imm(_) => "Imm",
         Inst::ImmData(_) => "ImmData",
         Inst::ImmCode(_) => "ImmCode",
+        Inst::BlockAddr(_) => "BlockAddr",
         Inst::LocalAddr(_) => "LocalAddr",
         Inst::TlsAddr(_) => "TlsAddr",
         Inst::Load { .. } => "Load",
@@ -2865,10 +3402,6 @@ fn emit_store_local(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> bool {
-    if matches!(kind, StoreKind::F32) {
-        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
-        return false;
-    }
     let disp = match i32::try_from(local_slot_off(off, func, frame, abi)) {
         Ok(v) => v,
         Err(_) => {
@@ -2876,6 +3409,35 @@ fn emit_store_local(
             return false;
         }
     };
+    if matches!(kind, StoreKind::F32) {
+        // `float` local store. A single-precision value (C99 6.3.1.8)
+        // writes directly via `movss`; a wider f64 value (a `double`
+        // assigned to a `float` the walker didn't pre-narrow) narrows
+        // via `cvtsd2ss` first. Mirrors the `Store` F32 path so a
+        // mem2reg-promoted slot round-trips identically to the prior
+        // address-taken `LocalAddr + Store` form.
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let Some(dn) = materialize_fp(code, value_place, SCRATCH_XMM14, frame) else {
+            bail_msg("StoreLocal F32: value not fp reg / spill / int reg");
+            return false;
+        };
+        if alloc.is_f32(value) {
+            emit_movss_mem_xmm(code, Reg::RBP, disp, dn);
+        } else {
+            emit_cvtsd2ss(code, SCRATCH_XMM15, dn);
+            emit_movss_mem_xmm(code, Reg::RBP, disp, SCRATCH_XMM15);
+        }
+        match dst {
+            Place::FpReg(r) if r != dn.0 => emit_movapd_xmm_xmm(code, Reg(r), dn),
+            Place::Spill(_) => fp_spill_dst_to_slot(code, dst, dn, frame),
+            _ => {}
+        }
+        return true;
+    }
     if matches!(kind, StoreKind::F64) {
         // `double` local store: a single 8-byte FP move; no narrow.
         // The accumulator (dst) keeps the same FP value per the c5
@@ -3510,6 +4072,84 @@ fn emit_fneg(
     emit_mov_r_imm64(code, scratch_int, mask);
     emit_movq_xmm_r(code, SCRATCH_XMM15, scratch_int);
     emit_xorpd(code, dd, SCRATCH_XMM15);
+    fp_spill_dst_to_slot(code, dst, dd, frame);
+    true
+}
+
+/// `sqrt` / `fabs` intrinsic -- a unary FP operation lowering to a
+/// single hardware instruction. `sqrt` uses `SQRTSD` / `SQRTSS`; `fabs`
+/// clears the IEEE 754 sign bit by AND-ing with the inverted-sign mask
+/// (C99 7.12.7), built in an integer scratch and transferred to
+/// SCRATCH_XMM15, mirroring `emit_fneg`.
+fn emit_fp_unary(
+    code: &mut Vec<u8>,
+    dst: Place,
+    v: super::super::ir::ValueId,
+    value: u32,
+    kind: super::super::op::Intrinsic,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    use super::super::op::Intrinsic as I;
+    use super::x86_64::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
+    let src_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let dd = match fp_or_spill_dst(dst) {
+        Some(r) => r,
+        None => {
+            bail_msg("fp_unary: dst not fp reg / spill");
+            return false;
+        }
+    };
+    let dn = match materialize_fp(code, src_place, dd, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("fp_unary: value not fp reg / spill / int reg");
+            return false;
+        }
+    };
+    let is_f32 = alloc.is_f32(v);
+    match kind {
+        I::Sqrt | I::Sqrtf => {
+            if is_f32 {
+                emit_sqrtss(code, dd, dn);
+            } else {
+                emit_sqrtsd(code, dd, dn);
+            }
+        }
+        I::Fabs | I::Fabsf => {
+            if dn.0 != dd.0 {
+                emit_movapd_xmm_xmm(code, dd, dn);
+            }
+            let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
+            emit_mov_r_imm64(code, SCRATCH_R10, mask);
+            emit_movq_xmm_r(code, SCRATCH_XMM15, SCRATCH_R10);
+            emit_andpd(code, dd, SCRATCH_XMM15);
+        }
+        I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
+            // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to
+            // suppress the precision (inexact) exception: 0x09 floor
+            // (toward -inf), 0x0A ceil (toward +inf), 0x0B trunc (toward
+            // zero).
+            let imm: u8 = match kind {
+                I::Floor | I::Floorf => 0x09,
+                I::Ceil | I::Ceilf => 0x0A,
+                _ => 0x0B,
+            };
+            if is_f32 {
+                emit_roundss(code, dd, dn, imm);
+            } else {
+                emit_roundsd(code, dd, dn, imm);
+            }
+        }
+        _ => {
+            bail_msg("fp_unary: not a unary FP intrinsic");
+            return false;
+        }
+    }
     fp_spill_dst_to_slot(code, dst, dd, frame);
     true
 }
@@ -4483,7 +5123,14 @@ fn emit_binop_imm(
     );
     let is_unsigned_cmp = matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge);
     if (is_signed_cmp || is_unsigned_cmp) && imm_fits_i32 {
-        super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+        // A compare against 0 is the shorter `test rn, rn`; ZF / SF /
+        // CF / OF match `cmp rn, 0`, so the dependent setcc / jcc is
+        // unchanged.
+        if rhs_imm == 0 {
+            super::x86_64::emit_test_rr(code, rn, rn);
+        } else {
+            super::x86_64::emit_cmp_r_imm32(code, rn, rhs_imm as i32);
+        }
         if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
             return true;
         }
@@ -4624,7 +5271,17 @@ fn emit_call(
     callee_is_variadic: bool,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &FunctionSsa,
 ) -> bool {
+    // Resolve the call's struct arguments once. With no tagged
+    // aggregate this is empty and `plan_call_args_aggs` reduces to the
+    // scalar `plan_call_args` placement, so every branch can run the
+    // aggregate planner uniformly.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     if callee_is_variadic && abi.position_indexed_args {
         // Win64 host variadic ABI (Microsoft x64 calling convention):
         // the first four arguments (named and variadic) ride
@@ -4637,8 +5294,10 @@ fn emit_call(
         // integer side (position-indexed int registers, then stack).
         // This is the same marshal `emit_call_ext` performs for a
         // libc variadic call; Win64 sets `variadic_zero_xmm_count`
-        // false, so no `al` is emitted.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        // false, so no `al` is emitted. A by-value aggregate argument
+        // the classifier tagged rides through `plan_call_args_aggs`.
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit_sub_rsp_imm32(code, plan.scratch_bytes);
         }
@@ -4654,6 +5313,19 @@ fn emit_call(
         super::x86_64::emit_call_rel32(code, 0);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        // A variadic callee may still return a <=16-byte aggregate by
+        // value in rax:rdx; store it into the caller's result temp, as
+        // the non-variadic path below does. Without this the struct
+        // result is dropped (the scalar bridge leaves the slot unwritten).
+        if let Some(ai) = ret_agg {
+            let size = agg_descs[ai as usize].size;
+            let base = local_slot_off(ret_slot_local, func, frame, abi);
+            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+            if size > 8 {
+                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+            }
+            return true;
         }
         // c5 internal call return convention: an integer / pointer
         // result lives in rax, a floating-point result in xmm0 (C99
@@ -4686,8 +5358,11 @@ fn emit_call(
         // xmm0..xmm7), so `plan_call_args` places floating-point
         // arguments in the FP bank. `al` carries the number of XMM
         // argument registers used so the callee prologue's guarded XMM
-        // save runs only when needed.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        // save runs only when needed. A by-value aggregate argument the
+        // classifier tagged (a 9-16 byte variadic struct spans two
+        // eightbytes, all-or-nothing) rides through `plan_call_args_aggs`.
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         let xmm_used = plan
             .placements
             .iter()
@@ -4709,6 +5384,19 @@ fn emit_call(
         super::x86_64::emit_call_rel32(code, 0);
         if plan.scratch_bytes > 0 {
             emit_add_rsp_imm32(code, plan.scratch_bytes);
+        }
+        // A variadic callee may still return a <=16-byte aggregate by
+        // value in rax:rdx; store it into the caller's result temp, as
+        // the non-variadic path below does. Without this the struct
+        // result is dropped (the scalar bridge leaves the slot unwritten).
+        if let Some(ai) = ret_agg {
+            let size = agg_descs[ai as usize].size;
+            let base = local_slot_off(ret_slot_local, func, frame, abi);
+            emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+            if size > 8 {
+                emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+            }
+            return true;
         }
         // c5 internal call return convention: an integer / pointer
         // result lives in rax, a floating-point result in xmm0 (C99
@@ -4751,7 +5439,7 @@ fn emit_call(
     // argument types (set by the walker) rather than register
     // placement, since a floating-point constant rides an integer
     // register as its `Imm` bit pattern.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
@@ -4770,6 +5458,19 @@ fn emit_call(
     super::x86_64::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Host-ABI aggregate return (System V AMD64 3.2.3): a <= 16-byte
+    // aggregate arrives in rax:rdx; store it into the caller's result
+    // temp. (> 16-byte returns keep the out-pointer convention and
+    // never set `ret_agg`.)
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+        if size > 8 {
+            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        }
+        return true;
     }
     // c5 internal call return convention: an integer / pointer
     // result lives in rax; a floating-point result lives in xmm0
@@ -4906,6 +5607,12 @@ fn emit_call_ext(
         return true;
     }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        // A float / double result is FP-classed (`Inst::CallExt::fp_return`).
+        // An f32 result is the single in the low 32 bits of xmm0 -- the same
+        // form `FpCast(F64ToF32)` produces and `StoreLocal F32` /
+        // `FpCast(F32ToF64)` consume -- so route it without widening. (The
+        // prior GPR-bridged path widened via cvtss2sd because the
+        // integer-class convention carried the f64-widened bits.)
         match dst {
             Place::FpReg(r) => {
                 if r != Reg::XMM0.0 {
@@ -4946,6 +5653,10 @@ fn emit_call_indirect(
     abi: super::Abi,
     fp_return: bool,
     fp_arg_mask: u32,
+    agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    func: &super::super::ir::FunctionSsa,
 ) -> bool {
     let target_place = alloc
         .places
@@ -5085,6 +5796,20 @@ fn emit_call_indirect(
         }
         emit_add_rsp_imm32(code, slot_bytes);
     }
+    // Host-ABI aggregate return through a function pointer (System V
+    // AMD64 3.2.3): a <= 16-byte aggregate arrives in rax:rdx; store it
+    // into the caller's result temp. The walker tags `ret_agg` only for
+    // the register-returned class, so > 16-byte (out-pointer) returns do
+    // not reach here.
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        let base = local_slot_off(ret_slot_local, func, frame, abi);
+        emit_mov_mem_r(code, Reg::RBP, base as i32, Reg::RAX);
+        if size > 8 {
+            emit_mov_mem_r(code, Reg::RBP, (base + 8) as i32, Reg::RDX);
+        }
+        return true;
+    }
     // A floating-point return rides xmm0 (C99 6.2.5p10); an integer
     // / pointer return rides rax. `fp_return` selects the source for
     // every dst kind.
@@ -5179,7 +5904,20 @@ fn emit_va_arg_sysv(
     } else {
         ap
     };
-    let (off_disp, bound, step): (i32, i32, i32) = if is_fp { (4, 176, 16) } else { (0, 48, 8) };
+    // A by-value integer-class aggregate spans `ceil(size/8)` eightbytes
+    // in consecutive gp save-area slots (System V AMD64 3.5.7); it rides
+    // the register save area only if all its eightbytes fit
+    // (`gp_offset + aligned <= 48`), else the whole aggregate sits in the
+    // overflow area. A scalar's aligned size is 8, leaving the bound and
+    // step at their single-eightbyte values. Floating-point arguments are
+    // single doubles (the classifier declines HFAs), so they keep the
+    // 16-byte fp-slot step and 176-byte bound.
+    let aligned = (((descriptor & 0xffff) as i32 + 7) & !7).max(8);
+    let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
+        (4, 176, 16)
+    } else {
+        (0, 48 - (aligned - 8), aligned)
+    };
     // r10 = current offset (gp_offset or fp_offset, a u32 field; the
     // 32-bit load zero-extends into r10). The whole sequence touches
     // only r10 and r13 -- both reserved outside the allocator's banks --
@@ -5204,11 +5942,12 @@ fn emit_va_arg_sysv(
     let rel_to_overflow = (overflow_start - (jae_rel32_at + 4)) as i32;
     code[jae_rel32_at..jae_rel32_at + 4].copy_from_slice(&rel_to_overflow.to_le_bytes());
     // r10 = overflow_arg_area (at [ap + 8]) = the argument slot, then
-    // bump it in memory by 8. The overflow area uses an 8-byte stride
-    // for every argument class (System V AMD64 3.5.7 rounds each to an
-    // eightbyte; a `double` overflow argument still occupies one).
+    // bump it in memory by the argument's eightbyte span. System V AMD64
+    // 3.5.7 rounds each overflow argument to an eightbyte; a scalar or a
+    // `double` occupies one, a by-value aggregate `ceil(size/8)`.
+    let ov_step = if is_fp { 8 } else { aligned };
     emit_mov_r_mem(code, SCRATCH_R10, ap, 8);
-    super::x86_64::emit_add_mem64_imm32(code, ap, 8, 8);
+    super::x86_64::emit_add_mem64_imm32(code, ap, 8, ov_step);
     // --- done: r10 holds the argument address; deliver it to dst. ---
     let done = code.len();
     let rel_to_done = (done - (jmp_rel32_at + 4)) as i32;
@@ -5231,7 +5970,7 @@ fn emit_intrinsic(
     kind: i64,
     args: &[u32],
     dst: Place,
-    _v: super::super::ir::ValueId,
+    v: super::super::ir::ValueId,
     func: &FunctionSsa,
     alloc: &Allocation,
     frame: Frame,
@@ -5647,6 +6386,61 @@ fn emit_intrinsic(
             bail_msg("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic");
             false
         }
+        I::Trap => {
+            // `ud2` (0F 0B) raises #UD (illegal instruction). Execution
+            // does not continue past it.
+            code.push(0x0F);
+            code.push(0x0B);
+            true
+        }
+        I::CpuRelax => {
+            // `pause` (F3 90), the x86-64 spin-loop hint.
+            code.push(0xF3);
+            code.push(0x90);
+            true
+        }
+        I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => {
+            if args.len() != 1 {
+                bail_msg("unary FP intrinsic: expected 1 arg");
+                return false;
+            }
+            emit_fp_unary(code, dst, v, args[0], intrinsic, alloc, frame)
+        }
+        I::FrameAddress => {
+            // __builtin_frame_address(0): the current frame pointer (rbp).
+            // The level argument is ignored; only level 0 is supported.
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("FrameAddress: dst not int reg / spill");
+                return false;
+            };
+            emit_mov_rr(code, rd, Reg::RBP);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
+        I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64 => {
+            // The integer bit-count and byte-swap builtins are lowered to a
+            // portable shift / mask sequence in the walker; they never reach
+            // codegen as an `Inst::Intrinsic`.
+            bail_msg("intrinsic: bit builtin reached codegen");
+            false
+        }
     }
 }
 
@@ -5965,11 +6759,58 @@ fn emit_return(
     } else {
         Place::None
     };
+    // Host-ABI aggregate return (System V AMD64 3.2.3): `value` is the
+    // struct's address. A <= 16-byte integer aggregate returns its
+    // eightbytes in rax:rdx (x86_64 has no x8 indirect-result path --
+    // the > 16-byte case keeps the out-pointer convention, so `ret_agg`
+    // is only ever set here for the register case). Stage the address
+    // through rcx (caller-saved, untouched by the callee-saved restore)
+    // before the restore, then load the eightbytes after it.
+    if let Some(ai) = func.ret_agg {
+        let size = func.agg_descs[ai as usize].size;
+        match return_place {
+            Place::IntReg(r) => {
+                if r != Reg::RCX.0 {
+                    emit_mov_rr(code, Reg::RCX, Reg(r));
+                }
+            }
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                super::x86_64::emit_mov_r_mem(code, Reg::RCX, Reg::RSP, sp_off);
+            }
+            _ => {}
+        }
+        for (i, &r) in alloc.gpr_used.iter().enumerate() {
+            super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, (i as i32) * 8);
+        }
+        emit_mov_r_mem(code, Reg::RAX, Reg::RCX, 0);
+        if size > 8 {
+            emit_mov_r_mem(code, Reg::RDX, Reg::RCX, 8);
+        }
+        if is_full_leaf(func, frame, alloc, abi) {
+            emit_ret(code);
+            return;
+        }
+        if frame.frame_bytes > 0 {
+            emit_add_rsp_imm32(code, frame.frame_bytes);
+        }
+        emit_pop_r(code, Reg::RBP);
+        if frame.param_spill_bytes > 0 {
+            emit_pop_r(code, Reg::R11);
+            emit_add_rsp_imm32(code, frame.param_spill_bytes);
+            emit_push_r(code, Reg::R11);
+        }
+        emit_ret(code);
+        return;
+    }
     // A floating-point scalar return rides xmm0 (C99 6.2.5p10). The
-    // value's register file is set by its producing instruction, so a
-    // spilled FP result is still delivered through xmm0 rather than
-    // mirrored into rax as an integer.
-    let return_is_fp = matches!(return_place, Place::FpReg(_))
+    // declared return type is authoritative: a bare FP constant
+    // materializes as an integer immediate in a GPR, and any value whose
+    // producing instruction is integer-classed lands in a GPR, yet an
+    // `fp_return` caller reads xmm0. `materialize_fp` reinterprets the
+    // GPR / spill bit pattern into an xmm via `movq` / `movsd`.
+    let return_is_fp = func.ret_is_fp
+        || matches!(return_place, Place::FpReg(_))
         || (value != super::super::ir::NO_VALUE
             && (value as usize) < func.insts.len()
             && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
@@ -6106,5 +6947,74 @@ mod scratch_picker_tests {
         let rd = Reg(7);
         let operands = [Reg(11), Reg(10), Reg(0), Reg(1), Reg(2), Reg(8), Reg(9)];
         assert_eq!(pick_caller_saved_scratch(rd, &operands), None);
+    }
+}
+
+#[cfg(test)]
+mod relax_branches_tests {
+    use super::*;
+
+    // jmp form: long_size 5; jcc form: long_size 6. Short form is 2
+    // bytes; displacement is measured from the byte after the 2-byte
+    // short instruction to the target offset.
+
+    #[test]
+    fn near_forward_branch_shortens() {
+        // Single jmp at offset 0 to a block 100 bytes ahead: short rel
+        // = 100 - 2 = 98, within i8.
+        let short = relax_branches(&[(0, 5, 1)], &[0, 100]);
+        assert_eq!(short, vec![true]);
+    }
+
+    #[test]
+    fn far_forward_branch_stays_long() {
+        // Target 200 bytes ahead: short rel = 198, out of i8 range.
+        let short = relax_branches(&[(0, 5, 1)], &[0, 200]);
+        assert_eq!(short, vec![false]);
+    }
+
+    #[test]
+    fn backward_branch_shortens() {
+        // jmp at offset 50 back to offset 0: short rel = 0 - 52 = -52.
+        let short = relax_branches(&[(50, 5, 0)], &[0, 50]);
+        assert_eq!(short, vec![true]);
+    }
+
+    #[test]
+    fn forward_boundary_127_shortens_128_does_not() {
+        // Short instr ends at offset 2; target 129 -> rel 127 (fits),
+        // target 130 -> rel 128 (does not).
+        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 129]), vec![true]);
+        assert_eq!(relax_branches(&[(0, 5, 1)], &[0, 130]), vec![false]);
+    }
+
+    #[test]
+    fn cascade_inner_shortening_brings_outer_into_range() {
+        // branch0 (offset 0) targets block 2 at 132; branch1 (offset 5)
+        // targets block 1 at 10 and shortens first (rel 3), removing 3
+        // bytes before branch0's target. branch0's short rel then
+        // becomes 132 - 3 - 2 = 127 -> fits. A single all-long pass
+        // (rel 130) would have missed branch0.
+        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 132]);
+        assert_eq!(short, vec![true, true]);
+        // One more byte of distance defeats the cascade for branch0.
+        let short = relax_branches(&[(0, 5, 2), (5, 5, 1)], &[0, 10, 133]);
+        assert_eq!(short, vec![false, true]);
+    }
+
+    #[test]
+    fn jcc_long_size_six_removes_four_bytes() {
+        // A shortened jcc removes 4 bytes (6 -> 2). Two jccs whose
+        // combined 8-byte saving brings a third into range.
+        // block layout: b0@0, b1@4, b2@8, b3@140.
+        // branch0@0 -> b3(140): all-long rel 138; after the two inner
+        // jccs shorten (save 8), rel = 140 - 8 - 2 = 130 -> still out.
+        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 140]);
+        assert!(short[1]);
+        assert!(short[2]);
+        assert!(!short[0]);
+        // Pull the target in by 3 so the saving is enough: 134 - 8 - 2 = 124.
+        let short = relax_branches(&[(0, 6, 3), (8, 6, 1), (16, 6, 2)], &[0, 4, 8, 134]);
+        assert!(short[0]);
     }
 }

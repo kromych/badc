@@ -2,6 +2,8 @@
 #include <stdlib.h>
 
 int main() {
-    printf("Hello %d\n", 123);
+    int a = 123;
+
+    printf("Hello %d\n", a);
     return 0;
 }

@@ -50,6 +50,13 @@ pub(crate) enum Inst {
     /// records a pending func-fixup so the writer can patch
     /// against the callee's body offset.
     ImmCode(usize),
+    /// Address of a basic block within the current function, as a
+    /// code pointer (GCC labels-as-values, `&&label`). The per-arch
+    /// lowering materializes the block's native address with a
+    /// PC-relative placeholder resolved against `pc_to_native` once
+    /// the block offsets are final. The value is only stored, loaded,
+    /// compared, and used as the operand of `Terminator::GotoIndirect`.
+    BlockAddr(BlockId),
     /// Address of a local or parameter slot relative to the
     /// frame pointer. N is the c5-slot index; locals are
     /// negative, params >= 2.
@@ -184,6 +191,20 @@ pub(crate) enum Inst {
         /// `Imm` bit pattern, so the placement alone cannot classify
         /// it. The per-arch emit feeds this to `plan_call_args`.
         fp_arg_mask: u32,
+        /// Host-ABI aggregate metadata. Parallel to `args`:
+        /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
+        /// an aggregate laid out by the function's `agg_descs[i]`,
+        /// passed by value per the host ABI; `None` is a scalar arg.
+        /// Empty (treated as all-`None`) for a scalar-only call.
+        arg_aggs: Vec<Option<u32>>,
+        /// `Some(i)` when the callee returns the aggregate
+        /// `agg_descs[i]` by value; `None` for scalar / void.
+        ret_agg: Option<u32>,
+        /// Negative frame slot of the caller-allocated result
+        /// temporary an aggregate return materialises into. A frame
+        /// slot rather than a `ValueId` so it survives value
+        /// renumbering. `0` unless `ret_agg` is set.
+        ret_slot_local: i64,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -205,12 +226,23 @@ pub(crate) enum Inst {
         fp_return: bool,
         /// See [`Self::Call::fp_arg_mask`].
         fp_arg_mask: u32,
+        /// See [`Self::Call::arg_aggs`].
+        arg_aggs: Vec<Option<u32>>,
+        /// See [`Self::Call::ret_agg`].
+        ret_agg: Option<u32>,
+        /// See [`Self::Call::ret_slot_local`].
+        ret_slot_local: i64,
     },
     /// External library call.
     CallExt {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
+        /// True when the callee returns a floating-point scalar, so the
+        /// result is delivered in the FP return register (d0 / xmm0) and
+        /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
+        /// without it an FP libc result is force-bridged through a GPR.
+        fp_return: bool,
     },
     /// Tail-jump to an external symbol. Used only as the body
     /// of an address-take trampoline; never has a defined value
@@ -404,6 +436,12 @@ pub(crate) enum Terminator {
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
+    /// Indirect branch to a code address held in `target` (GCC
+    /// computed goto, `goto *expr`). The set of possible successor
+    /// blocks is the function's `computed_goto_targets` (every block
+    /// whose address is taken via `&&label`); the CFG treats this as
+    /// a branch to all of them.
+    GotoIndirect { target: ValueId },
     /// Synthetic fall-through to a successor block. Preserved
     /// on the variant for object-file round-trips of SSA bodies
     /// that already carry it; new IR producers should use the
@@ -430,6 +468,20 @@ pub(crate) struct Block {
     /// written in this block (rare; e.g. a block consisting of
     /// just an unconditional branch to a synthetic target).
     pub exit_acc: ValueId,
+}
+
+/// Layout of an aggregate (struct / union) value for host-ABI
+/// argument / return classification. Interned per function in
+/// [`FunctionSsa::agg_descs`] and referenced by index from the call
+/// instructions' `arg_aggs` / `ret_agg` and the function's own
+/// `param_aggs` / `ret_agg`. Built by the walker via
+/// `Compiler::flatten_fields`; the per-arch emit feeds
+/// `(size, align, fields)` to `abi_classify::classify_aggregate`.
+#[derive(Debug, Clone)]
+pub(crate) struct AggDesc {
+    pub size: u32,
+    pub align: u32,
+    pub fields: Vec<crate::c5::codegen::abi_classify::FlatField>,
 }
 
 /// Per-function SSA program. Consumed by the allocator and the
@@ -526,4 +578,48 @@ pub(crate) struct FunctionSsa {
     /// ride the stack where the class no longer selects a register.
     /// Zero for SSA built outside the walker.
     pub param_fp_mask: u32,
+    /// Interned aggregate layouts referenced by the call
+    /// instructions' `arg_aggs` / `ret_agg` and this function's
+    /// `param_aggs` / `ret_agg`. Empty for SSA built outside the
+    /// walker and for functions that neither pass nor return a
+    /// struct by value through the host ABI. Passes that rebuild the
+    /// function copy this through; the inliner concatenates the
+    /// inlinee's table and offsets the inlined call indices.
+    pub agg_descs: Vec<AggDesc>,
+    /// Per declared parameter: `Some(i)` when parameter `k` is an
+    /// aggregate passed by value (described by `agg_descs[i]`).
+    /// Empty / all-`None` for functions with no struct parameters.
+    pub param_aggs: Vec<Option<u32>>,
+    /// Per declared parameter: the negative frame slot the parser
+    /// reserved for a struct-by-value parameter's body-visible
+    /// storage, or 0 when the parameter has no dedicated local.
+    /// A register-passed aggregate parameter has no SSA entry-copy;
+    /// the callee prologue (native) and `run_func` (VM) write the
+    /// argument's bytes directly into this slot. Parallel to the
+    /// declared parameter list; empty for SSA built outside the
+    /// walker.
+    pub param_local_slots: Vec<i64>,
+    /// `Some(i)` when this function returns the aggregate
+    /// `agg_descs[i]` by value through the host ABI; `None` for a
+    /// scalar / void return.
+    pub ret_agg: Option<u32>,
+    /// True when the function returns a floating-point scalar (C99
+    /// 6.2.5p10): the result is delivered in the FP return register
+    /// (d0 / xmm0). This is the declared-type signal the return emit
+    /// uses; a producing instruction's register file alone is
+    /// insufficient because a bare FP constant materializes as an
+    /// integer immediate in a GPR.
+    pub ret_is_fp: bool,
+    /// Negative frame slot holding the caller-supplied indirect-result
+    /// address (AAPCS64 x8) for a function returning an aggregate
+    /// larger than 16 bytes. The prologue stores x8 here; the callee
+    /// writes the result through it. `0` when the function does not
+    /// return through x8.
+    pub indirect_result_slot: i64,
+    /// Successor blocks of every `Terminator::GotoIndirect` in this
+    /// function: each block whose address is taken via `&&label`
+    /// (GCC computed goto). The CFG, liveness, and the allocator
+    /// treat an indirect branch as a branch to all of these. Empty
+    /// for functions with no computed goto.
+    pub computed_goto_targets: Vec<BlockId>,
 }

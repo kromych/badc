@@ -4,12 +4,12 @@ unary_plus_preserves_float.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x270              // =624
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
@@ -97,7 +98,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x38
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x38
                	ldr	d0, [x16]
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
@@ -138,7 +138,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x40
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x40
                	ldr	d1, [x16]
                	fadd	d0, d0, d1
@@ -168,7 +167,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x48
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x48
                	ldr	d1, [x16]
                	fadd	d0, d0, d1
@@ -196,7 +194,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x50
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x50
                	ldr	d1, [x16]
                	fadd	d0, d0, d1
@@ -233,7 +230,6 @@ Disassembly of section .text:
                	fmov	d16, x0
                	sub	x17, x29, #0x58
                	str	d16, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x58
                	ldr	d1, [x16]
                	fadd	d0, d0, d1

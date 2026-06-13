@@ -4,11 +4,13 @@ bitfield_compound_assignment.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
@@ -261,7 +263,7 @@ Disassembly of section .text:
                	popq	%rax
                	xorq	%rcx, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x15, %eax
                	addq	$0x60, %rsp

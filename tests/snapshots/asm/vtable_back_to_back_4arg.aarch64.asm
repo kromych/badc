@@ -4,12 +4,12 @@ vtable_back_to_back_4arg.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x270              // =624
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,23 +58,27 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<g_init>:
                	sxtw	x2, w2
                	sxtw	x3, w3
                	adrp	x1, <page>
                	add	x1, x1, #0x118
                	str	x1, [x0]
                	add	x1, x2, x3
-               	sxtw	x1, w1
                	str	w1, [x0, #0x8]
                	mov	x0, #0x0                // =0
                	ret
+
+<g_generate>:
                	sxtw	x2, w2
                	ldrsw	x0, [x0, #0x8]
                	add	x0, x0, #0x64
-               	sxtw	x0, w0
                	str	w0, [x1]
                	mov	x0, x2
                	ret
+
+<driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
@@ -129,6 +132,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>

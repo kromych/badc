@@ -4,12 +4,12 @@ param_incoming_reg_clobber.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	str	x2, [sp, #-0x10]!
                	sub	sp, sp, #0x20
                	stp	x29, x30, [sp, #-0x10]!
@@ -17,7 +17,6 @@ Disassembly of section .text:
                	mov	x3, x1
                	mov	x1, x0
                	stur	x2, [x29, #0x30]
-               	b	<addr>
                	ldur	w0, [x29, #0x30]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -38,6 +37,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
+
+<swap_or_copy>:
                	sub	sp, sp, #0x10
                	str	x2, [sp, #-0x10]!
                	sub	sp, sp, #0x20
@@ -55,7 +56,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x1, x4
                	bl	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	add	sp, sp, #0x10
@@ -68,7 +68,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #16
                	and	x0, x0, x17
                	add	x1, x20, x0
-               	b	<addr>
                	ldur	w0, [x29, #0x30]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -90,12 +89,13 @@ Disassembly of section .text:
                	mov	x4, x2
                	b	<addr>
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
                	str	x20, [sp]
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x8
                	b.ge	<addr>
@@ -118,7 +118,6 @@ Disassembly of section .text:
                	mov	x3, #0x1                // =1
                	bl	<addr>
                	mov	x20, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x8
                	b.ge	<addr>

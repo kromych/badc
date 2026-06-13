@@ -33,6 +33,80 @@ fn source_with_only_a_global_has_no_main() {
 }
 
 #[test]
+fn bare_return_in_non_void_function_is_rejected() {
+    // C23 6.8.6.4 + current toolchains: `return;` with no value in a
+    // function returning non-void. C99 leaves the value indeterminate
+    // (6.9.1p12).
+    expect_compile_error(
+        "int f(int x) { if (x) return x; return; } int main(void) { return f(0); }",
+        "`return` with no value in a function returning non-void",
+    );
+}
+
+#[test]
+fn bare_return_in_void_function_is_allowed() {
+    // The converse stays legal: `return;` in a `void` function.
+    Compiler::new(
+        "void g(int x) { if (x) return; } int main(void) { g(1); return 0; }".to_string(),
+    )
+    .compile()
+    .expect("bare return in a void function must compile");
+}
+
+#[test]
+fn fall_off_end_of_non_void_function_is_rejected() {
+    // C99 6.9.1p12: control reaching the closing brace of a
+    // value-returning function with no `return value;` is a defect.
+    expect_compile_error(
+        "int f(int x) { if (x) return x; } int main(void) { return f(1); }",
+        "control reaches end of non-void function",
+    );
+}
+
+#[test]
+fn fall_off_end_with_both_if_arms_returning_is_allowed() {
+    // Every path returns, so control cannot reach the end.
+    Compiler::new(
+        "int f(int x) { if (x) return 1; else return 0; } \
+         int main(void) { return f(1); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a function whose if/else both return must compile");
+}
+
+#[test]
+fn fall_off_end_after_noreturn_call_is_allowed() {
+    // A call to a `_Noreturn` function does not reach its continuation,
+    // so a function whose last statement is such a call does not fall
+    // off its end.
+    Compiler::new(
+        "_Noreturn void die(void); \
+         int f(int x) { if (x) return x; die(); } \
+         int main(void) { return f(1); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("a function ending in a _Noreturn call must compile");
+}
+
+#[test]
+fn fall_off_end_of_infinite_loop_is_allowed() {
+    // `for (;;)` with no break never reaches the end.
+    Compiler::new("int f(void) { for (;;) { } } int main(void) { f(); return 0; }".to_string())
+        .compile()
+        .expect("a function whose body is an infinite loop must compile");
+}
+
+#[test]
+fn fall_off_end_of_main_is_allowed() {
+    // C99 5.1.2.2.3: `main` returns 0 by default, so it is exempt.
+    Compiler::new("int main(void) { }".to_string())
+        .compile()
+        .expect("main may fall off its end");
+}
+
+#[test]
 fn missing_semicolon_after_statement() {
     expect_compile_error(
         "int main() { int a; a = 1 return a; }",
@@ -225,6 +299,8 @@ fn bad_lvalue_in_assignment() {
     );
 }
 
+// Emits a native image for every target, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
 #[test]
 fn thread_local_compiles_to_op_tlslea() {
     // `_Thread_local` lexes as Token::ThreadLocal, the parser
@@ -253,8 +329,12 @@ fn thread_local_compiles_to_op_tlslea() {
         super::super::codegen::Target::WindowsAarch64,
         super::super::codegen::Target::MacOSAarch64,
     ] {
-        super::super::emit_native_with_options(&p, target, super::super::NativeOptions::default())
-            .unwrap_or_else(|e| panic!("`{target:?}` rejected `_Thread_local`: {e}"));
+        super::super::codegen::emit_native_single_tu_for_test(
+            &p,
+            target,
+            super::super::NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("`{target:?}` rejected `_Thread_local`: {e}"));
     }
 }
 

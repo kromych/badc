@@ -594,6 +594,18 @@ fn run_func<H: Host>(
     let frame_bytes = (locals + n_params) * 8;
     let stack_base = mem.alloc_frame(frame_bytes)?;
     for (i, &v) in args.iter().enumerate() {
+        // Host-ABI register-passed aggregate parameter: `v` is the
+        // source struct's address. The callee body reads the aggregate
+        // from a parser-reserved body local (no entry copy in the SSA),
+        // so copy `size` bytes there directly -- the native prologue's
+        // register scatter, in interpreter terms.
+        if let Some(Some(idx)) = func.param_aggs.get(i).copied() {
+            let size = func.agg_descs[idx as usize].size as usize;
+            let slot = func.param_local_slots[i];
+            let dst = (stack_base as i64 + (locals as i64 + slot) * 8) as usize;
+            mem.copy_within(dst, v as usize, size)?;
+            continue;
+        }
         let addr = stack_base + (locals + i) * 8;
         mem.write_bytes(addr, &v.to_le_bytes())?;
     }
@@ -656,6 +668,13 @@ fn run_func<H: Host>(
             Terminator::FallThrough(target) => {
                 frame.block_idx = target as usize;
             }
+            Terminator::GotoIndirect { target } => {
+                // `target` holds a label-address token produced by
+                // Inst::BlockAddr (CODE_ADDR_TAG | block index). Mask the
+                // tag to recover the destination block index.
+                let tok = frame.regs[target as usize];
+                frame.block_idx = (tok & !CODE_ADDR_TAG) as usize;
+            }
             Terminator::TailExt(_) => {
                 break Err(C5Error::Runtime(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
@@ -665,6 +684,63 @@ fn run_func<H: Host>(
     };
     mem.release_frame(stack_base);
     result
+}
+
+/// Materialise a call's result. For a host-ABI aggregate return,
+/// `ret` is the callee's struct address (in its just-released frame,
+/// bytes intact); copy the aggregate into the caller's result temp at
+/// `ret_slot` and yield the temp's address. A scalar return passes
+/// `ret` through unchanged.
+fn finish_agg_return(
+    frame: &Frame<'_>,
+    mem: &mut Memory,
+    ret_agg: Option<u32>,
+    ret_slot_local: i64,
+    ret: i64,
+) -> Result<i64, C5Error> {
+    let Some(ai) = ret_agg else {
+        return Ok(ret);
+    };
+    let size = frame.func.agg_descs[ai as usize].size as usize;
+    let dst = frame.slot_addr(ret_slot_local).ok_or_else(|| {
+        C5Error::Runtime(format!(
+            "vm_ssa: aggregate return: slot {ret_slot_local} out of range"
+        ))
+    })?;
+    mem.copy_within(dst, ret as usize, size)?;
+    Ok(dst as i64)
+}
+
+/// Build the callee's flat argument list. A variadic by-value
+/// aggregate (`arg_aggs[i]` set, `i` past the fixed parameters) is
+/// expanded into its eightbytes so the callee's `va_arg`, which
+/// advances by the aggregate's span, reads them contiguously. A fixed
+/// struct parameter stays its source address; `run_func`'s
+/// `param_aggs` scatter copies it into the body local.
+fn collect_call_args(
+    frame: &Frame<'_>,
+    mem: &Memory,
+    args: &[ValueId],
+    arg_aggs: &[Option<u32>],
+    fixed_args: usize,
+) -> Result<alloc::vec::Vec<i64>, C5Error> {
+    let mut out = alloc::vec::Vec::with_capacity(args.len());
+    for (i, &a) in args.iter().enumerate() {
+        let val = frame.regs[a as usize];
+        if i >= fixed_args
+            && let Some(Some(idx)) = arg_aggs.get(i).copied()
+        {
+            let size = frame.func.agg_descs[idx as usize].size as usize;
+            let mut off = 0usize;
+            while off < size {
+                out.push(load_from_memory(mem, (val as usize) + off, LoadKind::I64)?);
+                off += 8;
+            }
+            continue;
+        }
+        out.push(val);
+    }
+    Ok(out)
 }
 
 fn run_inst<H: Host>(
@@ -691,6 +767,14 @@ fn run_inst<H: Host>(
             // Code pointers don't map to bytes; tag with
             // `CODE_ADDR_TAG` so `CallIndirect` recognises them.
             frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
+            return Ok(());
+        }
+        Inst::BlockAddr(b) => {
+            // Label address (GCC `&&label`). Tag the block index as a
+            // code pointer so it is non-zero (truthy, like a real label
+            // address) and distinct from a data address; GotoIndirect
+            // masks the tag back off to recover the block index.
+            frame.regs[v as usize] = CODE_ADDR_TAG | (*b as i64);
             return Ok(());
         }
         Inst::LocalAddr(off) => {
@@ -863,20 +947,31 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::Call {
-            target_pc, args, ..
+            target_pc,
+            args,
+            fixed_args,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => {
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
             })?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
+            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
-            frame.regs[v as usize] = ret;
+            frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
-        Inst::CallIndirect { target, args, .. } => {
+        Inst::CallIndirect {
+            target,
+            args,
+            fixed_args,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
+        } => {
             let raw = frame.regs[*target as usize];
             // Code pointers may be tagged two ways: SSA-VM bit 62
             // (set by `Inst::ImmCode`) or the `CODE_BASE`-biased
@@ -898,12 +993,9 @@ fn run_inst<H: Host>(
                     "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
                 ))
             })?;
-            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
-            for &a in args {
-                arg_vals.push(frame.regs[a as usize]);
-            }
+            let arg_vals = collect_call_args(frame, mem, args, arg_aggs, *fixed_args)?;
             let ret = run_func(prog, mem, host, callee, &arg_vals)?;
-            frame.regs[v as usize] = ret;
+            frame.regs[v as usize] = finish_agg_return(frame, mem, *ret_agg, *ret_slot_local, ret)?;
             return Ok(());
         }
         Inst::CallExt {
@@ -1421,17 +1513,17 @@ fn run_intrinsic(
         Intrinsic::VaArg => {
             // `__builtin_va_arg(self, descriptor)` returns the cursor's
             // current value (the address of the next variadic slot) and
-            // advances `*self` by 8 -- the c5 stack-slot width. The
-            // caller emits the matching `Inst::Load` to materialise the
-            // value. `args[1]` is the packed `(kind << 16) | size` type
-            // descriptor; the flat single-region VM model walks one
-            // cursor regardless of kind, so it is ignored here. The VM
-            // interprets programs compiled for the host target, whose
-            // `<stdarg.h>` selects the cursor `va_list` for every host
-            // that runs this interpreter.
+            // advances `*self` by the argument's eightbyte span. A
+            // scalar occupies one eightbyte; a by-value aggregate spans
+            // `ceil(size/8)`, matching how the caller laid it down in the
+            // flat single-region va_list. `args[1]` is the packed
+            // `(kind << 16) | size` type descriptor.
+            let descriptor = args.get(1).map(|&a| frame.regs[a as usize]).unwrap_or(0);
+            let size = descriptor & 0xffff;
+            let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
-            store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;
+            store_to_memory(mem, ap_addr, cursor + stride, StoreKind::I64)?;
             frame.regs[v as usize] = cursor;
             Ok(())
         }
@@ -1448,6 +1540,76 @@ fn run_intrinsic(
         Intrinsic::Fma | Intrinsic::Fmaf => Err(C5Error::Runtime(format!(
             "vm_ssa: Intrinsic::{intr:?} lowers to Inst::Fma, not Inst::Intrinsic",
         ))),
+        Intrinsic::Sqrt | Intrinsic::Sqrtf => {
+            let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
+            let r = if matches!(intr, Intrinsic::Sqrtf) {
+                libm::sqrtf(x as f32) as f64
+            } else {
+                libm::sqrt(x)
+            };
+            frame.regs[v as usize] =
+                round_if_f32(r.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            Ok(())
+        }
+        Intrinsic::Fabs | Intrinsic::Fabsf => {
+            // Clear the IEEE 754 sign bit. The value is held as an f64
+            // bit pattern; an f32 value occupies the same sign position.
+            let raw = frame.regs[args[0] as usize];
+            frame.regs[v as usize] = round_if_f32(
+                raw & 0x7fff_ffff_ffff_ffff,
+                frame.func.f32_values.get(v as usize),
+            );
+            Ok(())
+        }
+        Intrinsic::Floor
+        | Intrinsic::Floorf
+        | Intrinsic::Ceil
+        | Intrinsic::Ceilf
+        | Intrinsic::Trunc
+        | Intrinsic::Truncf => {
+            let x = f64::from_bits(frame.regs[args[0] as usize] as u64);
+            let r = match intr {
+                Intrinsic::Floor | Intrinsic::Floorf => libm::floor(x),
+                Intrinsic::Ceil | Intrinsic::Ceilf => libm::ceil(x),
+                _ => libm::trunc(x),
+            };
+            frame.regs[v as usize] =
+                round_if_f32(r.to_bits() as i64, frame.func.f32_values.get(v as usize));
+            Ok(())
+        }
+        // `__builtin_trap()` raises an illegal-instruction exception on
+        // the native targets; the interpreter cannot continue past it,
+        // so it surfaces as a runtime failure.
+        Intrinsic::Trap => Err(C5Error::Runtime("__builtin_trap".to_string())),
+        // A spin-loop hint with no architectural effect; the
+        // interpreter need do nothing.
+        Intrinsic::CpuRelax => {
+            frame.regs[v as usize] = 0;
+            Ok(())
+        }
+        Intrinsic::FrameAddress => {
+            // The interpreter has no native frame pointer; return this
+            // frame's base in the byte arena. It is non-zero, stable
+            // within a frame, and distinct across nested calls -- enough
+            // for a stack-depth comparison. (The arena grows up, so a
+            // deeper frame has a larger address than on a native stack.)
+            frame.regs[v as usize] = frame.stack_base as i64;
+            Ok(())
+        }
+        // The integer bit-count builtins are lowered to a portable
+        // shift / mask sequence in the walker; they never reach the VM
+        // as an `Inst::Intrinsic`.
+        Intrinsic::Clz
+        | Intrinsic::Ctz
+        | Intrinsic::Popcount
+        | Intrinsic::Clzll
+        | Intrinsic::Ctzll
+        | Intrinsic::Popcountll
+        | Intrinsic::Bswap16
+        | Intrinsic::Bswap32
+        | Intrinsic::Bswap64 => Err(C5Error::Runtime(
+            "vm_ssa: bit builtin reached the intrinsic dispatch".to_string(),
+        )),
     }
 }
 

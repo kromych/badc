@@ -4,18 +4,20 @@ fp_return_value.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sxtw	x0, w0
                	scvtf	d0, x0
                	mov	x0, #0x3fe0000000000000 // =4602678819172646912
                	fmov	d17, x0
                	fadd	d0, d0, d17
                	ret
+
+<make_float>:
                	sxtw	x0, w0
                	scvtf	d0, x0
                	fcvt	s0, d0
@@ -25,6 +27,8 @@ Disassembly of section .text:
                	fdiv	d0, d0, d17
                	fcvt	s0, d0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -65,10 +69,6 @@ Disassembly of section .text:
                	fdiv	d1, d1, d17
                	fcvt	s1, d1
                	fadd	s0, s0, s1
-               	sub	x0, x29, #0x10
-               	str	s0, [x0]
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
                	mov	x0, #0x4000000000000000 // =4611686018427387904
                	fcvt	d0, s0
                	fmov	d17, x0

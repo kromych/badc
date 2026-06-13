@@ -85,6 +85,7 @@ fn fmt_inst(inst: &Inst) -> String {
         Imm(v) => format!("Imm({v})"),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
+        BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
         Load { addr, disp, kind } => format!(
@@ -155,6 +156,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => format!(
             "Call {{ target_pc={target_pc}, args=[{}], fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
@@ -166,6 +168,7 @@ fn fmt_inst(inst: &Inst) -> String {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            ..
         } => format!(
             "CallIndirect {{ target=v{target}, args=[{}], callee_variadic={callee_variadic}, fixed_args={fixed_args}, fp_return={fp_return}, fp_arg_mask={fp_arg_mask:#x} }}",
             fmt_value_list(args),
@@ -174,10 +177,16 @@ fn fmt_inst(inst: &Inst) -> String {
             binding_idx,
             args,
             fp_arg_mask,
-        } => format!(
-            "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x} }}",
-            fmt_value_list(args),
-        ),
+            fp_return,
+        } => {
+            // Most external calls are integer-returning; show `fp_return`
+            // only when set so the common case keeps a stable form.
+            let fp = if *fp_return { ", fp_return=true" } else { "" };
+            format!(
+                "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x}{fp} }}",
+                fmt_value_list(args),
+            )
+        }
         TailExt(b) => format!("TailExt({b})"),
         Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
         Intrinsic { kind, args } => format!(
@@ -233,6 +242,7 @@ fn fmt_terminator(t: Terminator) -> String {
         Terminator::Return(v) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::FallThrough(b) => format!("FallThrough(b{b})"),
+        Terminator::GotoIndirect { target } => format!("GotoIndirect(v{target})"),
     }
 }
 

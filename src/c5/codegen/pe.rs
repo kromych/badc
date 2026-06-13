@@ -65,7 +65,7 @@
 //!   unaffected.
 
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -288,39 +288,16 @@ const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2047 * 4;
 
 // ----------------------------------------------------------------
-// Stub-only imports. Appended to the program's resolved imports
-// when building the executable entry stub. The stub references
-// them by index; the lowering never sees them.
-//
-// Console subsystem:
-//   msvcrt!__getmainargs -- populates argc/argv via out-pointers.
-//                           WINE's msvcrt doesn't export the
-//                           `__p___argc` / `__p___argv` variants,
-//                           so this is the portable spelling.
-//   msvcrt!exit          -- runs the CRT atexit chain and flushes
-//                           stdout/stderr; `kernel32!ExitProcess`
-//                           skips both.
-//
-// GUI subsystem (`#pragma subsystem(windows)`):
-//   kernel32!GetModuleHandleA -- supplies `HINSTANCE hInstance`.
-//   kernel32!GetCommandLineA  -- supplies `LPSTR lpCmdLine`.
-//   msvcrt!exit               -- as above.
-//
-// `hPrevInstance` is `NULL`. `nShowCmd` is `SW_SHOWNORMAL` (1)
-// rather than `SW_SHOWDEFAULT` (10); `SW_SHOWDEFAULT` defers to
-// `STARTUPINFOA::wShowWindow`, which resolves to `SW_HIDE` when
-// a parent left `wShowWindow = 0` without `STARTF_USESHOWWINDOW`.
+// Entry adapter. The executable entry is a minimal per-arch shim that
+// loads the initial stack pointer + the image-base offset into the
+// first two argument registers and calls `__c5_entry`, defined in the
+// embedded startup runtime. `__c5_entry` runs process startup
+// (argc/argv via the CRT, then the entry, then `exit`), so the writer
+// references only this one name; the CRT / kernel32 imports ride the
+// runtime TU's `#pragma binding`.
 // ----------------------------------------------------------------
 
-const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
-const STUB_IMPORT_WGETMAINARGS: (&str, &str) = ("__wgetmainargs", "msvcrt.dll");
-const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
-const STUB_IMPORT_GETMODULEHANDLEA: (&str, &str) = ("GetModuleHandleA", "kernel32.dll");
-const STUB_IMPORT_GETCOMMANDLINEA: (&str, &str) = ("GetCommandLineA", "kernel32.dll");
-
-/// `nShowCmd` value passed by the GUI entry stub. See the
-/// nShowCmd notes above the stub-import constants.
-const SW_SHOWNORMAL: u32 = 1;
+const RT_ENTRY: &str = "__c5_entry";
 
 // ----------------------------------------------------------------
 // Top-level writer.
@@ -369,24 +346,20 @@ pub(super) fn write(
     let stub = if user_dllmain || passthrough_entry {
         EntryStub::empty()
     } else {
-        build_entry_stub(machine, is_dll, subsystem, program.entry_name.as_deref())
+        build_entry_stub(machine, is_dll)
     };
 
     // 2) Combined imports list. Index N becomes IAT slot N. The
     //    program's resolved imports occupy `0..n_program_imports`;
-    //    the entry stub's stub-only imports follow at
-    //    `stub_imports_base + stub_import_idx`. Each entry is
-    //    `(symbol_name, dll_name)`.
+    //    The entry stub adds no imports of its own: the CRT /
+    //    kernel32 entries it relies on ride the embedded runtime
+    //    TU's `#pragma binding`, so they already sit in
+    //    `build.imports`.
     let n_program_imports = build.imports.imports.len();
-    let mut imports: Vec<(String, String)> =
-        Vec::with_capacity(n_program_imports + stub.stub_imports.len());
+    let mut imports: Vec<(String, String)> = Vec::with_capacity(n_program_imports);
     for imp in &build.imports.imports {
         let dll = build.imports.dylibs[imp.dylib_index].path.clone();
         imports.push((imp.real_symbol.clone(), dll));
-    }
-    let stub_imports_base = imports.len();
-    for &(sym, dll) in &stub.stub_imports {
-        imports.push((sym.to_string(), dll.to_string()));
     }
 
     // 3) Group imports by DLL while preserving each one's IAT index.
@@ -644,6 +617,7 @@ pub(super) fn write(
             text_rva + text_prologue_len,
             &build.exports,
             &build.pc_to_native,
+            build.shared_lib_name.as_deref(),
         )?
     } else {
         Vec::new()
@@ -865,17 +839,18 @@ pub(super) fn write(
         )?;
     }
 
-    // Stub-emitted IAT calls. Empty for the DllMain stub; two
-    // patches for console (`__getmainargs`, `exit`); three for
-    // GUI (`GetModuleHandleA`, `GetCommandLineA`, `exit`).
-    for patch in &stub.iat_patches {
-        let global_idx = stub_imports_base + patch.stub_import_idx;
-        patch_iat_lookup(
+    // Stub-emitted direct calls to embedded-runtime helpers. Empty
+    // for the DllMain stub; two for console (`__c5_getmainargs`,
+    // `__c5_exit`); three for GUI (`__c5_getmodulehandle`,
+    // `__c5_getcommandline`, `__c5_exit`). Each resolves to a
+    // native offset in `build.text`, shifted past the stub prologue.
+    for &(call_off, name) in &stub.direct_call_runtime {
+        let target = runtime_symbol_offset(build, name)?;
+        patch_direct_call(
             machine,
             &mut text_bytes,
-            patch.byte_offset,
-            text_rva,
-            idata_layout.iat_rva_for_import[global_idx],
+            call_off,
+            text_prologue_len + target,
         )?;
     }
 
@@ -1312,6 +1287,7 @@ fn build_export_directory(
     text_prologue_rva: u32,
     exports: &[crate::c5::program::ExportedFunction],
     pc_to_native: &[usize],
+    image_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let n = exports.len() as u32;
     // Layout offsets within the section.
@@ -1324,7 +1300,7 @@ fn build_export_directory(
     // The DLL-name string heads the string blob; per-export
     // names follow, each NUL-terminated. We compute their
     // RVAs as we go so the AddressOfNames entries match.
-    let dll_name = "c5-output.dll";
+    let dll_name = image_name.unwrap_or("c5-output.dll");
     let strings_rva = edata_rva + strings_off;
     let dll_name_rva = strings_rva;
 
@@ -2136,12 +2112,29 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
         .map(|off| base_rva + *off as u32)
         .collect();
 
+    // With no imported DLLs the descriptor block is a lone zero
+    // terminator and the IAT is empty. Pointing the Import data
+    // directory at that descriptor with a zero-size IAT directory is
+    // rejected by the Windows loader (ERROR_INVALID_PARAMETER) even
+    // though wine accepts it, so leave both directories empty
+    // (RVA = 0, size = 0) in that case.
+    let (import_directory_rva, import_directory_size, iat_rva_base, iat_size) = if n_dlls == 0 {
+        (0, 0, 0, 0)
+    } else {
+        (
+            base_rva + import_dir_off as u32,
+            import_dir_size as u32,
+            base_rva + iat_off as u32,
+            iat_size as u32,
+        )
+    };
+
     IDataLayout {
         bytes,
-        import_directory_rva: base_rva + import_dir_off as u32,
-        import_directory_size: import_dir_size as u32,
-        iat_rva_base: base_rva + iat_off as u32,
-        iat_size: iat_size as u32,
+        import_directory_rva,
+        import_directory_size,
+        iat_rva_base,
+        iat_size,
         iat_rva_for_import,
     }
 }
@@ -2165,34 +2158,24 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
 //   nShowCmd)`, then call `exit`. Entry signature
 //   `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)`.
 //
-// Instruction selection differs per architecture; the import set
-// and patch shape are uniform. `EntryStub` carries an
-// architecture-neutral list of `(byte-offset, stub-import-index)`
-// IAT patches plus the direct-call-main offset. The writer appends
-// `stub_imports` to the global import table and resolves each
-// patch's IAT slot from the resulting layout.
+// Instruction selection differs per architecture; the call shape is
+// uniform. Every CRT / kernel32 entry the stub needs is reached
+// through a `__c5_*` runtime helper called directly, so `EntryStub`
+// carries only an architecture-neutral list of
+// `(byte-offset, runtime-symbol-name)` direct-call patches plus the
+// direct-call-main offset. The writer resolves each name to its
+// native offset in `build.text` and patches the displacement.
 // ----------------------------------------------------------------
-
-/// Single IAT-lookup patch site in the stub. `byte_offset` points
-/// at the first byte of `call qword [rip+disp32]` (x86_64) or the
-/// `adrp` of the `adrp; ldr; blr` triple (aarch64).
-/// `stub_import_idx` indexes into [`EntryStub::stub_imports`];
-/// the writer adds the splice offset to get a global IAT index.
-struct StubIatPatch {
-    byte_offset: u32,
-    stub_import_idx: usize,
-}
 
 struct EntryStub {
     bytes: Vec<u8>,
-    /// `(symbol, dll)` pairs referenced by IAT lookups in `bytes`.
-    /// Empty for the DLL stub (a self-contained `mov eax, 1; ret`).
-    /// The writer appends these to the global imports table after
-    /// the program's `#pragma binding(...)` imports.
-    stub_imports: Vec<(&'static str, &'static str)>,
-    /// IAT-lookup patch sites; one per `call qword [rip+...]` /
-    /// `adrp;ldr;blr` triple in `bytes`.
-    iat_patches: Vec<StubIatPatch>,
+    /// Direct-call patch sites targeting embedded-runtime helpers:
+    /// `(byte_offset, symbol_name)`. `byte_offset` points at the
+    /// first byte of the `call rel32` (x86_64) or the `bl` word
+    /// (aarch64). The writer resolves each name to its native
+    /// offset in `build.text` and patches the relative displacement,
+    /// the same path as the direct call to `main`.
+    direct_call_runtime: Vec<(u32, &'static str)>,
     /// Offset of the direct `call main` / `bl main`. `None` for
     /// DLL output: `DllMain` is invoked by the loader, not from
     /// the stub.
@@ -2203,37 +2186,38 @@ impl EntryStub {
     fn empty() -> Self {
         Self {
             bytes: Vec::new(),
-            stub_imports: Vec::new(),
-            iat_patches: Vec::new(),
+            direct_call_runtime: Vec::new(),
             direct_call_main_offset: None,
         }
     }
 }
 
-fn build_entry_stub(
-    machine: Machine,
-    is_dll: bool,
-    subsystem: u16,
-    entry_name: Option<&str>,
-) -> EntryStub {
+/// Native offset within `build.text` of a runtime helper the entry
+/// stub direct-calls. Resolves the function name through the merged
+/// symbol tables (`func_names` -> `func_ent_pcs` -> `pc_to_native`),
+/// the same lineage the DWARF / CFI pass uses.
+fn runtime_symbol_offset(build: &Build, name: &str) -> Result<u32, C5Error> {
+    let idx = build
+        .func_names
+        .iter()
+        .position(|n| n == name)
+        .ok_or_else(|| {
+            C5Error::Compile(format!(
+                "PE entry stub references `{name}`, which the linked runtime does not define"
+            ))
+        })?;
+    let ent_pc = build.func_ent_pcs[idx];
+    Ok(build.pc_to_native[ent_pc] as u32)
+}
+
+fn build_entry_stub(machine: Machine, is_dll: bool) -> EntryStub {
     if is_dll {
         return build_dllmain_stub(machine);
     }
-    let gui = subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
-    // `wmain` -- swap `__getmainargs` for `__wgetmainargs` so
-    // argv comes through as `wchar_t **`.
-    let wide_console = !gui && entry_name == Some("wmain");
-    let getmainargs_import = if wide_console {
-        STUB_IMPORT_WGETMAINARGS
-    } else {
-        STUB_IMPORT_GETMAINARGS
-    };
-    match machine {
-        Machine::X86_64 if gui => build_x86_64_winmain_stub(),
-        Machine::X86_64 => build_x86_64_entry_stub(getmainargs_import),
-        Machine::Aarch64 if gui => build_aarch64_winmain_stub(),
-        Machine::Aarch64 => build_aarch64_entry_stub(getmainargs_import),
-    }
+    // The console / GUI / wide distinction lives in `__c5_entry` (gated
+    // by `__BADC_WIN_GUI__` / `__BADC_WIN_WIDE__` in the runtime TU), so
+    // the adapter is uniform across subsystems.
+    build_entry_adapter(machine)
 }
 
 /// Minimal `DllMain` for shared-library output. The Windows
@@ -2264,356 +2248,61 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
     };
     EntryStub {
         bytes,
-        stub_imports: Vec::new(),
-        iat_patches: Vec::new(),
+        direct_call_runtime: Vec::new(),
         direct_call_main_offset: None,
     }
 }
 
-fn build_x86_64_entry_stub(getmainargs_import: (&'static str, &'static str)) -> EntryStub {
-    // Stack frame for the call to `__getmainargs(int* pargc,
-    // char*** pargv, char*** penvp, int doWildcardExpand,
-    // _startupinfo* sinfo)`. Win64 passes the first four args in
-    // rcx/rdx/r8/r9 and the fifth on the stack at [rsp + 0x20]
-    // (right above the 32-byte shadow space).
-    //
-    // We carve 0x48 bytes from rsp for:
-    //   [rsp + 0x00..0x20]  shadow space for our callees
-    //   [rsp + 0x20..0x28]  fifth arg slot (pointer to _startupinfo)
-    //   [rsp + 0x28..0x30]  argc out (int, but the slot is 8 bytes
-    //                        so it stays aligned for the next thing)
-    //   [rsp + 0x30..0x38]  argv out (char**)
-    //   [rsp + 0x38..0x40]  envp out (char**), unused
-    //   [rsp + 0x40..0x48]  _startupinfo struct (`int newmode`,
-    //                        zero-initialised) plus 4 bytes pad
-    //
-    // 0x48 is 8 mod 16, so subtracting it from the entry rsp (also
-    // 8 mod 16, since the OS-pushed return address sits on top)
-    // leaves rsp 16-aligned for the call.
-    let mut bytes: Vec<u8> = Vec::with_capacity(80);
-
-    // sub rsp, 0x48                    (4 bytes)
-    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x48]);
-
-    // Zero the _startupinfo struct (4 bytes is enough).
-    // xor eax, eax                      (2 bytes)
-    bytes.extend_from_slice(&[0x31, 0xC0]);
-    // mov [rsp+0x40], eax              (4 bytes)
-    bytes.extend_from_slice(&[0x89, 0x44, 0x24, 0x40]);
-
-    // 5th arg: pointer to _startupinfo, stored at [rsp+0x20].
-    // lea rax, [rsp+0x40]              (5 bytes)
-    bytes.extend_from_slice(&[0x48, 0x8D, 0x44, 0x24, 0x40]);
-    // mov [rsp+0x20], rax              (5 bytes)
-    bytes.extend_from_slice(&[0x48, 0x89, 0x44, 0x24, 0x20]);
-
-    // arg1 = &argc -> &[rsp+0x28].   lea rcx, [rsp+0x28]  (5 bytes)
-    bytes.extend_from_slice(&[0x48, 0x8D, 0x4C, 0x24, 0x28]);
-    // arg2 = &argv -> &[rsp+0x30].   lea rdx, [rsp+0x30]  (5 bytes)
-    bytes.extend_from_slice(&[0x48, 0x8D, 0x54, 0x24, 0x30]);
-    // arg3 = &envp -> &[rsp+0x38].   lea r8, [rsp+0x38]   (5 bytes)
-    bytes.extend_from_slice(&[0x4C, 0x8D, 0x44, 0x24, 0x38]);
-    // arg4 = 0 (no wildcard expansion).   xor r9d, r9d   (3 bytes)
-    bytes.extend_from_slice(&[0x45, 0x31, 0xC9]);
-
-    // call qword [rip + 0]  __getmainargs   (6 bytes)
-    let call_gma_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-
-    // mov rcx, [rsp+0x28]             (5 bytes)  -- argc
-    bytes.extend_from_slice(&[0x48, 0x8B, 0x4C, 0x24, 0x28]);
-    // mov rdx, [rsp+0x30]             (5 bytes)  -- argv
-    bytes.extend_from_slice(&[0x48, 0x8B, 0x54, 0x24, 0x30]);
-
-    // call main rel32 (placeholder, 5 bytes)
-    let call_main_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]);
-
-    // mov rcx, rax                    (3 bytes)  -- main return value
-    bytes.extend_from_slice(&[0x48, 0x89, 0xC1]);
-
-    // call qword [rip + 0]  ExitProcess  (6 bytes)
-    let call_exit_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-
-    // Patch offsets point at the start of the `call qword [rip+...]`
-    // instruction (not at the disp32 byte); the patcher computes
-    // `disp32 = target - (call + 6)`.
-    EntryStub {
-        bytes,
-        stub_imports: vec![getmainargs_import, STUB_IMPORT_EXIT],
-        iat_patches: vec![
-            StubIatPatch {
-                byte_offset: call_gma_off,
-                stub_import_idx: 0,
-            },
-            StubIatPatch {
-                byte_offset: call_exit_off,
-                stub_import_idx: 1,
-            },
-        ],
-        direct_call_main_offset: Some(call_main_off),
-    }
-}
-
-/// x86_64 GUI-subsystem entry stub. Produces:
-///
-///   rcx = GetModuleHandleA(NULL)   -- hInstance
-///   rdx = 0                        -- hPrevInstance
-///   r8  = GetCommandLineA()        -- lpCmdLine
-///   r9  = SW_SHOWNORMAL (1)        -- nShowCmd
-///   call WinMain
-///   mov  ecx, eax
-///   call exit
-fn build_x86_64_winmain_stub() -> EntryStub {
-    // Win64 ABI: every call gets 32 bytes of caller-allocated
-    // shadow space at `[rsp..rsp+0x20]` that the callee may
-    // clobber. Values that must survive a call therefore live
-    // above the shadow region.
-    //
-    // Frame layout after `sub rsp, 0x28` (40 bytes):
-    //   [rsp+0x00..rsp+0x20]  shadow space (clobbered by callees)
-    //   [rsp+0x20..rsp+0x28]  hInstance spill across GetCommandLineA
-    //
-    // Entry rsp is `8 mod 16` (OS-pushed return address); after
-    // `sub 0x28` it is `0 mod 16`, aligned for the calls below.
-    let mut bytes: Vec<u8> = Vec::with_capacity(64);
-
-    // sub rsp, 0x28                          (4 bytes)
-    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
-
-    // xor ecx, ecx                           (2 bytes) -- arg1 = NULL
-    bytes.extend_from_slice(&[0x31, 0xC9]);
-    // call qword [rip+0]  GetModuleHandleA   (6 bytes)
-    let call_gmh_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-    // mov [rsp+0x20], rax  (5 bytes) -- spill hInstance above shadow.
-    bytes.extend_from_slice(&[0x48, 0x89, 0x44, 0x24, 0x20]);
-
-    // call qword [rip+0]  GetCommandLineA    (6 bytes)
-    let call_gcl_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-
-    // mov r8, rax                            (3 bytes) -- arg3 = lpCmdLine
-    bytes.extend_from_slice(&[0x49, 0x89, 0xC0]);
-    // mov rcx, [rsp+0x20]                    (5 bytes) -- arg1 = hInstance
-    bytes.extend_from_slice(&[0x48, 0x8B, 0x4C, 0x24, 0x20]);
-    // xor edx, edx                           (2 bytes) -- arg2 = NULL
-    bytes.extend_from_slice(&[0x31, 0xD2]);
-    // mov r9d, SW_SHOWNORMAL                 (6 bytes) -- arg4 = 1
-    bytes.push(0x41);
-    bytes.push(0xB9);
-    bytes.extend_from_slice(&SW_SHOWNORMAL.to_le_bytes());
-
-    // call WinMain rel32 (placeholder, 5 bytes)
-    let call_main_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]);
-
-    // mov ecx, eax                           (2 bytes) -- exit code
-    bytes.extend_from_slice(&[0x89, 0xC1]);
-    // call qword [rip+0]  exit               (6 bytes)
-    let call_exit_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-
-    EntryStub {
-        bytes,
-        stub_imports: vec![
-            STUB_IMPORT_GETMODULEHANDLEA,
-            STUB_IMPORT_GETCOMMANDLINEA,
-            STUB_IMPORT_EXIT,
-        ],
-        iat_patches: vec![
-            StubIatPatch {
-                byte_offset: call_gmh_off,
-                stub_import_idx: 0,
-            },
-            StubIatPatch {
-                byte_offset: call_gcl_off,
-                stub_import_idx: 1,
-            },
-            StubIatPatch {
-                byte_offset: call_exit_off,
-                stub_import_idx: 2,
-            },
-        ],
-        direct_call_main_offset: Some(call_main_off),
-    }
-}
-
-/// AArch64 entry stub. Same flow as the x86_64 one: prologue, lay
-/// out a small frame for argc/argv/envp/_startupinfo, call
-/// `__getmainargs` via IAT, hand argc/argv to `main`, then call
-/// `ExitProcess` via IAT. AAPCS64 calling convention -- args are
-/// in x0..x7, no shadow space.
-fn build_aarch64_entry_stub(getmainargs_import: (&'static str, &'static str)) -> EntryStub {
-    use super::aarch64 as a;
-    let mut bytes: Vec<u8> = Vec::with_capacity(80);
-
-    // Frame layout after `sub sp, sp, #0x40` (carved below the
-    // saved fp/lr pair):
-    //   [sp + 0x00..0x08]  argc out (low 32 bits used; we zero the
-    //                        slot before the call and load 64 bits
-    //                        afterwards so the upper bits are 0)
-    //   [sp + 0x08..0x10]  argv out (char**)
-    //   [sp + 0x10..0x18]  envp out (char***), unused after
-    //   [sp + 0x18..0x20]  _startupinfo (`int newmode`, zeroed)
-    //   [sp + 0x20..0x40]  padding (kept around to give us room
-    //                        for nested call's spill slots if the
-    //                        callee wanted them; AAPCS64 doesn't
-    //                        require shadow space, so this is just
-    //                        slack)
-
-    // stp x29, x30, [sp, #-16]!         (save fp, lr; pre-decrement)
-    a::emit(
-        &mut bytes,
-        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
-    );
-    // mov x29, sp                        (= add x29, sp, #0)
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
-    // sub sp, sp, #0x40
-    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 0x40));
-
-    // Zero argc and _startupinfo slots so the post-call ldr x0
-    // gets a clean zero-extended argc and __getmainargs sees a
-    // zeroed _startupinfo struct.
-    // str xzr, [sp, #0x00]
-    a::emit(&mut bytes, a::enc_str_imm(a::Reg(31), a::Reg::SP, 0x00));
-    // str xzr, [sp, #0x18]
-    a::emit(&mut bytes, a::enc_str_imm(a::Reg(31), a::Reg::SP, 0x18));
-
-    // Set up __getmainargs args:
-    //   x0 = &argc, x1 = &argv, x2 = &envp,
-    //   x3 = doWildcardExpansion (0), x4 = &_startupinfo
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0x00));
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X1, a::Reg::SP, 0x08));
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X2, a::Reg::SP, 0x10));
-    a::emit(&mut bytes, a::enc_movz(a::Reg(3), 0, 0));
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg(4), a::Reg::SP, 0x18));
-
-    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
-    let iat_gma_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0)); // placeholder
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0)); // placeholder
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    // Load argc into x0 (low 32 bits = int value, high 32 = zero
-    // since we zeroed the slot first). Load argv into x1.
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X0, a::Reg::SP, 0x00));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X1, a::Reg::SP, 0x08));
-
-    // bl main (rel26 placeholder).
-    let bl_main_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_bl(0));
-
-    // main's return value is in w0 / x0 already (AAPCS64), so it's
-    // the first arg for ExitProcess. Just call through the IAT.
-    let iat_exit_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    EntryStub {
-        bytes,
-        stub_imports: vec![getmainargs_import, STUB_IMPORT_EXIT],
-        iat_patches: vec![
-            StubIatPatch {
-                byte_offset: iat_gma_off,
-                stub_import_idx: 0,
-            },
-            StubIatPatch {
-                byte_offset: iat_exit_off,
-                stub_import_idx: 1,
-            },
-        ],
-        direct_call_main_offset: Some(bl_main_off),
-    }
-}
-
-/// AArch64 GUI-subsystem entry stub. AAPCS64 register-passing:
-///
-///   x0 = GetModuleHandleA(NULL)   -- hInstance
-///   x1 = 0                        -- hPrevInstance
-///   x2 = GetCommandLineA()        -- lpCmdLine
-///   w3 = SW_SHOWNORMAL (1)        -- nShowCmd
-///   bl WinMain
-///   bl exit
-fn build_aarch64_winmain_stub() -> EntryStub {
-    use super::aarch64 as a;
-    let mut bytes: Vec<u8> = Vec::with_capacity(64);
-
-    // Save fp/lr and carve 16 bytes for the hInstance spill.
-    // Total stack delta = 32 bytes; sp stays 16-aligned.
-    // stp x29, x30, [sp, #-16]!
-    a::emit(
-        &mut bytes,
-        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
-    );
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
-    // sub sp, sp, #0x10  -- 1 spill slot, kept 16-aligned
-    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 0x10));
-
-    // mov w0, #0  -- arg1 (NULL) to GetModuleHandleA
-    a::emit(&mut bytes, a::enc_movz(a::Reg::X0, 0, 0));
-
-    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
-    let iat_gmh_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    // str x0, [sp]  -- spill hInstance across the next call
-    a::emit(&mut bytes, a::enc_str_imm(a::Reg::X0, a::Reg::SP, 0x00));
-
-    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
-    let iat_gcl_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    // WinMain args. lpCmdLine is in x0 from GetCommandLineA;
-    // move it to x2 before reloading x0 with hInstance.
-    // mov x2, x0
-    a::emit(&mut bytes, a::enc_mov_reg(a::Reg::X2, a::Reg::X0));
-    // ldr x0, [sp]   -- reload hInstance
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X0, a::Reg::SP, 0x00));
-    // mov x1, #0
-    a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
-    // mov w3, #SW_SHOWNORMAL (1) -- fits in one movz.
-    a::emit(&mut bytes, a::enc_movz(a::Reg(3), SW_SHOWNORMAL as u16, 0));
-
-    // bl WinMain (rel26 placeholder).
-    let bl_main_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_bl(0));
-
-    // WinMain's return is in w0; `exit` takes it as its first arg.
-    // `exit` does not return, so no epilogue.
-    let iat_exit_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    EntryStub {
-        bytes,
-        stub_imports: vec![
-            STUB_IMPORT_GETMODULEHANDLEA,
-            STUB_IMPORT_GETCOMMANDLINEA,
-            STUB_IMPORT_EXIT,
-        ],
-        iat_patches: vec![
-            StubIatPatch {
-                byte_offset: iat_gmh_off,
-                stub_import_idx: 0,
-            },
-            StubIatPatch {
-                byte_offset: iat_gcl_off,
-                stub_import_idx: 1,
-            },
-            StubIatPatch {
-                byte_offset: iat_exit_off,
-                stub_import_idx: 2,
-            },
-        ],
-        direct_call_main_offset: Some(bl_main_off),
+/// The executable entry adapter -- a minimal per-arch shim that loads
+/// the initial stack pointer and the image-base offset into the first
+/// two argument registers and calls `__c5_entry`. The Windows entry
+/// ABI is not the SysV stack layout, so the Windows `__c5_entry`
+/// ignores `sp`; the arguments are passed uniformly with the other
+/// targets. `__c5_entry` runs the process startup and does not return.
+fn build_entry_adapter(machine: Machine) -> EntryStub {
+    match machine {
+        Machine::X86_64 => {
+            // mov rcx, rsp        -- arg0 = stack pointer
+            // sub rsp, 0x28       -- 32-byte shadow space + 16-align
+            // xor edx, edx        -- arg1 = image offset (0)
+            // call __c5_entry
+            // ud2                 -- unreachable
+            //
+            // The loader calls the entry, so rsp is `8 mod 16` here;
+            // `sub 0x28` brings it to `0 mod 16` and `call` pushes 8,
+            // giving `__c5_entry` the Win64-required alignment at its
+            // own call sites.
+            let mut bytes: Vec<u8> = Vec::with_capacity(16);
+            bytes.extend_from_slice(&[0x48, 0x89, 0xE1]); // mov rcx, rsp
+            bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
+            bytes.extend_from_slice(&[0x31, 0xD2]); // xor edx, edx
+            let call_off = bytes.len() as u32;
+            bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]); // call __c5_entry
+            bytes.extend_from_slice(&[0x0F, 0x0B]); // ud2
+            EntryStub {
+                bytes,
+                direct_call_runtime: vec![(call_off, RT_ENTRY)],
+                direct_call_main_offset: None,
+            }
+        }
+        Machine::Aarch64 => {
+            use super::aarch64 as a;
+            // mov x0, sp          -- arg0 = stack pointer
+            // mov x1, #0          -- arg1 = image offset
+            // bl  __c5_entry
+            // brk #1              -- unreachable
+            let mut bytes: Vec<u8> = Vec::with_capacity(16);
+            a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0));
+            a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
+            let bl_off = bytes.len() as u32;
+            a::emit(&mut bytes, a::enc_bl(0)); // patched to __c5_entry
+            a::emit(&mut bytes, 0xD420_0020); // brk #1
+            EntryStub {
+                bytes,
+                direct_call_runtime: vec![(bl_off, RT_ENTRY)],
+                direct_call_main_offset: None,
+            }
+        }
     }
 }
 
@@ -2971,6 +2660,32 @@ fn pad_to(out: &mut Vec<u8>, target_len: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::ToString;
+
+    /// Append the entry-stub runtime helpers to `build` so the
+    /// writer's executable stub direct-call patches resolve. The real
+    /// link path supplies these from the embedded startup runtime;
+    /// writer-level tests bypass the linker, so point each at the
+    /// program entry. These tests inspect PE structure, not the stub
+    /// call targets, and never execute the image.
+    fn inject_runtime_stub_symbols(build: &mut Build) {
+        let pc = build.pc_to_native.len();
+        build.pc_to_native.push(build.entry_offset);
+        build.func_names.push(RT_ENTRY.to_string());
+        build.func_ent_pcs.push(pc);
+    }
+
+    /// `codegen::lower_for` plus the runtime-stub symbol injection, so
+    /// every writer-level test resolves the entry stub's direct calls.
+    fn lower_for(
+        program: &Program,
+        target: super::super::Target,
+        options: super::super::NativeOptions,
+    ) -> Result<Build, C5Error> {
+        let mut build = super::super::lower_for(program, target, options)?;
+        inject_runtime_stub_symbols(&mut build);
+        Ok(build)
+    }
 
     #[test]
     fn round_up_aligns_correctly() {
@@ -3008,184 +2723,27 @@ mod tests {
         }
     }
 
-    /// `entry_name = Some("wmain")` swaps the `__getmainargs`
-    /// IAT entry for `__wgetmainargs` so the wide-char console
-    /// entry receives `wchar_t **` argv. The stub byte layout
-    /// is otherwise identical to the narrow path.
+    /// The executable entry is the uniform adapter that calls
+    /// `__c5_entry`; the console / GUI / wide distinction lives in the
+    /// runtime, so the adapter is identical regardless of subsystem.
     #[test]
-    fn x86_64_wmain_entry_stub_uses_wgetmainargs() {
-        let s_main = build_entry_stub(
-            Machine::X86_64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_CUI,
-            Some("main"),
-        );
-        let s_wmain = build_entry_stub(
-            Machine::X86_64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_CUI,
-            Some("wmain"),
-        );
-        assert_eq!(s_main.bytes, s_wmain.bytes);
-        assert_eq!(s_main.iat_patches.len(), s_wmain.iat_patches.len());
-        assert_eq!(s_main.stub_imports[0], STUB_IMPORT_GETMAINARGS);
-        assert_eq!(s_wmain.stub_imports[0], STUB_IMPORT_WGETMAINARGS);
-        assert_eq!(s_main.stub_imports[1], STUB_IMPORT_EXIT);
-        assert_eq!(s_wmain.stub_imports[1], STUB_IMPORT_EXIT);
+    fn entry_adapter_calls_c5_entry_x86_64() {
+        let s = build_entry_stub(Machine::X86_64, false);
+        // mov rcx,rsp(3) + sub rsp,0x28(4) + xor edx,edx(2)
+        //   + call __c5_entry(5) + ud2(2) = 16 bytes.
+        assert_eq!(s.bytes.len(), 16);
+        assert_eq!(s.direct_call_runtime, vec![(9, RT_ENTRY)]);
+        assert_eq!(s.direct_call_main_offset, None);
+        assert_eq!(&s.bytes[14..16], &[0x0F, 0x0B], "adapter must end in ud2");
     }
 
     #[test]
-    fn x86_64_console_entry_stub_layout_matches_expected_size() {
-        let s = build_entry_stub(
-            Machine::X86_64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_CUI,
-            Some("main"),
-        );
-        // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
-        assert_eq!(s.bytes.len(), 68);
-        assert_eq!(
-            s.stub_imports,
-            vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]
-        );
-        assert_eq!(s.iat_patches.len(), 2);
-        assert_eq!(s.iat_patches[0].byte_offset, 38);
-        assert_eq!(s.iat_patches[0].stub_import_idx, 0);
-        assert_eq!(s.iat_patches[1].byte_offset, 62);
-        assert_eq!(s.iat_patches[1].stub_import_idx, 1);
-        assert_eq!(s.direct_call_main_offset, Some(54));
-    }
-
-    #[test]
-    fn aarch64_console_entry_stub_is_one_word_per_instruction() {
-        let s = build_entry_stub(
-            Machine::Aarch64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_CUI,
-            Some("main"),
-        );
-        // 19 instructions * 4 bytes = 76 bytes.
-        assert_eq!(s.bytes.len(), 76);
-        assert_eq!(
-            s.stub_imports,
-            vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]
-        );
-        assert_eq!(s.iat_patches.len(), 2);
-        let gma = s.iat_patches[0].byte_offset;
-        let exit = s.iat_patches[1].byte_offset;
-        let main = s.direct_call_main_offset.unwrap();
-        assert!(gma.is_multiple_of(4));
-        assert!(exit.is_multiple_of(4));
-        assert!(main.is_multiple_of(4));
-        // Stub order: __getmainargs, bl main, exit.
-        assert!(gma < main);
-        assert!(main < exit);
-    }
-
-    #[test]
-    fn x86_64_gui_entry_stub_pulls_in_kernel32_imports() {
-        let s = build_entry_stub(
-            Machine::X86_64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_GUI,
-            Some("WinMain"),
-        );
-        // Three IAT lookups + one direct call to WinMain. The GUI
-        // stub does not call `__getmainargs`.
-        assert_eq!(
-            s.stub_imports,
-            vec![
-                STUB_IMPORT_GETMODULEHANDLEA,
-                STUB_IMPORT_GETCOMMANDLINEA,
-                STUB_IMPORT_EXIT,
-            ]
-        );
-        assert_eq!(s.iat_patches.len(), 3);
-        // Patches in source order: GetModuleHandleA,
-        // GetCommandLineA, exit. The call to WinMain sits
-        // between GetCommandLineA and exit.
-        let gmh = s.iat_patches[0].byte_offset;
-        let gcl = s.iat_patches[1].byte_offset;
-        let main = s.direct_call_main_offset.unwrap();
-        let exit = s.iat_patches[2].byte_offset;
-        assert_eq!(s.iat_patches[0].stub_import_idx, 0);
-        assert_eq!(s.iat_patches[1].stub_import_idx, 1);
-        assert_eq!(s.iat_patches[2].stub_import_idx, 2);
-        assert!(gmh < gcl);
-        assert!(gcl < main);
-        assert!(main < exit);
-        // `mov r9d, 1` (SW_SHOWNORMAL): 41 B9 01 00 00 00.
-        let needle: &[u8] = &[0x41, 0xB9, 0x01, 0x00, 0x00, 0x00];
-        assert!(
-            s.bytes.windows(needle.len()).any(|w| w == needle),
-            "GUI stub missing `mov r9d, SW_SHOWNORMAL`: bytes = {:02X?}",
-            s.bytes
-        );
-
-        // The hInstance spill must live above the 32-byte Win64
-        // shadow region; storing at `[rsp]` (inside shadow) would
-        // be legal for the callee to clobber. Look for
-        // `mov [rsp+0x20], rax` (48 89 44 24 20) and its matching
-        // reload `mov rcx, [rsp+0x20]` (48 8B 4C 24 20).
-        let store_at_0x20: &[u8] = &[0x48, 0x89, 0x44, 0x24, 0x20];
-        let load_at_0x20: &[u8] = &[0x48, 0x8B, 0x4C, 0x24, 0x20];
-        assert!(
-            s.bytes
-                .windows(store_at_0x20.len())
-                .any(|w| w == store_at_0x20),
-            "GUI stub must spill hInstance above shadow space (`mov [rsp+0x20], rax`): {:02X?}",
-            s.bytes
-        );
-        assert!(
-            s.bytes
-                .windows(load_at_0x20.len())
-                .any(|w| w == load_at_0x20),
-            "GUI stub must reload hInstance from above shadow space (`mov rcx, [rsp+0x20]`): {:02X?}",
-            s.bytes
-        );
-        // Reject a spill at `[rsp]` (48 89 04 24).
-        let store_at_rsp: &[u8] = &[0x48, 0x89, 0x04, 0x24];
-        assert!(
-            !s.bytes
-                .windows(store_at_rsp.len())
-                .any(|w| w == store_at_rsp),
-            "GUI stub must NOT spill into shadow space (`mov [rsp], rax`): {:02X?}",
-            s.bytes
-        );
-    }
-
-    #[test]
-    fn aarch64_gui_entry_stub_pulls_in_kernel32_imports() {
-        let s = build_entry_stub(
-            Machine::Aarch64,
-            false,
-            IMAGE_SUBSYSTEM_WINDOWS_GUI,
-            Some("WinMain"),
-        );
-        assert_eq!(
-            s.stub_imports,
-            vec![
-                STUB_IMPORT_GETMODULEHANDLEA,
-                STUB_IMPORT_GETCOMMANDLINEA,
-                STUB_IMPORT_EXIT,
-            ]
-        );
-        assert_eq!(s.iat_patches.len(), 3);
-        // One instruction word per op; every patch site is
-        // 4-byte aligned.
-        for p in &s.iat_patches {
-            assert!(p.byte_offset.is_multiple_of(4));
-        }
-        assert!(s.direct_call_main_offset.unwrap().is_multiple_of(4));
-        // Source order: GetModuleHandleA, GetCommandLineA, exit;
-        // bl WinMain falls between the second and third.
-        let gmh = s.iat_patches[0].byte_offset;
-        let gcl = s.iat_patches[1].byte_offset;
-        let main = s.direct_call_main_offset.unwrap();
-        let exit = s.iat_patches[2].byte_offset;
-        assert!(gmh < gcl);
-        assert!(gcl < main);
-        assert!(main < exit);
+    fn entry_adapter_calls_c5_entry_aarch64() {
+        let s = build_entry_stub(Machine::Aarch64, false);
+        // mov x0,sp + mov x1,#0 + bl __c5_entry + brk #1 = 16 bytes.
+        assert_eq!(s.bytes.len(), 16);
+        assert_eq!(s.direct_call_runtime, vec![(8, RT_ENTRY)]);
+        assert_eq!(s.direct_call_main_offset, None);
     }
 
     /// Offset within the Optional Header at which DataDirectory[i]
@@ -3219,7 +2777,7 @@ mod tests {
         let program = Compiler::new("int main() { return 0; }".to_string())
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -3248,7 +2806,7 @@ mod tests {
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -3356,7 +2914,7 @@ mod tests {
         let program = Compiler::new(super::super::super::tests::with_prelude(src))
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsAarch64,
             super::super::NativeOptions::default(),
@@ -3411,12 +2969,8 @@ mod tests {
                 let program = Compiler::new(super::super::super::tests::with_prelude(src))
                     .compile()
                     .expect("compile");
-                let build = super::super::lower_for(
-                    &program,
-                    target,
-                    super::super::NativeOptions::default(),
-                )
-                .expect("lower");
+                let build = lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
                 let machine = match target {
                     super::super::Target::WindowsX64 => Machine::X86_64,
                     super::super::Target::WindowsAarch64 => Machine::Aarch64,
@@ -3463,8 +3017,7 @@ mod tests {
                 .compile()
                 .expect("compile");
             let build =
-                super::super::lower_for(&program, target, super::super::NativeOptions::default())
-                    .expect("lower");
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
             let machine = match target {
                 super::super::Target::WindowsX64 => Machine::X86_64,
                 super::super::Target::WindowsAarch64 => Machine::Aarch64,
@@ -3537,7 +3090,7 @@ mod tests {
         let program = Compiler::new("int main() { return 0; }".to_string())
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -3584,7 +3137,7 @@ mod tests {
                 Compiler::with_target(super::super::super::tests::with_prelude(src), target)
                     .compile()
                     .expect("compile");
-            let build = super::super::lower_for(
+            let build = lower_for(
                 &program,
                 target,
                 super::super::NativeOptions::new().with_shared_library(),
@@ -3659,17 +3212,16 @@ mod tests {
     #[test]
     fn dllmain_stub_returns_true() {
         // DLL stubs don't depend on subsystem; pass console.
-        let s_x64 = build_entry_stub(Machine::X86_64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI, None);
+        let s_x64 = build_entry_stub(Machine::X86_64, true);
         assert_eq!(
             s_x64.bytes,
             vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
             "x64 DllMain must be `mov eax, 1; ret`"
         );
-        assert!(s_x64.stub_imports.is_empty());
-        assert!(s_x64.iat_patches.is_empty());
+        assert!(s_x64.direct_call_runtime.is_empty());
         assert!(s_x64.direct_call_main_offset.is_none());
 
-        let s_arm = build_entry_stub(Machine::Aarch64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI, None);
+        let s_arm = build_entry_stub(Machine::Aarch64, true);
         // 2 instructions x 4 bytes.
         assert_eq!(s_arm.bytes.len(), 8);
         // First word: movz w0, #1 => 0x52800020 (movz is the
@@ -3728,7 +3280,7 @@ mod tests {
             #pragma export(answer)
         ";
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::new().with_shared_library(),
@@ -3772,7 +3324,7 @@ mod tests {
         let dllmain_pc = program
             .dllmain_pc
             .expect("compiler must record dllmain_pc when source defines DllMain");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::new().with_shared_library(),
@@ -3802,12 +3354,11 @@ mod tests {
     }
 
     /// `#pragma subsystem(windows)` sets Subsystem to
-    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` and selects the
-    /// WinMain-shaped stub. The import table must carry
-    /// `kernel32!GetModuleHandleA` and `kernel32!GetCommandLineA`
-    /// even though the source declares neither of them.
+    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` and selects the WinMain-shaped
+    /// stub. The stub direct-calls the `__c5_*` runtime helpers, so
+    /// the writer itself hardcodes no kernel32 / msvcrt import names.
     #[test]
-    fn gui_subsystem_emits_winmain_stub_imports() {
+    fn gui_subsystem_sets_gui_and_hardcodes_no_imports() {
         use crate::Compiler;
         let src = "
             #pragma subsystem(windows)
@@ -3818,7 +3369,7 @@ mod tests {
             }
         ";
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -3842,23 +3393,24 @@ mod tests {
             "`#pragma subsystem(windows)` must set Subsystem to WINDOWS_GUI"
         );
 
-        // 2) GUI-stub imports must appear as ASCII strings in the
-        //    image (the import-name table writes them verbatim).
-        //    msvcrt!__getmainargs must not appear -- the GUI stub
-        //    doesn't synthesize argv.
+        // 2) The writer hardcodes no CRT / kernel32 import names for
+        //    the GUI stub -- it direct-calls the `__c5_*` runtime
+        //    helpers, which carry the kernel32 / msvcrt bindings on
+        //    the real link path. A single-program image (no runtime
+        //    linked) therefore contains none of those import strings.
         let contains =
             |needle: &str| -> bool { bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) };
         assert!(
-            contains("GetModuleHandleA"),
-            "GUI subsystem must import kernel32!GetModuleHandleA"
+            !contains("GetModuleHandleA"),
+            "writer must not hardcode kernel32!GetModuleHandleA"
         );
         assert!(
-            contains("GetCommandLineA"),
-            "GUI subsystem must import kernel32!GetCommandLineA"
+            !contains("GetCommandLineA"),
+            "writer must not hardcode kernel32!GetCommandLineA"
         );
         assert!(
             !contains("__getmainargs"),
-            "GUI subsystem must NOT pull in msvcrt!__getmainargs (no argc/argv needed)"
+            "writer must not hardcode msvcrt!__getmainargs"
         );
     }
 
@@ -3878,7 +3430,7 @@ mod tests {
             "
         );
         let program = Compiler::new(src).compile().expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -3974,7 +3526,7 @@ mod tests {
             long NtProcessStartup(long peb) { (void)peb; return 0; }
         ";
         let program = Compiler::new(src.to_string()).compile().expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsAarch64,
             super::super::NativeOptions::default(),
@@ -4005,7 +3557,7 @@ mod tests {
         let program = Compiler::new("int main() { return 0; }".to_string())
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsX64,
             super::super::NativeOptions::default(),
@@ -4040,7 +3592,7 @@ mod tests {
         let program = Compiler::new("int main() { return 42; }".to_string())
             .compile()
             .expect("compile");
-        let build = super::super::lower_for(
+        let build = lower_for(
             &program,
             super::super::Target::WindowsAarch64,
             super::super::NativeOptions::default(),

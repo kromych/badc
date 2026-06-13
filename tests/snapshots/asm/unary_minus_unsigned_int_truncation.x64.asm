@@ -4,11 +4,13 @@ unary_minus_unsigned_int_truncation.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -47,7 +49,7 @@ Disassembly of section .text:
                	movl	%edx, %edx
                	orq	%rdx, %rcx
                	shrq	$0x1f, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	addq	$0x40, %rsp
@@ -83,7 +85,7 @@ Disassembly of section .text:
                	shrq	$0x1f, %rax
                	xorq	$0x1, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x7, %eax
                	addq	$0x40, %rsp

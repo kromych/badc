@@ -4,12 +4,12 @@ clock_monotonic_advances.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x280              // =640
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
@@ -52,7 +52,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	cmp	x0, x17
                	cset	x20, eq
-               	b	<addr>
                	cbz	x20, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
@@ -81,7 +80,6 @@ Disassembly of section .text:
                	movk	x17, #0x3b9a, lsl #16
                	cmp	x0, x17
                	cset	x20, ge
-               	b	<addr>
                	cbz	x20, <addr>
                	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
@@ -91,7 +89,6 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
                	sxtw	x2, w1
                	mov	x17, #0x4240            // =16960
                	movk	x17, #0xf, lsl #16
@@ -142,7 +139,6 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x8]
                	cmp	x0, x1
                	cset	x1, lt
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x0, #0x7                // =7
                	ldr	x20, [sp]

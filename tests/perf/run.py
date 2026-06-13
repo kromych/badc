@@ -89,6 +89,21 @@ FIXTURE_FLAGS: dict[str, list[str]] = {
         "-DMINIZ_NO_ARCHIVE_APIS",
     ],
     "stb.c": [f"-I{REPO_ROOT}/demos/stb"],
+    # quickjs_bench.c drives the full engine, so its other seven
+    # translation units ride along as extra source arguments. qjs.c is
+    # excluded -- the bench supplies its own main().
+    "quickjs_bench.c": [
+        f"-I{REPO_ROOT}/demos/quickjs",
+        "-D_GNU_SOURCE",
+        '-DCONFIG_VERSION="2024"',
+        f"{REPO_ROOT}/demos/quickjs/quickjs.c",
+        f"{REPO_ROOT}/demos/quickjs/quickjs-libc.c",
+        f"{REPO_ROOT}/demos/quickjs/cutils.c",
+        f"{REPO_ROOT}/demos/quickjs/libregexp.c",
+        f"{REPO_ROOT}/demos/quickjs/libunicode.c",
+        f"{REPO_ROOT}/demos/quickjs/dtoa.c",
+        f"{REPO_ROOT}/demos/quickjs/repl_stub.c",
+    ],
 }
 
 # Flags applied only when the compiler is badc. badc does not ship the
@@ -101,6 +116,13 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
     # bindings do not include mremap / MREMAP_MAYMOVE.
     "sqlite.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
     "sqlite_bench.c": ["-include", "msvc_compat.h", "-DHAVE_MREMAP=0"],
+}
+
+# Compilers that cannot build a given fixture, skipped rather than counted
+# as a build failure. The vendored tcc does not implement the AArch64
+# `yield` instruction quickjs uses in a spin loop.
+FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
+    "quickjs_bench.c": {"tcc"},
 }
 
 
@@ -302,6 +324,7 @@ def main() -> int:
     fixtures = [
         "fib.c",
         "qsort.c",
+        "sieve.c",
         "crypto.c",
         "compress.c",
         "stb.c",
@@ -309,6 +332,7 @@ def main() -> int:
         # Multi-phase workload (bulk insert, aggregation, sort, index,
         # join, subquery, update / delete; 100k + 50k rows).
         "sqlite_bench.c",
+        "quickjs_bench.c",
     ]
     results: list[Result] = []
     any_fail = False
@@ -323,6 +347,8 @@ def main() -> int:
             any_fail = True
             continue
         for c in compilers:
+            if c.name in FIXTURE_SKIP_COMPILERS.get(fix, set()):
+                continue
             out = out_dir / f"{src.stem}-{c.name.replace(' ', '_').replace('/', '_')}{EXE}"
             if not compile_one(c, src, out):
                 any_fail = True

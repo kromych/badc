@@ -4,16 +4,18 @@ fn_ptr_decay_inside_block.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sxtw	x0, w0
                	add	x0, x0, #0x64
                	sxtw	x0, w0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
@@ -85,7 +87,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x2                // =2
-               	b	<addr>
                	mov	x0, x1
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]

@@ -4,23 +4,29 @@ function_pointer_typedefs.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<do_add>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	addq	%rsi, %rax
                	movslq	%eax, %rax
                	retq
+
+<do_sub>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	subq	%rsi, %rax
                	movslq	%eax, %rax
                	retq
+
+<do_cmp>:
                	movslq	%edi, %rdi
                	movslq	%esi, %rsi
                	cmpq	%rsi, %rdi
@@ -33,6 +39,8 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
+
+<apply>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%esi, %rsi
@@ -43,6 +51,8 @@ Disassembly of section .text:
                	callq	*%r11
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x60, %rsp
@@ -78,7 +88,7 @@ Disassembly of section .text:
                	movq	%rbx, %r11
                	movq	%rdi, %rsi
                	callq	*%r11
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx

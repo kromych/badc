@@ -9,6 +9,552 @@ fn arithmetic() {
 }
 
 #[test]
+fn hex_float_literal() {
+    // C99 6.4.4.2 hexadecimal floating constants.
+    assert_eq!(run_fixture("hex_float_literal.c"), 0);
+}
+
+#[test]
+fn bool_normalize_c99() {
+    // C99 6.3.1.2 `_Bool` 0/1 normalisation on every conversion.
+    assert_eq!(run_fixture("bool_normalize_c99.c"), 0);
+}
+
+#[test]
+fn compound_literal_block() {
+    // C99 6.5.2.5 block-scope compound literals.
+    assert_eq!(run_fixture("compound_literal_block.c"), 0);
+}
+
+#[test]
+fn cast_fn_ptr_call() {
+    // C99 6.5.4 cast to an abstract function-pointer type.
+    assert_eq!(run_fixture("cast_fn_ptr_call.c"), 0);
+}
+
+#[test]
+fn struct_arg_in_registers() {
+    // C99 6.5.2.2 + AAPCS64 6.8.2: small integer aggregates passed by
+    // value in argument registers, with by-value copy semantics.
+    assert_eq!(run_fixture("struct_arg_in_registers.c"), 0);
+}
+
+#[test]
+fn struct_arg_two_eightbyte() {
+    // AAPCS64 6.8.2: two two-eightbyte aggregates in one call -- one
+    // aggregate's load must not clobber the other's pending base
+    // register.
+    assert_eq!(run_fixture("struct_arg_two_eightbyte.c"), 0);
+}
+
+#[test]
+fn struct_arg_by_stack() {
+    // System V AMD64 3.2.3: an aggregate larger than two eightbytes is
+    // MEMORY class, passed inline on the caller's outgoing stack; the
+    // callee copies it from the incoming stack into its own local.
+    assert_eq!(run_fixture("struct_arg_by_stack.c"), 0);
+}
+
+#[test]
+fn wide_char_utf8() {
+    // A multibyte UTF-8 code point decodes to its scalar value in a
+    // wide char constant and survives the preprocessor in a narrow
+    // string literal.
+    assert_eq!(run_fixture("wide_char_utf8.c"), 0);
+}
+
+#[test]
+fn local_aggregate_runtime_init() {
+    // A local aggregate initializer mixes a runtime file-scope scalar
+    // read with a string-literal char-array member and a constant
+    // global address.
+    assert_eq!(run_fixture("local_aggregate_runtime_init.c"), 0);
+}
+
+#[test]
+fn aggregate_init_struct_member_copy() {
+    // C99 6.7.8p13: a struct member of an automatic aggregate initialized
+    // by a non-constant struct expression (subscript, deref, by-value
+    // parameter) copies the source's bytes, not its address.
+    assert_eq!(run_fixture("aggregate_init_struct_member_copy.c"), 0);
+}
+
+#[test]
+fn variadic_union_struct_return() {
+    // A variadic function returning a 16-byte struct whose first eightbyte
+    // is a union overlapping a double with an int/pointer returns in the
+    // integer result registers while its variadic tail rides the host
+    // stack.
+    assert_eq!(run_fixture("variadic_union_struct_return.c"), 0);
+}
+
+#[test]
+fn union_fp_member_regs_return() {
+    // C99 6.7.2.1 / System V AMD64 3.2.3 / AAPCS64 6.9: a 16-byte struct
+    // whose first eightbyte overlaps a double with an int/pointer member
+    // returns in the integer result registers, not through an out-pointer.
+    assert_eq!(run_fixture("union_fp_member_regs_return.c"), 0);
+}
+
+#[test]
+fn fn_ptr_float_return() {
+    // C99 6.2.5p10 / 6.3.1.8: a call through a function pointer with a
+    // `float` return type yields a single-precision value; the indirect
+    // result must be tagged f32 so the store does not narrow it twice.
+    assert_eq!(run_fixture("fn_ptr_float_return.c"), 0);
+}
+
+#[test]
+fn fn_ptr_float_arg() {
+    // C99 6.5.2.2p7: a float argument through a function pointer is
+    // converted to the pointer's declared parameter type, not promoted to
+    // double. Covers a fn-pointer variable, typedef, and a callback
+    // parameter whose own parameter name shadows the enclosing prototype.
+    assert_eq!(run_fixture("fn_ptr_float_arg.c"), 0);
+}
+
+#[test]
+fn variadic_fn_ptr_init() {
+    // C99 6.5.2.2: a variadic function pointer declared with an initializer
+    // (or via a typedef) keeps its variadic prototype, so an indirect call
+    // places the variadic arguments per the host variadic ABI.
+    assert_eq!(run_fixture("variadic_fn_ptr_init.c"), 0);
+}
+
+#[test]
+fn variadic_struct_return() {
+    // A variadic function returning a struct by value: the call must
+    // recover the result registers into the caller's temp.
+    assert_eq!(run_fixture("variadic_struct_return.c"), 0);
+}
+
+#[test]
+fn flex_array_member_sizing() {
+    // C99 6.7.2.1p18: a flexible/zero-length array member contributes no
+    // storage; an aggregate built only from such members has size 0.
+    assert_eq!(run_fixture("flex_array_member_sizing.c"), 0);
+}
+
+#[test]
+fn bitfield_mixed_base_packing() {
+    // C99 6.7.2.1p11: adjacent bitfields of different base types share a
+    // storage unit when the bits fit (the gcc/clang layout).
+    assert_eq!(run_fixture("bitfield_mixed_base_packing.c"), 0);
+}
+
+#[test]
+fn computed_goto() {
+    // GCC labels-as-values: `&&label` address, `goto *expr` indirect
+    // branch, with a runtime label table, a back edge, and a scalar
+    // target.
+    assert_eq!(run_fixture("computed_goto.c"), 0);
+}
+
+#[test]
+fn label_addr_array_init() {
+    // A `&&label` element in an array initializer fills the slot with a
+    // runtime store (the block address is not a compile-time constant),
+    // indexed by a computed goto.
+    assert_eq!(run_fixture("label_addr_array_init.c"), 0);
+}
+
+#[test]
+fn sieve_of_eratosthenes() {
+    // Dense array write/read loop with a multiplicative inner stride;
+    // the prime count below 100000 checks the result.
+    assert_eq!(run_fixture("sieve_of_eratosthenes.c"), 0);
+}
+
+#[test]
+fn static_neg_infinity_init() {
+    // `-INFINITY` in a static initializer folds in f64, not coerced to an
+    // integer; covers scalar, struct, and union members.
+    assert_eq!(run_fixture("static_neg_infinity_init.c"), 0);
+}
+
+#[test]
+fn sub_word_return_narrow() {
+    // A char/short return narrows its body value to the declared type.
+    assert_eq!(run_fixture("sub_word_return_narrow.c"), 0);
+}
+
+#[test]
+fn fp_const_return() {
+    // A floating-constant return reaches the FP return register (d0/xmm0).
+    assert_eq!(run_fixture("fp_const_return.c"), 0);
+}
+
+#[test]
+fn struct_array_init_from_lvalue() {
+    // An array-of-struct element initialized by a compatible struct
+    // expression copies the whole object (C99 6.7.9p13).
+    assert_eq!(run_fixture("struct_array_init_from_lvalue.c"), 0);
+}
+
+#[test]
+fn array_range_designator() {
+    // GCC `[a ... b] = value` fills the inclusive range; covers constant
+    // data and a label-address dispatch table.
+    assert_eq!(run_fixture("array_range_designator.c"), 0);
+}
+
+#[test]
+fn flexible_array_member() {
+    // A flexible array member contributes no storage but decays to a
+    // pointer-to-element at the field offset for `p->v[i]`.
+    assert_eq!(run_fixture("flexible_array_member.c"), 0);
+}
+
+#[test]
+fn sizeof_array_type_and_binding() {
+    // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
+    // the full unary-expression.
+    assert_eq!(run_fixture("sizeof_array_type_and_binding.c"), 0);
+}
+
+#[test]
+fn designator_override_and_braced_string() {
+    // A duplicate designator re-initializes the whole subobject; a
+    // character array accepts a brace-wrapped string literal.
+    assert_eq!(run_fixture("designator_override_and_braced_string.c"), 0);
+}
+
+#[test]
+fn multidim_array_init() {
+    // N-dimensional array initializers pad each nesting level to its
+    // sub-array span, with inner designators and inferred outer dim.
+    assert_eq!(run_fixture("multidim_array_init.c"), 0);
+}
+
+#[test]
+fn macro_paste_stringize_unexpanded() {
+    // `#` and `##` operands substitute the unexpanded argument.
+    assert_eq!(run_fixture("macro_paste_stringize_unexpanded.c"), 0);
+}
+
+#[test]
+fn line_directive() {
+    // `#line` retargets `__LINE__`, expands its operand, and reaches
+    // `#if` conditions.
+    assert_eq!(run_fixture("line_directive.c"), 0);
+}
+
+#[test]
+fn float_global_init() {
+    // A `float` global stores the f32 pattern, not the f64 low bytes.
+    assert_eq!(run_fixture("float_global_init.c"), 0);
+}
+
+#[test]
+fn func_name_array() {
+    // `sizeof(__func__)` is the array length, not a decayed pointer.
+    assert_eq!(run_fixture("func_name_array.c"), 0);
+}
+
+#[test]
+fn unary_plus_init_and_param_shadow() {
+    // Unary `+` in a constant initializer is identity; a parameter
+    // shadows a same-named function.
+    assert_eq!(run_fixture("unary_plus_init_and_param_shadow.c"), 0);
+}
+
+#[test]
+fn fn_ptr_multi_deref() {
+    // Repeated `*` on a function decays to the function; a pointer to
+    // an incomplete array dereferences address-preservingly.
+    assert_eq!(run_fixture("fn_ptr_multi_deref.c"), 0);
+}
+
+#[test]
+fn stringize_whitespace() {
+    // `#` collapses inter-token white space and preserves it inside
+    // literals.
+    assert_eq!(run_fixture("stringize_whitespace.c"), 0);
+}
+
+#[test]
+fn kr_old_style_def() {
+    // Old-style parameter declarations between `)` and the body refine
+    // the parameter types.
+    assert_eq!(run_fixture("kr_old_style_def.c"), 0);
+}
+
+#[test]
+fn fn_ptr_return_type() {
+    // A call through a function pointer yields the callee's return
+    // type, so a following `->` / `[` sees the right shape.
+    assert_eq!(run_fixture("fn_ptr_return_type.c"), 0);
+}
+
+#[test]
+fn fn_returning_fn_ptr() {
+    // A function returning a function pointer: the result decays so a
+    // following `*` is a no-op and the result is callable.
+    assert_eq!(run_fixture("fn_returning_fn_ptr.c"), 0);
+}
+
+#[test]
+fn duff_switch_into_loop() {
+    // Duff's device: case labels inside a loop nested in the switch,
+    // plus K&R parameters and C89 implicit-int locals.
+    assert_eq!(run_fixture("duff_switch_into_loop.c"), 0);
+}
+
+#[test]
+fn empty_macro_arg_and_string_rows() {
+    // `q()` passes one empty argument; a string fills a row of a
+    // multi-dimensional char array.
+    assert_eq!(run_fixture("empty_macro_arg_and_string_rows.c"), 0);
+}
+
+#[test]
+fn extern_incomplete_struct_completion() {
+    // An `extern` of an incomplete struct reserves no storage; the
+    // completed definition allocates without overlapping later globals.
+    assert_eq!(run_fixture("extern_incomplete_struct_completion.c"), 0);
+}
+
+#[test]
+fn block_scope_extern() {
+    // A block-scope `extern` declaration refers to the file-scope
+    // object, allocating no local and not shadowing it.
+    assert_eq!(run_fixture("block_scope_extern.c"), 0);
+}
+
+#[test]
+fn inline_arg_count_mismatch() {
+    // A call passing fewer arguments than the callee has parameters is
+    // not inlined, so the optimized IR stays well-formed.
+    assert_eq!(run_fixture("inline_arg_count_mismatch.c"), 0);
+}
+
+#[test]
+fn const_member_address_init() {
+    // C99 6.6: a static initializer may be the constant address of a
+    // global's member, array member, or indexed element's member.
+    assert_eq!(run_fixture("const_member_address_init.c"), 0);
+}
+
+#[test]
+fn const_float_div_zero() {
+    // IEEE float division by zero in a constant expression yields
+    // inf / NaN, not a diagnostic.
+    assert_eq!(run_fixture("const_float_div_zero.c"), 0);
+}
+
+#[test]
+fn array_of_struct_brace_elision() {
+    // C99 6.7.8p20: a flat value list fills an array of structs with the
+    // per-element braces elided; the length follows from the slot count.
+    assert_eq!(run_fixture("array_of_struct_brace_elision.c"), 0);
+}
+
+#[test]
+fn local_struct_array_runtime_init() {
+    // C99 6.7.8p13: a deferred-size automatic array of structs whose
+    // element field takes the address of a local routes to per-element
+    // runtime stores instead of the constant stage-into-data path.
+    assert_eq!(run_fixture("local_struct_array_runtime_init.c"), 0);
+}
+
+#[test]
+fn nested_runtime_init() {
+    // C99 6.7.8p13: a nested struct/union member with non-constant
+    // initializers stores each field at runtime at the member's offset.
+    assert_eq!(run_fixture("nested_runtime_init.c"), 0);
+}
+
+#[test]
+fn fn_type_typedef_cast() {
+    // A cast through a function-type-typedef pointer must not leak its
+    // marker into a following declarator's return type.
+    assert_eq!(run_fixture("fn_type_typedef_cast.c"), 0);
+}
+
+#[test]
+fn fn_type_typedef_local() {
+    // A pointer to a function-type typedef is a function pointer (one
+    // level), distinct from a pointer to a function-pointer typedef.
+    assert_eq!(run_fixture("fn_type_typedef_local.c"), 0);
+}
+
+#[test]
+fn fn_type_typedef_field() {
+    // Struct field that is a pointer to a function-type typedef returning
+    // a struct, called through the field; the call yields the struct.
+    assert_eq!(run_fixture("fn_type_typedef_field.c"), 0);
+}
+
+#[test]
+fn fn_ptr_float_arg_narrow() {
+    // A double-typed argument narrows to a float parameter through a
+    // subscripted dispatch table and a dereferenced function pointer
+    // (C99 6.5.2.2p7), matching the direct-identifier call path.
+    assert_eq!(run_fixture("fn_ptr_float_arg_narrow.c"), 0);
+}
+
+#[test]
+fn struct_array_elided_runtime() {
+    // C99 6.7.8p20 brace elision for a struct-array element with a
+    // non-constant initializer (runtime per-field stores).
+    assert_eq!(run_fixture("struct_array_elided_runtime.c"), 0);
+}
+
+#[test]
+fn bitfield_incdec() {
+    // C99 6.7.2.1: ++/-- on a bitfield member, wrapping within the field
+    // width and preserving the other bits.
+    assert_eq!(run_fixture("bitfield_incdec.c"), 0);
+}
+
+#[test]
+fn c11_atomic_specifier() {
+    // C11 6.7.2.4 / 6.7.3: the `_Atomic(type-name)` specifier and the
+    // `_Atomic` qualifier both reduce to the unqualified inner type.
+    assert_eq!(run_fixture("c11_atomic_specifier.c"), 0);
+}
+
+#[test]
+fn c11_atomic_ops() {
+    // C11 7.17: atomic_load / store / exchange / fetch_* /
+    // compare_exchange_strong lowered to load / store / RMW on the
+    // pointee width.
+    assert_eq!(run_fixture("c11_atomic_ops.c"), 0);
+}
+
+#[test]
+fn inline_asm_hint() {
+    // GCC inline asm: the operand-free empty barrier and the
+    // pause / yield spin hint compile and leave the surrounding
+    // computation unaffected.
+    assert_eq!(run_fixture("inline_asm_hint.c"), 0);
+}
+
+#[test]
+fn compound_assign_int_fp() {
+    // C99 6.5.16.2: an integer lvalue with a floating rhs in a
+    // compound assignment performs the operation in floating point
+    // and converts the result back to the integer type.
+    assert_eq!(run_fixture("compound_assign_int_fp.c"), 0);
+}
+
+#[test]
+fn signal_sig_t() {
+    // POSIX `sig_t` handler type in <signal.h>.
+    assert_eq!(run_fixture("signal_sig_t.c"), 0);
+}
+
+#[test]
+fn math_classify() {
+    // C99 7.12.3: isnan / isinf / isfinite classify a floating value.
+    assert_eq!(run_fixture("math_classify.c"), 0);
+}
+
+#[test]
+fn switch_unsigned_negative_case() {
+    // C99 6.8.4.2: case labels convert to the promoted controlling type.
+    assert_eq!(run_fixture("switch_unsigned_negative_case.c"), 0);
+}
+
+#[test]
+fn enum_bitfield_unsigned() {
+    // C99 6.7.2.1/6.7.2.2: a non-negative enum bitfield reads unsigned.
+    assert_eq!(run_fixture("enum_bitfield_unsigned.c"), 0);
+}
+
+#[test]
+fn indirect_struct_return_outptr() {
+    // A struct returned through a function pointer in the out-pointer
+    // class (SysV > 16B, Win64 outside {1,2,4,8}B); the result temp is
+    // sized to the whole struct.
+    assert_eq!(run_fixture("indirect_struct_return_outptr.c"), 0);
+}
+
+#[test]
+fn indirect_struct_return() {
+    // A struct returned by value from a call through a function pointer
+    // follows the same return ABI as a direct call.
+    assert_eq!(run_fixture("indirect_struct_return.c"), 0);
+}
+
+#[test]
+fn nested_compound_literal() {
+    // C99 6.5.2.5 compound literal nested inside another aggregate
+    // initializer; the inner cast names the member type and is dropped
+    // so the brace list initializes the member directly.
+    assert_eq!(run_fixture("nested_compound_literal.c"), 0);
+}
+
+#[test]
+fn zero_length_array() {
+    // GCC zero-length array `T x[0]` as a struct's trailing member,
+    // treated as a flexible array member (zero storage, real bytes
+    // follow the fixed part).
+    assert_eq!(run_fixture("zero_length_array.c"), 0);
+}
+
+#[test]
+fn builtin_frame_address() {
+    // __builtin_frame_address(0): non-null, stable within a frame,
+    // distinct between a function and its callee.
+    assert_eq!(run_fixture("builtin_frame_address.c"), 0);
+}
+
+#[test]
+fn builtin_bswap_expect() {
+    // GCC __builtin_bswap16/32/64, __builtin_expect, __builtin_unreachable.
+    assert_eq!(run_fixture("builtin_bswap_expect.c"), 0);
+}
+
+#[test]
+fn builtin_bit_count() {
+    // GCC __builtin_clz / ctz / popcount (+ ll forms), lowered to a
+    // portable shift / mask sequence; results match hand-computed
+    // values on every lane including the interpreter.
+    assert_eq!(run_fixture("builtin_bit_count.c"), 0);
+}
+
+#[test]
+fn scanf_fscanf_binding() {
+    // C99 7.19.6.4 scanf / 7.19.6.2 fscanf must be declared and bound
+    // from <stdio.h>; the calls are guarded so the interp lane never
+    // reaches their (unimplemented) CallExt and never blocks on stdin.
+    assert_eq!(run_fixture("scanf_fscanf_binding.c"), 0);
+}
+
+#[test]
+fn anon_union_init() {
+    // C11 6.7.2.1p13: an anonymous union is one positional slot in a
+    // brace initializer; an anonymous struct contributes one per member.
+    assert_eq!(run_fixture("anon_union_init.c"), 0);
+}
+
+#[test]
+fn builtin_trap() {
+    // __builtin_trap() does not return; a function whose fall-through
+    // path ends in it satisfies the non-void return requirement. The
+    // trap path is not taken at run time.
+    assert_eq!(run_fixture("builtin_trap.c"), 0);
+}
+
+#[test]
+fn struct_multi_byval() {
+    // C99 6.5.2.2: several aggregates of mixed size passed by value in
+    // one call, interleaved with scalars, plus aggregate returns. The
+    // aggregates consume argument registers and push later scalars onto
+    // the host stack, so the ParamRef seed must track the per-ABI
+    // register/stack split rather than parameter position.
+    assert_eq!(run_fixture("struct_multi_byval.c"), 0);
+}
+
+#[test]
+fn struct_return_by_value() {
+    // C99 6.8.6.4 + AAPCS64 6.9: integer aggregate returns in x0/x1
+    // (<= 16 bytes) or through x8 (> 16 bytes).
+    assert_eq!(run_fixture("struct_return_by_value.c"), 0);
+}
+
+#[test]
 fn goto() {
     assert_eq!(run_fixture("goto.c"), 5);
 }
@@ -23,6 +569,13 @@ fn function_pointers() {
 fn switch_statement() {
     // a == 2 -> res = 20, falls through to case 3 -> res += 5 -> 25
     assert_eq!(run_fixture("switch_statement.c"), 25);
+    assert_eq!(run_fixture("switch_binary_search.c"), 0);
+    assert_eq!(run_fixture("branch_relaxation.c"), 21);
+    assert_eq!(run_fixture("float_register_resident.c"), 45);
+    assert_eq!(run_fixture("variadic_struct_arg.c"), 18);
+    assert_eq!(run_fixture("variadic_struct_arg_16b.c"), 51);
+    assert_eq!(run_fixture("libc_div.c"), 0);
+    assert_eq!(run_fixture("libc_fp_classify.c"), 0);
 }
 
 #[test]
@@ -243,6 +796,125 @@ fn vsnprintf_underscore_alias_resolves_to_libc() {
     // correctly.
     use super::compile_fixture;
     let _ = compile_fixture("vsnprintf_underscore_alias.c");
+}
+
+#[test]
+fn function_pointer_global_initialized_with_address_of() {
+    // C99 6.3.2.1p4: `&func` is the same function-pointer value as the
+    // bare name. A scalar global initialized `= &func` must work like
+    // `= func`.
+    assert_eq!(run_fixture("funcptr_global_addressof_init.c"), 0);
+}
+
+#[test]
+fn static_local_shadows_same_named_global() {
+    // C99 6.2.1 + 6.2.4p3: a block-scope `static` local has its own
+    // static storage and block scope; a same-named file-scope object
+    // is a distinct object. The local must not share the global's
+    // storage and the global reappears after the function returns.
+    assert_eq!(run_fixture("static_local_shadows_global.c"), 0);
+}
+
+#[test]
+fn float_argument_to_variadic_is_promoted_to_double() {
+    // C99 6.5.2.2p6-7: a `float` passed to a variadic function is
+    // promoted to `double`. The fixture self-checks `%g` of a float
+    // variable, a float cast, and a float mixed with other arguments
+    // via snprintf.
+    assert_eq!(run_fixture("float_variadic_promotion.c"), 0);
+}
+
+#[test]
+fn pointer_to_array_arithmetic_scales_by_array_size() {
+    // C99 6.5.6p8: arithmetic on a pointer-to-array `T (*p)[N]` steps
+    // by `sizeof(T[N])`, not `sizeof(T)`. The fixture self-checks
+    // `a+i`, `p++`/`p--`, a chained `p+i-j`, `(*p)[k]` after an offset,
+    // `p-a`, and the post-increment deref `(*p++)[k]`.
+    assert_eq!(run_fixture("pointer_to_array_arithmetic.c"), 0);
+}
+
+#[test]
+fn typedef_at_function_body_top_level() {
+    // C99 6.7.7 + 6.2.1: a `typedef` is a declaration valid at the
+    // function-body top level (before or after a statement), with block
+    // scope. The fixture self-checks a body-top `typedef enum`, a
+    // typedef after a statement, and that a function-scope typedef does
+    // not leak to file scope nor shadow a same-named file-scope object
+    // outside the function.
+    assert_eq!(run_fixture("typedef_in_function_body.c"), 0);
+}
+
+#[test]
+fn const_expr_cast_narrows_to_target_width() {
+    // C99 6.3.1.3: a cast to an integer type in a constant expression
+    // narrows to the target width and re-interprets by signedness, so
+    // `(int)UINT_MAX` folds to -1. The fixture self-checks signed
+    // sign-extension, unsigned truncation, `_Bool`, an 8-byte target,
+    // and runtime/compile-time agreement, all via array-dimension and
+    // enum constant expressions.
+    assert_eq!(run_fixture("const_expr_cast_narrowing.c"), 0);
+}
+
+#[test]
+fn scalar_initializer_may_be_brace_enclosed() {
+    // C99 6.7.8p11: a scalar initializer is a single expression,
+    // optionally brace-enclosed, at block scope (function-body top and
+    // nested blocks) and for static locals, not only at file scope. The
+    // fixture self-checks braced integer / pointer / non-constant /
+    // trailing-comma / static-local / nested-block forms.
+    assert_eq!(run_fixture("scalar_brace_initializer.c"), 0);
+}
+
+#[test]
+fn brace_elided_struct_member_array_init() {
+    // C99 6.7.8p20: a struct member that is an array of structs accepts
+    // a flat initializer list with each element's braces elided. The
+    // fixture self-checks brace-elided elements (each consuming one
+    // struct's fields, including a partially-braced nested array member)
+    // and zero-fill of an omitted trailing element. Previously a
+    // brace-elided element was written as a single struct-width scalar,
+    // overflowing the initializer byte writer (panic).
+    assert_eq!(run_fixture("brace_elided_struct_array_init.c"), 0);
+}
+
+#[test]
+fn brace_elided_toplevel_struct_array() {
+    // C99 6.7.8p20: brace elision for a top-level array of structs at
+    // file scope, block scope, and static local, in known-size and
+    // size-from-initializer forms, plus a mix of braced and elided
+    // elements. Previously these rejected elided elements, and the
+    // known-size static-local path overran its buffer (panic).
+    assert_eq!(run_fixture("brace_elided_toplevel_struct_array.c"), 0);
+}
+
+#[test]
+fn multichar_constant_packs_bytes() {
+    // C99 6.4.4.4p10: a narrow character constant with more than one
+    // character packs the bytes with the first character most
+    // significant (`value = (value << 8) | byte`). The fixture checks the
+    // packed value, that a single-character constant and escape sequences
+    // are unaffected, and a char followed by an octal escape.
+    assert_eq!(run_fixture("multichar_constant.c"), 0);
+}
+
+#[test]
+fn sqrtf_fabsf_lower_to_hardware_intrinsics() {
+    // C99 7.12.7.5 / 7.12.7.2: sqrtf / fabsf lower to a single hardware
+    // instruction (no math library), so they run on the interpreter too.
+    // The fixture self-checks several values, a float result widened to
+    // double, nesting, and a non-constant argument.
+    assert_eq!(run_fixture("fp_unary_intrinsic.c"), 0);
+}
+
+#[test]
+fn wide_string_literal_size_includes_one_terminator() {
+    // C99 6.4.5: a wide string literal is `wchar_t[N+1]` with a single
+    // wide terminator; adjacent wide literals concatenate. The lexer
+    // appends the wchar_t-width NUL, so the parser must not also append
+    // the narrow one-byte NUL. The fixture checks sizes (empty, single,
+    // multi, concatenated), narrow-literal sizes for contrast, and wide
+    // content across a concatenation.
+    assert_eq!(run_fixture("wide_string_literal_size.c"), 0);
 }
 
 #[test]
@@ -974,12 +1646,19 @@ int main() { return 0; }
 #[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
-    // runs under badc, compiles hello.c, and runs the resulting program
-    // -- which prints "Hello 123" then exits 0. We only check the exit
-    // code; the printed output goes to the real stdout.
+    // runs under badc, compiles the c4-subset self-host fixture, and
+    // runs the resulting program -- which prints "Hello 123" then exits
+    // 0. We only check the exit code; the printed output goes to the
+    // real stdout.
     let exit = super::run_fixture_with_args(
         "c4.c",
-        ["c4.c", concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")],
+        [
+            "c4.c",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/c/c4_selfhost_hello.c"
+            ),
+        ],
     );
     assert_eq!(exit, 0);
 }

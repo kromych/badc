@@ -4,17 +4,16 @@ indexed_load_store.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sxtw	x2, w2
                	sxtw	x3, w3
                	mov	x5, #0x0                // =0
                	mov	x4, x5
-               	b	<addr>
                	sxtw	x6, w4
                	cmp	x6, x2
                	b.ge	<addr>
@@ -51,11 +50,12 @@ Disassembly of section .text:
                	b	<addr>
                	sxtw	x0, w5
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x8
                	b.ge	<addr>
@@ -66,7 +66,6 @@ Disassembly of section .text:
                	sub	x0, x29, #0x20
                	sxtw	x2, w1
                	add	x3, x2, #0x1
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x40
                	sxtw	x2, w1
@@ -74,7 +73,6 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	mov	x17, #0xa               // =10
                	mul	x3, x3, x17
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	b	<addr>
                	sub	x0, x29, #0x20
@@ -87,7 +85,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10

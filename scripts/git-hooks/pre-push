@@ -60,6 +60,17 @@ ASCII_SKIP_PREFIXES = (
     "tests/perf/build/",
 )
 
+# Individual files exempt from the ASCII check because their contents
+# under test are non-ASCII by design: a fixture that exercises the
+# lexer / preprocessor UTF-8 decode paths must carry the raw multibyte
+# bytes in source, since an escape sequence would bypass exactly the
+# code being tested.
+ASCII_ALLOW_PATHS = frozenset(
+    [
+        "tests/fixtures/c/wide_char_utf8.c",
+    ]
+)
+
 
 def run(label: str, cmd: list[str], cwd: Path) -> int:
     print(f"[pre-push] {label}", flush=True)
@@ -84,6 +95,8 @@ def check_ascii(root: Path) -> int:
         if not path:
             continue
         if any(path.startswith(pre) for pre in ASCII_SKIP_PREFIXES):
+            continue
+        if path in ASCII_ALLOW_PATHS:
             continue
         suffix = Path(path).suffix.lower()
         if suffix not in ASCII_SUFFIXES:
@@ -128,6 +141,26 @@ def main() -> int:
             "clippy",
             "--release",
             "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        root,
+    )
+    if rc != 0:
+        return rc
+    # The default features are the host-JIT library only, so the run
+    # above skips the `badc` binary and the CLI integration tests (both
+    # gated on `full`). Lint them too.
+    rc = run(
+        "cargo clippy --release --all-targets --features full -- -D warnings",
+        [
+            "cargo",
+            "clippy",
+            "--release",
+            "--all-targets",
+            "--features",
+            "full",
             "--",
             "-D",
             "warnings",

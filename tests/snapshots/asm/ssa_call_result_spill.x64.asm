@@ -4,11 +4,13 @@ ssa_call_result_spill.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<rot>:
                	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rcx
@@ -24,6 +26,8 @@ Disassembly of section .text:
                	movq	%r13, %rcx
                	orq	%rcx, %rax
                	retq
+
+<ch>:
                	movq	%rdi, %rax
                	andq	%rsi, %rax
                	movq	%rdi, %rcx
@@ -31,6 +35,8 @@ Disassembly of section .text:
                	andq	%rdx, %rcx
                	xorq	%rcx, %rax
                	retq
+
+<bs1>:
                	movq	%rdi, %rax
                	rorq	$0xe, %rax
                	movq	%rdi, %rcx
@@ -40,6 +46,8 @@ Disassembly of section .text:
                	rorq	$0x29, %rcx
                	xorq	%rcx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp
@@ -61,7 +69,6 @@ Disassembly of section .text:
                	movl	$0x4000, %r14d          # imm = 0x4000
                	movl	$0x8000, %r12d          # imm = 0x8000
                	xorq	%rbx, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x4, %rax
                	jge	<addr>
@@ -137,3 +144,5 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -521,6 +521,15 @@ pub(super) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_alu_rr(code, 0x39, dst, src);
 }
 
+/// `TEST dst, src` -- `dst & src`, setting ZF / SF (and clearing
+/// CF / OF). Encoding: `REX.W + 85 /r`. `test reg, reg` is the 3-byte
+/// compare-with-zero that replaces a 7-byte `cmp reg, imm32` against 0:
+/// ZF / SF / CF / OF match, so every dependent `jcc` / `setcc` is
+/// unchanged.
+pub(super) fn emit_test_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x85, dst, src);
+}
+
 fn emit_alu_rr(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
     emit_byte(code, rex(true, src.high(), false, dst.high()));
     emit_byte(code, opcode);
@@ -818,6 +827,58 @@ pub(super) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
 /// `DIVSD xmm, xmm` -- `dst = dst / src`.
 pub(super) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5E, dst, src);
+}
+
+/// `SQRTSD xmm, xmm` -- `dst = sqrt(src)`, scalar double. `F2 0F 51 /r`.
+pub(super) fn emit_sqrtsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x51, dst, src);
+}
+
+/// `SQRTSS xmm, xmm` -- `dst = sqrt(src)`, scalar single. `F3 0F 51 /r`.
+pub(super) fn emit_sqrtss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse_ss(code, 0x51, dst, src);
+}
+
+/// `ANDPD xmm, xmm` -- bitwise AND of two doubles. `66 0F 54 /r`. Used
+/// for `FABS` (AND with the inverted sign-bit mask in another XMM).
+pub(super) fn emit_andpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x54);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `ROUNDSD xmm, xmm, imm8` -- round a scalar double per the immediate
+/// rounding mode (SSE4.1). `66 0F 3A 0B /r ib`. The mode bits: 0x09
+/// floor (round down), 0x0A ceil (round up), 0x0B truncate; each sets
+/// bit 3 to suppress the precision exception.
+pub(super) fn emit_roundsd(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x3A);
+    emit_byte(code, 0x0B);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    emit_byte(code, imm);
+}
+
+/// `ROUNDSS xmm, xmm, imm8` -- scalar single-precision form. `66 0F 3A
+/// 0A /r ib`.
+pub(super) fn emit_roundss(code: &mut Vec<u8>, dst: Reg, src: Reg, imm: u8) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x3A);
+    emit_byte(code, 0x0A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+    emit_byte(code, imm);
 }
 
 /// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
@@ -1251,6 +1312,22 @@ pub(super) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
     emit_i32(code, rel32);
 }
 
+/// `Jmp rel8` -- short unconditional branch, 2 bytes. The target must
+/// be within -128..127 of the byte after the rel8 field; the caller
+/// (branch relaxation) guarantees the range.
+pub(super) fn emit_jmp_rel8(code: &mut Vec<u8>, rel8: i8) {
+    emit_byte(code, 0xEB);
+    emit_byte(code, rel8 as u8);
+}
+
+/// `Jcc rel8` -- short conditional branch, 2 bytes. The opcode is
+/// `0x70 | cc`, the one-byte-displacement form of the `0x0F 0x80 | cc`
+/// rel32 encoding.
+pub(super) fn emit_jcc_rel8(code: &mut Vec<u8>, cc: Cc, rel8: i8) {
+    emit_byte(code, 0x70 | (cc as u8));
+    emit_byte(code, rel8 as u8);
+}
+
 /// `CALL r64` -- indirect call through a register. Encoding:
 /// `FF /2`.
 pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
@@ -1259,6 +1336,17 @@ pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
     }
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b11, 2, target.lo()));
+}
+
+/// `JMP r64` -- indirect branch through a register (GCC computed
+/// goto). Same `FF` opcode family as the indirect `CALL` above; only
+/// the ModR/M `/4` extension changes (4 = JMP, 2 = CALL).
+pub(super) fn emit_jmp_r(code: &mut Vec<u8>, target: Reg) {
+    if target.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 4, target.lo()));
 }
 
 /// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
@@ -1855,7 +1943,8 @@ pub(super) fn lower(
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &alloc::format!(
-                    "ssa emit (x86_64): function at ent_pc {ent_pc} contains an op outside the implemented subset",
+                    "ssa emit (x86_64): function `{}` (ent_pc {ent_pc}) contains an op outside the implemented subset",
+                    func_ssa.name,
                 ),
             )));
         }
@@ -2034,6 +2123,7 @@ pub(super) fn lower(
         code_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        shared_lib_name: None,
         dllmain_pc: None,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
         // is not in our target list.
@@ -2204,6 +2294,34 @@ mod tests {
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
         );
+    }
+
+    #[test]
+    fn test_rax_rax_is_three_bytes() {
+        // test rax, rax  ->  48 85 C0 -- the compare-with-zero form,
+        // shorter than `cmp rax, 0` (48 81 F8 00 00 00 00).
+        assert_eq!(
+            assemble(|c| emit_test_rr(c, Reg::RAX, Reg::RAX)),
+            vec![0x48, 0x85, 0xC0]
+        );
+    }
+
+    #[test]
+    fn short_branch_encodings() {
+        // jmp rel8  ->  EB cb (2 bytes), vs the 5-byte E9 rel32 form.
+        assert_eq!(assemble(|c| emit_jmp_rel8(c, 0x10)), vec![0xEB, 0x10]);
+        assert_eq!(assemble(|c| emit_jmp_rel8(c, -2)), vec![0xEB, 0xFE]);
+        // jcc rel8  ->  (0x70 | cc) cb (2 bytes), vs the 6-byte
+        // 0F 8x rel32 form. je -> 74, jne -> 75, jl -> 7C.
+        assert_eq!(
+            assemble(|c| emit_jcc_rel8(c, Cc::E, 0x05)),
+            vec![0x74, 0x05]
+        );
+        assert_eq!(
+            assemble(|c| emit_jcc_rel8(c, Cc::Ne, 0x05)),
+            vec![0x75, 0x05]
+        );
+        assert_eq!(assemble(|c| emit_jcc_rel8(c, Cc::L, -4)), vec![0x7C, 0xFC]);
     }
 
     #[test]
@@ -2461,22 +2579,27 @@ mod tests {
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // `mov [rsp], <reg>` encodings (4 bytes each):
-        //   4C 89 0C 24 = r9   4C 89 04 24 = r8
-        //   48 89 14 24 = rdx  48 89 0C 24 = rcx
+        // Each parameter spills into its positional c5 cdecl cell at
+        // `[rsp + 16*i]`, so the four `mov [rsp+disp], <reg>` stores carry
+        // the parameter's displacement (param 0 at disp 0, the rest at
+        // disp8). Encodings:
+        //   rcx -> [rsp+0x00]: 48 89 0C 24
+        //   rdx -> [rsp+0x10]: 48 89 54 24 10
+        //   r8  -> [rsp+0x20]: 4C 89 44 24 20
+        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
-            contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
             "WinMain prologue must spill r9 (= nShowCmd) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x4C, 0x89, 0x04, 0x24]),
+            contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
             "WinMain prologue must spill r8 (= lpCmdLine) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x14, 0x24]),
+            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
             "WinMain prologue must spill rdx (= hPrevInstance) into the c5 frame; got {:02X?}",
             prologue
         );
@@ -2506,6 +2629,13 @@ mod tests {
         let entry = build.entry_offset;
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
+        // Positional c5 cdecl cells: argc (rcx) at [rsp+0x00], argv
+        // (rdx) at [rsp+0x10]. r8 / r9 are not parameters, so no cell2 /
+        // cell3 store appears.
+        //   rcx -> [rsp+0x00]: 48 89 0C 24
+        //   rdx -> [rsp+0x10]: 48 89 54 24 10
+        //   r8  -> [rsp+0x20]: 4C 89 44 24 20  (absent)
+        //   r9  -> [rsp+0x30]: 4C 89 4C 24 30  (absent)
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
             contains(&[0x48, 0x89, 0x0C, 0x24]),
@@ -2513,17 +2643,17 @@ mod tests {
             prologue
         );
         assert!(
-            contains(&[0x48, 0x89, 0x14, 0x24]),
+            contains(&[0x48, 0x89, 0x54, 0x24, 0x10]),
             "console main must spill rdx (= argv) into the c5 frame; got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x04, 0x24]),
+            !contains(&[0x4C, 0x89, 0x44, 0x24, 0x20]),
             "console main must NOT spill r8 (function has only 2 params); got {:02X?}",
             prologue
         );
         assert!(
-            !contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            !contains(&[0x4C, 0x89, 0x4C, 0x24, 0x30]),
             "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
             prologue
         );

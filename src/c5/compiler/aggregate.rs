@@ -95,19 +95,23 @@ impl Compiler {
         // exceeds the running max. The final struct alignment is
         // capped at 8 because the rest of c5's IR slots at 8.
         let mut struct_align: usize = 1;
-        // Bit-packing state for contiguous bitfields. When
-        // `bf_active` is true, `bf_storage_offset` is the byte
-        // offset of the current storage unit, `bf_unit_size` is
-        // the unit's width in bytes (the bitfield's base type
-        // size per C99 6.7.2.1p11), and `bf_next_bit` is the
-        // next free bit position within it. A non-bitfield
-        // field, a bitfield with a different base size, or a
-        // bitfield that doesn't fit in the remaining bits closes
-        // the unit.
+        // Bit-packing state for contiguous bitfields. `bf_bit_cursor`
+        // is the next free bit position measured from the start of the
+        // aggregate; the run begins at `offset * 8` when `bf_active`
+        // turns true. Each bitfield is placed at the cursor and bumped
+        // to the next storage-unit boundary of its declared type only
+        // when it would otherwise straddle one (the SysV AMD64 / AAPCS64
+        // rule gcc and clang follow), so a smaller-typed bitfield can
+        // share the bits left in a larger-typed neighbour's unit.
         let mut bf_active = false;
-        let mut bf_storage_offset: usize = 0;
-        let mut bf_unit_size: usize = 0;
-        let mut bf_next_bit: u32 = 0;
+        let mut bf_bit_cursor: usize = 0;
+        // Set once any field is declared. The empty-aggregate floor to
+        // 1 byte below applies only to a truly fieldless `struct {}`; an
+        // aggregate with members whose sizes sum to 0 (flexible /
+        // zero-length arrays, or nested size-0 aggregates) has size 0
+        // (gcc / clang), and flooring it would add a spurious byte that
+        // mis-pads any enclosing aggregate.
+        let mut saw_field = false;
         while self.lex.tk != '}' {
             // Reset the typedef-array carrier between field groups
             // (`jmp_buf env;` then `int code;`). The aggregate
@@ -127,6 +131,7 @@ impl Compiler {
             let mut saw_unsigned = false;
             let mut long_count: u8 = 0;
             let mut saw_short = false;
+            let mut saw_bool = false;
             // Set when the field-type prefix is an anonymous
             // (no-tag) `struct { ... }` / `union { ... }` whose
             // members should promote into the enclosing struct
@@ -138,6 +143,8 @@ impl Compiler {
             let mut anon_aggregate_inner_id: Option<usize> = None;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod {
+                    // `_Bool` is the only keyword mapped to `IntMod`.
+                    saw_bool = true;
                     saw_int_mod = true;
                 } else if self.lex.tk == Token::Signed {
                     saw_signed = true;
@@ -156,6 +163,11 @@ impl Compiler {
             }
             let saw_long = long_count >= 1;
             let saw_long_long = long_count >= 2;
+            // Set when the field's base type is an `enum` (directly or
+            // through an enum typedef). An enum bitfield reads as
+            // unsigned, so a value with the field's high bit set
+            // zero-extends rather than sign-extends.
+            let mut field_base_is_enum = false;
             let field_base = if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {
@@ -265,8 +277,12 @@ impl Compiler {
                 if self.lex.tk == '{' {
                     self.parse_enum_body(&tag_name)?;
                 }
+                field_base_is_enum = true;
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {
+                if self.symbols[self.lex.curr_id_idx].is_enum_typedef {
+                    field_base_is_enum = true;
+                }
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
                 // C99 6.7.7 paragraph 3: a typedef name carries
                 // through any array dimension on its alias. Stash
@@ -287,23 +303,29 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.base_is_function_type =
+                        self.symbols[self.lex.curr_id_idx].is_function_type;
                 }
                 self.next()?;
                 aliased
             } else if saw_int_mod {
-                let base = if saw_long_long {
-                    Ty::LongLong as i64
-                } else if saw_long {
-                    Ty::Long as i64
-                } else if saw_short {
-                    Ty::Short as i64
+                if saw_bool {
+                    Ty::Bool as i64
                 } else {
-                    Ty::Int as i64
-                };
-                if saw_unsigned {
-                    base | UNSIGNED_BIT
-                } else {
-                    base
+                    let base = if saw_long_long {
+                        Ty::LongLong as i64
+                    } else if saw_long {
+                        Ty::Long as i64
+                    } else if saw_short {
+                        Ty::Short as i64
+                    } else {
+                        Ty::Int as i64
+                    };
+                    if saw_unsigned {
+                        base | UNSIGNED_BIT
+                    } else {
+                        base
+                    }
                 }
             } else {
                 return Err(self.compile_err("type expected in struct field"));
@@ -369,6 +391,18 @@ impl Compiler {
                         // exactly this (anon-struct LowPart and
                         // named-`u`-struct LowPart coexist
                         // because the latter is qualified).
+                        // Members of one anonymous union share a single
+                        // positional initializer slot; tag them with the
+                        // inner aggregate's id so the initializer groups
+                        // them. Anonymous-struct members keep distinct
+                        // positions, so they propagate any group tag they
+                        // already carry (a union nested inside).
+                        let group = if self.structs[inner_id].is_union {
+                            inner_id as u32 + 1
+                        } else {
+                            inner_field.anon_union_group
+                        };
+                        saw_field = true;
                         self.structs[struct_id].fields.push(StructField {
                             name: inner_field.name,
                             offset: base_offset + inner_field.offset,
@@ -380,6 +414,8 @@ impl Compiler {
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
                             fn_ptr_indirection: inner_field.fn_ptr_indirection,
+                            params: inner_field.params,
+                            anon_union_group: group,
                         });
                     }
 
@@ -411,29 +447,31 @@ impl Compiler {
                 };
 
                 if let Some(width) = anon_bitfield_width {
-                    let field_unit_size = self.size_of_type(field_base).max(1);
-                    let unit_capacity_bits = (field_unit_size as u32) * 8;
+                    let unit = self.size_of_type(field_base).max(1);
                     if width == 0 {
                         // C99 6.7.2.1p11: a width-zero bitfield aligns
                         // the next field to the start of the next
                         // storage unit of the bitfield's base type.
-                        if bf_active && !is_union {
-                            offset = bf_storage_offset + bf_unit_size;
+                        if !is_union {
+                            if !bf_active {
+                                bf_bit_cursor = offset * 8;
+                            }
+                            bf_bit_cursor = round_up(bf_bit_cursor, unit * 8);
+                            offset = offset.max(bf_bit_cursor / 8);
                         }
                         bf_active = false;
                     } else if !is_union {
-                        let need_new_unit = !bf_active
-                            || bf_unit_size != field_unit_size
-                            || bf_next_bit + width > unit_capacity_bits;
-                        if need_new_unit {
-                            offset = round_up(offset, field_unit_size);
-                            bf_storage_offset = offset;
-                            offset += field_unit_size;
-                            bf_next_bit = 0;
-                            bf_unit_size = field_unit_size;
-                            bf_active = true;
+                        place_bitfield(
+                            &mut offset,
+                            &mut bf_active,
+                            &mut bf_bit_cursor,
+                            unit,
+                            width,
+                        );
+                        let a = unit.min(8);
+                        if a > struct_align {
+                            struct_align = a;
                         }
-                        bf_next_bit += width;
                     }
                     if self.lex.tk == ',' {
                         self.next()?;
@@ -442,7 +480,8 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
+                let (id_idx, mut field_ty, mut field_array_size) =
+                    self.parse_declarator(field_base)?;
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->
@@ -468,6 +507,11 @@ impl Compiler {
                 // `typedef struct { ... } T;` as a fn-pointer
                 // alias.
                 let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                // Capture the function-pointer field's parameter prototype
+                // (set by the same declarator branch) so a later
+                // `s.fp(args)` narrows its arguments. Always consume the
+                // side-channel so it cannot leak to the next field.
+                let field_params = self.pending.fn_ptr_param_types.take().unwrap_or_default();
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
@@ -483,6 +527,10 @@ impl Compiler {
                 // inside an active run.
                 let mut bit_width: u32 = 0;
                 let mut bit_offset: u32 = 0;
+                // Storage-unit width (bytes) the extraction reads for a
+                // bitfield; the declared type's size. Zero for a
+                // non-bitfield field.
+                let mut bit_unit: usize = 0;
                 let field_offset: usize;
                 if self.lex.tk == ':' {
                     if field_array_size != 0 {
@@ -502,34 +550,40 @@ impl Compiler {
                         return Err(self.compile_err(format!("bitfield width {n} exceeds 64")));
                     }
                     bit_width = n as u32;
+                    // C99 6.7.2.1: an enum bitfield reads as unsigned (a
+                    // non-negative enum's underlying type is unsigned),
+                    // so the extraction zero-extends. A full-width enum
+                    // field keeps `int`; only the sub-word bitfield case
+                    // changes.
+                    if field_base_is_enum {
+                        field_ty |= UNSIGNED_BIT;
+                    }
                     if is_union {
                         field_offset = 0;
                         bit_offset = 0;
+                        bit_unit = self.size_of_type(field_ty).max(1);
                     } else {
                         // C99 6.7.2.1p11 / p13: the bitfield's
                         // addressable storage unit is implementation
-                        // defined; c5 sizes it at the bitfield's
-                        // base type. Consecutive bitfields share a
-                        // unit only when their base sizes match and
-                        // the new field fits in the remaining bits;
-                        // otherwise the old unit closes and a new
-                        // one starts.
-                        let field_unit_size = self.size_of_type(field_ty);
-                        let unit_capacity_bits = (field_unit_size as u32) * 8;
-                        let need_new_unit = !bf_active
-                            || bf_unit_size != field_unit_size
-                            || bf_next_bit + bit_width > unit_capacity_bits;
-                        if need_new_unit {
-                            offset = round_up(offset, field_unit_size.max(1));
-                            bf_storage_offset = offset;
-                            offset += field_unit_size;
-                            bf_next_bit = 0;
-                            bf_unit_size = field_unit_size;
-                            bf_active = true;
+                        // defined. Place it at the running bit cursor,
+                        // its addressable unit sized at the declared
+                        // type; bump to the next such unit only when it
+                        // would straddle one.
+                        let unit = self.size_of_type(field_ty).max(1);
+                        let (foff, boff) = place_bitfield(
+                            &mut offset,
+                            &mut bf_active,
+                            &mut bf_bit_cursor,
+                            unit,
+                            bit_width,
+                        );
+                        field_offset = foff;
+                        bit_offset = boff;
+                        bit_unit = unit;
+                        let a = unit.min(8);
+                        if a > struct_align {
+                            struct_align = a;
                         }
-                        field_offset = bf_storage_offset;
-                        bit_offset = bf_next_bit;
-                        bf_next_bit += bit_width;
                     }
                 } else {
                     // Regular (non-bitfield) field. Seal any pending
@@ -555,6 +609,12 @@ impl Compiler {
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
+                    } else if field_array_size < 0 {
+                        // Flexible array member (`T v[]`, C99
+                        // 6.7.2.1p16): contributes no storage to the
+                        // struct size (it may still raise the struct's
+                        // alignment via `field_align` below).
+                        0
                     } else {
                         elem_size
                     };
@@ -577,6 +637,7 @@ impl Compiler {
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
+                saw_field = true;
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
@@ -586,8 +647,10 @@ impl Compiler {
                     array_dims: field_array_dims,
                     bit_offset,
                     bit_width,
-                    bit_unit_size: if bit_width > 0 { bf_unit_size as u8 } else { 0 },
+                    bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                     fn_ptr_indirection: field_fn_ptr_indirection,
+                    params: field_params,
+                    anon_union_group: 0,
                 });
 
                 if self.lex.tk == ',' {
@@ -622,8 +685,43 @@ impl Compiler {
         // every other struct's size is whatever the field cursor
         // ended up at, rounded to the struct's own alignment.
         let total = round_up(offset, struct_align);
-        self.structs[struct_id].size = total.max(1);
+        // A genuinely empty aggregate floors at 1 byte so `struct *p`
+        // has a meaningful sizeof for pointer arithmetic (matching GCC's
+        // empty-struct extension); an aggregate with a flexible-array
+        // member legitimately has size 0 when nothing precedes it (gcc /
+        // clang) and must not be floored.
+        self.structs[struct_id].size = if saw_field { total } else { total.max(1) };
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
     }
+}
+
+/// Place a bitfield of declared-type size `unit` bytes and `width` bits
+/// at the running `bit_cursor` (bit position from the aggregate start),
+/// bumping it to the next `unit`-byte storage-unit boundary only when
+/// the field would otherwise straddle one (the SysV AMD64 / AAPCS64
+/// rule). Begins the run at `offset * 8` when not already `active`,
+/// advances `offset` to the highest byte the run reaches, and returns
+/// the field's `(byte offset of its addressable unit, bit offset within
+/// that unit)`.
+fn place_bitfield(
+    offset: &mut usize,
+    active: &mut bool,
+    bit_cursor: &mut usize,
+    unit: usize,
+    width: u32,
+) -> (usize, u32) {
+    if !*active {
+        *bit_cursor = *offset * 8;
+        *active = true;
+    }
+    let unit_bits = unit * 8;
+    if *bit_cursor % unit_bits + width as usize > unit_bits {
+        *bit_cursor = round_up(*bit_cursor, unit_bits);
+    }
+    let field_offset = (*bit_cursor / unit_bits) * unit;
+    let bit_offset = (*bit_cursor % unit_bits) as u32;
+    *bit_cursor += width as usize;
+    *offset = (*offset).max(bit_cursor.div_ceil(8));
+    (field_offset, bit_offset)
 }

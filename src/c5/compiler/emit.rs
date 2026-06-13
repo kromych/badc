@@ -54,71 +54,6 @@ impl Compiler {
         Err(self.compile_err("unmatched parentheses"))
     }
 
-    /// Skip a balanced parameter-list parenthesis group (the open `(`
-    /// already consumed) and report the pointee function signature's
-    /// prototype: `(fixed_param_count, is_variadic)`. A top-level `...`
-    /// makes the function variadic and stops the fixed count at the
-    /// preceding parameter; the count is the number of top-level
-    /// comma-separated parameters before any `...`. An empty or
-    /// `(void)` list reports 0 fixed parameters. Used to record the
-    /// prototype of a function-pointer declarator (`RET (*p)(args)`)
-    /// whose pointee signature c5 otherwise skips, so an indirect call
-    /// through `p` can split fixed vs variadic arguments per the host
-    /// variadic ABI.
-    pub(super) fn skip_balanced_parens_capturing_proto(
-        &mut self,
-    ) -> Result<(usize, bool), C5Error> {
-        let mut depth: i64 = 1;
-        let mut is_variadic = false;
-        // Number of top-level parameters seen so far. A leading token
-        // that is not an immediate `)` means at least one parameter;
-        // each top-level comma adds one more.
-        let mut top_level_commas: usize = 0;
-        let mut saw_any_top_level_token = false;
-        let mut saw_void_only = false;
-        let mut top_level_token_count: usize = 0;
-        while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '(' {
-                depth += 1;
-            } else if self.lex.tk == ')' {
-                depth -= 1;
-                if depth == 0 {
-                    self.next()?;
-                    let fixed = if is_variadic {
-                        top_level_commas
-                    } else if !saw_any_top_level_token || saw_void_only {
-                        0
-                    } else {
-                        top_level_commas + 1
-                    };
-                    return Ok((fixed, is_variadic));
-                }
-            } else if depth == 1 {
-                if self.lex.tk == ',' {
-                    top_level_commas += 1;
-                } else if self.lex.tk == Token::Ellipsis {
-                    is_variadic = true;
-                } else {
-                    saw_any_top_level_token = true;
-                    top_level_token_count += 1;
-                    // `(void)` -- the sole top-level token is the
-                    // `void` keyword and there is no comma: an empty
-                    // parameter list, not one `void` parameter.
-                    if self.lex.tk == Token::Void
-                        && top_level_commas == 0
-                        && top_level_token_count == 1
-                    {
-                        saw_void_only = true;
-                    } else if self.lex.tk != Token::Void {
-                        saw_void_only = false;
-                    }
-                }
-            }
-            self.next()?;
-        }
-        Err(self.compile_err("unmatched parentheses"))
-    }
-
     // ---- Code emission ----
 
     /// Mark a scalar-load emit. The parser calls this at every
@@ -637,6 +572,8 @@ impl Compiler {
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
+        sym.is_scope_static = false;
+        sym.is_scope_typedef = false;
     }
 
     // ---- AST helpers ----
@@ -675,6 +612,7 @@ impl Compiler {
         param_local_slots: alloc::vec::Vec<i64>,
         returns_struct: bool,
         return_struct_size: i64,
+        return_ty: i64,
         alloca_top_slot: i64,
     ) {
         // Reserve one PC unit so end_pc > ent_pc holds for every
@@ -696,6 +634,7 @@ impl Compiler {
             param_local_slots,
             returns_struct,
             return_struct_size,
+            return_ty,
             alloca_top_slot,
         };
         self.pending_is_inline = false;
@@ -807,6 +746,31 @@ impl Compiler {
     pub(super) fn ast_emit_cast(&mut self, child: ExprId, to_ty: i64) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::Cast { child, to_ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::CompoundLiteral { slot_off, ty, array_size, init }`
+    /// (C99 6.5.2.5). The frame slot is already reserved and the
+    /// initializer captured into `init`; the walker emits the init
+    /// at the evaluation point and yields the object's address
+    /// (array / struct) or loaded scalar value.
+    pub(super) fn ast_emit_compound_literal(
+        &mut self,
+        slot_off: i64,
+        ty: i64,
+        array_size: i64,
+        init: super::super::ast::LocalInit,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::CompoundLiteral {
+                slot_off,
+                ty,
+                array_size,
+                init,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
     }
 
@@ -1192,6 +1156,16 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Goto(label), pos)
     }
 
+    /// Push a `Stmt::GotoIndirect` (GCC `goto *expr;`).
+    pub(super) fn ast_emit_goto_indirect(
+        &mut self,
+        target: super::super::ast::ExprId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::GotoIndirect(target), pos)
+    }
+
     /// Push a `Stmt::Labeled` wrapping the just-parsed body.
     pub(super) fn ast_emit_labeled(
         &mut self,
@@ -1305,7 +1279,7 @@ impl Compiler {
     /// Helper for the unary arms: wraps the accumulator with the
     /// given `UnOp` and replaces it. Drops the node if the
     /// accumulator is empty (the operand wasn't AST-wired yet).
-    fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
+    pub(super) fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
         let Some(child) = self.ast_acc.take() else {
             return;
         };

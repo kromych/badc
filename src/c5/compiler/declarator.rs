@@ -67,10 +67,28 @@ impl Compiler {
         // declarator carries explicit fn-pointer shape rather
         // than inheriting from the base type), so we update
         // pending only when leading `*`s actually accumulated.
+        // A function-TYPE typedef (`typedef RET F(args)`) pre-decays to a
+        // function pointer (`RET` + one pointer level). The first `*` in
+        // `F *p` forms that pointer-to-function rather than adding a
+        // level, so the object is a function pointer, not a pointer to
+        // one. Absorb the first `*`: drop one pointer level from the type
+        // and count it as zero for the indirection. A later `*` (`F **p`)
+        // adds normally. Consumed here so it does not leak to the next
+        // declarator.
+        let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        self.pending.base_is_function_type = false;
+        if absorb_fn_type_ptr {
+            ty -= Ty::Ptr as i64;
+        }
         if leading_ptr_count > 0
             && let Some(fpi) = self.pending.fn_ptr_indirection
         {
-            self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
+            let added = if absorb_fn_type_ptr {
+                leading_ptr_count - 1
+            } else {
+                leading_ptr_count
+            };
+            self.pending.fn_ptr_indirection = Some(fpi + added);
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
@@ -162,8 +180,23 @@ impl Compiler {
                     // named-parameter count. Subsequent signatures
                     // (function-returning-fp shapes) keep skipping.
                     if !saw_fn_signature {
-                        let (fixed, variadic) = self.skip_balanced_parens_capturing_proto()?;
-                        self.pending.typedef_fn_proto = Some((fixed, variadic));
+                        // Capture the pointee signature's parameter types (not
+                        // just the count) so an indirect call through the
+                        // pointer narrows each argument to its declared
+                        // parameter type instead of applying the default
+                        // argument promotions. parse_function_params binds
+                        // each named parameter as a Loc symbol; restore the
+                        // shadowed bindings since a fn-pointer declarator has
+                        // no body to scope them.
+                        let saved_proto = self.pending.parsing_fn_ptr_proto;
+                        self.pending.parsing_fn_ptr_proto = true;
+                        let pp = self.parse_function_params()?;
+                        self.pending.parsing_fn_ptr_proto = saved_proto;
+                        for &pidx in &pp.indices {
+                            Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
+                        }
+                        self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
+                        self.pending.fn_ptr_param_types = Some(pp.types);
                     } else {
                         self.skip_balanced_parens_after_open()?;
                     }
@@ -172,6 +205,15 @@ impl Compiler {
                     self.next()?;
                     if self.lex.tk == ']' {
                         self.next()?;
+                        // `T (*p)[]` -- pointer to an incomplete array.
+                        // `*p` decays to a pointer to the element, so it
+                        // is address-preserving and `(*p)[j]` strides by
+                        // the element size. Record a single-element row
+                        // so the pointer-to-array deref path engages;
+                        // the inner count only affects `p[i]` row
+                        // striding, which is a constraint violation on
+                        // an incomplete pointee anyway.
+                        pointee_dims.push(1);
                     } else {
                         let m = self.parse_constant_int()?;
                         if m > 0 {
@@ -267,7 +309,7 @@ impl Compiler {
                 // `#define`s the preprocessor folded into the
                 // source token stream).
                 let n = self.parse_constant_int()?;
-                if n <= 0 {
+                if n < 0 {
                     return Err(
                         self.compile_err(format!("array dimension must be positive (got {n})"))
                     );
@@ -276,7 +318,12 @@ impl Compiler {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                array_size = n;
+                // `T x[0]` -- a GCC zero-length array. It behaves like a
+                // C99 6.7.2.1 flexible array member (`T x[]`): zero size,
+                // valid as a struct/union's trailing member with storage
+                // allocated past the fixed part. Route it through the same
+                // `array_size = -1` sentinel.
+                array_size = if n == 0 { -1 } else { n };
             }
             // Trailing dimensions for N-dim arrays. c5 stores
             // `array_size = product(dims)` (total element count),
@@ -347,10 +394,27 @@ impl Compiler {
             // never propagates into a computed stride; the
             // post-init fixup in `run_compile` overwrites it with
             // the real count once the initializer has been parsed.
-            let inner_dim: i64 = if dims.len() >= 2 {
-                dims[1]
-            } else if array_size < 0 && !dims.is_empty() {
-                dims[0]
+            // Unified dimension list, outermost first. For a deferred
+            // outer dim (`array_size < 0`), `dims` holds only the
+            // trailing inner dims, so prepend the `0` placeholder; an
+            // explicit shape already carries every dimension. The
+            // post-init fixup in `run_compile` overwrites `dims[0] == 0`
+            // with the real outer count once the initializer is parsed.
+            let full_dims: alloc::vec::Vec<i64> = if array_size < 0 && !dims.is_empty() {
+                let mut v = alloc::vec::Vec::with_capacity(dims.len() + 1);
+                v.push(0);
+                v.extend(dims);
+                v
+            } else {
+                dims
+            };
+            // `inner_array_size` is the second overall dimension (the
+            // immediate inner row width), used by the 2D-init padding
+            // path. `seed_multi_dim_strides` only reads `dims[k+1..]`
+            // for stride[k], so the placeholder zero never enters a
+            // computed stride.
+            let inner_dim: i64 = if full_dims.len() >= 2 {
+                full_dims[1]
             } else {
                 0
             };
@@ -363,13 +427,8 @@ impl Compiler {
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
                 self.symbols[idx].inner_array_size = inner_dim;
-                self.symbols[idx].array_dims = if dims.len() >= 2 {
-                    dims
-                } else if array_size < 0 && !dims.is_empty() {
-                    let mut v = alloc::vec::Vec::with_capacity(dims.len() + 1);
-                    v.push(0);
-                    v.extend(dims);
-                    v
+                self.symbols[idx].array_dims = if full_dims.len() >= 2 {
+                    full_dims
                 } else {
                     alloc::vec::Vec::new()
                 };

@@ -40,6 +40,35 @@ enum PackDirective {
     Pop,
 }
 
+/// Decode one UTF-8 code point from the front of `bytes`, returning
+/// `(code_point, byte_length)`. A malformed lead or truncated sequence
+/// falls back to the single byte interpreted as Latin-1, so the lexer
+/// always advances.
+fn decode_utf8(bytes: &[u8]) -> (u32, usize) {
+    let b0 = bytes[0];
+    let (mut cp, len) = if b0 & 0x80 == 0 {
+        return (b0 as u32, 1);
+    } else if b0 & 0xE0 == 0xC0 {
+        ((b0 & 0x1F) as u32, 2)
+    } else if b0 & 0xF0 == 0xE0 {
+        ((b0 & 0x0F) as u32, 3)
+    } else if b0 & 0xF8 == 0xF0 {
+        ((b0 & 0x07) as u32, 4)
+    } else {
+        return (b0 as u32, 1);
+    };
+    let mut i = 1;
+    while i < len && i < bytes.len() && bytes[i] & 0xC0 == 0x80 {
+        cp = (cp << 6) | (bytes[i] & 0x3F) as u32;
+        i += 1;
+    }
+    if i < len {
+        // Truncated sequence: fall back to the lead byte.
+        return (b0 as u32, 1);
+    }
+    (cp, len)
+}
+
 /// One parsed GNU-style line marker (`# N "file" [flags]`) or
 /// C99 `#line N "file"` directive. The `#` prefix is already
 /// stripped by the lexer's `#`-line handler, so we see the
@@ -211,6 +240,18 @@ pub(crate) struct Lexer {
     /// decimal constant with no `u` suffix stays signed.
     pub int_is_decimal: bool,
 
+    /// `true` when the most recent `'"'` string-literal token came from
+    /// a wide (`L"..."`) literal. The element width follows
+    /// `wchar_bytes`; the initializer and expression parsers read this
+    /// to size the element stride (C99 6.4.5).
+    pub str_is_wide: bool,
+
+    /// Byte width of a `wchar_t` element. 4 on the Unix targets (where
+    /// `wchar_t` is `int`) and 2 on Windows (UTF-16). The compiler sets
+    /// it from the target after construction; wide string and character
+    /// literals store this many bytes per element.
+    pub wchar_bytes: usize,
+
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
     /// reads it via [`Self::current_pack`] and clamps each field's
@@ -345,6 +386,8 @@ impl Lexer {
             int_suffix_long: 0,
             int_suffix_unsigned: false,
             int_is_decimal: true,
+            str_is_wide: false,
+            wchar_bytes: 4,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -377,6 +420,89 @@ impl Lexer {
     /// are absorbed into the current token so the parser's narrow
     /// concatenation loop does not interleave a 1-byte gap, and a
     /// 16-bit `0` terminator is appended at the end.
+    /// Parse the rest of a C99 6.4.4.2 hexadecimal floating
+    /// constant. The integer hex digits occupy `[mant_start,
+    /// self.pos)`; `self.pos` points at the `.` or the binary-
+    /// exponent letter `p`/`P`. Consumes the optional fractional
+    /// digits, the mandatory `p`/`P` [sign] decimal exponent, and an
+    /// optional `f`/`F`/`l`/`L` suffix, returning the value as f64.
+    fn lex_hex_float(&mut self, mant_start: usize) -> Result<f64, C5Error> {
+        let hex_val = |b: u8| -> Option<u32> {
+            match b {
+                b'0'..=b'9' => Some((b - b'0') as u32),
+                b'a'..=b'f' => Some((b - b'a' + 10) as u32),
+                b'A'..=b'F' => Some((b - b'A' + 10) as u32),
+                _ => None,
+            }
+        };
+        let mut mant: f64 = 0.0;
+        for &b in &self.src[mant_start..self.pos] {
+            mant = mant * 16.0 + hex_val(b).unwrap_or(0) as f64;
+        }
+        if self.pos < self.src.len() && self.src[self.pos] == b'.' {
+            self.pos += 1;
+            let mut scale = 1.0_f64 / 16.0;
+            while self.pos < self.src.len() {
+                let Some(d) = hex_val(self.src[self.pos]) else {
+                    break;
+                };
+                mant += d as f64 * scale;
+                scale /= 16.0;
+                self.pos += 1;
+            }
+        }
+        if self.pos >= self.src.len() || (self.src[self.pos] != b'p' && self.src[self.pos] != b'P')
+        {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "{}: hexadecimal floating constant requires a binary exponent (`p`)",
+                    self.line
+                ),
+            )));
+        }
+        self.pos += 1;
+        let exp_neg = if self.pos < self.src.len()
+            && (self.src[self.pos] == b'+' || self.src[self.pos] == b'-')
+        {
+            let neg = self.src[self.pos] == b'-';
+            self.pos += 1;
+            neg
+        } else {
+            false
+        };
+        let exp_start = self.pos;
+        let mut exp: i32 = 0;
+        while self.pos < self.src.len() && self.src[self.pos].is_ascii_digit() {
+            exp = exp
+                .saturating_mul(10)
+                .saturating_add((self.src[self.pos] - b'0') as i32);
+            self.pos += 1;
+        }
+        if self.pos == exp_start {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("{}: binary exponent has no digits", self.line),
+            )));
+        }
+        let mut exp = if exp_neg { -exp } else { exp };
+        // The `f`/`F`/`l`/`L` suffix only selects the type; c5 stores
+        // every floating constant as f64, so it is consumed and
+        // discarded.
+        if self.pos < self.src.len() && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L') {
+            self.pos += 1;
+        }
+        // Scale by 2^exp through exact doubling / halving so the
+        // result needs no std-only float intrinsics.
+        while exp > 0 {
+            mant *= 2.0;
+            exp -= 1;
+        }
+        while exp < 0 {
+            mant *= 0.5;
+            exp += 1;
+        }
+        Ok(mant)
+    }
+
     fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
         let quote = self.src[self.pos];
         self.pos += 1;
@@ -384,8 +510,19 @@ impl Lexer {
         let mut char_value: i64 = 0;
         loop {
             while self.pos < self.src.len() && self.src[self.pos] != quote {
-                let mut val = self.src[self.pos] as i64;
-                self.pos += 1;
+                // A wide literal's elements are Unicode code points
+                // (C99 6.4.4.4 / 6.4.5): decode the UTF-8 source bytes
+                // so `L'a'` is U+00E1 = 225, not the trailing byte of
+                // its two-byte encoding. ASCII passes through unchanged.
+                let mut val = if self.src[self.pos] < 0x80 {
+                    let b = self.src[self.pos] as i64;
+                    self.pos += 1;
+                    b
+                } else {
+                    let (cp, len) = decode_utf8(&self.src[self.pos..]);
+                    self.pos += len;
+                    cp as i64
+                };
                 if val == b'\\' as i64 {
                     if self.pos >= self.src.len() {
                         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -431,6 +568,35 @@ impl Lexer {
                             }
                             val = acc;
                         }
+                        b'u' | b'U' => {
+                            // Universal character name (C99 6.4.3):
+                            // `\u` takes exactly four hex digits, `\U`
+                            // exactly eight, naming a Unicode code point.
+                            let digits = if esc == b'u' { 4 } else { 8 };
+                            let mut acc: i64 = 0;
+                            let mut count = 0;
+                            while count < digits && self.pos < self.src.len() {
+                                let h = self.src[self.pos];
+                                let d = match h {
+                                    b'0'..=b'9' => (h - b'0') as i64,
+                                    b'a'..=b'f' => 10 + (h - b'a') as i64,
+                                    b'A'..=b'F' => 10 + (h - b'A') as i64,
+                                    _ => break,
+                                };
+                                acc = (acc << 4) | d;
+                                self.pos += 1;
+                                count += 1;
+                            }
+                            if count != digits {
+                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                    &format!(
+                                        "{}: \\{} needs {} hex digits",
+                                        self.line, esc as char, digits
+                                    ),
+                                )));
+                            }
+                            val = acc;
+                        }
                         b'0'..=b'7' => {
                             let mut acc: i64 = (esc - b'0') as i64;
                             let mut count = 1;
@@ -449,8 +615,12 @@ impl Lexer {
                     }
                 }
                 if quote == b'"' {
-                    data.push(val as u8);
-                    data.push((val >> 8) as u8);
+                    // A wide string stores one code point per element at
+                    // the target's `wchar_t` width (4 bytes on Unix, 2
+                    // on Windows / UTF-16).
+                    for k in 0..self.wchar_bytes {
+                        data.push((val >> (k * 8)) as u8);
+                    }
                 } else {
                     char_value = val;
                 }
@@ -491,10 +661,13 @@ impl Lexer {
             }
             self.pos = saved_pos;
             self.line = saved_line;
-            data.push(0);
-            data.push(0);
+            // `wchar_t`-width NUL terminator.
+            for _ in 0..self.wchar_bytes {
+                data.push(0);
+            }
             self.ival = start_data;
             self.tk = Tok('"' as i64);
+            self.str_is_wide = true;
             return Ok(());
         }
     }
@@ -674,6 +847,82 @@ impl Lexer {
         count
     }
 
+    /// Count top-level comma-separated items in a brace list, starting
+    /// just past the outer `{`. Used to size a brace-elided array of
+    /// structs (C99 6.7.8p20): the number of items divided by the per-
+    /// element initializer slot count gives the array length. Returns
+    /// the item count (0 for an empty `{ }`). Trailing commas do not
+    /// inflate the count.
+    pub fn count_top_level_items_in_array(&self) -> usize {
+        let bytes = &self.src;
+        let mut p = self.pos;
+        let mut depth: i32 = 1;
+        let mut items: usize = 0;
+        // True once the current top-level item has seen content; a
+        // trailing comma before `}` leaves it false, so no phantom item.
+        let mut cur_has_content = false;
+        while p < bytes.len() && depth > 0 {
+            let c = bytes[p];
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'*' {
+                p += 2;
+                while p + 1 < bytes.len() && !(bytes[p] == b'*' && bytes[p + 1] == b'/') {
+                    p += 1;
+                }
+                p = (p + 2).min(bytes.len());
+                continue;
+            }
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'/' {
+                while p < bytes.len() && bytes[p] != b'\n' {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'"' || c == b'\'' {
+                let q = c;
+                p += 1;
+                while p < bytes.len() && bytes[p] != q {
+                    if bytes[p] == b'\\' && p + 1 < bytes.len() {
+                        p += 2;
+                    } else {
+                        p += 1;
+                    }
+                }
+                if p < bytes.len() {
+                    p += 1;
+                }
+                cur_has_content = true;
+                continue;
+            }
+            if c == b'{' || c == b'[' || c == b'(' {
+                depth += 1;
+                cur_has_content = true;
+                p += 1;
+                continue;
+            }
+            if c == b'}' || c == b']' || c == b')' {
+                depth -= 1;
+                p += 1;
+                continue;
+            }
+            if c == b',' && depth == 1 {
+                if cur_has_content {
+                    items += 1;
+                    cur_has_content = false;
+                }
+                p += 1;
+                continue;
+            }
+            if !c.is_ascii_whitespace() {
+                cur_has_content = true;
+            }
+            p += 1;
+        }
+        if cur_has_content {
+            items += 1;
+        }
+        items
+    }
+
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.
@@ -835,6 +1084,7 @@ impl Lexer {
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
                 {
                     self.pos += 1;
+                    let hex_body_start = self.pos;
                     // Accumulate via wrapping_mul / wrapping_add so a
                     // hex literal that fills the full 64-bit range
                     // (e.g. `0xFFFFFFFFFFFFFFFEul`) doesn't trip
@@ -855,6 +1105,20 @@ impl Lexer {
                         };
                         val = val.wrapping_mul(16).wrapping_add(digit);
                         self.pos += 1;
+                    }
+                    // C99 6.4.4.2 hex floating constant: the integer
+                    // hex digits are followed by a `.` and/or the
+                    // mandatory binary-exponent part `p`/`P`. Detect
+                    // either marker here; a plain `0x...` with neither
+                    // stays an integer constant.
+                    let next_is_dot = self.pos < self.src.len() && self.src[self.pos] == b'.';
+                    let next_is_bexp = self.pos < self.src.len()
+                        && (self.src[self.pos] == b'p' || self.src[self.pos] == b'P');
+                    if next_is_dot || next_is_bexp {
+                        let f = self.lex_hex_float(hex_body_start)?;
+                        self.ival = f.to_bits() as i64;
+                        self.tk = Tok(Token::FloatNum as i64);
+                        return Ok(());
                     }
                     // Hex literals can carry the standard integer suffix
                     // letters (u/U/l/L plus ll/LL combinations such as
@@ -1030,6 +1294,13 @@ impl Lexer {
                 }
             } else if c == '\'' || c == '"' {
                 let start_data = data.len() as i64;
+                // C99 6.4.4.4p10: a character constant containing more
+                // than one character has an implementation-defined value;
+                // the common convention packs the bytes with the first
+                // character in the most significant position. Accumulate
+                // here; a single-character constant keeps its exact value.
+                let mut char_acc: i64 = 0;
+                let mut char_count: i64 = 0;
                 while self.pos < self.src.len() && self.src[self.pos] as char != c {
                     let mut val = self.src[self.pos] as i64;
                     self.pos += 1;
@@ -1105,7 +1376,12 @@ impl Lexer {
                     if c == '"' {
                         data.push(val as u8);
                     } else {
-                        self.ival = val;
+                        char_count += 1;
+                        char_acc = (char_acc << 8) | (val & 0xFF);
+                        // Single-character constant keeps its exact value
+                        // (so a hex escape that overran a byte is not
+                        // re-masked); multi-character packs the bytes.
+                        self.ival = if char_count == 1 { val } else { char_acc };
                     }
                 }
                 self.pos += 1;
@@ -1116,6 +1392,7 @@ impl Lexer {
                     // trailing NUL once all the parts have been read.
                     self.ival = start_data;
                     self.tk = Tok('"' as i64);
+                    self.str_is_wide = false;
                 } else {
                     self.tk = Tok(Token::Num as i64);
                 }
@@ -1456,15 +1733,18 @@ const KEYWORDS: &[(&str, Token)] = &[
     // Other function specifiers -- accepted, no effect.
     ("register", Token::FuncSpec),
     ("auto", Token::FuncSpec),
-    // C11 _Noreturn -- pure hint to optimizers (the called function
-    // never returns); semantics-equivalent to dropping it. Treated as
-    // a no-op function specifier so user code that pulls in
-    // <stdnoreturn.h> (which defines `noreturn` as `_Noreturn`)
-    // compiles unchanged. `noreturn` itself is the macro spelling
-    // and is recognised under the same token so source that uses
-    // the keyword without the header still parses.
-    ("_Noreturn", Token::FuncSpec),
-    ("noreturn", Token::FuncSpec),
+    // C11 _Noreturn (6.7.4): the function never returns to its
+    // caller. Recorded on the function symbol so the reachability
+    // analysis treats a call to it as not reaching its continuation.
+    // `noreturn` is the <stdnoreturn.h> macro spelling, recognised
+    // under the same token so source using the keyword without the
+    // header still parses.
+    ("_Atomic", Token::Atomic),
+    ("asm", Token::Asm),
+    ("__asm__", Token::Asm),
+    ("__asm", Token::Asm),
+    ("_Noreturn", Token::Noreturn),
+    ("noreturn", Token::Noreturn),
     // typedef -- drives the parser's type-alias registration.
     ("typedef", Token::Typedef),
     // union -- like struct, but all members share offset 0 and
@@ -1668,7 +1948,12 @@ mod tests {
     /// return the bytes the lexer pushed into `data`. Used to pin
     /// the escape-sequence behaviour of string literals.
     fn lex_string_literal(src: &str) -> Vec<u8> {
+        lex_string_literal_w(src, 4)
+    }
+
+    fn lex_string_literal_w(src: &str, wchar_bytes: usize) -> Vec<u8> {
         let mut lex = Lexer::new(src.to_string());
+        lex.wchar_bytes = wchar_bytes;
         let mut symbols: Vec<Symbol> = Vec::new();
         let mut index = SymbolIndex::new();
         let mut data: Vec<u8> = Vec::new();
@@ -1737,23 +2022,33 @@ mod tests {
     }
 
     #[test]
-    fn wide_string_literal_emits_two_bytes_per_char() {
-        // `L"AB"` -- two ASCII chars, encoded as 16-bit LE
-        // (0x41 0x00, 0x42 0x00) plus a 16-bit nul terminator.
+    fn wide_string_literal_emits_four_bytes_per_char() {
+        // `L"AB"` -- `wchar_t` is `int`, so each code point is a 4-byte
+        // LE value (0x41 0 0 0, 0x42 0 0 0) plus a 4-byte nul.
         assert_eq!(
             lex_string_literal(r#"L"AB""#),
-            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn wide_string_literal_emits_two_bytes_per_char_on_windows() {
+        // With a 2-byte `wchar_t` (Windows / UTF-16) `L"AB"` stores two
+        // bytes per code point (0x41 0, 0x42 0) plus a 2-byte nul.
+        assert_eq!(
+            lex_string_literal_w(r#"L"AB""#, 2),
+            vec![0x41, 0, 0x42, 0, 0, 0]
         );
     }
 
     #[test]
     fn wide_string_literal_absorbs_adjacent_wide_chunks() {
-        // The lexer concatenates adjacent `L"..."` literals into
-        // one token so the 16-bit terminator lands at the end of
-        // the merged payload, not between chunks.
+        // The lexer concatenates adjacent `L"..."` literals into one
+        // token so the 4-byte terminator lands at the end of the merged
+        // payload, not between chunks.
         assert_eq!(
             lex_string_literal(r#"L"A" L"B""#),
-            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0x42, 0, 0, 0, 0, 0, 0, 0]
         );
     }
 
@@ -1762,11 +2057,19 @@ mod tests {
         // `\n` -> 0x0A, `\\` -> 0x5C, `\x41` -> 0x41.
         assert_eq!(
             lex_string_literal(r#"L"\n\\""#),
-            vec![0x0A, 0x00, 0x5C, 0x00, 0x00, 0x00]
+            vec![0x0A, 0, 0, 0, 0x5C, 0, 0, 0, 0, 0, 0, 0]
         );
         assert_eq!(
             lex_string_literal(r#"L"\x41""#),
-            vec![0x41, 0x00, 0x00, 0x00]
+            vec![0x41, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn wide_char_literal_decodes_utf8_code_point() {
+        // `L'a'` (U+00E1, UTF-8 0xC3 0xA1) is the code point 225, not
+        // the trailing byte of its encoding.
+        assert_eq!(lex_char_literal("L'\u{00e1}'"), 0x00E1);
+        assert_eq!(lex_char_literal("L'A'"), 0x41);
     }
 }

@@ -4,11 +4,13 @@ setjmp_longjmp.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x2a0, %esi            # imm = 0x2A0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<trigger>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movslq	%esi, %rsi
@@ -19,6 +21,8 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x240, %rsp            # imm = 0x240
@@ -40,7 +44,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movq	%rax, %r12
                	movslq	%r12d, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x208(%rbp), %rdi
                	movl	$0x7, %esi
@@ -94,4 +98,4 @@ Disassembly of section .text:
                	addq	$0x240, %rsp            # imm = 0x240
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

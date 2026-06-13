@@ -14,7 +14,7 @@ use super::super::codegen::Target;
 use super::super::ir::{BinOp, FunctionSsa, LoadKind, StoreKind};
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::{Expr, ExprId, Stmt, StmtId, UnOp};
+use super::{AtomicKind, Expr, ExprId, Stmt, StmtId, UnOp};
 
 /// Diagnostic for a shape the walker can't lower yet. Carries
 /// enough context to point at the offending AST node so the
@@ -74,6 +74,7 @@ pub(crate) fn walk_function(
     param_local_slots: &[i64],
     returns_struct: bool,
     return_struct_size: i64,
+    return_ty: i64,
     alloca_top_slot: i64,
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
@@ -100,6 +101,73 @@ pub(crate) fn walk_function(
     // reserve the per-frame arena and store the running top into
     // the named local slot.
     b.alloca_init(alloca_top_slot);
+    // C99 6.8.6.4 + AAPCS64 6.9: classify the return convention. An
+    // integer aggregate of at most 16 bytes returns in x0/x1; a larger
+    // one returns through the caller-supplied x8 indirect-result
+    // register. Both carry no hidden argument, so their parameters
+    // start at slot 2. Every other aggregate keeps the c5 out-pointer
+    // convention (hidden pointer at slot 2, parameters start at 3).
+    use crate::c5::compiler::StructReturnAbi;
+    let ret_abi = crate::c5::compiler::struct_return_abi(structs, target, return_ty);
+    let ret_outptr = matches!(ret_abi, StructReturnAbi::OutPtr);
+    let ret_in_regs = matches!(ret_abi, StructReturnAbi::Regs(_));
+    let ret_indirect = matches!(ret_abi, StructReturnAbi::Indirect(_));
+    if let StructReturnAbi::Regs(desc) | StructReturnAbi::Indirect(desc) = &ret_abi {
+        let idx = b.intern_agg_desc(desc.clone());
+        b.set_ret_agg(idx);
+    }
+    b.set_ret_is_fp(is_floating_scalar(return_ty));
+    // A function returning > 16 bytes saves the incoming x8 result
+    // pointer into a dedicated local for the codegen prologue; the
+    // `return` lowering writes the value through it.
+    let indirect_result_slot: i64 = if ret_indirect {
+        let slot = b.alloc_synthetic_local();
+        b.set_indirect_result_slot(slot);
+        slot
+    } else {
+        0
+    };
+    // C99 6.5.2.2 + the host ABI (AAPCS64 6.8.2): a small aggregate
+    // parameter arrives in argument registers rather than by the
+    // caller's address. Classify each by-value struct parameter; a
+    // tagged parameter gets no SSA entry-copy below -- the callee
+    // prologue (native) and `run_func` (VM) write the incoming bytes
+    // straight into the parser-reserved body local recorded in
+    // `param_local_slots[i]`. Variadic and out-pointer-returning
+    // callees keep the c5 by-address shape (the hidden out-pointer
+    // shifts every parameter cell), so they are excluded; host-ABI
+    // returns (registers / x8) leave the parameter slots unshifted.
+    let mut param_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+    // Parallel per-parameter aggregate classification, consumed below by
+    // the argument-register planner so the `ParamRef` seed loop knows
+    // which scalar parameters an aggregate pushed past the argument
+    // registers onto the host stack.
+    let mut param_arg_aggs: alloc::vec::Vec<Option<crate::c5::codegen::ArgAgg>> =
+        alloc::vec::Vec::new();
+    if !is_variadic && !ret_outptr {
+        param_aggs = alloc::vec![None; param_tys.len()];
+        param_arg_aggs = alloc::vec![None; param_tys.len()];
+        for (i, &pty) in param_tys.iter().enumerate() {
+            if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(structs, target, pty) {
+                param_arg_aggs[i] = Some(crate::c5::codegen::ArgAgg {
+                    class: crate::c5::codegen::abi_classify::classify_aggregate(
+                        desc.size,
+                        desc.align,
+                        &desc.fields,
+                        target.abi(),
+                        false,
+                    ),
+                    size: desc.size,
+                });
+                let idx = b.intern_agg_desc(desc);
+                param_aggs[i] = Some(idx);
+            }
+        }
+    }
+    let has_struct_params = param_aggs.iter().any(Option::is_some);
+    if has_struct_params {
+        b.set_param_aggs(param_aggs.clone(), param_local_slots.to_vec());
+    }
     // C99 6.5.2.2 + the c5 calling convention: for each
     // struct-by-value parameter, the caller passes the
     // source's address in slot `i + base` (base = 2, or 3
@@ -116,7 +184,7 @@ pub(crate) fn walk_function(
     // args). The parser's symbol-table assignment uses the same
     // base, so this index matches the `val` the parser stored
     // for each declared param.
-    let arg_slot_base: i64 = if returns_struct { 3 } else { 2 };
+    let arg_slot_base: i64 = if ret_outptr { 3 } else { 2 };
     // C99 6.2.5p10 + the host ABI (System V AMD64 3.2.3 / AAPCS64
     // 6.4.1): a floating-point scalar parameter passed in an FP
     // argument register. Record the per-parameter FP mask so the
@@ -128,7 +196,7 @@ pub(crate) fn walk_function(
     // keep the c5 cdecl shape (their args ride the c5 stack / a
     // hidden out-pointer shifts every cell), so they are excluded
     // here exactly as they are from the seed loop below.
-    if !is_variadic && !returns_struct {
+    if !is_variadic && !ret_outptr {
         for (i, &pty) in param_tys.iter().enumerate() {
             let stripped = pty & !(1i64 << 30);
             let is_pointer = pty & (1i64 << 30) != 0;
@@ -156,8 +224,12 @@ pub(crate) fn walk_function(
     // floating-point parameter is seeded with an FP `ParamRef` only
     // when the plan placed it in an FP register; one that overflowed to
     // the host stack reads its c5 cdecl cell instead.
-    let param_plan =
-        super::super::codegen::plan_param_regs(param_tys.len(), b.param_fp_mask(), target.abi());
+    let param_plan = super::super::codegen::plan_param_regs_aggs(
+        param_tys.len(),
+        b.param_fp_mask(),
+        target.abi(),
+        &param_arg_aggs,
+    );
     let param_in_fp_reg = |i: usize| -> bool {
         matches!(
             param_plan.placements.get(i),
@@ -183,9 +255,8 @@ pub(crate) fn walk_function(
     // place can land on any caller-saved reg, including a host
     // arg reg) and any reordering would let those writes clobber
     // the incoming argument before its `ParamRef` materialised.
-    if !is_variadic && !returns_struct {
-        let int_arg_regs_count = target.abi().int_arg_regs.len();
-        for i in 0..param_tys.len().min(int_arg_regs_count) {
+    if !is_variadic && !ret_outptr {
+        for i in 0..param_tys.len() {
             let pty = param_tys[i];
             let local_slot = param_local_slots[i];
             if local_slot < 0 {
@@ -220,6 +291,19 @@ pub(crate) fn walk_function(
                 continue;
             }
             if is_float {
+                continue;
+            }
+            // Seed an integer `ParamRef` only when the planner placed this
+            // parameter in an integer argument register. An aggregate
+            // earlier in the list can consume several registers (or one
+            // by-reference pointer register), pushing a later scalar that
+            // would fit by position onto the host stack; such a parameter
+            // has no incoming register and reads its c5 cdecl cell, which
+            // the prologue restripes from the incoming stack.
+            if !matches!(
+                param_plan.placements.get(i),
+                Some(super::super::codegen::ArgPlacement::IntReg(_))
+            ) {
                 continue;
             }
             // Pointer-typed parameters carry the pointer marker
@@ -270,6 +354,13 @@ pub(crate) fn walk_function(
         let is_struct_value =
             stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
         if is_struct_value {
+            // Host-ABI register-passed parameter: no entry copy. The
+            // backend scatters the incoming argument registers (native)
+            // or copies the argument bytes (VM) straight into this
+            // body local.
+            if param_aggs.get(i).copied().flatten().is_some() {
+                continue;
+            }
             let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
             if id >= structs.len() {
                 continue;
@@ -285,18 +376,18 @@ pub(crate) fn walk_function(
         // 4-byte narrow-storage local (`local_slot < 0`).
         let is_float = stripped == crate::c5::token::Ty::Float as i64;
         if is_float {
-            let dst = b.local_addr(local_slot);
-            if !is_variadic && !returns_struct && param_in_fp_reg(i) {
+            if !is_variadic && !ret_outptr && param_in_fp_reg(i) {
                 // The argument arrives at single precision in an FP
                 // argument register (C99 6.2.5p10). Seed an FP
                 // `ParamRef { F32 }` (the s-register view) and store it
                 // into the local with `StoreKind::F32`. The value never
                 // round-trips through the positive c5 cdecl cell, so
                 // that cell stays unobserved and the prologue's spill of
-                // it is elided.
+                // it is elided. A direct `StoreLocal` (not the
+                // address-taken form) keeps the slot mem2reg-promotable.
                 let pr = b.param_ref(i as u32, super::super::ir::LoadKind::F32);
                 b.mark_f32(pr);
-                b.store(dst, pr, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, pr, super::super::ir::StoreKind::F32);
             } else if b.param_fp_mask() != 0 {
                 // Host-stack-overflow `float` parameter (more than eight
                 // preceding FP parameters) under the FP-register ABI: the
@@ -305,7 +396,7 @@ pub(crate) fn walk_function(
                 // narrow back into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
                 let val = b.load_local(arg_slot, super::super::ir::LoadKind::F32);
-                b.store(dst, val, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
             } else {
                 // Variadic / struct-returning callees keep the c5 cdecl
                 // shape: the caller widened the `float` to an 8-byte
@@ -314,7 +405,7 @@ pub(crate) fn walk_function(
                 // `StoreKind::F32` into the local.
                 let arg_slot = (i as i64) + arg_slot_base;
                 let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-                b.store(dst, val, super::super::ir::StoreKind::F32);
+                b.store_local(local_slot, val, super::super::ir::StoreKind::F32);
             }
         }
     }
@@ -325,8 +416,13 @@ pub(crate) fn walk_function(
         target,
         loop_ctx: alloc::vec::Vec::new(),
         label_blocks: alloc::vec::Vec::new(),
+        switch_dispatch: alloc::vec::Vec::new(),
         returns_struct,
         return_struct_size,
+        ret_in_regs,
+        ret_indirect,
+        indirect_result_slot,
+        scalar_return_ty: return_ty,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -382,14 +478,43 @@ struct Walker<'a> {
     /// a Goto's forward reference or the matching Labeled stmt --
     /// both sides see the same block.
     label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
+    /// Per enclosing `switch` (innermost last): the block reserved for
+    /// each `case` value and for `default`. A `case` / `default` marker
+    /// reached while walking the switch body jumps to its block, so the
+    /// dispatcher can target it wherever it sits -- including inside a
+    /// loop nested in the switch (C99 6.8.4.2 admits a case label at any
+    /// depth; the loop's back edge re-enters the body at its first case
+    /// block). The blocks are allocated once by the case-collection pass
+    /// before the dispatcher emits.
+    #[allow(clippy::type_complexity)]
+    switch_dispatch: alloc::vec::Vec<(
+        alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        Option<super::super::ir::BlockId>,
+    )>,
     /// True when the function's declared return type is a struct
-    /// value. `return s;` lowers as: load the hidden out-pointer
-    /// from `slot 2`, Mcpy `return_struct_size` bytes from `s`'s
-    /// address into it, then return the out-pointer.
+    /// value returned through the c5 out-pointer convention. `return
+    /// s;` loads the hidden out-pointer from `slot 2`, Mcpy
+    /// `return_struct_size` bytes from `s`'s address into it, then
+    /// returns the out-pointer. False for host-ABI returns.
     returns_struct: bool,
-    /// Byte size of the struct return type when `returns_struct`
-    /// is true. Zero otherwise.
+    /// Byte size of the struct return type when the function returns
+    /// a struct by any convention. Zero otherwise.
     return_struct_size: i64,
+    /// AAPCS64 register return (aggregate <= 16 bytes): `return s;`
+    /// yields `s`'s address; the codegen scatters the eightbytes into
+    /// x0/x1.
+    ret_in_regs: bool,
+    /// AAPCS64 indirect return (aggregate > 16 bytes via x8): `return
+    /// s;` copies the value through the saved x8 pointer in
+    /// `indirect_result_slot`, then returns that pointer.
+    ret_indirect: bool,
+    /// The function's declared scalar return type (C99 6.8.6.4). A
+    /// `char` / `short` return is narrowed to this width before
+    /// `Terminator::Return`.
+    scalar_return_ty: i64,
+    /// Body-local slot holding the saved x8 indirect-result pointer
+    /// when `ret_indirect` is true; zero otherwise.
+    indirect_result_slot: i64,
 }
 
 impl<'a> Walker<'a> {
@@ -538,14 +663,24 @@ impl<'a> Walker<'a> {
         b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => {
+                if self.ret_in_regs || self.ret_indirect {
+                    // C99 6.8.6.4 + AAPCS64 6.9 host-ABI struct return:
+                    // yield the struct's address. The codegen scatters
+                    // the eightbytes into the result registers (<= 16
+                    // bytes) or copies the value through the x8 result
+                    // pointer (> 16 bytes); the VM copies it into the
+                    // caller's result temp.
+                    let v = self.walk_expr_rvalue(b, *e)?;
+                    b.return_(v);
+                    return Ok(true);
+                }
                 if self.returns_struct {
-                    // C99 6.8.6.4 + the c5 ABI: a struct-returning
-                    // callee receives the caller's result-temp
-                    // address in `slot 2`. `return s;` copies
-                    // `sizeof(struct T)` bytes from `s`'s address
-                    // into that out-pointer and returns the
-                    // out-pointer so the call site has a stable
-                    // value to chain into the surrounding
+                    // C99 6.8.6.4 + the c5 out-pointer convention: the
+                    // callee receives the caller's result-temp address
+                    // in `slot 2`. `return s;` copies `sizeof(struct
+                    // T)` bytes from `s`'s address into that
+                    // out-pointer and returns it so the call site has a
+                    // stable value to chain into the surrounding
                     // assignment / Mcpy.
                     let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = self.walk_expr_rvalue(b, *e)?;
@@ -555,7 +690,33 @@ impl<'a> Walker<'a> {
                     b.return_(out_ptr);
                     return Ok(true);
                 }
-                let v = self.walk_expr_rvalue(b, *e)?;
+                let mut v = self.walk_expr_rvalue(b, *e)?;
+                // C99 6.8.6.4 / 6.3.1.1: the returned value is converted to
+                // the function's return type. For a `char` / `short` return
+                // the ABI carries an `int`-promoted value, so a body result
+                // wider than the declared type (e.g. `(x << 8) | (x >> 8)`
+                // in a `uint16_t`-returning byte-swap) must be narrowed to
+                // the type's width here; without it the caller reads the
+                // un-narrowed bits. Integer-and-wider returns already ride
+                // the result register at full width. `_Bool` is excluded: its
+                // conversion is a boolean `!= 0` (6.3.1.2), not a width mask,
+                // and the rvalue walk already normalizes it to 0/1.
+                let stripped = self.scalar_return_ty & !UNSIGNED_BIT;
+                let rs = type_size_bytes(self.scalar_return_ty, self.target);
+                if !is_floating_scalar(self.scalar_return_ty)
+                    && !is_pointer_ty(self.scalar_return_ty)
+                    && stripped != Ty::Bool as i64
+                    && (rs == 1 || rs == 2)
+                {
+                    if (self.scalar_return_ty & UNSIGNED_BIT) != 0 {
+                        let mask: i64 = if rs == 1 { 0xff } else { 0xffff };
+                        v = b.binop_imm(BinOp::And, v, mask);
+                    } else {
+                        let bits = 64i64 - (rs as i64) * 8;
+                        let shifted = b.binop_imm(BinOp::Shl, v, bits);
+                        v = b.binop_imm(BinOp::Shr, shifted, bits);
+                    }
+                }
                 b.return_(v);
                 Ok(true)
             }
@@ -772,6 +933,13 @@ impl<'a> Walker<'a> {
                 b.jmp(target);
                 Ok(true)
             }
+            Stmt::GotoIndirect(target) => {
+                // GCC `goto *expr;`: evaluate the label-address operand
+                // and close the block with an indirect branch.
+                let v = self.walk_expr_rvalue(b, *target)?;
+                b.goto_indirect(v);
+                Ok(true)
+            }
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
                 // C99 6.8.1: a labeled statement is reachable from
@@ -792,296 +960,104 @@ impl<'a> Walker<'a> {
             Stmt::Switch { disc, body } => {
                 let disc_val = self.walk_expr_rvalue(b, *disc)?;
                 let body_id = *body;
-
-                // Flatten the body's top-level items into a list
-                // for partitioning. A Compound's items become the
-                // list directly; a singleton stmt becomes a one-
-                // element list.
-                let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(body_id) {
-                    Stmt::Compound(its) => its.clone(),
-                    _ => alloc::vec![super::BlockItem::Stmt(body_id)],
-                };
-
-                // Partition the items into (labels, stmts)
-                // tuples. `labels` is empty for the pre-first-
-                // case fall-in region (C99 6.8.4.2: reachable
-                // only by goto-into-switch; the walker still
-                // emits a block so outer goto has a target),
-                // or a list of `Some(val)` (Case markers) and
-                // `None` (Default marker) entries when one or
-                // more case labels share the body that follows.
-                // C99 6.8.4.2: a Case / Default marker labels
-                // the following statement, so a chain like
-                // `case 'a': case 'b': case 'c': body;` puts
-                // three labels on the same body. The parser
-                // builds those as nested `Stmt::Case`s on the
-                // body field; peel them off so the dispatcher
-                // emits one comparison per label that all
-                // branch to the same case block.
-                #[allow(clippy::type_complexity)]
-                let mut partitions: alloc::vec::Vec<(
-                    alloc::vec::Vec<Option<i64>>,
-                    alloc::vec::Vec<super::BlockItem>,
-                )> = alloc::vec::Vec::new();
-                // C99 6.8.1: a `goto`-target label that wraps a
-                // Case / Default marker resolves to the same
-                // statement as the marker. The peel loop records
-                // every such label id keyed by the partition it
-                // ends up in; after the partitions' SSA blocks
-                // are allocated below we register
-                // `label_id -> block` so a downstream
-                // `Stmt::Goto(label)` lands on the case block
-                // instead of an orphan block that
-                // `block_for_label` would otherwise materialise.
-                let mut peeled_label_partition: alloc::vec::Vec<(
-                    super::super::ast::LabelId,
-                    usize,
-                )> = alloc::vec::Vec::new();
-                let mut current_labels: alloc::vec::Vec<Option<i64>> = alloc::vec::Vec::new();
-                let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
-                let mut pending_goto_labels: alloc::vec::Vec<super::super::ast::LabelId> =
-                    alloc::vec::Vec::new();
-                let flush =
-                    |partitions: &mut alloc::vec::Vec<(
-                        alloc::vec::Vec<Option<i64>>,
-                        alloc::vec::Vec<super::BlockItem>,
-                    )>,
-                     current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                     current: &mut alloc::vec::Vec<super::BlockItem>| {
-                        if !current.is_empty() || !current_labels.is_empty() {
-                            partitions
-                                .push((core::mem::take(current_labels), core::mem::take(current)));
-                        }
-                    };
-                // Process a slice of switch-body items into the
-                // partitions / current accumulator pair. Recurses
-                // into any Compound whose body contains a case or
-                // default marker so a Duff's-device shape like
-                // `case A: { int x; ...; case B: body; }` partitions
-                // the same way as `case A: ...; case B: body;` --
-                // C99 6.8.4.2p4 scopes case labels to the nearest
-                // enclosing switch regardless of nesting depth.
-                // Locals are slot-allocated at function-prologue
-                // time, so inlining a compound's items preserves
-                // execution semantics; the Decl statements still
-                // run their initialisers at the per-partition
-                // position they sit at.
-                fn partition_items(
-                    walker: &Walker,
-                    items: &[super::BlockItem],
-                    partitions: &mut alloc::vec::Vec<(
-                        alloc::vec::Vec<Option<i64>>,
-                        alloc::vec::Vec<super::BlockItem>,
-                    )>,
-                    peeled_label_partition: &mut alloc::vec::Vec<(
-                        super::super::ast::LabelId,
-                        usize,
-                    )>,
-                    current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                    current: &mut alloc::vec::Vec<super::BlockItem>,
-                    pending_goto_labels: &mut alloc::vec::Vec<super::super::ast::LabelId>,
-                ) {
-                    let do_flush =
-                        |partitions: &mut alloc::vec::Vec<(
-                            alloc::vec::Vec<Option<i64>>,
-                            alloc::vec::Vec<super::BlockItem>,
-                        )>,
-                         current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                         current: &mut alloc::vec::Vec<super::BlockItem>| {
-                            if !current.is_empty() || !current_labels.is_empty() {
-                                partitions.push((
-                                    core::mem::take(current_labels),
-                                    core::mem::take(current),
-                                ));
-                            }
-                        };
-                    for item in items {
-                        if let super::BlockItem::Stmt(s) = item {
-                            let mut s_id = *s;
-                            let mut saw_marker = false;
-                            loop {
-                                match walker.ast.stmt(s_id) {
-                                    Stmt::Case { val, body } => {
-                                        if !saw_marker {
-                                            do_flush(partitions, current_labels, current);
-                                            saw_marker = true;
-                                        }
-                                        current_labels.push(Some(*val));
-                                        s_id = *body;
-                                    }
-                                    Stmt::Default { body } => {
-                                        if !saw_marker {
-                                            do_flush(partitions, current_labels, current);
-                                            saw_marker = true;
-                                        }
-                                        current_labels.push(None);
-                                        s_id = *body;
-                                    }
-                                    Stmt::Labeled { label, body } => {
-                                        let inner = walker.ast.stmt(*body);
-                                        if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. })
-                                        {
-                                            pending_goto_labels.push(*label);
-                                            s_id = *body;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    _ => break,
-                                }
-                            }
-                            if saw_marker {
-                                let target_idx = partitions.len();
-                                for lab in pending_goto_labels.drain(..) {
-                                    peeled_label_partition.push((lab, target_idx));
-                                }
-                                // C99 6.8.4.2p4: case labels scope
-                                // to the nearest enclosing switch
-                                // regardless of nesting depth. When
-                                // a case body is itself a Compound,
-                                // descend so any case labels at the
-                                // next depth still become partition
-                                // boundaries (the Duff's-device
-                                // `case A: { ... case B: ... }`
-                                // shape).
-                                if let Stmt::Compound(inner_items) = walker.ast.stmt(s_id) {
-                                    let inner_items_owned = inner_items.clone();
-                                    partition_items(
-                                        walker,
-                                        &inner_items_owned,
-                                        partitions,
-                                        peeled_label_partition,
-                                        current_labels,
-                                        current,
-                                        pending_goto_labels,
-                                    );
-                                } else {
-                                    current.push(super::BlockItem::Stmt(s_id));
-                                }
-                                continue;
-                            }
-                        }
-                        // A non-case-marked Compound at this level
-                        // may still embed a case label at an inner
-                        // depth (Duff's device with the case sitting
-                        // inside a plain `{}` block, no enclosing
-                        // case marker). Descend so those labels still
-                        // partition correctly; if no case is reached,
-                        // the recursion no-ops and the items end up
-                        // pushed in order into the current partition.
-                        if let super::BlockItem::Stmt(s) = item
-                            && let Stmt::Compound(inner_items) = walker.ast.stmt(*s)
-                        {
-                            let inner_items_owned = inner_items.clone();
-                            partition_items(
-                                walker,
-                                &inner_items_owned,
-                                partitions,
-                                peeled_label_partition,
-                                current_labels,
-                                current,
-                                pending_goto_labels,
-                            );
-                            continue;
-                        }
-                        current.push(*item);
-                    }
-                }
-                partition_items(
-                    self,
-                    &items,
-                    &mut partitions,
-                    &mut peeled_label_partition,
-                    &mut current_labels,
-                    &mut current,
-                    &mut pending_goto_labels,
-                );
-                flush(&mut partitions, &mut current_labels, &mut current);
-
                 let after_blk = b.new_block();
-                let blocks: alloc::vec::Vec<super::super::ir::BlockId> =
-                    (0..partitions.len()).map(|_| b.new_block()).collect();
-                for (label, idx) in &peeled_label_partition {
-                    if idx < &blocks.len() {
-                        self.label_blocks.push((*label, blocks[*idx]));
-                    }
-                }
-                let default_idx = partitions
-                    .iter()
-                    .position(|(lbls, _)| lbls.iter().any(|l| l.is_none()));
 
-                // Dispatcher chain: for each Case label across
-                // all partitions, cmp disc against its val and
-                // branch to the matching case block when equal;
-                // fall through to the next comparison otherwise.
-                // After the chain, jmp to default (if present)
-                // or to after_blk.
-                let mut next_dispatcher_blk = b.new_block();
-                b.jmp(next_dispatcher_blk);
-                for (i, (labels, _)) in partitions.iter().enumerate() {
-                    for val in labels.iter().flatten() {
-                        b.switch_to(next_dispatcher_blk);
-                        let eq = b.binop_imm(BinOp::Eq, disc_val, *val);
-                        let next = b.new_block();
-                        b.branch_nonzero(eq, blocks[i], next);
-                        next_dispatcher_blk = next;
-                    }
-                }
-                b.switch_to(next_dispatcher_blk);
-                let final_target = match default_idx {
-                    Some(idx) => blocks[idx],
-                    None => after_blk,
-                };
-                b.jmp(final_target);
+                // Reserve a block for every case value and for default
+                // (C99 6.8.4.2: case labels at any depth scope to the
+                // nearest switch). The body walk below jumps to these
+                // blocks at each marker, so a marker inside a nested
+                // loop is still reachable from the dispatcher.
+                let mut cases: alloc::vec::Vec<(i64, super::super::ir::BlockId)> =
+                    alloc::vec::Vec::new();
+                let mut default_blk: Option<super::super::ir::BlockId> = None;
+                self.collect_switch_cases(b, body_id, &mut cases, &mut default_blk);
 
-                // Push loop_ctx for break. Continue is invalid
-                // inside a bare switch; propagate the outer
-                // loop's continue target so nested switch-in-loop
-                // works.
+                // Dispatcher: a balanced binary search over the sorted
+                // case values. Each internal node branches on `<` (one
+                // conditional branch) and a leaf tests equality, so a
+                // dispatch is O(log n) branches where a linear compare
+                // chain is O(n). Case values are distinct (C99 6.8.4.2);
+                // the discriminant's signedness selects the ordering and
+                // the comparison so an unsigned discriminant with the
+                // high bit set still sorts correctly.
+                let deflt = default_blk.unwrap_or(after_blk);
+                let disc_ty = expr_ty(self.ast.expr(*disc)).unwrap_or(Ty::Int as i64);
+                let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
+                let mut sorted = cases.clone();
+                if disc_unsigned {
+                    // C99 6.8.4.2p1 + p5: the controlling expression is
+                    // integer-promoted, then each case label is converted to
+                    // that promoted type. A 4-byte unsigned controlling type
+                    // (`unsigned int`, and `unsigned long` on LLP64) promotes
+                    // to itself, so a negative label wraps modulo 2^32 and
+                    // must match the zero-extended discriminant -- mask it to
+                    // 32 bits. An 8-byte unsigned type keeps the full-width
+                    // value, which already matches. (Sub-`int` unsigned types
+                    // promote to signed `int`, so a negative label stays
+                    // negative and never matches a zero-extended value; those
+                    // are reported as unsigned by `disc_ty` but take the plain
+                    // path here with no masking.)
+                    if type_size_bytes(disc_ty, self.target) == 4 {
+                        for c in sorted.iter_mut() {
+                            c.0 = (c.0 as u32) as i64;
+                        }
+                    }
+                    sorted.sort_by_key(|p| p.0 as u64);
+                } else {
+                    sorted.sort_by_key(|p| p.0);
+                }
+                let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
+                self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+
+                // Walk the body linearly. The opening block is reachable
+                // only by a goto into the switch ahead of the first case
+                // (C99 6.8.1); the dispatcher never targets it.
+                let fallin = b.new_block();
+                b.switch_to(fallin);
+
+                // `break` leaves the switch; `continue` is invalid in a
+                // bare switch, so propagate the enclosing loop's target.
                 let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
                 self.loop_ctx.push((after_blk, prev_continue));
-
-                // Walk each partition's stmts into its block;
-                // fallthrough lands on the next partition's
-                // block (or after_blk for the last partition).
-                // C99 6.8.1: a `Stmt::Labeled` is reachable via
-                // its label even when the textually preceding
-                // stmt terminated, so the partition keeps walking
-                // past a terminator to give every embedded label
-                // its block. The terminator flag still suppresses
-                // an implicit fallthrough at the partition's tail
-                // when the last walked statement closed the block
-                // itself (Goto / Return / Break / Continue).
-                let n = partitions.len();
-                for (i, (_, stmts)) in partitions.into_iter().enumerate() {
-                    b.switch_to(blocks[i]);
-                    let mut terminated = false;
-                    for item in stmts {
-                        let super::BlockItem::Stmt(s) = item else {
-                            continue;
-                        };
-                        if terminated && !matches!(self.ast.stmt(s), Stmt::Labeled { .. }) {
-                            continue;
-                        }
-                        terminated = self.walk_stmt(b, s)?;
-                    }
-                    if !terminated {
-                        let next_block = if i + 1 < n { blocks[i + 1] } else { after_blk };
-                        b.jmp(next_block);
-                    }
-                }
-
+                self.switch_dispatch.push((cases, default_blk));
+                let terminated = self.walk_stmt(b, body_id)?;
+                self.switch_dispatch.pop();
                 self.loop_ctx.pop();
+                if !terminated {
+                    b.jmp(after_blk);
+                }
                 b.switch_to(after_blk);
                 Ok(false)
             }
-            // Case / Default markers normally get consumed by the
-            // enclosing Switch's partition pass. If a stray one
-            // reaches the walker (e.g. inside a non-switch
-            // Compound -- which would be a parser bug), treat it
-            // as a transparent wrapper around its body.
-            Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
+            // A case / default marker inside the active switch jumps to
+            // the block the case-collection pass reserved for it, so the
+            // dispatcher can target it and a preceding statement falls
+            // through into it. Outside any switch (a parser bug) it is a
+            // transparent wrapper around its body.
+            Stmt::Case { val, body } => {
+                let val = *val;
                 let body_id = *body;
+                let blk = self
+                    .switch_dispatch
+                    .last()
+                    .and_then(|d| d.0.iter().find(|(v, _)| *v == val).map(|&(_, b)| b));
+                if let Some(blk) = blk {
+                    if b.is_block_open() {
+                        b.jmp(blk);
+                    }
+                    b.switch_to(blk);
+                }
+                self.walk_stmt(b, body_id)
+            }
+            Stmt::Default { body } => {
+                let body_id = *body;
+                let blk = self.switch_dispatch.last().and_then(|d| d.1);
+                if let Some(blk) = blk {
+                    if b.is_block_open() {
+                        b.jmp(blk);
+                    }
+                    b.switch_to(blk);
+                }
                 self.walk_stmt(b, body_id)
             }
             Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
@@ -1116,72 +1092,7 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let ty = *ty;
                 let init_clone = init.clone();
-                match init_clone {
-                    super::super::ast::LocalInit::None => Ok(()),
-                    super::super::ast::LocalInit::Scalar(init_id) => {
-                        let v = self.walk_expr_rvalue(b, init_id)?;
-                        // C99 6.7.8p13 struct-value initializer:
-                        // copy the source's bytes into the local
-                        // slot via Mcpy. `v` is the source
-                        // address (the walker's address-as-value
-                        // routing for struct rvalues). Size comes
-                        // from the local's declared struct type.
-                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
-                            let dst = b.local_addr(slot);
-                            let size = self.struct_size(ty);
-                            b.mcpy(dst, v, size);
-                            return Ok(());
-                        }
-                        let kind = store_kind_for(ty, self.target);
-                        // Integer widths fuse into a single
-                        // `StoreLocal`; `F32` routes through
-                        // `LocalAddr` + `Store` because the per-arch
-                        // `StoreLocal` keeps the value in a GPR.
-                        if matches!(kind, super::super::ir::StoreKind::F32) {
-                            let addr = b.local_addr(slot);
-                            b.store(addr, v, kind);
-                        } else {
-                            b.store_local(slot, v, kind);
-                        }
-                        Ok(())
-                    }
-                    super::super::ast::LocalInit::Aggregate {
-                        src_data_off,
-                        size_bytes,
-                    } => {
-                        let dst = b.local_addr(slot);
-                        let src = b.imm_data(src_data_off);
-                        b.mcpy(dst, src, size_bytes);
-                        Ok(())
-                    }
-                    super::super::ast::LocalInit::Runtime {
-                        zero_init,
-                        elements,
-                    } => {
-                        // C99 6.7.8p19 zero prelude (if the parser
-                        // emitted one): Mcpy staged zero bytes
-                        // before the per-element stores.
-                        if let Some((src_data_off, size_bytes)) = zero_init {
-                            let dst = b.local_addr(slot);
-                            let src = b.imm_data(src_data_off);
-                            b.mcpy(dst, src, size_bytes);
-                        }
-                        // Per-element stores: address = local_addr
-                        // + offset, store(walked-value, kind).
-                        for elem in &elements {
-                            let v = self.walk_expr_rvalue(b, elem.value)?;
-                            let base = b.local_addr(slot);
-                            let addr = if elem.offset == 0 {
-                                base
-                            } else {
-                                b.binop_imm(BinOp::Add, base, elem.offset)
-                            };
-                            let kind = store_kind_for(elem.ty, self.target);
-                            b.store(addr, v, kind);
-                        }
-                        Ok(())
-                    }
-                }
+                self.emit_local_init(b, slot, ty, &init_clone)
             }
             super::super::ast::Decl::Vla { .. } => Err(WalkError::UnsupportedStmt {
                 id: 0,
@@ -1195,6 +1106,86 @@ impl<'a> Walker<'a> {
                 // ident reference still resolves through the Glo
                 // path in `load_ident_rvalue` /
                 // `ident_address`.
+                Ok(())
+            }
+        }
+    }
+
+    /// Emit the initialization of a frame slot from a [`LocalInit`].
+    /// Shared by local-variable declarations (`Decl::Local`) and
+    /// block-scope compound literals (`Expr::CompoundLiteral`), both
+    /// of which lower the same C99 6.7.8 / 6.5.2.5 initializer
+    /// shapes into the same slot.
+    fn emit_local_init(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        slot: i64,
+        ty: i64,
+        init: &super::super::ast::LocalInit,
+    ) -> Result<(), WalkError> {
+        match init {
+            super::super::ast::LocalInit::None => Ok(()),
+            super::super::ast::LocalInit::Scalar(init_id) => {
+                let v = self.walk_expr_rvalue(b, *init_id)?;
+                // C99 6.7.8p13 struct-value initializer: copy the
+                // source's bytes into the slot via Mcpy. `v` is the
+                // source address (the walker's address-as-value
+                // routing for struct rvalues).
+                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                    let dst = b.local_addr(slot);
+                    let size = self.struct_size(ty);
+                    b.mcpy(dst, v, size);
+                    return Ok(());
+                }
+                let kind = store_kind_for(ty, self.target);
+                // A direct `StoreLocal` keeps the slot mem2reg-promotable.
+                // The `F32` s-view store is narrowed by the per-arch emit
+                // when the value is still double.
+                b.store_local(slot, v, kind);
+                Ok(())
+            }
+            super::super::ast::LocalInit::Aggregate {
+                src_data_off,
+                size_bytes,
+            } => {
+                let dst = b.local_addr(slot);
+                let src = b.imm_data(*src_data_off);
+                b.mcpy(dst, src, *size_bytes);
+                Ok(())
+            }
+            super::super::ast::LocalInit::Runtime {
+                zero_init,
+                elements,
+            } => {
+                // C99 6.7.8p19 zero prelude (if the parser emitted
+                // one): Mcpy staged zero bytes before the per-element
+                // stores.
+                if let Some((src_data_off, size_bytes)) = zero_init {
+                    let dst = b.local_addr(slot);
+                    let src = b.imm_data(*src_data_off);
+                    b.mcpy(dst, src, *size_bytes);
+                }
+                for elem in elements {
+                    let v = self.walk_expr_rvalue(b, elem.value)?;
+                    let base = b.local_addr(slot);
+                    let addr = if elem.offset == 0 {
+                        base
+                    } else {
+                        b.binop_imm(BinOp::Add, base, elem.offset)
+                    };
+                    // C99 6.7.8p13: a struct/union member initialized by a
+                    // single expression of compatible type copies the
+                    // source's bytes. `v` is the source address (the
+                    // walker's address-as-value routing for struct rvalues),
+                    // so this needs an Mcpy, not a scalar store.
+                    if is_struct_ty(elem.ty) && struct_ptr_depth(elem.ty) == 0 {
+                        let size = self.struct_size(elem.ty);
+                        b.mcpy(addr, v, size);
+                        continue;
+                    }
+                    let kind = store_kind_for(elem.ty, self.target);
+                    b.store(addr, v, kind);
+                }
                 Ok(())
             }
         }
@@ -1214,6 +1205,98 @@ impl<'a> Walker<'a> {
         let blk = b.new_block();
         self.label_blocks.push((label, blk));
         blk
+    }
+
+    /// Reserve a block for every `case` value and for `default` in a
+    /// switch body, descending into nested statements but not into a
+    /// nested switch (whose labels belong to it, C99 6.8.4.2). A
+    /// duplicate case value keeps the first block; the parser already
+    /// rejects duplicates.
+    /// Emit a balanced binary search over a sorted, distinct case list
+    /// as the switch dispatcher. The cursor is at an open block on entry
+    /// and the block is closed on return. Internal nodes branch on
+    /// `lt_op` (`<`); a leaf tests equality and falls to `deflt` when the
+    /// discriminant matches no case.
+    fn emit_switch_search(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        disc: super::super::ir::ValueId,
+        cases: &[(i64, super::super::ir::BlockId)],
+        lt_op: BinOp,
+        deflt: super::super::ir::BlockId,
+    ) {
+        match cases {
+            [] => b.jmp(deflt),
+            [(val, blk)] => {
+                let eq = b.binop_imm(BinOp::Eq, disc, *val);
+                b.branch_nonzero(eq, *blk, deflt);
+            }
+            _ => {
+                let mid = cases.len() / 2;
+                let pivot = cases[mid].0;
+                let lt = b.binop_imm(lt_op, disc, pivot);
+                let left = b.new_block();
+                let ge = b.new_block();
+                b.branch_nonzero(lt, left, ge);
+                b.switch_to(left);
+                self.emit_switch_search(b, disc, &cases[..mid], lt_op, deflt);
+                b.switch_to(ge);
+                self.emit_switch_search(b, disc, &cases[mid..], lt_op, deflt);
+            }
+        }
+    }
+
+    fn collect_switch_cases(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        stmt_id: super::super::ast::StmtId,
+        cases: &mut alloc::vec::Vec<(i64, super::super::ir::BlockId)>,
+        default_blk: &mut Option<super::super::ir::BlockId>,
+    ) {
+        match self.ast.stmt(stmt_id) {
+            Stmt::Case { val, body } => {
+                let val = *val;
+                let body = *body;
+                if !cases.iter().any(|(v, _)| *v == val) {
+                    let blk = b.new_block();
+                    cases.push((val, blk));
+                }
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            Stmt::Default { body } => {
+                let body = *body;
+                if default_blk.is_none() {
+                    *default_blk = Some(b.new_block());
+                }
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            Stmt::Compound(items) => {
+                let items = items.clone();
+                for item in items {
+                    if let super::BlockItem::Stmt(s) = item {
+                        self.collect_switch_cases(b, s, cases, default_blk);
+                    }
+                }
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                let then_s = *then_s;
+                let else_s = *else_s;
+                self.collect_switch_cases(b, then_s, cases, default_blk);
+                if let Some(e) = else_s {
+                    self.collect_switch_cases(b, e, cases, default_blk);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::DoWhile { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Labeled { body, .. } => {
+                let body = *body;
+                self.collect_switch_cases(b, body, cases, default_blk);
+            }
+            // A nested switch owns its own case labels; every other
+            // statement carries none.
+            _ => {}
+        }
     }
 
     /// Walk an expression in rvalue position. Returns the
@@ -1509,22 +1592,27 @@ impl<'a> Walker<'a> {
                 }
                 // Local-target shortcut: a Token::Loc-class Ident
                 // lvalue lowers to a single `StoreLocal` instead of
-                // `LocalAddr` + `Store`. `F32` keeps the value in an
-                // FP register, which the per-arch `StoreLocal` does
-                // not store, so it stays on the `LocalAddr` + `Store`
-                // path.
+                // `LocalAddr` + `Store`, keeping the slot mem2reg-
+                // promotable. The `F32` s-view is narrowed below before
+                // the store so the assignment yields the f32 value.
                 let kind = store_kind_for(*ty, self.target);
-                if !matches!(kind, StoreKind::F32)
-                    && let Expr::Ident {
-                        class,
-                        val,
-                        is_thread_local: false,
-                        ..
-                    } = self.ast.expr(*lhs)
+                if let Expr::Ident {
+                    class,
+                    val,
+                    is_thread_local: false,
+                    ..
+                } = self.ast.expr(*lhs)
                     && *class == Token::Loc as i64
                 {
                     let slot = *val;
-                    let value = self.walk_expr_rvalue(b, *rhs)?;
+                    let mut value = self.walk_expr_rvalue(b, *rhs)?;
+                    // C99 6.5.16.1 + 6.3.1.5: a `double` value assigned
+                    // to a `float` object is narrowed to single precision;
+                    // the assignment expression's value is the converted
+                    // (f32) value.
+                    if matches!(kind, StoreKind::F32) {
+                        value = b.fp_narrow_to_f32(value);
+                    }
                     b.store_local(slot, value, kind);
                     return Ok(value);
                 }
@@ -1605,20 +1693,30 @@ impl<'a> Walker<'a> {
                 }
             }
             Expr::Call { callee, args, ty } => {
-                // Struct-returning c5-internal callee: allocate
-                // a result temp on this frame, prepend its
-                // address as the hidden out-pointer arg 0, run
-                // the call, and return the temp's address as
-                // the expression's value (the c5 ABI's
-                // address-as-value rule for struct rvalues).
+                // Out-pointer-returning c5-internal callee: allocate a
+                // result temp on this frame, prepend its address as the
+                // hidden out-pointer arg 0, run the call, and return the
+                // temp's address as the expression's value (the c5 ABI's
+                // address-as-value rule for struct rvalues). Host-ABI
+                // returns (registers / x8) carry no hidden argument and
+                // fall through to the normal call path below, which
+                // tags the call's `ret_agg` / `ret_slot`.
                 if is_struct_ty(*ty)
                     && struct_ptr_depth(*ty) == 0
+                    && matches!(
+                        crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                        crate::c5::compiler::StructReturnAbi::OutPtr
+                    )
                     && let Expr::Ident {
                         sym, class, val, ..
                     } = self.ast.expr(*callee)
                     && *class == Token::Fun as i64
                 {
-                    let result_slot = b.alloc_synthetic_local();
+                    // The callee writes the whole struct through the
+                    // out-pointer, so the result temp must hold
+                    // `sizeof(struct)` bytes, not a single slot.
+                    let result_size = self.struct_size(*ty);
+                    let result_slot = b.alloc_synthetic_struct(result_size);
                     // Spill the out-pointer through an int-typed
                     // temp so the codegen routes it via the host
                     // int arg register, matching the way FP and
@@ -1641,10 +1739,20 @@ impl<'a> Walker<'a> {
                     // `param_fp_mask` because the hidden out-pointer
                     // shifts every parameter cell), so its arguments
                     // ride the integer bank: `fp_arg_mask` is 0.
-                    // A struct-returning callee is non-variadic (it
-                    // keeps the c5 cdecl shape with the hidden
-                    // out-pointer), so every argument is fixed.
-                    let fixed_args = all_args.len();
+                    // The hidden out-pointer is a fixed argument. A
+                    // variadic struct-returning callee (e.g. a printf-style
+                    // error helper returning a 16-byte value) still passes
+                    // its variadic tail on the host stack, so fixed_args
+                    // counts the out-pointer plus the callee's named
+                    // parameters; the emit detects the variadic callee from
+                    // its target and places `args[fixed_args..]` per the
+                    // host variadic ABI. A non-variadic callee keeps every
+                    // argument fixed.
+                    let fixed_args = if self.fun_is_variadic(*sym) {
+                        1 + self.fun_fixed_args(*sym)
+                    } else {
+                        all_args.len()
+                    };
                     if target_pc == 0 {
                         let _ = b.call_extern(*sym, all_args, fixed_args, false, 0);
                     } else {
@@ -1744,6 +1852,64 @@ impl<'a> Walker<'a> {
                         } else {
                             args.len()
                         };
+                        // C99 6.5.2.2 + the host ABI: a struct passed as
+                        // a variadic argument rides by value -- its
+                        // eightbyte occupies the save area / stack slot
+                        // `va_arg` reads -- not via the c5 address-as-
+                        // value pointer that `walk_expr_rvalue` left in
+                        // `arg_vals`. Replace each small struct variadic
+                        // argument's address with its loaded eightbyte.
+                        // A struct larger than one eightbyte is left on
+                        // the address path. TODO: pass its second
+                        // eightbyte.
+                        // Host-ABI aggregate arguments (AAPCS64 6.8.2 /
+                        // System V 3.2.3): tag each by-value struct argument
+                        // with its layout so the caller marshals it into the
+                        // argument registers / stack slots the callee reads.
+                        // A fixed parameter classifies by its declared type;
+                        // a variadic argument by its own type. A variadic
+                        // struct of at most one eightbyte rides as a single
+                        // loaded integer in the variadic slot (C99 6.5.2.2);
+                        // a larger aggregate routes through the host-ABI
+                        // placement so `plan_call_args_aggs` lays its
+                        // eightbytes down all-or-nothing and the callee's
+                        // `va_arg` reads them contiguously. Inert on ABIs /
+                        // sizes the classifier declines.
+                        let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                        {
+                            let nparams = self.symbols[*sym as usize].params.len();
+                            for i in 0..arg_vals.len() {
+                                let agg_ty = if i < nparams {
+                                    Some(self.symbols[*sym as usize].params[i])
+                                } else {
+                                    match expr_ty(self.ast.expr(args[i])) {
+                                        Some(aty)
+                                            if is_struct_ty(aty)
+                                                && struct_ptr_depth(aty) == 0
+                                                && self.struct_size(aty) <= 8 =>
+                                        {
+                                            arg_vals[i] = b
+                                                .load(arg_vals[i], super::super::ir::LoadKind::I64);
+                                            None
+                                        }
+                                        other => other,
+                                    }
+                                };
+                                let Some(ty_tag) = agg_ty else {
+                                    continue;
+                                };
+                                if let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                    self.structs,
+                                    self.target,
+                                    ty_tag,
+                                ) {
+                                    if arg_aggs.is_empty() {
+                                        arg_aggs = alloc::vec![None; arg_vals.len()];
+                                    }
+                                    arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                                }
+                            }
+                        }
                         // macOS arm64's variadic ABI (Apple "Writing
                         // ARM64 Code for Apple Platforms") passes the
                         // named arguments per AAPCS64 6.4.1 (int bank +
@@ -1780,6 +1946,22 @@ impl<'a> Walker<'a> {
                                     fp_arg_mask,
                                 )
                             };
+                            if !arg_aggs.is_empty() {
+                                b.set_call_arg_aggs(call, arg_aggs);
+                            }
+                            if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                            | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty,
+                                )
+                            {
+                                let ridx = b.intern_agg_desc(desc.clone());
+                                let slot = b.alloc_synthetic_struct(desc.size as i64);
+                                b.set_call_ret_agg(call, ridx, slot);
+                                return Ok(b.local_addr(slot));
+                            }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
@@ -1822,6 +2004,22 @@ impl<'a> Walker<'a> {
                                     fp_arg_mask,
                                 )
                             };
+                            if !arg_aggs.is_empty() {
+                                b.set_call_arg_aggs(call, arg_aggs);
+                            }
+                            if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                            | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                                crate::c5::compiler::struct_return_abi(
+                                    self.structs,
+                                    self.target,
+                                    *ty,
+                                )
+                            {
+                                let ridx = b.intern_agg_desc(desc.clone());
+                                let slot = b.alloc_synthetic_struct(desc.size as i64);
+                                b.set_call_ret_agg(call, ridx, slot);
+                                return Ok(b.local_addr(slot));
+                            }
                             if is_float_ty(*ty) {
                                 return Ok(b.mark_f32(call));
                             }
@@ -1871,6 +2069,21 @@ impl<'a> Walker<'a> {
                         // from there and FP-classes the value.
                         let fp_return = is_floating_scalar(*ty);
                         let target_pc = self.live_fun_val(*sym, *val);
+                        // Host-ABI aggregate return (AAPCS64 6.9):
+                        // reserve the result temp before the call. Its
+                        // frame slot rides on the call instruction, so it
+                        // survives value renumbering and needs no SSA
+                        // operand.
+                        let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                        | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                            crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                        {
+                            let ridx = b.intern_agg_desc(desc.clone());
+                            let slot = b.alloc_synthetic_struct(desc.size as i64);
+                            Some((ridx, slot))
+                        } else {
+                            None
+                        };
                         let call = if target_pc == 0 {
                             b.call_extern(*sym, arg_vals, fixed_args, fp_return, call_fp_arg_mask)
                         } else {
@@ -1882,6 +2095,18 @@ impl<'a> Walker<'a> {
                                 call_fp_arg_mask,
                             )
                         };
+                        if !arg_aggs.is_empty() {
+                            b.set_call_arg_aggs(call, arg_aggs);
+                        }
+                        // Tag the call's `ret_agg` / `ret_slot` and yield
+                        // the result temp's address. The codegen reads
+                        // the eightbytes from x0/x1 (<= 16 bytes) or has
+                        // the callee write through x8 (> 16 bytes); the
+                        // VM copies the returned struct into the temp.
+                        if let Some((ridx, slot)) = ret_temp {
+                            b.set_call_ret_agg(call, ridx, slot);
+                            return Ok(b.local_addr(slot));
+                        }
                         // A `float`-returning callee yields a single-
                         // precision value (C99 6.2.5p10 / 6.3.1.8); tag it.
                         if is_float_ty(*ty) {
@@ -1895,8 +2120,17 @@ impl<'a> Walker<'a> {
                         // binding(...)` directives -- exactly
                         // what `Inst::CallExt::binding_idx`
                         // wants. `fp_arg_mask` is the per-arg
-                        // FP-ness bit set we built above.
-                        return Ok(b.call_ext(*val, arg_vals, fp_arg_mask));
+                        // FP-ness bit set we built above. A
+                        // floating-point return is FP-classed (C99
+                        // 6.2.5p10) so the result rides d0 / xmm0
+                        // without a GPR bridge; a `float` result
+                        // additionally carries the f32 tag.
+                        let fp_return = is_floating_scalar(*ty);
+                        let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
+                        if is_float_ty(*ty) {
+                            return Ok(b.mark_f32(call));
+                        }
+                        return Ok(call);
                     }
                 }
                 // Determine the pointed-to function's variadic-ness
@@ -1924,6 +2158,52 @@ impl<'a> Walker<'a> {
                     None => self.walk_expr_rvalue(b, *callee)?,
                 };
                 let fp_return = is_floating_scalar(*ty);
+                // Host-ABI out-pointer struct return through a function
+                // pointer (SysV x86_64 > 16 bytes, Win64 aggregates outside
+                // {1,2,4,8} bytes). Mirror the direct-call path: allocate
+                // the result temp, pass its address as a hidden first
+                // integer argument, and yield the temp's address; the
+                // callee writes the struct through the pointer and returns
+                // it. An out-pointer-returning function uses the all-integer
+                // cdecl (its prologue skips the FP bank), so the call is
+                // non-variadic with FP mask 0.
+                if matches!(
+                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty),
+                    crate::c5::compiler::StructReturnAbi::OutPtr
+                ) {
+                    // The callee writes the whole struct through the
+                    // out-pointer, so the result temp must hold
+                    // `sizeof(struct)` bytes.
+                    let result_size = self.struct_size(*ty);
+                    let result_slot = b.alloc_synthetic_struct(result_size);
+                    let addr = b.local_addr(result_slot);
+                    let temp = b.alloc_synthetic_local();
+                    b.store_local(temp, addr, super::super::ir::StoreKind::I64);
+                    let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
+                    let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                        alloc::vec::Vec::with_capacity(arg_vals.len() + 1);
+                    all_args.push(out_arg);
+                    all_args.extend_from_slice(&arg_vals);
+                    let fixed = all_args.len();
+                    b.call_indirect(target, all_args, false, fixed, false, 0);
+                    return Ok(b.local_addr(result_slot));
+                }
+                // Host-ABI aggregate return through a function pointer:
+                // mirror the direct-call path. Reserve the result temp and
+                // tag the call so the codegen reads the eightbytes from
+                // x0/x1 (<= 16 bytes) or has the callee write through x8
+                // (> 16 bytes on aarch64); the VM copies the returned
+                // struct into the temp.
+                let ret_temp = if let crate::c5::compiler::StructReturnAbi::Regs(desc)
+                | crate::c5::compiler::StructReturnAbi::Indirect(desc) =
+                    crate::c5::compiler::struct_return_abi(self.structs, self.target, *ty)
+                {
+                    let ridx = b.intern_agg_desc(desc.clone());
+                    let slot = b.alloc_synthetic_struct(desc.size as i64);
+                    Some((ridx, slot))
+                } else {
+                    None
+                };
                 if callee_variadic && abi.variadic_on_stack {
                     // macOS arm64 variadic ABI: named arguments follow
                     // AAPCS64 (int / FP bank), variadic arguments on the
@@ -1943,14 +2223,26 @@ impl<'a> Walker<'a> {
                             arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
                         }
                     }
-                    return Ok(b.call_indirect(
+                    let call = b.call_indirect(
                         target,
                         arg_vals,
                         true,
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
-                    ));
+                    );
+                    if let Some((ridx, slot)) = ret_temp {
+                        b.set_call_ret_agg(call, ridx, slot);
+                        return Ok(b.local_addr(slot));
+                    }
+                    // A `float`-returning callee yields a single-precision
+                    // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
+                    // store reads the s-register view instead of narrowing
+                    // the d-register a second time.
+                    if is_float_ty(*ty) {
+                        return Ok(b.mark_f32(call));
+                    }
+                    return Ok(call);
                 }
                 // Register-save host variadic ABI (System V AMD64 on Linux
                 // x86_64, AAPCS64 on Linux aarch64): a variadic callee
@@ -1971,14 +2263,26 @@ impl<'a> Walker<'a> {
                             arg_vals[i] = b.fp_widen_to_f64(arg_vals[i]);
                         }
                     }
-                    return Ok(b.call_indirect(
+                    let call = b.call_indirect(
                         target,
                         arg_vals,
                         true,
                         callee_fixed,
                         fp_return,
                         fp_arg_mask,
-                    ));
+                    );
+                    if let Some((ridx, slot)) = ret_temp {
+                        b.set_call_ret_agg(call, ridx, slot);
+                        return Ok(b.local_addr(slot));
+                    }
+                    // A `float`-returning callee yields a single-precision
+                    // value (C99 6.2.5p10 / 6.3.1.8); tag it so the result
+                    // store reads the s-register view instead of narrowing
+                    // the d-register a second time.
+                    if is_float_ty(*ty) {
+                        return Ok(b.mark_f32(call));
+                    }
+                    return Ok(call);
                 }
                 // A function-pointer callee whose register/stack
                 // placement would interleave keeps the all-integer c5
@@ -2023,14 +2327,26 @@ impl<'a> Walker<'a> {
                 // for the indirect call regardless of `callee_variadic`
                 // (`fixed_args` is unused there); pass the prototype
                 // through so only the macOS path consults it.
-                Ok(b.call_indirect(
+                let call = b.call_indirect(
                     target,
                     arg_vals,
                     callee_variadic,
                     callee_fixed,
                     fp_return,
                     call_fp_arg_mask,
-                ))
+                );
+                if let Some((ridx, slot)) = ret_temp {
+                    b.set_call_ret_agg(call, ridx, slot);
+                    return Ok(b.local_addr(slot));
+                }
+                // A `float`-returning callee yields a single-precision value
+                // (C99 6.2.5p10 / 6.3.1.8); tag it so the result store reads
+                // the s-register view instead of narrowing the d-register a
+                // second time.
+                if is_float_ty(*ty) {
+                    return Ok(b.mark_f32(call));
+                }
+                Ok(call)
             }
             Expr::Member {
                 obj,
@@ -2149,11 +2465,29 @@ impl<'a> Walker<'a> {
                     | Expr::ShortCircuit { ty, .. } => *ty,
                     Expr::Cast { to_ty: t, .. } => *t,
                     Expr::Sizeof(s) => s.result_ty,
+                    Expr::CompoundLiteral { ty, .. } => *ty,
                     Expr::StrLit { ty, .. } => *ty,
                     Expr::Intrinsic { ty, .. } => *ty,
+                    Expr::Atomic { ty, .. } => *ty,
+                    // `&&label` is a `void *` (char-pointer encoding).
+                    Expr::LabelAddr(_) => {
+                        crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64
+                    }
                 };
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
+                // C99 6.3.1.2: a conversion to `_Bool` yields 0 when
+                // the source compares equal to 0, else 1. This holds
+                // for every scalar source, so it precedes the
+                // width/fp-ness conversions below.
+                if is_bool_scalar(*to_ty) {
+                    if source_is_fp {
+                        let d = b.fp_widen_to_f64(v);
+                        let zero = b.imm(0);
+                        return Ok(b.binop(BinOp::Fne, d, zero));
+                    }
+                    return Ok(b.binop_imm(BinOp::Ne, v, 0));
+                }
                 if target_is_fp && !source_is_fp {
                     // Integer -> FP. `IntToFp` produces an f64; a `float`
                     // target then narrows to single precision (6.3.1.4).
@@ -2244,7 +2578,22 @@ impl<'a> Walker<'a> {
                         | BinOp::Shru
                 );
                 let new_val =
-                    if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
+                    if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                        && !is_floating_scalar(*ty)
+                    {
+                        // C99 6.5.16.2: an integer lvalue with a floating
+                        // operand. The operation runs in the floating common
+                        // type; convert the loaded integer up, apply the op,
+                        // then convert the result back to the lvalue's
+                        // integer type before the store.
+                        let lv = b.fp_cast(super::super::ir::FpCastKind::IntToFp, old);
+                        let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                        if b.is_f32(rv) {
+                            rv = b.fp_widen_to_f64(rv);
+                        }
+                        let res = b.binop(*op, lv, rv);
+                        b.fp_cast(super::super::ir::FpCastKind::FpToInt, res)
+                    } else if matches!(*op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv) {
                         // C99 6.5.16.2: `E1 op= E2` computes `E1 op E2` in
                         // the operands' common type, then converts to E1's
                         // type. `old` (the lvalue) is `float` when the store
@@ -2328,6 +2677,30 @@ impl<'a> Walker<'a> {
                 Ok(old)
             }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
+            Expr::CompoundLiteral {
+                slot_off,
+                ty,
+                array_size,
+                init,
+            } => {
+                let slot = *slot_off;
+                let ty = *ty;
+                let array_size = *array_size;
+                let init = init.clone();
+                self.emit_local_init(b, slot, ty, &init)?;
+                // C99 6.5.2.5p4: a compound literal is an lvalue. An
+                // array decays to (and a struct is passed by) the
+                // object's address; a scalar literal yields the
+                // loaded value.
+                let address_only =
+                    array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+                if address_only {
+                    Ok(b.local_addr(slot))
+                } else {
+                    let kind = load_kind_for(ty, self.target);
+                    Ok(b.load_local(slot, kind))
+                }
+            }
             Expr::Comma { lhs, rhs, .. } => {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
@@ -2354,7 +2727,138 @@ impl<'a> Walker<'a> {
                     }
                     return Ok(v);
                 }
-                Ok(b.intrinsic(intr_kind, arg_vals))
+                // The integer bit-count builtins lower to a portable
+                // shift / mask sequence here rather than a dedicated
+                // instruction, so the result is identical across the
+                // interpreter and every target. clz / ctz at zero are
+                // undefined in GCC; this lowering returns the bit width.
+                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                    && i.is_int_bit_unary()
+                {
+                    use super::super::op::Intrinsic as I;
+                    let x = arg_vals[0];
+                    let w64 = i.is_bit_unary_64();
+                    return Ok(match i {
+                        I::Clz | I::Clzll => lower_clz(b, x, w64),
+                        I::Ctz | I::Ctzll => lower_ctz(b, x, w64),
+                        _ => lower_popcount(b, x, w64),
+                    });
+                }
+                if let Some(i) = super::super::op::Intrinsic::from_i64(intr_kind)
+                    && i.is_bswap()
+                {
+                    use super::super::op::Intrinsic as I;
+                    let bytes = match i {
+                        I::Bswap16 => 2,
+                        I::Bswap64 => 8,
+                        _ => 4,
+                    };
+                    return Ok(lower_bswap(b, arg_vals[0], bytes));
+                }
+                // The unary FP math intrinsics produce an FP value; tag the
+                // single-precision forms so the codegen picks the f32
+                // instruction and width.
+                let single = super::super::op::Intrinsic::from_i64(intr_kind)
+                    .is_some_and(|i| i.is_single_precision());
+                let v = b.intrinsic(intr_kind, arg_vals);
+                if single {
+                    return Ok(b.mark_f32(v));
+                }
+                Ok(v)
+            }
+            Expr::LabelAddr(label) => {
+                // GCC `&&label`: materialize the address of the label's
+                // block as a code pointer. block_addr records the block
+                // as a computed-goto successor.
+                let blk = self.block_for_label(b, *label);
+                Ok(b.block_addr(blk))
+            }
+            Expr::Atomic {
+                kind,
+                args,
+                elem_ty,
+                ..
+            } => {
+                let kind = *kind;
+                let elem_ty = *elem_ty;
+                let args = args.clone();
+                self.walk_atomic(b, kind, &args, elem_ty)
+            }
+        }
+    }
+
+    /// Lower a C11 7.17 atomic operation to ordinary load / store /
+    /// read-modify-write on the pointee width. A naturally-aligned
+    /// scalar load and store is already atomic on the supported
+    /// targets, so `atomic_load` / `atomic_store` carry full
+    /// semantics. The read-modify-write and compare-exchange forms
+    /// lower to a non-atomic load-op-store sequence: correct for a
+    /// single thread of execution but not yet inter-thread atomic.
+    // TODO: emit the target's atomic read-modify-write (x86 lock
+    // prefix / xchg / cmpxchg, AArch64 LSE or load-exclusive /
+    // store-exclusive) for the RMW and compare-exchange forms.
+    fn walk_atomic(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        kind: AtomicKind,
+        args: &[ExprId],
+        elem_ty: i64,
+    ) -> Result<super::super::ir::ValueId, WalkError> {
+        let load_kind = load_kind_for(elem_ty, self.target);
+        let store_kind = store_kind_for(elem_ty, self.target);
+        let addr = self.walk_expr_rvalue(b, args[0])?;
+        match kind {
+            AtomicKind::Load => Ok(b.load(addr, load_kind)),
+            AtomicKind::Store => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                b.store(addr, value, store_kind);
+                // Used in statement position; the value is discarded.
+                Ok(b.imm(0))
+            }
+            AtomicKind::Exchange
+            | AtomicKind::FetchAdd
+            | AtomicKind::FetchSub
+            | AtomicKind::FetchAnd
+            | AtomicKind::FetchOr
+            | AtomicKind::FetchXor => {
+                let value = self.walk_expr_rvalue(b, args[1])?;
+                let old = b.load(addr, load_kind);
+                let new = match kind {
+                    AtomicKind::Exchange => value,
+                    AtomicKind::FetchAdd => b.binop(BinOp::Add, old, value),
+                    AtomicKind::FetchSub => b.binop(BinOp::Sub, old, value),
+                    AtomicKind::FetchAnd => b.binop(BinOp::And, old, value),
+                    AtomicKind::FetchOr => b.binop(BinOp::Or, old, value),
+                    AtomicKind::FetchXor => b.binop(BinOp::Xor, old, value),
+                    _ => unreachable!(),
+                };
+                b.store(addr, new, store_kind);
+                // C11 7.17.7: the prior value of the object.
+                Ok(old)
+            }
+            AtomicKind::CompareExchangeStrong => {
+                // C11 7.17.7.4. Branchless: a select via a 0/-1 mask
+                // keeps the lowering free of basic-block management.
+                // When the comparison fails the back-stores rewrite the
+                // same bytes, a no-op for a single thread.
+                let exp_addr = self.walk_expr_rvalue(b, args[1])?;
+                let desired = self.walk_expr_rvalue(b, args[2])?;
+                let cur = b.load(addr, load_kind);
+                let ecur = b.load(exp_addr, load_kind);
+                let eq = b.binop(BinOp::Eq, cur, ecur);
+                let zero = b.imm(0);
+                let mask = b.binop(BinOp::Sub, zero, eq); // 0 or -1
+                // *p     = eq ? desired : cur
+                let cxd = b.binop(BinOp::Xor, cur, desired);
+                let sel_p = b.binop(BinOp::And, cxd, mask);
+                let new_p = b.binop(BinOp::Xor, cur, sel_p);
+                b.store(addr, new_p, store_kind);
+                // *expected = eq ? *expected : cur
+                let cxe = b.binop(BinOp::Xor, cur, ecur);
+                let sel_e = b.binop(BinOp::And, cxe, mask);
+                let new_e = b.binop(BinOp::Xor, cur, sel_e);
+                b.store(exp_addr, new_e, store_kind);
+                Ok(eq)
             }
         }
     }
@@ -2377,6 +2881,27 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         store_kind: StoreKind,
     ) -> Result<RmwPlace, WalkError> {
+        // A bitfield member: compute the storage unit's address once so
+        // the read and the write target the same unit (the object is
+        // evaluated a single time per C99 6.5.2.4 / 6.5.16.2).
+        if let Expr::Member {
+            obj,
+            field_off,
+            bitfield: Some(bf),
+            ..
+        } = self.ast.expr(lvalue)
+        {
+            let bf = *bf;
+            let obj = *obj;
+            let field_off = *field_off;
+            let base = self.walk_expr_rvalue(b, obj)?;
+            let addr = if field_off != 0 {
+                b.binop_imm(BinOp::Add, base, field_off)
+            } else {
+                base
+            };
+            return Ok(RmwPlace::Bitfield { addr, bf });
+        }
         if !matches!(store_kind, StoreKind::F32)
             && let Expr::Ident {
                 class,
@@ -2749,6 +3274,15 @@ impl<'a> Walker<'a> {
 enum RmwPlace {
     Slot(i64),
     Addr(super::super::ir::ValueId),
+    /// A bitfield read-modify-write target: the storage unit's address
+    /// and the field descriptor. `load` extracts the field value;
+    /// `store` merges the new value back into the unit, preserving the
+    /// other bits. The passed `LoadKind` / `StoreKind` are ignored; the
+    /// unit width comes from the descriptor.
+    Bitfield {
+        addr: super::super::ir::ValueId,
+        bf: super::super::ast::BitfieldDesc,
+    },
 }
 
 impl RmwPlace {
@@ -2760,6 +3294,32 @@ impl RmwPlace {
         match *self {
             RmwPlace::Slot(off) => b.load_local(off, kind),
             RmwPlace::Addr(addr) => b.load(addr, kind),
+            RmwPlace::Bitfield { addr, bf } => {
+                // C99 6.7.2.1: load the unit, shift the slice to bit 0,
+                // mask, and sign-extend when the field type is signed.
+                let unit_kind = match bf.unit_size {
+                    1 => LoadKind::U8,
+                    2 => LoadKind::U16,
+                    4 => LoadKind::U32,
+                    _ => LoadKind::I64,
+                };
+                let mut v = b.load(addr, unit_kind);
+                if bf.bit_offset > 0 {
+                    v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
+                }
+                let mask: i64 = if bf.bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bf.bit_width) - 1
+                };
+                v = b.binop_imm(BinOp::And, v, mask);
+                if bf.signed && bf.bit_width < 64 {
+                    let shift = 64i64 - (bf.bit_width as i64);
+                    v = b.binop_imm(BinOp::Shl, v, shift);
+                    v = b.binop_imm(BinOp::Shr, v, shift);
+                }
+                v
+            }
         }
     }
 
@@ -2776,6 +3336,32 @@ impl RmwPlace {
             RmwPlace::Addr(addr) => {
                 b.store(addr, value, kind);
             }
+            RmwPlace::Bitfield { addr, bf } => {
+                // C99 6.7.2.1: load the unit, clear the slice, mask + shift
+                // the new value into place, OR back, store.
+                let (load_kind, store_kind) = match bf.unit_size {
+                    1 => (LoadKind::U8, StoreKind::I8),
+                    2 => (LoadKind::U16, StoreKind::I16),
+                    4 => (LoadKind::U32, StoreKind::I32),
+                    _ => (LoadKind::I64, StoreKind::I64),
+                };
+                let mask: i64 = if bf.bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bf.bit_width) - 1
+                };
+                let clear_mask: i64 = !(mask << bf.bit_offset);
+                let old = b.load(addr, load_kind);
+                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+                let masked = b.binop_imm(BinOp::And, value, mask);
+                let shifted = if bf.bit_offset > 0 {
+                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+                } else {
+                    masked
+                };
+                let combined = b.binop(BinOp::Or, cleared, shifted);
+                b.store(addr, combined, store_kind);
+            }
         }
     }
 }
@@ -2788,7 +3374,10 @@ fn load_kind_for(ty: i64, target: Target) -> LoadKind {
     if is_pointer_ty(ty) {
         return LoadKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 {
+        // 1-byte `_Bool`, always zero-extends (holds only 0 / 1).
+        LoadKind::U8
+    } else if stripped == Ty::Char as i64 {
         if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
         if unsigned {
@@ -2823,7 +3412,7 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     if is_pointer_ty(ty) {
         return StoreKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         StoreKind::I8
     } else if stripped == Ty::Short as i64 {
         StoreKind::I16
@@ -2877,10 +3466,132 @@ fn is_float_ty(ty: i64) -> bool {
     (ty & !UNSIGNED_BIT) == Ty::Float as i64
 }
 
+/// True for the scalar `_Bool` type (not a pointer to one). Used by
+/// the cast lowering to apply the C99 6.3.1.2 conversion (any
+/// nonzero scalar becomes 1).
+fn is_bool_scalar(ty: i64) -> bool {
+    (ty & !UNSIGNED_BIT) == Ty::Bool as i64
+}
+
 /// `Token::Ty` unsigned-bit position. The compiler-side helper is
 /// `pub(super)`-visible to the parser module only; the walker
 /// keeps a local copy to avoid coupling to the compiler module.
 const UNSIGNED_BIT: i64 = 1 << 30;
+
+// Portable lowering of the GCC bit-count builtins (`__builtin_clz` /
+// `ctz` / `popcount` and the 64-bit `ll` forms). Each expands to a
+// branchless shift / mask sequence over the SSA builder so the result
+// matches across the interpreter and every target without a dedicated
+// instruction. `w64` selects the 64-bit forms; the rest operate on the
+// low 32 bits (the operand reaches here zero-extended from the parser's
+// unsigned cast).
+
+type Bld = super::super::codegen::ssa_build::SsaBuilder;
+type Val = super::super::ir::ValueId;
+
+/// Count set bits via the standard SWAR reduction. Right shifts are
+/// logical (`BinOp::Shru`) so the masks see clean bits regardless of
+/// the operand's sign. The result is at most the bit width, so the
+/// final `& 0x7f` extracts it.
+fn lower_popcount(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let su = BinOp::Shru;
+    let and = BinOp::And;
+    if w64 {
+        let t = b.binop_imm(su, x, 1);
+        let t = b.binop_imm(and, t, 0x5555_5555_5555_5555u64 as i64);
+        let a = b.binop(BinOp::Sub, x, t);
+        let lo = b.binop_imm(and, a, 0x3333_3333_3333_3333u64 as i64);
+        let hi = b.binop_imm(su, a, 2);
+        let hi = b.binop_imm(and, hi, 0x3333_3333_3333_3333u64 as i64);
+        let a = b.binop(BinOp::Add, lo, hi);
+        let s = b.binop_imm(su, a, 4);
+        let a = b.binop(BinOp::Add, a, s);
+        let a = b.binop_imm(and, a, 0x0f0f_0f0f_0f0f_0f0fu64 as i64);
+        let s = b.binop_imm(su, a, 8);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 16);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 32);
+        let a = b.binop(BinOp::Add, a, s);
+        b.binop_imm(and, a, 0x7f)
+    } else {
+        let x = b.binop_imm(and, x, 0xffff_ffff);
+        let t = b.binop_imm(su, x, 1);
+        let t = b.binop_imm(and, t, 0x5555_5555);
+        let a = b.binop(BinOp::Sub, x, t);
+        let lo = b.binop_imm(and, a, 0x3333_3333);
+        let hi = b.binop_imm(su, a, 2);
+        let hi = b.binop_imm(and, hi, 0x3333_3333);
+        let a = b.binop(BinOp::Add, lo, hi);
+        let s = b.binop_imm(su, a, 4);
+        let a = b.binop(BinOp::Add, a, s);
+        let a = b.binop_imm(and, a, 0x0f0f_0f0f);
+        let s = b.binop_imm(su, a, 8);
+        let a = b.binop(BinOp::Add, a, s);
+        let s = b.binop_imm(su, a, 16);
+        let a = b.binop(BinOp::Add, a, s);
+        b.binop_imm(and, a, 0x7f)
+    }
+}
+
+/// Count leading zeros: smear the highest set bit down to fill the low
+/// bits, then `width - popcount`. At zero the smear stays zero and the
+/// result is the bit width.
+fn lower_clz(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let su = BinOp::Shru;
+    let or = BinOp::Or;
+    let t = b.binop_imm(su, x, 1);
+    let mut s = b.binop(or, x, t);
+    for sh in [2, 4, 8, 16] {
+        let t = b.binop_imm(su, s, sh);
+        s = b.binop(or, s, t);
+    }
+    if w64 {
+        let t = b.binop_imm(su, s, 32);
+        s = b.binop(or, s, t);
+    }
+    let pc = lower_popcount(b, s, w64);
+    let width = b.imm(if w64 { 64 } else { 32 });
+    b.binop(BinOp::Sub, width, pc)
+}
+
+/// Count trailing zeros as `popcount((x - 1) & ~x)`: `x - 1` turns the
+/// trailing zeros into ones and clears the lowest set bit, and `~x`
+/// keeps only those positions. At zero the mask is all-ones and the
+/// result is the bit width.
+fn lower_ctz(b: &mut Bld, x: Val, w64: bool) -> Val {
+    let xm1 = b.binop_imm(BinOp::Sub, x, 1);
+    let notx = b.binop_imm(BinOp::Xor, x, -1);
+    let m = b.binop(BinOp::And, xm1, notx);
+    lower_popcount(b, m, w64)
+}
+
+/// Reverse the low `n` bytes of `x`: extract each byte with a logical
+/// shift and mask, shift it to the mirrored position, and or the bytes
+/// together. `n` is 2, 4, or 8.
+fn lower_bswap(b: &mut Bld, x: Val, n: i64) -> Val {
+    let mut acc: Option<Val> = None;
+    for i in 0..n {
+        let src_shift = i * 8;
+        let dst_shift = (n - 1 - i) * 8;
+        let shifted = if src_shift == 0 {
+            x
+        } else {
+            b.binop_imm(BinOp::Shru, x, src_shift)
+        };
+        let byte = b.binop_imm(BinOp::And, shifted, 0xff);
+        let placed = if dst_shift == 0 {
+            byte
+        } else {
+            b.binop_imm(BinOp::Shl, byte, dst_shift)
+        };
+        acc = Some(match acc {
+            None => placed,
+            Some(a) => b.binop(BinOp::Or, a, placed),
+        });
+    }
+    acc.unwrap_or(x)
+}
 
 /// Struct-type band base + stride. Mirrors
 /// `compiler::types::{STRUCT_BASE, STRUCT_STRIDE}` so the walker
@@ -2911,9 +3622,15 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::PostInc { ty, .. }
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. } => Some(*ty),
+        | Expr::Intrinsic { ty, .. }
+        | Expr::Atomic { ty, .. } => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
         Expr::Sizeof(s) => Some(s.result_ty),
+        Expr::CompoundLiteral { ty, .. } => Some(*ty),
+        // `&&label` is a `void *` (char-pointer encoding).
+        Expr::LabelAddr(_) => {
+            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
+        }
     }
 }
 
@@ -2927,7 +3644,7 @@ fn type_size_bytes(ty: i64, target: Target) -> usize {
     if is_pointer_ty(ty) {
         return 8;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 || stripped == Ty::Char as i64 {
         1
     } else if stripped == Ty::Short as i64 {
         2
@@ -3042,9 +3759,12 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::PreInc { .. } => "PreInc",
         Expr::PostInc { .. } => "PostInc",
         Expr::Sizeof(_) => "Sizeof",
+        Expr::CompoundLiteral { .. } => "CompoundLiteral",
         Expr::Comma { .. } => "Comma",
         Expr::Intrinsic { .. } => "Intrinsic",
         Expr::ShortCircuit { .. } => "ShortCircuit",
+        Expr::Atomic { .. } => "Atomic",
+        Expr::LabelAddr(_) => "LabelAddr",
     }
 }
 
@@ -3097,6 +3817,7 @@ mod tests {
             &[],
             false,
             0,
+            Ty::Int as i64,
             0,
         )
         .expect("walk");
@@ -3160,6 +3881,7 @@ mod tests {
             &[],
             &[],
             false,
+            0,
             0,
             0,
         )
@@ -3234,6 +3956,7 @@ mod tests {
             false,
             0,
             0,
+            0,
         )
         .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -3298,6 +4021,7 @@ mod tests {
             false,
             0,
             0,
+            0,
         )
         .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
@@ -3340,6 +4064,7 @@ mod tests {
             &[],
             &[],
             false,
+            0,
             0,
             0,
         )

@@ -54,9 +54,10 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
 }
 
 /// Variant of [`jit_run`] that accepts user-controllable
-/// [`NativeOptions`]. The `optimize` knob is currently a no-op
-/// (see [`NativeOptions::optimize`]); the other knobs control
-/// `OutputKind`, DWARF emission, and so on.
+/// [`NativeOptions`]. `optimize` runs the SSA optimization passes
+/// before lowering (the same passes the native `-O` path uses, since
+/// both share `x86_64::lower` / `aarch64::lower`); the other knobs
+/// control `OutputKind`, DWARF emission, and so on.
 pub fn jit_run_with_options(
     program: &Program,
     args: &[String],

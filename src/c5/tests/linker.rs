@@ -200,6 +200,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         None,
         OutputKind::Executable,
         Target::LinuxX64,
+        None,
     )
     .expect("write executable");
     // ELF64: e_phoff @ 0x20 (u64), e_phentsize @ 0x36 (u16),
@@ -366,6 +367,7 @@ fn pragma_export_round_trips_into_shared_library() {
         None,
         OutputKind::SharedLibrary,
         Target::LinuxX64,
+        None,
     )
     .expect("write shared library");
     // e_type @ 0x10: ET_DYN (3) for a shared object.
@@ -374,6 +376,151 @@ fn pragma_export_round_trips_into_shared_library() {
         3,
         "shared library must be ET_DYN"
     );
+}
+
+#[test]
+fn win64_dll_records_requested_name() {
+    // A Win64 DLL records its own name in the export directory so a
+    // consumer linking against it by name references the file it loads
+    // at runtime; the name comes from the requested `-o` basename, not a
+    // fixed default. (The runtime's `exit` binding resolving through
+    // msvcrt.dll rather than ucrtbase.dll is exercised by the Windows
+    // demos, which link the embedded runtime.)
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::new(alloc::format!(
+        "{TEST_PRELUDE}\
+         #pragma export(api_fn)\n\
+         int api_fn(int x) {{ return x + 1; }}\n"
+    ))
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let dll = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("requested_name.dll"),
+    )
+    .expect("write DLL");
+    let contains = |needle: &str| dll.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(
+        contains("requested_name.dll"),
+        "export directory must carry the requested DLL name"
+    );
+    assert!(
+        !contains("c5-output.dll"),
+        "the fixed default name must not leak into the image"
+    );
+}
+
+#[test]
+fn win64_dll_without_imports_leaves_import_and_iat_dirs_empty() {
+    // A DLL whose code calls nothing external has no imported DLLs.
+    // The import-descriptor block is then a lone zero terminator and
+    // the IAT is empty. Pointing the Import data directory at that
+    // descriptor with a zero-size IAT directory is rejected by the
+    // Windows loader (ERROR_INVALID_PARAMETER) at LoadLibrary time,
+    // though wine tolerates it. The writer must leave both directories
+    // empty (RVA = 0, size = 0) in that case.
+    use crate::c5::codegen::emit_native_with_options_named;
+    use crate::c5::{NativeOptions, Target};
+    let src = "#pragma export(answer)\nint answer(void) { return 42; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        // Compile for the same target the writer lowers for, so the
+        // per-target bindings are in scope (a host-default compile
+        // would feed the wrong `#pragma binding` set).
+        let program = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .expect("compile");
+        let dll = emit_native_with_options_named(
+            &program,
+            target,
+            NativeOptions::new().with_shared_library(),
+            Some("noimports.dll"),
+        )
+        .expect("emit DLL");
+        let pe = u32::from_le_bytes(dll[0x3c..0x40].try_into().unwrap()) as usize;
+        let opt = pe + 24;
+        // PE32+ data directories start at optional-header offset 112;
+        // entry 1 is Import, entry 12 is IAT (8 bytes each: RVA, size).
+        let dir = |i: usize| {
+            let o = opt + 112 + i * 8;
+            let rva = u32::from_le_bytes(dll[o..o + 4].try_into().unwrap());
+            let size = u32::from_le_bytes(dll[o + 4..o + 8].try_into().unwrap());
+            (rva, size)
+        };
+        assert_eq!(dir(1), (0, 0), "{target:?}: import directory must be empty");
+        assert_eq!(dir(12), (0, 0), "{target:?}: IAT directory must be empty");
+        // The export directory (entry 0) still carries `answer`.
+        let (exp_rva, exp_size) = dir(0);
+        assert!(
+            exp_rva != 0 && exp_size != 0,
+            "{target:?}: export directory must be present"
+        );
+    }
+}
+
+#[test]
+fn wdm_driver_demo_builds_as_native_subsystem_pe() {
+    // The WDM driver skeleton carries `#pragma subsystem(driver)`
+    // (an alias for the native subsystem) and `#pragma
+    // entrypoint(DriverEntry)`. The PE optional-header Subsystem must
+    // be IMAGE_SUBSYSTEM_NATIVE (1) for both Windows targets; the
+    // kernel's PE loader refuses a CUI/GUI subsystem.
+    //
+    // A NATIVE-subsystem image runs no `_start` CRT stub, so the
+    // libc-`exit` runtime wrapper is not linked and the image carries
+    // no user-mode `exit` import -- `msvcrt!exit` is unsatisfiable in
+    // kernel mode. The skeleton imports nothing, so the import data
+    // directory is empty.
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("demos");
+    path.push("wdm_driver");
+    path.push("wdm_driver.c");
+    let src = std::fs::read_to_string(&path).expect("read wdm_driver.c");
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(src.clone(), target)
+            .compile()
+            .expect("compile wdm_driver.c");
+        let pe = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect("emit driver PE");
+        let pe_off = u32::from_le_bytes(pe[0x3c..0x40].try_into().unwrap()) as usize;
+        let opt = pe_off + 24;
+        // Subsystem sits at optional-header offset 68 in PE32+.
+        let subsystem = u16::from_le_bytes(pe[opt + 68..opt + 70].try_into().unwrap());
+        assert_eq!(
+            subsystem, 1,
+            "{target:?}: wdm_driver must be IMAGE_SUBSYSTEM_NATIVE"
+        );
+        // Import data directory (entry 1) must be empty.
+        let imp = opt + 112 + 8;
+        let imp_rva = u32::from_le_bytes(pe[imp..imp + 4].try_into().unwrap());
+        let imp_size = u32::from_le_bytes(pe[imp + 4..imp + 8].try_into().unwrap());
+        assert_eq!(
+            (imp_rva, imp_size),
+            (0, 0),
+            "{target:?}: a native driver must carry no imports"
+        );
+        assert!(
+            !pe.windows(10)
+                .any(|w| w.eq_ignore_ascii_case(b"msvcrt.dll")),
+            "{target:?}: a native driver must not reference msvcrt.dll"
+        );
+    }
 }
 
 #[test]

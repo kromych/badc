@@ -4,23 +4,26 @@ static_inline_function.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<triple_plus_one>:
                	movslq	%edi, %rdi
                	leaq	(%rdi,%rdi,2), %rax
                	movslq	%eax, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	retq
+
+<bit_count>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	movq	%rdi, %rax
                	andq	$0x1, %rax
@@ -31,6 +34,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x2, %eax
@@ -62,7 +67,7 @@ Disassembly of section .text:
                	retq
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbp

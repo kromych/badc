@@ -28,6 +28,27 @@ use super::Compiler;
 impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
     /// count. The `sizeof` keyword has already been consumed.
+    /// Lookahead for the `sizeof ( id )` fast path: true only when the
+    /// identifier is immediately followed by `)` and no postfix
+    /// operator (`[`, `.`, `->`) trails the close paren. Otherwise the
+    /// parens wrap a postfix unary-expression (`sizeof(a)[i]` parses as
+    /// `sizeof((a)[i])` per C99 6.5.3.4), which must route through the
+    /// general expression parse. Snapshots and restores the lexer so
+    /// token position is unchanged.
+    fn sizeof_bare_id_paren_ok(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        self.next()?; // past the identifier
+        let mut ok = false;
+        if self.lex.tk == ')' {
+            self.next()?; // past the close paren
+            ok = self.lex.tk != Token::Brak
+                && self.lex.tk != Token::Dot
+                && self.lex.tk != Token::Arrow;
+        }
+        self.lex.restore(snap);
+        Ok(ok)
+    }
+
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
         // Snapshot the lex state before any speculative paren
         // consumption so the operand-shape dispatch below can
@@ -75,18 +96,36 @@ impl Compiler {
                     self.next()?;
                 }
             }
+            // Abstract array declarator: `sizeof(T [N])` /
+            // `sizeof(T [N][M])` (C99 6.7.6 / 6.5.3.4). Each
+            // dimension multiplies the element count; the result is
+            // the total byte size of the array type.
+            let mut array_count: i64 = 1;
+            while self.lex.tk == Token::Brak {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                if n <= 0 {
+                    return Err(self.compile_err("array dimension in sizeof must be positive"));
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("close bracket expected in sizeof array type"));
+                }
+                self.next()?;
+                array_count *= n;
+            }
             let elem_size = self.size_of_type(self.ty) as i64;
-            if typedef_dim > 0 && !decayed_to_ptr {
+            let base = if typedef_dim > 0 && !decayed_to_ptr {
                 typedef_dim * elem_size
             } else {
                 elem_size
-            }
+            };
+            base * array_count
         } else if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
-            && (!had_paren || self.lex.peek_after_whitespace(b')'))
+            && (!had_paren || self.sizeof_bare_id_paren_ok()?)
         {
             // Bare identifier: short-circuit symbol lookup so an
             // array variable uses its `array_size * sizeof(elem)`

@@ -4,17 +4,19 @@ bst_free.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x2b0, %esi            # imm = 0x2B0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<free_tree>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movq	%rdi, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
@@ -38,15 +40,16 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<insert>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x10, %rsp
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
-               	movq	%r14, 0x10(%rsp)
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x18, %edi
                	xorl	%eax, %eax
@@ -58,36 +61,31 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
                	movq	(%rbx), %rax
                	cmpq	%rax, %r12
                	jge	<addr>
-               	movq	%rbx, %r14
-               	addq	$0x8, %r14
-               	movq	(%r14), %rdi
+               	movq	0x8(%rbx), %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	movq	%rax, (%r14)
-               	jmp	<addr>
+               	movq	%rax, 0x8(%rbx)
                	movq	%rbx, %rcx
                	movq	(%rsp), %rbx
                	movq	0x8(%rsp), %r12
-               	movq	0x10(%rsp), %r14
                	movq	%rcx, %rax
-               	addq	$0x20, %rsp
+               	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movq	%rbx, %r14
-               	addq	$0x10, %r14
-               	movq	(%r14), %rdi
+               	movq	0x10(%rbx), %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	movq	%rax, (%r14)
+               	movq	%rax, 0x10(%rbx)
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -114,4 +112,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

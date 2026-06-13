@@ -4,11 +4,13 @@ commutative_imm_lhs_swap.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -33,7 +35,7 @@ Disassembly of section .text:
                	retq
                	movq	%rax, %rcx
                	andq	$0xf0, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	addq	$0x10, %rsp
@@ -58,7 +60,7 @@ Disassembly of section .text:
                	cmpq	$0x1, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	addq	$0x10, %rsp
@@ -85,7 +87,7 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	setl	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x9, %eax
                	addq	$0x10, %rsp

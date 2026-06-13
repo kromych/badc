@@ -4,16 +4,17 @@ local_array_partial_init_zero.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<clobber>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xb0, %rsp
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x28, %rax
                	jge	<addr>
@@ -32,6 +33,8 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
+
+<sum_partial_init>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x80, %rsp
@@ -73,7 +76,6 @@ Disassembly of section .text:
                	popq	%r11
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%ecx, %rdx
                	cmpq	$0x19, %rdx
                	jge	<addr>
@@ -91,6 +93,8 @@ Disassembly of section .text:
                	addq	$0x80, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -103,7 +107,7 @@ Disassembly of section .text:
                	callq	<addr>
                	callq	<addr>
                	movl	%ebx, %ecx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -113,7 +117,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx

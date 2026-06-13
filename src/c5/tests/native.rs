@@ -323,6 +323,13 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("goto.c", 5),
     ("switch_statement.c", 25),
+    ("switch_binary_search.c", 0),
+    ("branch_relaxation.c", 21),
+    ("float_register_resident.c", 45),
+    ("variadic_struct_arg.c", 18),
+    ("variadic_struct_arg_16b.c", 51),
+    ("libc_div.c", 0),
+    ("libc_int_arith.c", 0),
     ("switch_default_routing.c", 100),
     ("control_flow.c", 1),
     ("do_while.c", 5),
@@ -377,6 +384,15 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("size_t_via_stdio.c", 3),
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
+    ("libc_fp_classify.c", 0),
+    ("libc_math_fdim_scalbn.c", 0),
+    ("libc_fileno_isblank.c", 0),
+    ("libc_math_minmax.c", 0),
+    ("libc_math_round.c", 0),
+    ("libc_math_libm.c", 0),
+    ("libc_math_hyperbolic.c", 0),
+    ("libc_math_special.c", 0),
+    ("libc_math_nextafter.c", 0),
     ("long_double_libc_return.c", 0),
     ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),
@@ -392,6 +408,84 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_label_after_terminator.c", 0),
     ("unsigned_div_in_assign.c", 0),
     ("fp_param_ternary.c", 0),
+    ("hex_float_literal.c", 0),
+    ("bool_normalize_c99.c", 0),
+    ("compound_literal_block.c", 0),
+    ("struct_arg_in_registers.c", 0),
+    ("struct_arg_by_stack.c", 0),
+    ("wide_char_utf8.c", 0),
+    ("local_aggregate_runtime_init.c", 0),
+    ("aggregate_init_struct_member_copy.c", 0),
+    ("computed_goto.c", 0),
+    ("label_addr_array_init.c", 0),
+    ("sieve_of_eratosthenes.c", 0),
+    ("static_neg_infinity_init.c", 0),
+    ("sub_word_return_narrow.c", 0),
+    ("fp_const_return.c", 0),
+    ("struct_array_init_from_lvalue.c", 0),
+    ("array_range_designator.c", 0),
+    ("bitfield_mixed_base_packing.c", 0),
+    ("flex_array_member_sizing.c", 0),
+    ("variadic_struct_return.c", 0),
+    ("variadic_union_struct_return.c", 0),
+    ("union_fp_member_regs_return.c", 0),
+    ("fn_ptr_float_return.c", 0),
+    ("fn_ptr_float_arg.c", 0),
+    ("variadic_fn_ptr_init.c", 0),
+    ("flexible_array_member.c", 0),
+    ("sizeof_array_type_and_binding.c", 0),
+    ("designator_override_and_braced_string.c", 0),
+    ("multidim_array_init.c", 0),
+    ("macro_paste_stringize_unexpanded.c", 0),
+    ("line_directive.c", 0),
+    ("float_global_init.c", 0),
+    ("func_name_array.c", 0),
+    ("unary_plus_init_and_param_shadow.c", 0),
+    ("fn_ptr_multi_deref.c", 0),
+    ("stringize_whitespace.c", 0),
+    ("kr_old_style_def.c", 0),
+    ("fn_ptr_return_type.c", 0),
+    ("fn_returning_fn_ptr.c", 0),
+    ("duff_switch_into_loop.c", 0),
+    ("empty_macro_arg_and_string_rows.c", 0),
+    ("inline_arg_count_mismatch.c", 0),
+    ("block_scope_extern.c", 0),
+    ("extern_incomplete_struct_completion.c", 0),
+    ("const_member_address_init.c", 0),
+    ("const_float_div_zero.c", 0),
+    ("array_of_struct_brace_elision.c", 0),
+    ("local_struct_array_runtime_init.c", 0),
+    ("scanf_fscanf_binding.c", 0),
+    ("builtin_bit_count.c", 0),
+    ("builtin_bswap_expect.c", 0),
+    ("builtin_frame_address.c", 0),
+    ("zero_length_array.c", 0),
+    ("nested_compound_literal.c", 0),
+    ("indirect_struct_return.c", 0),
+    ("indirect_struct_return_outptr.c", 0),
+    ("bitfield_incdec.c", 0),
+    ("c11_atomic_specifier.c", 0),
+    ("c11_atomic_ops.c", 0),
+    ("inline_asm_hint.c", 0),
+    ("compound_assign_int_fp.c", 0),
+    ("signal_sig_t.c", 0),
+    ("math_classify.c", 0),
+    ("switch_unsigned_negative_case.c", 0),
+    ("enum_bitfield_unsigned.c", 0),
+    ("addr_of_intrinsic_math.c", 0),
+    ("addr_of_intrinsic_math_float.c", 0),
+    ("fn_ptr_float_arg_narrow.c", 0),
+    ("struct_array_elided_runtime.c", 0),
+    ("fn_type_typedef_field.c", 0),
+    ("fn_type_typedef_local.c", 0),
+    ("fn_type_typedef_cast.c", 0),
+    ("nested_runtime_init.c", 0),
+    ("anon_union_init.c", 0),
+    ("builtin_trap.c", 0),
+    ("struct_multi_byval.c", 0),
+    ("struct_arg_two_eightbyte.c", 0),
+    ("struct_return_by_value.c", 0),
+    ("cast_fn_ptr_call.c", 0),
     ("paren_comma_side_effect.c", 0),
     ("for_init_decl_in_loop.c", 0),
     ("int_times_double_into_local.c", 0),
@@ -466,6 +560,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("ir_translation_if.c", 2),
     ("ir_translation_while.c", 0),
     ("type_warning_int_to_ptr.c", 0),
+    ("type_warning_return.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
@@ -479,6 +574,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // (4 pointer-ish args), joins it, returns the thread's exit
     // status. macOS pthread is in libSystem so dlopen(NULL) finds it.
     ("pthread_create.c", 11),
+    ("pthread_cond_timedwait.c", 0),
+    ("posix_os_headers.c", 0),
+    ("dirent_readdir.c", 0),
+    ("ftw_walk.c", 0),
+    ("stat_timespec.c", 0),
+    ("malloc_size.c", 0),
     // sprintf with two fixed args + four variadic. macOS arm64
     // variadic ABI puts variadic args on the stack while fixed
     // args ride registers; this guards against the lowering
@@ -498,6 +599,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
     ("float_single_precision.c", 0),
+    ("fp_unary_intrinsic.c", 0),
     ("fp_arg_passed_in_fp_reg.c", 0),
     ("float_arg_single_precision.c", 0),
     ("fp_return_value.c", 0),
@@ -704,14 +806,20 @@ fn original_c4_compiles_and_runs_hello_natively() {
     // Native counterpart of `tests::programs::original_c4_compiles_and_runs_hello`.
     // The native build of c4.c reads its first user argv entry as the
     // source file to compile-and-run; we hand it the absolute path to
-    // hello.c and let c4.c (running natively) parse + execute it. The
-    // expected output is "Hello 123" with exit 0.
+    // the c4-subset self-host fixture and let c4.c (running natively)
+    // parse + execute it. The expected output is "Hello 123" with
+    // exit 0.
     //
     // Unlike the VM-side test, the native binary's argv[0] is set by
     // `Command::new` to the binary path -- so we only need to pass
-    // hello.c's absolute path; c4.c does `--argc; ++argv;` itself.
-    let outcome =
-        build_and_run_fixture_with_args("c4.c", [concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")]);
+    // the fixture's absolute path; c4.c does `--argc; ++argv;` itself.
+    let outcome = build_and_run_fixture_with_args(
+        "c4.c",
+        [concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/c/c4_selfhost_hello.c"
+        )],
+    );
     assert!(
         matches!(outcome, RunOutcome::Exit(0)),
         "expected clean exit, got {outcome:?}"

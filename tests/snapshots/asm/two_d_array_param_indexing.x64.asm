@@ -4,11 +4,13 @@ two_d_array_param_indexing.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -18,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -42,11 +44,10 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -55,6 +56,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<sum_short_row>:
                	movslq	%esi, %rsi
                	movq	%rsi, %rax
                	shlq	$0x2, %rax
@@ -64,6 +67,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<sum_int_row>:
                	movslq	%esi, %rsi
                	imulq	$0xc, %rsi, %rax
                	addq	%rdi, %rax
@@ -75,6 +80,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<sum_char_row>:
                	movslq	%esi, %rsi
                	movq	%rsi, %rax
                	shlq	$0x2, %rax
@@ -90,12 +97,13 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x4d0, %rsp            # imm = 0x4D0
                	movq	%rbx, (%rsp)
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x100, %rax            # imm = 0x100
                	jge	<addr>
@@ -135,7 +143,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rbx, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0xa, %rax
                	jge	<addr>
@@ -168,7 +175,6 @@ Disassembly of section .text:
                	imulq	$0x64, %rdx, %rdx
                	movslq	%edx, %rdx
                	addq	%rsi, %rdx
-               	movslq	%edx, %rdx
                	movl	%edx, (%rax,%rsi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -180,7 +186,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rbx, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x8, %rax
                	jge	<addr>

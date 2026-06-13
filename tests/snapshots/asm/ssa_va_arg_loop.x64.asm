@@ -4,11 +4,13 @@ ssa_va_arg_loop.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<var_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xe0, %rsp
@@ -38,7 +40,6 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rax)
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%ecx, %rdx
                	movslq	-0xe0(%rbp), %rsi
                	cmpq	%rsi, %rdx
@@ -65,6 +66,8 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
+
+<var_one>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xd0, %rsp
@@ -108,6 +111,8 @@ Disassembly of section .text:
                	addq	$0xd0, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x3, %edi
@@ -146,4 +151,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

@@ -155,6 +155,13 @@ impl SsaBuilder {
             extern_tls_refs: Vec::new(),
             f32_values: Vec::new(),
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -275,6 +282,12 @@ impl SsaBuilder {
         }
     }
 
+    /// Record that the function returns a floating-point scalar. See
+    /// [`FunctionSsa::ret_is_fp`].
+    pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
+        self.func.ret_is_fp = is_fp;
+    }
+
     /// The accumulated per-parameter FP mask. See
     /// [`FunctionSsa::param_fp_mask`].
     pub(crate) fn param_fp_mask(&self) -> u32 {
@@ -287,6 +300,68 @@ impl SsaBuilder {
     /// [`FunctionSsa::param_fp_mask`].
     pub(crate) fn set_param_fp_mask(&mut self, mask: u32) {
         self.func.param_fp_mask = mask;
+    }
+
+    /// Intern an aggregate layout into the function's `agg_descs`,
+    /// returning its index for a call's `arg_aggs` or the function's
+    /// `param_aggs`.
+    pub(crate) fn intern_agg_desc(&mut self, desc: crate::c5::ir::AggDesc) -> u32 {
+        let idx = self.func.agg_descs.len() as u32;
+        self.func.agg_descs.push(desc);
+        idx
+    }
+
+    /// Record the per-parameter aggregate map and the matching
+    /// body-local slots (host-ABI struct parameters). Both vectors
+    /// are parallel to the declared parameter list.
+    pub(crate) fn set_param_aggs(&mut self, param_aggs: Vec<Option<u32>>, local_slots: Vec<i64>) {
+        self.func.param_aggs = param_aggs;
+        self.func.param_local_slots = local_slots;
+    }
+
+    /// Record that this function returns `agg_descs[idx]` by value
+    /// through the host ABI (registers or x8).
+    pub(crate) fn set_ret_agg(&mut self, idx: u32) {
+        self.func.ret_agg = Some(idx);
+    }
+
+    /// Record the body-local slot holding the incoming x8 indirect-
+    /// result pointer for a function returning an aggregate larger
+    /// than 16 bytes.
+    pub(crate) fn set_indirect_result_slot(&mut self, slot: i64) {
+        self.func.indirect_result_slot = slot;
+    }
+
+    /// Mark the call instruction whose result is `v` as returning the
+    /// aggregate `agg_descs[ret_agg]` into the result temporary at
+    /// frame slot `ret_slot_local`.
+    pub(crate) fn set_call_ret_agg(&mut self, v: ValueId, ret_agg: u32, ret_slot_local: i64) {
+        if let Inst::Call {
+            ret_agg: ra,
+            ret_slot_local: rs,
+            ..
+        }
+        | Inst::CallIndirect {
+            ret_agg: ra,
+            ret_slot_local: rs,
+            ..
+        } = &mut self.func.insts[v as usize]
+        {
+            *ra = Some(ret_agg);
+            *rs = ret_slot_local;
+        }
+    }
+
+    /// Attach the per-argument aggregate map to the call instruction
+    /// whose result is `v` (its index in `insts`). The metadata
+    /// travels with the instruction through the optimizer.
+    pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { arg_aggs: a, .. } | Inst::CallIndirect { arg_aggs: a, .. } => {
+                *a = arg_aggs;
+            }
+            _ => {}
+        }
     }
 
     /// True when value `v` was previously marked single-precision.
@@ -349,6 +424,25 @@ impl SsaBuilder {
         let id = self.push(Inst::ImmCode(target_pc));
         self.pure_cache.insert(PureKey::ImmCode(target_pc), id);
         id
+    }
+
+    /// `Inst::BlockAddr` -- the code address of a basic block in
+    /// this function (GCC `&&label`). Records `block` as a computed-
+    /// goto successor so the CFG treats every `goto *` as branching
+    /// to it. Not CSE'd: distinct `&&label` sites must stay separate
+    /// defs so the allocator keeps each live as needed.
+    pub(crate) fn block_addr(&mut self, block: BlockId) -> ValueId {
+        if !self.func.computed_goto_targets.contains(&block) {
+            self.func.computed_goto_targets.push(block);
+        }
+        self.push(Inst::BlockAddr(block))
+    }
+
+    /// Close the current block with `Terminator::GotoIndirect`
+    /// (GCC `goto *expr`); `target` holds the destination code
+    /// address.
+    pub(crate) fn goto_indirect(&mut self, target: ValueId) {
+        self.close(Terminator::GotoIndirect { target }, target);
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.
@@ -753,6 +847,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
         })
     }
 
@@ -775,6 +872,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -798,6 +898,9 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
         })
     }
 
@@ -833,6 +936,22 @@ impl SsaBuilder {
         -self.func.locals
     }
 
+    /// Reserve `ceil(size/8)` contiguous 8-byte slots and return the
+    /// base (most-negative) slot, whose address is the lowest of the
+    /// group. A whole-struct `Mcpy` from that address covers the
+    /// reserved bytes. Used for an aggregate result temporary.
+    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64) -> i64 {
+        let nslots = (size + 7) / 8;
+        let mut base = 0;
+        for k in 0..nslots {
+            let s = self.alloc_synthetic_local();
+            if k == nslots - 1 {
+                base = s;
+            }
+        }
+        base
+    }
+
     /// `Inst::CallExt` -- libc / external call. libc body may
     /// write through caller-supplied pointers, including ones
     /// derived from escaped local addresses; invalidate the
@@ -842,12 +961,14 @@ impl SsaBuilder {
         binding_idx: i64,
         args: Vec<ValueId>,
         fp_arg_mask: u32,
+        fp_return: bool,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::CallExt {
             binding_idx,
             args,
             fp_arg_mask,
+            fp_return,
         })
     }
 

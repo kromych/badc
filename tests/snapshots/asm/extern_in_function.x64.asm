@@ -4,17 +4,23 @@ extern_in_function.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<wrap>:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	retq
+
+<negate>:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
                	retq
+
+<main>:
                	movabsq	$-0x5, %rax
                	imulq	$-0x1, %rax, %rax
                	cmpq	$0x5, %rax

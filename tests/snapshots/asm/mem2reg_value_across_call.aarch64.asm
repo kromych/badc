@@ -4,17 +4,21 @@ mem2reg_value_across_call.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	add	x0, x0, #0x7
                	ret
+
+<noise>:
                	lsl	x0, x0, #1
                	add	x0, x0, #0x1
                	ret
+
+<g>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -28,7 +32,6 @@ Disassembly of section .text:
                	add	x21, x21, #0x238
                	mov	x22, #0x0               // =0
                	mov	x23, x22
-               	b	<addr>
                	cmp	x22, x20
                	b.ge	<addr>
                	mov	x0, x22
@@ -51,6 +54,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x3                // =3

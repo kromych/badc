@@ -35,6 +35,13 @@ fn run_one(func: &mut FunctionSsa) {
     if n_original == 0 {
         return;
     }
+    // Skip computed-goto functions: inserting split blocks renumbers
+    // block ids, which `Inst::BlockAddr` and computed_goto_targets
+    // reference directly. Such functions carry no phis (mem2reg is
+    // skipped for them), so there are no critical edges to split.
+    if !func.computed_goto_targets.is_empty() {
+        return;
+    }
     // Count predecessors per block. Walking terminators is enough.
     let mut pred_count: Vec<u32> = alloc::vec![0; n_original];
     for block in &func.blocks {
@@ -166,7 +173,13 @@ fn successors(term: &Terminator) -> Vec<BlockId> {
             fall_through,
             ..
         } => alloc::vec![*target, *fall_through],
-        Terminator::Return(_) | Terminator::TailExt(_) => Vec::new(),
+        // This pass is skipped for functions with a computed goto (its
+        // run() guards on computed_goto_targets), so an indirect branch
+        // never reaches here; its successors live on the function, not
+        // the terminator.
+        Terminator::GotoIndirect { .. } | Terminator::Return(_) | Terminator::TailExt(_) => {
+            Vec::new()
+        }
     }
 }
 
@@ -188,6 +201,13 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

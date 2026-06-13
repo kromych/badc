@@ -4,11 +4,13 @@ sqlite_min.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x3b0, %esi            # imm = 0x3B0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x150, %rsp            # imm = 0x150
@@ -30,7 +32,7 @@ Disassembly of section .text:
                	movq	%rax, 0x28(%rsp)
                	movq	0x28(%rsp), %rax
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jge	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -47,7 +49,7 @@ Disassembly of section .text:
                	movl	$0x400, %esi            # imm = 0x400
                	movq	%r15, %r11
                	callq	*%r11
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -64,7 +66,7 @@ Disassembly of section .text:
                	leaq	-0x108(%rbp), %rsi
                	movq	%r14, %r11
                	callq	*%r11
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx
@@ -81,8 +83,9 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	movl	$0x1, %edx
                	movq	%r12, %r11
+               	movb	$0x0, %al
                	callq	*%r11
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	movq	%rax, %rcx
@@ -108,13 +111,13 @@ Disassembly of section .text:
                	addq	$0x150, %rsp            # imm = 0x150
                	popq	%rbp
                	retq
+
+<__c5_sys_open>:
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdx, (%rsp)
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rdx, 0x20(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -129,6 +132,8 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_close>:
                	popq	%r10
                	subq	$0x10, %rsp
                	movq	%rdi, (%rsp)
@@ -144,11 +149,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_ftruncate>:
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -162,13 +168,13 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_fcntl>:
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rdx, (%rsp)
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x30, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
+               	movq	%rdx, 0x20(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -183,11 +189,12 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_stat>:
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -201,11 +208,12 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	pushq	%r11
                	retq
+
+<__c5_sys_fstat>:
                	popq	%r10
-               	subq	$0x10, %rsp
-               	movq	%rsi, (%rsp)
-               	subq	$0x10, %rsp
+               	subq	$0x20, %rsp
                	movq	%rdi, (%rsp)
+               	movq	%rsi, 0x10(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp

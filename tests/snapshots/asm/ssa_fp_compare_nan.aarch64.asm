@@ -4,12 +4,12 @@ ssa_fp_compare_nan.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x2b0              // =688
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<nan_value>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
@@ -72,6 +73,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -87,7 +90,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	mov	x17, #0x1               // =1
                	orr	x20, x20, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -96,7 +98,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x2               // =2
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -105,7 +106,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x4               // =4
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -114,7 +114,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x8               // =8
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -123,7 +122,6 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x10              // =16
                	orr	x20, x0, x17
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	fmov	d17, x0
                	fcmp	d8, d17
@@ -133,21 +131,18 @@ Disassembly of section .text:
                	sxtw	x0, w20
                	mov	x17, #0x20              // =32
                	orr	x20, x0, x17
-               	b	<addr>
                	fcmp	d8, d8
                	cset	x0, mi
                	cbz	x0, <addr>
                	sxtw	x0, w20
                	mov	x17, #0x40              // =64
                	orr	x20, x0, x17
-               	b	<addr>
                	fcmp	d8, d8
                	cset	x0, eq
                	cbz	x0, <addr>
                	sxtw	x0, w20
                	mov	x17, #0x80              // =128
                	orr	x20, x0, x17
-               	b	<addr>
                	sxtw	x0, w20
                	cbz	x0, <addr>
                	adrp	x0, <page>

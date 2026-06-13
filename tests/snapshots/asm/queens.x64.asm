@@ -4,15 +4,16 @@ queens.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<conflicts>:
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	%rsi, %rax
                	jge	<addr>
@@ -31,14 +32,13 @@ Disassembly of section .text:
                	subq	%r10, %rax
                	movslq	%eax, %r9
                	movslq	%r9d, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jge	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
                	movslq	%r9d, %rax
                	imulq	$-0x1, %rax, %r9
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	movslq	(%rdi,%rax,4), %rax
                	cmpq	%rdx, %rax
@@ -53,6 +53,8 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+
+<solve>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -77,7 +79,6 @@ Disassembly of section .text:
                	retq
                	xorq	%r14, %r14
                	movq	%r14, %r15
-               	jmp	<addr>
                	movslq	%r14d, %rax
                	cmpq	$0x8, %rax
                	jge	<addr>
@@ -90,7 +91,7 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>
                	movslq	%r15d, %rax
@@ -115,6 +116,8 @@ Disassembly of section .text:
                	addq	%r15, %rax
                	movslq	%eax, %r15
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -132,3 +135,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, 0x41(%rdx)

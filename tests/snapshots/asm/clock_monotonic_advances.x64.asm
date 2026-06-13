@@ -4,11 +4,13 @@ clock_monotonic_advances.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x280, %esi            # imm = 0x280
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
@@ -23,7 +25,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	movq	%rax, %rcx
@@ -37,15 +39,14 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rax
                	sete	%bl
                	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	je	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$-0x1, %rax
                	sete	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -56,7 +57,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jge	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx
@@ -67,18 +68,17 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setl	%bl
                	movzbq	%bl, %rbx
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	setge	%bl
                	movzbq	%bl, %rbx
-               	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	je	<addr>
                	movl	$0x4, %eax
                	movq	%rax, %rcx
@@ -89,7 +89,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%ecx, %rdx
                	cmpq	$0xf4240, %rdx          # imm = 0xF4240
                	jge	<addr>
@@ -106,7 +105,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	%rax, %rcx
@@ -135,7 +134,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	sete	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	-0x20(%rbp), %rax
                	movq	0x8(%rax), %rax
@@ -144,8 +143,7 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	setl	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x7, %eax
                	movq	%rax, %rcx

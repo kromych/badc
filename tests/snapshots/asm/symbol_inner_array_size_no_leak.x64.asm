@@ -4,14 +4,15 @@ symbol_inner_array_size_no_leak.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<build_one>:
                	movslq	%esi, %rsi
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	%rsi, %rax
                	jge	<addr>
@@ -23,7 +24,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rax
                	leaq	(%rax,%rax,2), %rdx
                	movslq	%edx, %rdx
-               	movswq	%dx, %rdx
                	movw	%dx, (%rdi,%rax,2)
                	jmp	<addr>
                	movq	%rsi, %rax
@@ -31,6 +31,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movswq	(%rdi,%rax,2), %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -46,18 +48,17 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %rax
                	movswq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	leaq	-0x10(%rbp), %rax
                	movswq	0xe(%rax), %rax
                	cmpq	$0x15, %rax
                	setne	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	addq	$0x30, %rsp
@@ -79,5 +80,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

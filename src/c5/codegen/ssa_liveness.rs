@@ -90,6 +90,7 @@ impl Liveness {
             }
             match &blk.terminator {
                 Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(*cond),
+                Terminator::GotoIndirect { target } if *target != NO_VALUE => mark(*target),
                 Terminator::Return(v) if *v != NO_VALUE => mark(*v),
                 _ => {}
             }
@@ -104,7 +105,10 @@ impl Liveness {
             for b in (0..nblocks).rev() {
                 let base = b * words;
                 scratch.iter_mut().for_each(|w| *w = 0);
-                for s in super::ssa_mem2reg::successors(&func.blocks[b].terminator) {
+                for s in super::ssa_mem2reg::successors(
+                    &func.blocks[b].terminator,
+                    &func.computed_goto_targets,
+                ) {
                     let sb = s as usize * words;
                     for w in 0..words {
                         scratch[w] |= live_in[sb + w];
@@ -191,6 +195,7 @@ impl Liveness {
         }
         match &blk.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => *cond == x,
+            Terminator::GotoIndirect { target } => *target == x,
             Terminator::Return(v) => *v == x,
             _ => false,
         }
@@ -254,6 +259,9 @@ impl Liveness {
                     if (*cond as usize) < n {
                         live.insert(*cond);
                     }
+                }
+                Terminator::GotoIndirect { target } if (*target as usize) < n => {
+                    live.insert(*target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
                     live.insert(*v);
@@ -328,6 +336,9 @@ impl Liveness {
                     if (*cond as usize) < n {
                         live.insert(*cond);
                     }
+                }
+                Terminator::GotoIndirect { target } if (*target as usize) < n => {
+                    live.insert(*target);
                 }
                 Terminator::Return(v) if *v != NO_VALUE && (*v as usize) < n => {
                     live.insert(*v);
@@ -416,6 +427,13 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

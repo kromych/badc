@@ -4,12 +4,12 @@ long_double_libc_return.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xf8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x300              // =768
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
@@ -19,12 +19,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
-               	sub	x17, x29, #0x8
-               	str	d16, [x17]
-               	sub	x16, x29, #0x8
-               	ldr	d0, [x16]
                	mov	x0, #0x45f0000000000000 // =5039527983027585024
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -40,12 +34,6 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
-               	sub	x17, x29, #0x10
-               	str	d16, [x17]
-               	sub	x16, x29, #0x10
-               	ldr	d0, [x16]
                	mov	x0, #0x43f0000000000000 // =4895412794951729152
                	fmov	d17, x0
                	fcmp	d0, d17
@@ -61,12 +49,6 @@ Disassembly of section .text:
                	fmov	d0, x0
                	mov	x0, x1
                	bl	<addr>
-               	fmov	x0, d0
-               	fmov	d16, x0
-               	sub	x17, x29, #0x18
-               	str	d16, [x17]
-               	sub	x16, x29, #0x18
-               	ldr	d0, [x16]
                	mov	x0, #0x4340000000000000 // =4845873199050653696
                	fmov	d17, x0
                	fcmp	d0, d17

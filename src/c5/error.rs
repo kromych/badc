@@ -63,11 +63,11 @@ pub(crate) fn fmt_internal_err(message: &str) -> String {
 /// malformed archives). These describe a problem with the user's
 /// command line or sources -- not a c5 bug -- so they MUST NOT
 /// carry the `internal compiler error:` marker. Mirrors ld /
-/// gold's "error:" prefix. Gated to the `linker` feature -- the
+/// gold's "error:" prefix. Gated to the `full` feature -- the
 /// only caller lives in the linker module, so under
 /// `--no-default-features --lib` this helper would otherwise
 /// trip the dead-code lint.
-#[cfg(feature = "linker")]
+#[cfg(feature = "full")]
 pub(crate) fn fmt_link_err(message: &str) -> String {
     use alloc::format;
     format!("error: {message}")

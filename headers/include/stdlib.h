@@ -62,8 +62,6 @@
 #pragma binding(libc::mkstemp, "_mkstemp")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
-#pragma binding(libc::div,     "_div")
-#pragma binding(libc::ldiv,    "_ldiv")
 #pragma binding(libc::random,  "_random")
 #pragma binding(libc::srandom, "_srandom")
 #endif
@@ -107,8 +105,6 @@
 #pragma binding(libc::mkstemp, "mkstemp")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
-#pragma binding(libc::div,     "div")
-#pragma binding(libc::ldiv,    "ldiv")
 #pragma binding(libc::random,  "random")
 #pragma binding(libc::srandom, "srandom")
 #endif
@@ -183,8 +179,57 @@ double strtof(char *s, char **endp);
 long double strtold(char *s, char **endp);
 #endif
 int abs(int x);
-int abort();
-int exit(int status);
+// C99 7.20.6.1: absolute value of a long / long long. Provided inline
+// rather than through a libc binding because the result reduces to a
+// sign test. Undefined when the value is not representable (LONG_MIN /
+// LLONG_MIN), as the standard specifies.
+static inline long labs(long x) {
+    return x < 0 ? -x : x;
+}
+static inline long long llabs(long long x) {
+    return x < 0 ? -x : x;
+}
+// C99 7.20.6.2: integer division yielding quotient and remainder
+// together. The quotient is truncated toward zero (C99 6.5.5p6) and
+// quot * denom + rem == numer, so these reduce to the / and %
+// operators. Provided inline rather than through a libc binding
+// because the result is a small aggregate returned by value, which c5
+// marshals through its own struct-return path.
+typedef struct {
+    int quot;
+    int rem;
+} div_t;
+typedef struct {
+    long quot;
+    long rem;
+} ldiv_t;
+typedef struct {
+    long long quot;
+    long long rem;
+} lldiv_t;
+static inline div_t div(int n, int d) {
+    div_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
+static inline ldiv_t ldiv(long n, long d) {
+    ldiv_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
+static inline lldiv_t lldiv(long long n, long long d) {
+    lldiv_t r;
+    r.quot = n / d;
+    r.rem = n % d;
+    return r;
+}
+// C99 7.20.4: abort / exit / _Exit do not return to the caller.
+// `_Noreturn` lets the reachability analysis treat a call as not
+// reaching its continuation.
+_Noreturn int abort();
+_Noreturn int exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 int setenv(char *name, char *value, int overwrite);

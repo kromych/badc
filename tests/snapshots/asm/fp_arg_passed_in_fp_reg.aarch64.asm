@@ -4,14 +4,16 @@ fp_arg_passed_in_fp_reg.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	fmadd	d0, d0, d1, d0
                	ret
+
+<g>:
                	sxtw	x0, w0
                	sxtw	x1, w1
                	scvtf	d2, x0
@@ -19,6 +21,8 @@ Disassembly of section .text:
                	fmul	d1, d1, d3
                	fmadd	d0, d0, d2, d1
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

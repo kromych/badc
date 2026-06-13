@@ -283,6 +283,26 @@ pub(crate) enum Token {
     /// flag the function symbol for the SSA inliner, which
     /// bypasses the body-size cap for inline-marked callees.
     Inline,
+    /// `_Noreturn` / `noreturn` (C11 6.7.4). Tracked distinctly so
+    /// the parser can flag the function symbol; the reachability
+    /// analysis treats a call to a `_Noreturn` function as not
+    /// reaching its continuation, which suppresses the
+    /// fall-off-the-end diagnostic on a caller whose last statement
+    /// is such a call.
+    Noreturn,
+    /// `_Atomic` (C11 6.7.2.4 / 6.7.3). Two forms: the type
+    /// specifier `_Atomic ( type-name )` and the type qualifier
+    /// `_Atomic` preceding a type. c5 does not model atomicity, so
+    /// both reduce to the unqualified inner type; a distinct token
+    /// is needed only so the parser can recognize the parenthesized
+    /// specifier (the qualifier form is consumed like `const`).
+    Atomic,
+    /// `asm` / `__asm__` / `__asm` (GCC inline assembly statement).
+    /// c5 supports the operand-free forms: an empty template (a
+    /// compiler barrier, no instruction) and a single known
+    /// operand-free hint instruction (`pause` / `yield`). Operand
+    /// constraints and other instructions are rejected.
+    Asm,
     /// `typedef` keyword. Drives the typedef parser: when seen
     /// at the start of a declaration, the declarator's name is
     /// registered as a *type alias* whose underlying type is
@@ -388,6 +408,8 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::ShrOp as i64 => "`>>`",
         x if x == Token::AddOp as i64 => "`+`",
         x if x == Token::SubOp as i64 => "`-`",
+        x if x == Token::Atomic as i64 => "`_Atomic`",
+        x if x == Token::Asm as i64 => "`asm`",
         x if x == Token::MulOp as i64 => "`*`",
         x if x == Token::DivOp as i64 => "`/`",
         x if x == Token::ModOp as i64 => "`%`",
@@ -482,4 +504,12 @@ pub(crate) enum Ty {
     /// integer" in real C, and c5 keeps the same guarantee.
     /// `long long*` = 502, `long long**` = 504, etc.
     LongLong = 500,
+    /// C99 `_Bool` (6.2.5p2): a 1-byte unsigned integer type that
+    /// holds only 0 or 1. Distinct from `unsigned char` so the
+    /// conversion sites can apply the 6.3.1.2 normalisation
+    /// (any nonzero scalar becomes 1) that a plain `unsigned char`
+    /// store must not. Sits in its own band [600, 700); the same
+    /// +2-per-`*` scheme applies, so `_Bool*` = 602, `_Bool**` =
+    /// 604, etc.
+    Bool = 600,
 }

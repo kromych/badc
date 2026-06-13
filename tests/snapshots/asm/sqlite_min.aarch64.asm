@@ -4,12 +4,12 @@ sqlite_min.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0x100]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x3b0              // =944
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x150
@@ -99,14 +99,7 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	mov	x2, #0x1                // =1
                	mov	x9, x21
-               	str	x2, [sp, #-0x10]!
-               	str	x1, [sp, #-0x10]!
-               	str	x0, [sp, #-0x10]!
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x10]
-               	ldr	x2, [sp, #0x20]
                	blr	x9
-               	add	sp, sp, #0x30
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -135,6 +128,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x150
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<__c5_sys_open>:
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -152,6 +147,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
+
+<__c5_sys_close>:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -165,6 +162,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
+
+<__c5_sys_ftruncate>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
@@ -180,6 +179,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
                	ret
+
+<__c5_sys_fcntl>:
                	str	x2, [sp, #-0x10]!
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -197,6 +198,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
+
+<__c5_sys_stat>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
@@ -212,6 +215,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x20
                	ret
+
+<__c5_sys_fstat>:
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!

@@ -2,15 +2,18 @@
 
 ## General notes
 
-You are an assistant to a systems engineer. The goal is to build a cross-platform compiler
+You are an assistant to the systems engineer. The goal is to build a cross-platform compiler
 that is quick and slim still providing a rich and cohesive feature set. There are no oddities:
 every oddity or anomaly is a bug and it must be fixed. For each bug, look at the large picture
 and decide based on evidence whether this is a narrow bug or a design gap and fix accordingly.
 
 Fix any crashes and hangs before doing feature work.
 
-Using words "classic", "known", "provably", "latent", "flake", "glitch", "unreliable", any
+Using words "classic", "known", "provably", "latent", "flake", "glitch", "unreliable", and any
 confident label in general requires providing facts and analysis. No loose speech is allowed.
+
+Before committing changes, check no stray files are being added. Use a git-ignored or the
+system-provided temporary directory for one-off tests, binaries and archives you create.
 
 ## Pre-push validation
 
@@ -20,10 +23,12 @@ There are local boxes available via ssh. CI may hang due to miscompiles and SIGS
 and costs money. Be frugal. Before any `git push`, the following must pass on the local
 boxes using `./scripts/validate_local_boxes.py`:
 
+  * `cargo test`
   * `cargo test --release --lib` (release exercises the JIT + native fixture-parity paths that debug builds skip)
   * `python3 demos/sqlite3/smoke.py`
   * `python3 demos/lua/smoke.py`
   * `python3 demos/miniz/smoke.py`
+  * `python3 demos/monocypher/smoke.py`
   * `python3 demos/stb/smoke.py`
   * `python3 demos/tweetnacl/smoke.py`
 
@@ -62,4 +67,4 @@ applies throughout.
 * File issues
 * Implement solutions
 * Add a regression test for each bug or feature to lock the behaviors in
-* Ananlyze SSA and assembler delta's under `./tests/snapshots` for improvements.
+* Analyze SSA and assembler delta's under `./tests/snapshots` for improvements.

@@ -213,14 +213,18 @@ impl Compiler {
         Ok(())
     }
 
-    /// Parse a `typedef` at block scope. Same shape as the file-
-    /// scope handler in run_compile, just routed here so block-
-    /// local typedefs (e.g. `typedef void(*LOGFUNC_t)(...)` inside
-    /// a switch case) bind without bouncing through the
-    /// declaration parser.
-    fn parse_block_typedef(
+    /// Parse a `typedef` declaration at function/block scope (C99
+    /// 6.7.7, 6.2.1), routed here so block-local typedefs (e.g.
+    /// `typedef void(*LOGFUNC_t)(...)` inside a switch case) bind
+    /// without bouncing through the file-scope declaration parser.
+    /// `block_symbols == Some` records the prior binding for an
+    /// enclosing `parse_block_stmt` to restore on block exit;
+    /// `block_symbols == None` (function-body top level) shadows the
+    /// prior binding and marks `is_scope_typedef` so the function-exit
+    /// cleanup restores it.
+    pub(super) fn parse_block_typedef(
         &mut self,
-        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+        mut block_symbols: Option<&mut Vec<(usize, i64, i64, i64)>>,
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
@@ -248,12 +252,17 @@ impl Compiler {
             } else {
                 (ty, fn_ptr_indirection, None)
             };
-            block_symbols.push((
-                id_idx,
-                self.symbols[id_idx].class,
-                self.symbols[id_idx].type_,
-                self.symbols[id_idx].val,
-            ));
+            if let Some(bs) = block_symbols.as_deref_mut() {
+                bs.push((
+                    id_idx,
+                    self.symbols[id_idx].class,
+                    self.symbols[id_idx].type_,
+                    self.symbols[id_idx].val,
+                ));
+            } else {
+                self.shadow_symbol(id_idx);
+                self.symbols[id_idx].is_scope_typedef = true;
+            }
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
@@ -346,6 +355,13 @@ impl Compiler {
             // `(*kf)(...)` is lowered as `Load { kind = result_tag }` and
             // dereferences the function pointer's bit pattern.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            // Capture the function-pointer prototype before the initializer
+            // is parsed: an initializer cast (`= (void *)f`) runs a base-type
+            // parse that clears these pending fields, so a variadic
+            // fn-pointer declared with an initializer would otherwise lose
+            // its prototype and emit the indirect call as non-variadic.
+            let fnptr_proto = self.pending.typedef_fn_proto.take();
+            let fnptr_param_types = self.pending.fn_ptr_param_types.take();
             // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes
             // its dimension only when the declarator stayed at
             // the typedef's element type. A `*` in the declarator
@@ -426,7 +442,10 @@ impl Compiler {
             // the host variadic ABI. Only variadic prototypes are
             // recorded (see the equivalent site in
             // `parse_function_body_local_decl`).
-            if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+            if let Some(types) = fnptr_param_types {
+                self.symbols[loc_idx].params = types;
+                self.symbols[loc_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+            } else if let Some((proto_fixed, true)) = fnptr_proto {
                 self.symbols[loc_idx].params = alloc::vec![0i64; proto_fixed];
                 self.symbols[loc_idx].is_variadic = true;
             }
@@ -455,7 +474,7 @@ impl Compiler {
         let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk == Token::Typedef {
-                self.parse_block_typedef(&mut block_symbols)?;
+                self.parse_block_typedef(Some(&mut block_symbols))?;
             } else if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
@@ -572,7 +591,83 @@ impl Compiler {
         Ok(())
     }
 
+    /// Parse a GCC inline-asm statement. c5 supports the operand-free
+    /// forms: an empty template (a compiler barrier, no instruction
+    /// emitted) and a single known operand-free hint instruction
+    /// (`pause` / `yield`, lowered to the target spin-loop hint).
+    /// Operand constraints and other instructions are rejected.
+    fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        self.next()?; // asm / __asm__ / __asm
+        // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
+        // `goto`). c5 acts on none of them.
+        while self.lex.tk == Token::TypeQual || self.lex.tk == Token::Inline {
+            self.next()?;
+        }
+        self.consume(b'(', "`(` expected after `asm`")?;
+        if self.lex.tk != '"' {
+            return Err(self.compile_err("inline asm template string expected"));
+        }
+        // The lexer has appended the template bytes to the data
+        // section; read them back, then drop them once parsing is done
+        // so the template does not occupy the data section.
+        let tstart = self.lex.ival as usize;
+        let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
+        self.next()?; // consume the template string
+        // Optional `: outputs : inputs : clobbers`. An operand binding
+        // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
+        // clobber strings and the separating colons are accepted.
+        while self.lex.tk != ')' {
+            if self.lex.tk == '(' {
+                self.data.truncate(tstart);
+                return Err(self.compile_err("inline asm operands are not supported"));
+            }
+            if self.lex.tk == ':' || self.lex.tk == ',' || self.lex.tk == '"' {
+                self.next()?;
+                continue;
+            }
+            self.data.truncate(tstart);
+            return Err(self.compile_err("unsupported inline asm syntax"));
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        self.data.truncate(tstart);
+        let t = core::str::from_utf8(&template)
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .to_ascii_lowercase();
+        if t.is_empty() {
+            // A compiler barrier with no instruction. c5 does not
+            // reorder memory accesses across the statement, so nothing
+            // is emitted.
+            return Ok(());
+        }
+        if t == "pause" || t == "yield" {
+            self.mark_emit_other();
+            self.ty = Ty::Int as i64;
+            let pos = self.ast_src_pos();
+            let id = self.ast.push_expr(
+                super::super::ast::Expr::Intrinsic {
+                    kind: super::super::op::Intrinsic::CpuRelax as i64,
+                    args: alloc::vec::Vec::new(),
+                    ty: Ty::Int as i64,
+                },
+                pos,
+            );
+            self.ast_acc = Some(id);
+            let _ = self.ast_emit_expr_stmt();
+            return Ok(());
+        }
+        Err(self.compile_err(format!("inline asm instruction `{t}` is not supported")))
+    }
+
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
+        // Function-pointer callee parameters captured for a postfix
+        // indirect call never span a statement: drop any left set by a
+        // producer whose call did not consume them so they cannot reach an
+        // unrelated call in a later statement.
+        self.pending.indirect_callee_params = None;
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.labels.push(name.clone());
@@ -584,6 +679,10 @@ impl Compiler {
             let body_s = self.ast_wrap_stmts_since(body_before);
             self.ast_emit_labeled(label, body_s);
             return Ok(());
+        }
+
+        if self.lex.tk == Token::Asm {
+            return self.parse_asm_stmt();
         }
 
         if self.lex.tk == Token::If {
@@ -695,21 +794,34 @@ impl Compiler {
             self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
             self.next()?;
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err("expected identifier after goto"));
+            if self.lex.tk == Token::MulOp {
+                // GCC computed goto: `goto *expr;` branches to the
+                // label address that `expr` evaluates to.
+                self.next()?; // consume '*'
+                self.parse_full_expr()?;
+                let target = self.ast_acc;
+                self.flush_pending_stores();
+                self.consume(b';', "semicolon expected after computed goto")?;
+                if let Some(t) = target {
+                    self.ast_emit_goto_indirect(t);
+                }
+            } else {
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("expected identifier after goto"));
+                }
+                let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+
+                self.flush_pending_stores();
+
+                if !self.labels.iter().any(|n| n == &target_name) {
+                    self.unresolved_gotos.push(target_name.clone());
+                }
+
+                self.consume(b';', "semicolon expected after goto")?;
+                let label = self.ast_label_by_name(&target_name);
+                self.ast_emit_goto(label);
             }
-            let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.next()?;
-
-            self.flush_pending_stores();
-
-            if !self.labels.iter().any(|n| n == &target_name) {
-                self.unresolved_gotos.push(target_name.clone());
-            }
-
-            self.consume(b';', "semicolon expected after goto")?;
-            let label = self.ast_label_by_name(&target_name);
-            self.ast_emit_goto(label);
         } else if self.lex.tk == Token::Break {
             self.next()?;
             if self.loop_break_depth == 0 {
@@ -727,6 +839,7 @@ impl Compiler {
             self.consume(b';', "semicolon expected after continue")?;
             self.ast_emit_continue();
         } else if self.lex.tk == Token::Return {
+            let line = self.lex.line;
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
@@ -739,10 +852,9 @@ impl Compiler {
                     // Reject here rather than silently dropping
                     // the value -- gcc and clang both diagnose this
                     // at the strict level.
-                    return Err(self.compile_err(
-                        "`return` with a value in a function returning `void` \
-                         (C99 6.8.6.4p1)",
-                    ));
+                    return Err(
+                        self.compile_err("`return` with a value in a function returning `void`")
+                    );
                 }
                 if returns_struct {
                     // Push the hidden out-pointer (loaded from
@@ -764,6 +876,18 @@ impl Compiler {
                              struct-returning function",
                         ));
                     }
+                    // C99 6.8.6.4p3: the returned value is converted as
+                    // if by assignment. Diagnose a return of an
+                    // incompatible struct type, matching the assignment
+                    // path.
+                    if let Some(reason) = Self::type_warning(ret_ty, self.ty, false) {
+                        let want = super::types::format_type(ret_ty, &self.structs);
+                        let got = super::types::format_type(self.ty, &self.structs);
+                        self.warn_at(
+                            line,
+                            format!("{reason} in return (declared={want}, returned={got})"),
+                        );
+                    }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
                     // `Stmt::Return(Some(_))` so the AST-driven
@@ -775,13 +899,27 @@ impl Compiler {
                     return_value = self.ast_acc;
                 } else {
                     self.parse_full_expr()?;
-                    // C99 6.8.6.4p3: the value is converted to the
-                    // function's return type as if by assignment.
+                    // C99 6.8.6.4p3 + 6.5.16.1: the value is converted
+                    // to the return type as if by assignment. Diagnose
+                    // the same incompatible pointer / integer cases the
+                    // assignment path flags, before the conversion
+                    // rewrites `self.ty`.
+                    let rhs_is_zero = self.last_emit_is_zero();
+                    let rhs_is_untyped = self.last_emit_was_indirect_call();
+                    if let Some(reason) =
+                        Self::type_warning_with_flags(ret_ty, self.ty, rhs_is_zero, rhs_is_untyped)
+                    {
+                        let want = super::types::format_type(ret_ty, &self.structs);
+                        let got = super::types::format_type(self.ty, &self.structs);
+                        self.warn_at(
+                            line,
+                            format!("{reason} in return (declared={want}, returned={got})"),
+                        );
+                    }
                     // Reuse `convert_assign_rhs` so an `int`-typed
-                    // `return` from a `double`-returning function
-                    // lifts through the int-to-float cast rather
-                    // than landing the integer's bit pattern in
-                    // the FP slot.
+                    // `return` from a `double`-returning function lifts
+                    // through the int-to-float cast rather than landing
+                    // the integer's bit pattern in the FP slot.
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
                 }
@@ -792,6 +930,14 @@ impl Compiler {
                 // value, matching the synthetic function-end Lev
                 // in run_compile.
                 self.emit_imm(0);
+            } else {
+                // Bare `return;` in a function returning non-void.
+                // C99 leaves the returned value indeterminate (6.9.1p12
+                // -- undefined behaviour if the caller uses it); C23
+                // 6.8.6.4 and every current toolchain reject it. Error.
+                return Err(
+                    self.compile_err("`return` with no value in a function returning non-void")
+                );
             }
             self.emit_dead_stores_and_flush();
             self.ast_emit_return(return_value);

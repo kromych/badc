@@ -4,16 +4,17 @@ struct_2d_array_field.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x230, %esi            # imm = 0x230
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x3, %rax
                	jge	<addr>
@@ -45,7 +46,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rsi, %rsi
                	movslq	%esi, %rsi
                	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -81,4 +81,4 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	jmp	<addr>
                	jmp	<addr>
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

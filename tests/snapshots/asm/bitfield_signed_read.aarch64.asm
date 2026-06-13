@@ -4,12 +4,12 @@ bitfield_signed_read.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -220,25 +220,23 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	str	w1, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x4
                	ldrh	w1, [x0]
-               	mov	x17, #0xfffc            // =65532
+               	mov	x17, #0xcfff            // =53247
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x1, x1, x17
-               	mov	x2, #0x3                // =3
+               	mov	x2, #0x3000             // =12288
                	orr	x1, x1, x2
                	strh	w1, [x0]
                	sub	x0, x29, #0x18
-               	add	x0, x0, #0x4
                	ldrh	w1, [x0]
-               	mov	x17, #0xfff3            // =65523
+               	mov	x17, #0x3fff            // =16383
                	movk	x17, #0xffff, lsl #16
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	and	x1, x1, x17
-               	mov	x2, #0x4                // =4
+               	mov	x2, #0x4000             // =16384
                	orr	x1, x1, x2
                	strh	w1, [x0]
                	sub	x0, x29, #0x18
@@ -252,7 +250,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	ldrh	w0, [x0, #0x4]
+               	ldrh	w0, [x0]
+               	asr	x0, x0, #12
                	mov	x17, #0x3               // =3
                	and	x0, x0, x17
                	lsl	x0, x0, #62
@@ -268,8 +267,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x18
-               	ldrh	w0, [x0, #0x4]
-               	asr	x0, x0, #2
+               	ldrh	w0, [x0]
+               	asr	x0, x0, #14
                	mov	x17, #0x3               // =3
                	and	x0, x0, x17
                	lsl	x0, x0, #62
@@ -282,7 +281,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x6                // =6
                	sub	x1, x29, #0x18
-               	ldrh	w1, [x1, #0x4]
+               	ldrh	w1, [x1]
+               	asr	x1, x1, #12
                	mov	x17, #0x3               // =3
                	and	x1, x1, x17
                	lsl	x1, x1, #62

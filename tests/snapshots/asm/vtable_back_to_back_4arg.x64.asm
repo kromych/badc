@@ -4,11 +4,13 @@ vtable_back_to_back_4arg.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -18,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -42,11 +44,10 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -55,23 +56,27 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<g_init>:
                	movslq	%edx, %rdx
                	movslq	%ecx, %rcx
                	leaq	<rip>, %rax
                	movq	%rax, (%rdi)
                	movq	%rdx, %rax
                	addq	%rcx, %rax
-               	movslq	%eax, %rax
                	movl	%eax, 0x8(%rdi)
                	xorq	%rax, %rax
                	retq
+
+<g_generate>:
                	movq	%rdx, %rax
                	movslq	%eax, %rax
                	movslq	0x8(%rdi), %rcx
                	addq	$0x64, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rsi)
                	retq
+
+<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
@@ -108,9 +113,10 @@ Disassembly of section .text:
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	popq	%rbp
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

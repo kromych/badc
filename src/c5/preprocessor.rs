@@ -359,6 +359,32 @@ impl Preprocessor {
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
         let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        // GCC bit-count / byte-swap builtins are available with no header
+        // (they are compiler builtins, not library functions), matching
+        // gcc/clang. The call-site lowering in the walker expands each to a
+        // portable shift / mask sequence. __builtin_unreachable marks a
+        // point control must not reach; it lowers to the trap intrinsic so
+        // a reached unreachable aborts rather than continuing.
+        let mut intrinsics: alloc::collections::BTreeMap<String, i64> =
+            alloc::collections::BTreeMap::new();
+        for (name, kind) in [
+            ("__builtin_clz", super::op::Intrinsic::Clz),
+            ("__builtin_ctz", super::op::Intrinsic::Ctz),
+            ("__builtin_popcount", super::op::Intrinsic::Popcount),
+            ("__builtin_clzll", super::op::Intrinsic::Clzll),
+            ("__builtin_ctzll", super::op::Intrinsic::Ctzll),
+            ("__builtin_popcountll", super::op::Intrinsic::Popcountll),
+            ("__builtin_bswap16", super::op::Intrinsic::Bswap16),
+            ("__builtin_bswap32", super::op::Intrinsic::Bswap32),
+            ("__builtin_bswap64", super::op::Intrinsic::Bswap64),
+            ("__builtin_unreachable", super::op::Intrinsic::Trap),
+            (
+                "__builtin_frame_address",
+                super::op::Intrinsic::FrameAddress,
+            ),
+        ] {
+            intrinsics.insert(name.to_string(), kind as i64);
+        }
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // common implementation-defined extensions used throughout
         // real-world C source for hints the c5 dialect doesn't act
@@ -378,6 +404,18 @@ impl Preprocessor {
                 },
             );
         }
+        // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
+        // evaluates to its first operand. The dialect does not consume the
+        // hint, so it expands to the operand. Defined here (not via a
+        // header) to match gcc/clang, where it needs no include.
+        fn_macros.insert(
+            "__builtin_expect".to_string(),
+            FnMacro {
+                params: alloc::vec!["x".to_string(), "c".to_string()],
+                body: "(x)".to_string(),
+                is_variadic: false,
+            },
+        );
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -456,7 +494,7 @@ impl Preprocessor {
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
             warn_disabled: BTreeSet::new(),
-            intrinsics: alloc::collections::BTreeMap::new(),
+            intrinsics,
         }
     }
 
@@ -706,7 +744,7 @@ impl Preprocessor {
                         active = taken;
                     }
                     Directive::If(expr) => {
-                        let taken = active && self.eval_condition(expr, line_no)?;
+                        let taken = active && self.eval_condition(expr, source_line)?;
                         cond_stack.push(CondFrame {
                             parent_active: active,
                             this_branch_taken: taken,
@@ -755,7 +793,7 @@ impl Preprocessor {
                             .unwrap_or(false);
                         let eligible = parent_active && !any_taken_so_far;
                         let cond = if eligible {
-                            self.eval_condition(expr, line_no)?
+                            self.eval_condition(expr, source_line)?
                         } else {
                             false
                         };
@@ -831,11 +869,16 @@ impl Preprocessor {
                             let name = trimmed
                                 .strip_prefix('<')
                                 .and_then(|s| s.strip_suffix('>'))
+                                .map(|n| (n, false))
                                 .or_else(|| {
-                                    trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                                    trimmed
+                                        .strip_prefix('"')
+                                        .and_then(|s| s.strip_suffix('"'))
+                                        .map(|n| (n, true))
                                 });
-                            if let Some(n) = name {
-                                let included = self.process_include(n.trim(), line_no, filename)?;
+                            if let Some((n, quoted)) = name {
+                                let included =
+                                    self.process_include(n.trim(), line_no, filename, quoted)?;
                                 out.push_str(&included);
                                 out.push_str(&format_line_marker(source_line + 1, &current_file));
                                 source_line += 1;
@@ -852,9 +895,9 @@ impl Preprocessor {
                             ));
                         }
                     }
-                    Directive::Include(name) => {
+                    Directive::Include { name, quoted } => {
                         if active {
-                            let included = self.process_include(name, line_no, filename)?;
+                            let included = self.process_include(name, line_no, filename, quoted)?;
                             out.push_str(&included);
                             // Closing marker uses `source_line + 1`
                             // (NOT `line_no + 1`) and `current_file`
@@ -905,6 +948,41 @@ impl Preprocessor {
                             source_line = line;
                             idx_iter += 1;
                             continue;
+                        }
+                    }
+                    Directive::LineMacro(args) => {
+                        if active {
+                            // C99 6.10.4: macro-expand the operand, then
+                            // reparse as `#line N ["file"]`. A result
+                            // that still doesn't lead with a digit
+                            // sequence is malformed; warn and skip.
+                            let expanded = self.substitute(args, filename, line_no);
+                            let trimmed = expanded.trim();
+                            let mut split = trimmed.splitn(2, char::is_whitespace);
+                            if let Some(num) = split.next()
+                                && let Ok(line) = num.parse::<usize>()
+                            {
+                                if let Some(f) = split.next().and_then(|tail| {
+                                    let t = tail.trim();
+                                    t.strip_prefix('"')
+                                        .and_then(|s| s.strip_suffix('"'))
+                                        .map(|s| s.to_string())
+                                }) {
+                                    current_file = f;
+                                }
+                                out.push_str(&format_line_marker(line, &current_file));
+                                source_line = line;
+                                idx_iter += 1;
+                                continue;
+                            }
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!(
+                                    "#line `{args}` expands to `{trimmed}`, \
+                                     which is not a line number"
+                                ),
+                            ));
                         }
                     }
                     Directive::Error(message) => {
@@ -987,7 +1065,10 @@ impl Preprocessor {
                     buffer.push_str(lines[idx + consumed]);
                     consumed += 1;
                 }
-                out.push_str(&self.substitute(&buffer, filename, line_no));
+                // `__LINE__` reflects the presumed line (`source_line`),
+                // which a `#line` directive can retarget (C99 6.10.4);
+                // absent any `#line`, it equals the physical line.
+                out.push_str(&self.substitute(&buffer, filename, source_line));
                 out.push('\n');
                 // Preserve source line numbering by emitting a blank
                 // line for each extra source line we joined into the
@@ -1048,6 +1129,13 @@ impl Preprocessor {
         let mut i = 0;
         while i < bytes.len() {
             let c = bytes[i];
+            // Skip a string / char literal's encoding prefix so the `L`
+            // of `L"..."` isn't collected as a macro identifier (C99
+            // 6.4.5 / 6.4.4.4); the literal body falls to the quote arm.
+            if let Some(plen) = literal_prefix_len(bytes, i) {
+                i += plen;
+                continue;
+            }
             if c.is_ascii_alphabetic() || c == b'_' {
                 let start = i;
                 i += 1;
@@ -1094,6 +1182,17 @@ impl Preprocessor {
         let mut i = 0;
         while i < bytes.len() {
             let c = bytes[i];
+            // A string / char literal may carry an encoding prefix
+            // (`L`, `u`, `U`, `u8`) that is part of the literal token,
+            // not an identifier (C99 6.4.5 / 6.4.4.4). Detect it before
+            // the identifier scan so a macro parameter named `L`/`u`/`U`
+            // doesn't capture the prefix of an adjacent wide / UTF
+            // literal. The literal body is copied verbatim below.
+            if let Some(plen) = literal_prefix_len(bytes, i) {
+                out.push_str(&line[i..i + plen]);
+                i += plen;
+                continue;
+            }
             if c.is_ascii_alphabetic() || c == b'_' {
                 let start = i;
                 i += 1;
@@ -1159,7 +1258,7 @@ impl Preprocessor {
                                 self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
-                        let expanded = expand_fn_macro(macro_def, &expanded_args);
+                        let expanded = expand_fn_macro(macro_def, &expanded_args, &args);
                         // C99 6.10.3.4 "blue paint": any macro that
                         // fired during arg pre-expansion stays on
                         // the blocklist for the body rescan, so a
@@ -1234,7 +1333,8 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
-                                let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
+                                let inner_body =
+                                    expand_fn_macro(inner_def, &inner_expanded_args, &inner_args);
                                 let deeper = Blocklist::Cons(trimmed, blocklist);
                                 let inner_recursed = self.substitute_with_blocklist(
                                     &inner_body,
@@ -1302,7 +1402,8 @@ impl Preprocessor {
                                         )
                                     })
                                     .collect();
-                                let body_expanded = expand_fn_macro(macro_def, &expanded_args);
+                                let body_expanded =
+                                    expand_fn_macro(macro_def, &expanded_args, &args);
                                 let deeper = Blocklist::Cons(trimmed, &nested);
                                 let recursed = self.substitute_with_blocklist(
                                     &body_expanded,
@@ -1324,23 +1425,31 @@ impl Preprocessor {
                 // Copy string and character literals verbatim so
                 // identifier-looking bytes inside them aren't
                 // substituted, and so a quoted quote (`'"'` /
-                // `"\"")` doesn't open the *other* literal kind.
+                // `"\"")` doesn't open the *other* literal kind. Copy
+                // the byte range as a UTF-8 slice rather than byte by
+                // byte: a per-byte `as char` push would re-encode each
+                // byte of a multibyte sequence (`L'a'` -> two chars ->
+                // four bytes), corrupting non-ASCII literal contents.
                 let quote = c;
-                out.push(quote as char);
+                let lit_start = i;
                 i += 1;
                 while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        out.push(bytes[i] as char);
-                        out.push(bytes[i + 1] as char);
                         i += 2;
                     } else {
-                        out.push(bytes[i] as char);
                         i += 1;
                     }
                 }
                 if i < bytes.len() {
-                    out.push(quote as char);
-                    i += 1;
+                    i += 1; // consume the closing quote
+                }
+                match core::str::from_utf8(&bytes[lit_start..i]) {
+                    Ok(s) => out.push_str(s),
+                    Err(_) => {
+                        for &b in &bytes[lit_start..i] {
+                            out.push(b as char);
+                        }
+                    }
                 }
             } else {
                 out.push(c as char);
@@ -1384,7 +1493,7 @@ impl Preprocessor {
     /// argument and lose the original name. Returns a fully
     /// macro-substituted string suitable for the `#if` expression
     /// parser.
-    fn expand_for_if(&self, expr: &str) -> String {
+    fn expand_for_if(&self, expr: &str, line_no: usize) -> String {
         let mut out = String::with_capacity(expr.len());
         let bytes = expr.as_bytes();
         let mut i = 0;
@@ -1460,7 +1569,7 @@ impl Preprocessor {
         // and line comments from the result -- macro bodies can
         // carry inline `/* ... */` comments that survive expansion
         // and would otherwise confuse the expression tokenizer.
-        let substituted = self.substitute(&out, "<#if>", 0);
+        let substituted = self.substitute(&out, "<#if>", line_no);
         strip_comments(&substituted)
     }
 
@@ -1479,7 +1588,7 @@ impl Preprocessor {
         // parser sees them. `defined(X)` is protected by a
         // pre-pass that converts it to a literal 0/1 since
         // substitute would otherwise expand X away.
-        let prepared = self.expand_for_if(expr);
+        let prepared = self.expand_for_if(expr, line_no);
         let mut p = IfExprParser::new(&prepared, self);
         let v = p.parse_ternary()?;
         p.skip_ws();
@@ -1868,6 +1977,17 @@ impl Preprocessor {
             "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
             "fma" => super::op::Intrinsic::Fma as i64,
             "fmaf" => super::op::Intrinsic::Fmaf as i64,
+            "sqrt" => super::op::Intrinsic::Sqrt as i64,
+            "sqrtf" => super::op::Intrinsic::Sqrtf as i64,
+            "fabs" => super::op::Intrinsic::Fabs as i64,
+            "fabsf" => super::op::Intrinsic::Fabsf as i64,
+            "floor" => super::op::Intrinsic::Floor as i64,
+            "floorf" => super::op::Intrinsic::Floorf as i64,
+            "ceil" => super::op::Intrinsic::Ceil as i64,
+            "ceilf" => super::op::Intrinsic::Ceilf as i64,
+            "trunc" => super::op::Intrinsic::Trunc as i64,
+            "truncf" => super::op::Intrinsic::Truncf as i64,
+            "__builtin_trap" => super::op::Intrinsic::Trap as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
@@ -1878,7 +1998,8 @@ impl Preprocessor {
                          __builtin_alloca, __c5_aarch64_setjmp, \
                          __c5_aarch64_longjmp, __builtin_va_start, \
                          __builtin_va_arg, __builtin_va_end, \
-                         __builtin_va_copy, fma, fmaf"
+                         __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
+                         fabs, fabsf"
                     ),
                 )));
             }
@@ -2073,15 +2194,8 @@ impl Preprocessor {
         name: &str,
         line_no: usize,
         filename: &str,
+        quoted: bool,
     ) -> Result<String, C5Error> {
-        if self.pragma_once_files.contains(name) {
-            if self.show_includes {
-                let depth = self.include_stack.len() + 1;
-                self.include_trace
-                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
-            }
-            return Ok(String::new());
-        }
         // Resolution order:
         //   1. Filesystem search paths added via `add_search_path`
         //      (= the CLI's `-I` flag plus any built-in defaults).
@@ -2096,11 +2210,25 @@ impl Preprocessor {
         //      isn't a hard failure; the user sees the warning
         //      and can decide whether the missing surface
         //      matters.
+        // A quoted include (`#include "header"`) searches the
+        // directory of the including file before the system search
+        // paths (C99 6.10.2p2); an angle include skips that step.
+        // `filename` carries the including file's path (the top-level
+        // source path, or the resolved path threaded through a nested
+        // include), so its parent directory is the search base.
+        let source_dir = if quoted {
+            include_parent_dir(filename)
+        } else {
+            None
+        };
         // The result is owned `String` because filesystem-loaded
         // bodies don't have static lifetime; the embedded path
-        // copies its `&'static str` into one to share the type.
-        let resolved: Option<String> = self.find_include(name);
-        let Some(content) = resolved else {
+        // copies its `&'static str` into one to share the type. The
+        // second element is the path the body resolved to, threaded
+        // as the new file's name so a nested quoted include resolves
+        // against the right directory.
+        let resolved: Option<(String, String)> = self.find_include(name, source_dir.as_deref());
+        let Some((content, resolved_path)) = resolved else {
             // Missing header. Push a warning into the same list
             // the parser uses; the caller drains it through to
             // `Program::warnings` after the compile finishes.
@@ -2115,6 +2243,18 @@ impl Preprocessor {
             }
             return Ok(String::new());
         };
+        // `#pragma once` dedups by the resolved path (file identity),
+        // not the include spelling, so two different spellings that
+        // name the same file are still included once. The handler in
+        // `process_named` records the same `resolved_path`.
+        if self.pragma_once_files.contains(&resolved_path) {
+            if self.show_includes {
+                let depth = self.include_stack.len() + 1;
+                self.include_trace
+                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
+            }
+            return Ok(String::new());
+        }
         if self.show_includes {
             let depth = self.include_stack.len() + 1;
             self.include_trace
@@ -2129,28 +2269,47 @@ impl Preprocessor {
             )));
         }
         self.include_stack.push(name.to_string());
-        let result = self.process_named(&content, name);
+        let result = self.process_named(&content, &resolved_path);
         self.include_stack.pop();
         result
     }
 
-    /// Look `name` up in the search-path chain and the embedded
-    /// registry. See `process_include` for the resolution order.
-    fn find_include(&self, name: &str) -> Option<String> {
+    /// Look `name` up and return its body plus the path it resolved
+    /// to. `source_dir` is `Some` only for a quoted include; when set
+    /// it is searched first (C99 6.10.2p2). Then the configured search
+    /// paths (`-I` plus built-in defaults), then the embedded
+    /// registry. The resolved path is the filesystem candidate that
+    /// matched, or `name` for an embedded header.
+    fn find_include(&self, name: &str, source_dir: Option<&str>) -> Option<(String, String)> {
         #[cfg(feature = "std")]
-        for path in &self.search_paths {
-            let candidate = if path.is_empty() {
-                name.to_string()
-            } else if path.ends_with('/') || path.ends_with('\\') {
-                format!("{path}{name}")
-            } else {
-                format!("{path}/{name}")
+        {
+            let join = |dir: &str| -> String {
+                if dir.is_empty() {
+                    name.to_string()
+                } else if dir.ends_with('/') || dir.ends_with('\\') {
+                    format!("{dir}{name}")
+                } else {
+                    format!("{dir}/{name}")
+                }
             };
-            if let Ok(body) = std::fs::read_to_string(&candidate) {
-                return Some(body);
+            // A name with its own directory component or an absolute
+            // path is taken as-is; otherwise probe the source
+            // directory (quoted only) then the search paths.
+            if let Some(dir) = source_dir {
+                let candidate = join(dir);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
+            }
+            for path in &self.search_paths {
+                let candidate = join(path);
+                if let Ok(body) = std::fs::read_to_string(&candidate) {
+                    return Some((body, candidate));
+                }
             }
         }
-        embedded_header(name).map(|s| s.to_string())
+        let _ = source_dir;
+        embedded_header(name).map(|s| (s.to_string(), name.to_string()))
     }
 
     /// `#pragma binding(dylib::local_name, "real_symbol")` -- record
@@ -2320,22 +2479,28 @@ fn strip_c_comments(source: &str) -> String {
         }
         if c == b'"' || c == b'\'' {
             // Pass-through quoted literal so `"//"` etc. survive.
+            // Copy the byte range as a UTF-8 slice so a multibyte
+            // sequence is not re-encoded byte by byte.
             let quote = c;
-            out.push(c as char);
+            let lit_start = i;
             i += 1;
             while i < bytes.len() && bytes[i] != quote {
                 if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    out.push(bytes[i] as char);
-                    out.push(bytes[i + 1] as char);
                     i += 2;
                 } else {
-                    out.push(bytes[i] as char);
                     i += 1;
                 }
             }
             if i < bytes.len() {
-                out.push(quote as char);
                 i += 1;
+            }
+            match core::str::from_utf8(&bytes[lit_start..i]) {
+                Ok(s) => out.push_str(s),
+                Err(_) => {
+                    for &b in &bytes[lit_start..i] {
+                        out.push(b as char);
+                    }
+                }
             }
             continue;
         }
@@ -2376,6 +2541,97 @@ fn unfold_line_continuations(source: &str) -> String {
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the
 /// dylib `name`.
+/// If `bytes[at..]` begins with a string- or char-literal encoding
+/// prefix (`L`, `u`, `U`, or `u8`) immediately followed by a `"` or
+/// `'` quote, return the prefix length (1 or 2). The quote itself is
+/// not included. C99 6.4.5 (string literals) and 6.4.4.4 (character
+/// constants) make the prefix part of the literal token; the
+/// preprocessor must not treat it as an identifier.
+fn literal_prefix_len(bytes: &[u8], at: usize) -> Option<usize> {
+    let c = *bytes.get(at)?;
+    let quote = |b: u8| b == b'"' || b == b'\'';
+    match c {
+        b'L' | b'U' if bytes.get(at + 1).is_some_and(|&n| quote(n)) => Some(1),
+        b'u' => {
+            if bytes.get(at + 1) == Some(&b'8') && bytes.get(at + 2).is_some_and(|&n| n == b'"') {
+                Some(2)
+            } else if bytes.get(at + 1).is_some_and(|&n| quote(n)) {
+                Some(1)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Build the `#`-stringized form of a macro argument (C99 6.10.3.2):
+/// the spelling is wrapped in `"`, leading and trailing white space is
+/// deleted, and each internal white-space run between tokens becomes a
+/// single space. White space inside a character constant or string
+/// literal is preserved, and a `\` or `"` that occurs inside such a
+/// literal is escaped; a `\` outside any literal is copied verbatim.
+fn stringize_arg(arg: &str) -> String {
+    let bytes = arg.as_bytes();
+    let mut out = String::with_capacity(arg.len() + 2);
+    out.push('"');
+    let mut in_str = false;
+    let mut in_char = false;
+    let mut pending_space = false;
+    let mut wrote_any = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        let in_lit = in_str || in_char;
+        if !in_lit && matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0c) {
+            if wrote_any {
+                pending_space = true;
+            }
+            i += 1;
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+            pending_space = false;
+        }
+        if in_lit && c == b'\\' && i + 1 < bytes.len() {
+            // Escape sequence inside a literal: escape the backslash,
+            // then copy the escaped char (re-escaping a quote or
+            // backslash). The escaped char never toggles literal state.
+            out.push_str("\\\\");
+            match bytes[i + 1] {
+                b'"' => out.push_str("\\\""),
+                b'\\' => out.push_str("\\\\"),
+                n => out.push(n as char),
+            }
+            i += 2;
+            wrote_any = true;
+            continue;
+        }
+        match c {
+            b'"' => {
+                out.push_str("\\\"");
+                if !in_char {
+                    in_str = !in_str;
+                }
+            }
+            b'\'' => {
+                out.push('\'');
+                if !in_str {
+                    in_char = !in_char;
+                }
+            }
+            // A backslash outside any literal is not escaped (C99 only
+            // escapes those within character / string literals).
+            _ => out.push(c as char),
+        }
+        wrote_any = true;
+        i += 1;
+    }
+    out.push('"');
+    out
+}
+
 fn is_ident(s: &str) -> bool {
     let mut bytes = s.bytes();
     let Some(first) = bytes.next() else {
@@ -2429,7 +2685,14 @@ enum Directive<'a> {
     Elif(&'a str),
     Endif,
     Pragma(&'a str),
-    Include(&'a str),
+    /// `#include "header"` (`quoted = true`) or `#include <header>`
+    /// (`quoted = false`). A quoted include searches the directory of
+    /// the including file before the system search paths (C99
+    /// 6.10.2p2-3); an angle include searches only the system paths.
+    Include {
+        name: &'a str,
+        quoted: bool,
+    },
     /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
     /// is optional -- bare `#line N` keeps the current file and
     /// just retargets the line counter.
@@ -2444,6 +2707,10 @@ enum Directive<'a> {
     /// text is carried verbatim; substitution happens in the
     /// handler.
     IncludeMacro(&'a str),
+    /// `#line pp-tokens` whose tokens are not already a literal line
+    /// number (C99 6.10.4): the operand is macro-expanded and reparsed
+    /// as `#line N ["file"]` in the handler.
+    LineMacro(&'a str),
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
@@ -2626,17 +2893,29 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             });
             return Directive::Line { line, file };
         }
+        // C99 6.10.4: the operand is not already a digit sequence, so
+        // its tokens are macro-expanded and reparsed in the handler.
+        if !trimmed.is_empty() {
+            return Directive::LineMacro(trimmed);
+        }
     }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
         // Strip the `<...>` or `"..."` wrapping when the operand
-        // is already in one of the two literal forms.
-        if let Some(name) = trimmed
-            .strip_prefix('<')
-            .and_then(|s| s.strip_suffix('>'))
-            .or_else(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
-        {
-            return Directive::Include(name.trim());
+        // is already in one of the two literal forms, recording which
+        // form so the handler can apply the quoted-include source-dir
+        // search.
+        if let Some(name) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return Directive::Include {
+                name: name.trim(),
+                quoted: false,
+            };
+        }
+        if let Some(name) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            return Directive::Include {
+                name: name.trim(),
+                quoted: true,
+            };
         }
         // C99 6.10.2p4: `#include <pp-tokens>` -- when the operand
         // isn't already a `<...>` or `"..."` literal, the
@@ -2679,6 +2958,23 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     Directive::Other
 }
 
+/// Parent directory of an include path, or `None` when the path has
+/// no directory component (a bare name, the embedded-header label, or
+/// the synthetic `<force-include>` / top-level labels). Handles both
+/// `/` and `\` separators. Used to resolve a quoted include against
+/// the including file's directory.
+fn include_parent_dir(filename: &str) -> Option<alloc::string::String> {
+    // A bare filename (no directory component) names a file in the
+    // current working directory, so a quoted include in it searches the
+    // cwd. Return an empty directory; `find_include` joins that as a
+    // cwd-relative name. `None` would skip the source-directory step and
+    // miss a same-directory header.
+    match filename.rfind(['/', '\\']) {
+        Some(cut) => Some(filename[..cut].to_string()),
+        None => Some(alloc::string::String::new()),
+    }
+}
+
 /// Split off the leading identifier in `s`, returning `(ident,
 /// rest)`. Used to peel the macro name from its replacement text.
 fn split_ident(s: &str) -> (&str, &str) {
@@ -2717,9 +3013,13 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
             b')' => {
                 depth -= 1;
                 if depth == 0 {
-                    if !current.is_empty() || !args.is_empty() {
-                        args.push(current.trim().to_string());
-                    }
+                    // The closing paren ends the final argument. C99
+                    // 6.10.3p4: `m()` is a single empty argument, so a
+                    // one-parameter macro substitutes its parameter with
+                    // nothing rather than leaving the parameter name to
+                    // be rescanned. A zero-parameter macro ignores the
+                    // spare empty argument at expansion.
+                    args.push(current.trim().to_string());
                     return Some((args, i + 1));
                 }
                 current.push(')');
@@ -2732,23 +3032,28 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
             }
             b'"' | b'\'' => {
                 // Copy the whole literal (including escapes) so commas
-                // / parens inside don't perturb the depth counter.
+                // / parens inside don't perturb the depth counter. Use a
+                // UTF-8 slice so a multibyte sequence stays intact.
                 let quote = c;
-                current.push(c as char);
+                let lit_start = i;
                 i += 1;
                 while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        current.push(bytes[i] as char);
-                        current.push(bytes[i + 1] as char);
                         i += 2;
                     } else {
-                        current.push(bytes[i] as char);
                         i += 1;
                     }
                 }
                 if i < bytes.len() {
-                    current.push(quote as char);
                     i += 1;
+                }
+                match core::str::from_utf8(&bytes[lit_start..i]) {
+                    Ok(s) => current.push_str(s),
+                    Err(_) => {
+                        for &b in &bytes[lit_start..i] {
+                            current.push(b as char);
+                        }
+                    }
                 }
             }
             _ => {
@@ -3421,23 +3726,29 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
-fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
+fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {
     // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
-    // the macro isn't variadic or no trailing args were supplied.
-    let va_args_str: String = if def.is_variadic {
-        let var_start = def.params.len();
-        if args.len() > var_start {
-            args[var_start..].join(", ")
+    // the macro isn't variadic or no trailing args were supplied. The
+    // raw form (unexpanded arguments) feeds the `#` and `##` operands
+    // per C99 6.10.3.1 / 6.10.3.2; the expanded form feeds ordinary
+    // substitution.
+    let var_start = def.params.len();
+    let join_from = |src: &[String]| -> String {
+        if def.is_variadic && src.len() > var_start {
+            src[var_start..].join(", ")
         } else {
             String::new()
         }
-    } else {
-        String::new()
     };
+    let va_args_str = join_from(args);
+    let raw_va_args_str = join_from(raw_args);
 
     let bytes = def.body.as_bytes();
     let mut out = String::with_capacity(def.body.len());
     let mut i = 0;
+    // True when the next token is the right-hand operand of a `##`, so
+    // it must substitute from the unexpanded argument.
+    let mut after_paste = false;
     while i < bytes.len() {
         let c = bytes[i];
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
@@ -3454,10 +3765,16 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
             while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
                 i += 1;
             }
-        } else if c == b'#' {
+            after_paste = true;
+            continue;
+        }
+        let preceded_by_paste = after_paste;
+        after_paste = false;
+        if c == b'#' {
             // Stringification: `#param` -> `"<arg>"`. The C standard
             // says the operand must be a parameter; we follow that
-            // and pass a stray `#` through unchanged.
+            // and pass a stray `#` through unchanged. The operand uses
+            // the unexpanded argument (C99 6.10.3.2p2).
             let mut j = i + 1;
             while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
                 j += 1;
@@ -3469,28 +3786,28 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
                 }
                 let name = &def.body[start..j];
                 let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
-                    Some(va_args_str.as_str())
+                    Some(raw_va_args_str.as_str())
                 } else if let Some(idx) = def.params.iter().position(|p| p == name) {
-                    args.get(idx).map(|s| s.as_str())
+                    raw_args.get(idx).map(|s| s.as_str())
                 } else {
                     None
                 };
                 if let Some(arg) = arg_text {
-                    out.push('"');
-                    for byte in arg.bytes() {
-                        match byte {
-                            b'"' => out.push_str("\\\""),
-                            b'\\' => out.push_str("\\\\"),
-                            _ => out.push(byte as char),
-                        }
-                    }
-                    out.push('"');
+                    out.push_str(&stringize_arg(arg));
                     i = j;
                     continue;
                 }
             }
             out.push('#');
             i += 1;
+        } else if let Some(plen) = literal_prefix_len(bytes, i) {
+            // An `L`/`u`/`U`/`u8` prefix belongs to the following string
+            // or char literal (C99 6.4.5 / 6.4.4.4); emit it verbatim so
+            // a parameter named `L`/`u`/`U` doesn't capture it. The
+            // literal body is copied by the `"`/`'` arm on the next
+            // iteration.
+            out.push_str(&def.body[i..i + plen]);
+            i += plen;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
@@ -3498,33 +3815,56 @@ fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
                 i += 1;
             }
             let word = &def.body[start..i];
+            // A parameter that is an operand of `##` (immediately
+            // before or after the operator) substitutes from the
+            // unexpanded argument (C99 6.10.3.1p1).
+            let followed_by_paste = {
+                let mut k = i;
+                while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                    k += 1;
+                }
+                k + 1 < bytes.len() && bytes[k] == b'#' && bytes[k + 1] == b'#'
+            };
+            let use_raw = preceded_by_paste || followed_by_paste;
+            let params = if use_raw { raw_args } else { args };
+            let va = if use_raw {
+                &raw_va_args_str
+            } else {
+                &va_args_str
+            };
             if word == "__VA_ARGS__" && def.is_variadic {
-                out.push_str(&va_args_str);
+                out.push_str(va);
             } else {
                 match def.params.iter().position(|p| p == word) {
-                    Some(idx) if idx < args.len() => out.push_str(&args[idx]),
+                    Some(idx) if idx < params.len() => out.push_str(&params[idx]),
                     _ => out.push_str(word),
                 }
             }
         } else if c == b'"' || c == b'\'' {
-            // Pass literals through unchanged so identifier-like
-            // bytes inside don't get substituted.
+            // Pass literals through unchanged so identifier-like bytes
+            // inside don't get substituted. Copy the byte range as a
+            // UTF-8 slice rather than byte by byte so a multibyte
+            // sequence isn't re-encoded per byte (`as char` widening).
             let quote = c;
-            out.push(c as char);
+            let lit_start = i;
             i += 1;
             while i < bytes.len() && bytes[i] != quote {
                 if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                    out.push(bytes[i] as char);
-                    out.push(bytes[i + 1] as char);
                     i += 2;
                 } else {
-                    out.push(bytes[i] as char);
                     i += 1;
                 }
             }
             if i < bytes.len() {
-                out.push(quote as char);
                 i += 1;
+            }
+            match core::str::from_utf8(&bytes[lit_start..i]) {
+                Ok(s) => out.push_str(s),
+                Err(_) => {
+                    for &b in &bytes[lit_start..i] {
+                        out.push(b as char);
+                    }
+                }
             }
         } else {
             out.push(c as char);
@@ -3893,10 +4233,14 @@ mod tests {
     fn counter_monotonically_increases() {
         // Each `__COUNTER__` expansion advances the per-TU
         // counter, starting from 0. The `##` paste here mints
-        // unique identifiers, the canonical use case.
+        // unique identifiers, the canonical use case. Three levels
+        // of indirection are required: `##` operands use the
+        // unexpanded argument (C99 6.10.3.1), so the extra `CAT`
+        // layer forces `__COUNTER__` to expand before the paste.
         let src = "\
-#define UNIQUE_(prefix, n) prefix##n
-#define UNIQUE(prefix)     UNIQUE_(prefix, __COUNTER__)
+#define CAT_(a, b) a##b
+#define CAT(a, b)  CAT_(a, b)
+#define UNIQUE(prefix) CAT(prefix, __COUNTER__)
 int UNIQUE(x_);
 int UNIQUE(x_);
 int x_2 = __COUNTER__;
@@ -4111,5 +4455,21 @@ int x_2 = __COUNTER__;
         // same way -- so an unknown name no-ops cleanly.
         let out = process("#include \"not-a-real-header.h\"\nint main() {}\n");
         assert!(out.contains("int main()"));
+    }
+
+    #[test]
+    fn include_parent_dir_resolves_bare_filename_to_cwd() {
+        // A bare source filename names a file in the current directory,
+        // so a quoted include in it must search the cwd (empty dir,
+        // joined cwd-relative by find_include), not be skipped.
+        assert_eq!(super::include_parent_dir("src.c"), Some(String::new()));
+        assert_eq!(
+            super::include_parent_dir("dir/src.c"),
+            Some("dir".to_string())
+        );
+        assert_eq!(
+            super::include_parent_dir("/abs/dir/src.c"),
+            Some("/abs/dir".to_string())
+        );
     }
 }

@@ -4,11 +4,13 @@ sizeof_function_call_truncation.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<harness>:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	andq	$0xff, %rax
@@ -24,6 +26,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	movl	$0x1234, %eax           # imm = 0x1234
                	movq	%rax, %rcx
                	andq	$0xff, %rcx
@@ -54,7 +58,7 @@ Disassembly of section .text:
                	shlq	$0x1, %rax
                	movslq	%eax, %rax
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq

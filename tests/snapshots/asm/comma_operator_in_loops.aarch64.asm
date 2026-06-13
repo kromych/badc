@@ -4,12 +4,12 @@ comma_operator_in_loops.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x280              // =640
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<bump>:
                	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, #0x128
@@ -66,26 +67,23 @@ Disassembly of section .text:
                	add	x2, x2, #0x1
                	str	w2, [x1]
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	mov	x20, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w20
                	add	x20, x0, #0xa
-               	b	<addr>
                	mov	x21, #0x0               // =0
                	mov	x0, x21
                	bl	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
-               	b	<addr>
                	sxtw	x0, w20
                	add	x20, x0, #0x64
-               	b	<addr>
                	mov	x0, #0x7                // =7
                	bl	<addr>
                	b	<addr>

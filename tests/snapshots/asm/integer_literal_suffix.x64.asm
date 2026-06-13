@@ -4,11 +4,13 @@ integer_literal_suffix.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -47,15 +49,14 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rax
                	sete	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
                	movq	%rax, %rdx
                	cmpq	%r13, %rax
                	sete	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0xe, %eax
                	addq	$0x40, %rsp
@@ -69,7 +70,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$-0x1, %rax
                	incq	%rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x10, %eax
                	addq	$0x40, %rsp

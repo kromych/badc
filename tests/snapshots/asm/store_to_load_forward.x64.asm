@@ -4,42 +4,46 @@ store_to_load_forward.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<use_struct>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
                	movslq	%edx, %rdx
                	movq	%rsi, (%rdi)
                	movl	%edx, 0x8(%rdi)
-               	movswq	%dx, %rax
-               	movw	%ax, 0xc(%rdi)
-               	movsbq	%dl, %rax
-               	movb	%al, 0xe(%rdi)
-               	movq	%rdx, %rcx
-               	andq	$0xff, %rcx
-               	movb	%cl, 0xf(%rdi)
-               	movq	(%rdi), %rcx
-               	movslq	0x8(%rdi), %rdx
+               	movw	%dx, 0xc(%rdi)
+               	movb	%dl, 0xe(%rdi)
+               	movq	%rdx, %rax
+               	andq	$0xff, %rax
+               	movb	%al, 0xf(%rdi)
+               	movq	(%rdi), %rax
+               	movslq	0x8(%rdi), %rcx
                	movswq	0xc(%rdi), %rsi
-               	movsbq	%al, %rax
+               	movsbq	%dl, %rdx
                	movzbq	0xf(%rdi), %rdi
-               	addq	%rdx, %rcx
-               	addq	%rsi, %rcx
                	addq	%rcx, %rax
+               	addq	%rsi, %rax
+               	addq	%rdx, %rax
                	movq	%rdi, %rcx
                	andq	$0xff, %rcx
                	addq	%rcx, %rax
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+
+<deref_twice>:
                	movq	%rsi, (%rdi)
                	movq	%rsi, %rax
                	addq	%rsi, %rax
                	retq
+
+<no_forward_across_call>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -60,6 +64,8 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp

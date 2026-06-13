@@ -4,12 +4,12 @@ param_reg_swap.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	ldrb	w1, [x0, #0x3]
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -39,6 +39,8 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	orr	x0, x1, x0
                	ret
+
+<core>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x90
@@ -54,7 +56,6 @@ Disassembly of section .text:
                	mov	x22, x2
                	mov	x21, x1
                	mov	x24, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w24
                	cmp	x0, #0x4
                	b.ge	<addr>
@@ -126,11 +127,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x10
                	b.ge	<addr>
@@ -146,7 +148,6 @@ Disassembly of section .text:
                	strb	w2, [x0]
                	b	<addr>
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x20
                	b.ge	<addr>

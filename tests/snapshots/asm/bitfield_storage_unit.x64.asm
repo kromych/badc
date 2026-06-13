@@ -4,11 +4,13 @@ bitfield_storage_unit.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -155,29 +157,26 @@ Disassembly of section .text:
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %ecx
                	andq	$-0x100, %rcx
                	xorq	%rdx, %rdx
                	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %ecx
                	andq	$-0x101, %rcx           # imm = 0xFEFF
                	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rax
-               	addq	$0x4, %rax
-               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %ecx
                	movabsq	$-0xfffffe01, %r13      # imm = 0xFFFFFFFF000001FF
                	andq	%r13, %rcx
                	orq	%rdx, %rcx
-               	movl	%ecx, (%rax)
+               	movl	%ecx, 0x4(%rax)
                	leaq	-0x20(%rbp), %rax
                	movl	0x4(%rax), %eax
                	andq	$0xff, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x17, %eax
                	addq	$0x20, %rsp
@@ -187,7 +186,7 @@ Disassembly of section .text:
                	movl	0x4(%rax), %eax
                	sarq	$0x8, %rax
                	andq	$0x1, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x18, %eax
                	addq	$0x20, %rsp
@@ -197,7 +196,7 @@ Disassembly of section .text:
                	movl	0x4(%rax), %eax
                	sarq	$0x9, %rax
                	andq	$0x7fffff, %rax         # imm = 0x7FFFFF
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x19, %eax
                	addq	$0x20, %rsp
@@ -208,4 +207,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

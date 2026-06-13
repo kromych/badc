@@ -81,6 +81,66 @@ pub enum Intrinsic {
     /// `fmaf(x, y, z)` -- the single-precision partner of [`Fma`]; the
     /// operands and result are `float`.
     Fmaf = 9,
+    /// `__builtin_trap()` -- execute an architecture trap instruction
+    /// (`ud2` on x86_64, `brk #0` on AArch64) that raises an illegal-
+    /// instruction / breakpoint exception. Takes no argument, produces
+    /// no value, and does not return to its caller. The VM aborts the
+    /// process.
+    Trap = 10,
+    /// `sqrt(x)` / `sqrtf(x)` -- C99 7.12.7.5, the correctly-rounded
+    /// square root. Lowered to `Inst::FUnary { op: Sqrt }` so it emits
+    /// the hardware instruction (`fsqrt` / `sqrtsd` / `sqrtss`) rather
+    /// than a library call. `Sqrt` is double, `Sqrtf` single precision.
+    Sqrt = 11,
+    Sqrtf = 12,
+    /// `fabs(x)` / `fabsf(x)` -- C99 7.12.7.2, absolute value. Lowered to
+    /// `Inst::FUnary { op: Abs }`, which clears the IEEE 754 sign bit.
+    Fabs = 13,
+    Fabsf = 14,
+    /// `floor` / `ceil` / `trunc` and their single-precision partners --
+    /// C99 7.12.9.2 / 7.12.9.1 / 7.12.9.8. Each lowers to one rounding
+    /// instruction (x86-64 ROUNDSD/ROUNDSS with the rounding-mode
+    /// immediate, AArch64 FRINTM/FRINTP/FRINTZ).
+    Floor = 15,
+    Floorf = 16,
+    Ceil = 17,
+    Ceilf = 18,
+    Trunc = 19,
+    Truncf = 20,
+    /// `__builtin_clz(x)` / `__builtin_clzll(x)` -- count leading zero
+    /// bits of a 32-bit / 64-bit unsigned value. `__builtin_ctz` /
+    /// `__builtin_ctzll` count trailing zeros; `__builtin_popcount` /
+    /// `__builtin_popcountll` count set bits. The result is `int`. The
+    /// value at zero is undefined for clz / ctz (GCC); the walker's
+    /// branchless lowering returns the bit width there. Lowered in the
+    /// walker to a portable shift / mask / add sequence rather than a
+    /// dedicated instruction, so the behavior is identical across the
+    /// interpreter and every target.
+    Clz = 21,
+    Ctz = 22,
+    Popcount = 23,
+    Clzll = 24,
+    Ctzll = 25,
+    Popcountll = 26,
+    /// `__builtin_bswap16` / `bswap32` / `bswap64` -- reverse the byte
+    /// order of a 16- / 32- / 64-bit value. The result type matches the
+    /// operand width. Lowered in the walker to a portable shift / mask /
+    /// or sequence rather than a dedicated instruction.
+    Bswap16 = 27,
+    Bswap32 = 28,
+    Bswap64 = 29,
+    /// `__builtin_frame_address(0)` -- the current frame pointer (x29 /
+    /// rbp), returned as a `void *`. Only level 0 is supported; a
+    /// non-zero level (a caller's frame) is not. Used for stack-depth /
+    /// stack-overflow checks.
+    FrameAddress = 30,
+    /// CPU spin-loop relax hint, the lowering of an operand-free
+    /// inline-asm spin hint (`asm volatile("pause")` on x86-64,
+    /// `asm volatile("yield")` on AArch64). Emits the target hint
+    /// instruction (`pause` = F3 90, `yield` = 0xD503203F); a no-op
+    /// for correctness, so the interpreter ignores it. Takes no
+    /// argument and produces no value.
+    CpuRelax = 31,
 }
 
 impl Intrinsic {
@@ -95,7 +155,95 @@ impl Intrinsic {
             7 => Some(Intrinsic::VaCopy),
             8 => Some(Intrinsic::Fma),
             9 => Some(Intrinsic::Fmaf),
+            10 => Some(Intrinsic::Trap),
+            11 => Some(Intrinsic::Sqrt),
+            12 => Some(Intrinsic::Sqrtf),
+            13 => Some(Intrinsic::Fabs),
+            14 => Some(Intrinsic::Fabsf),
+            15 => Some(Intrinsic::Floor),
+            16 => Some(Intrinsic::Floorf),
+            17 => Some(Intrinsic::Ceil),
+            18 => Some(Intrinsic::Ceilf),
+            19 => Some(Intrinsic::Trunc),
+            20 => Some(Intrinsic::Truncf),
+            21 => Some(Intrinsic::Clz),
+            22 => Some(Intrinsic::Ctz),
+            23 => Some(Intrinsic::Popcount),
+            24 => Some(Intrinsic::Clzll),
+            25 => Some(Intrinsic::Ctzll),
+            26 => Some(Intrinsic::Popcountll),
+            27 => Some(Intrinsic::Bswap16),
+            28 => Some(Intrinsic::Bswap32),
+            29 => Some(Intrinsic::Bswap64),
+            30 => Some(Intrinsic::FrameAddress),
+            31 => Some(Intrinsic::CpuRelax),
             _ => None,
         }
+    }
+
+    /// Byte-swap builtins: one integer argument, a result of the same
+    /// width, lowered in the walker to a portable shift / mask sequence.
+    pub fn is_bswap(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Bswap16 | Intrinsic::Bswap32 | Intrinsic::Bswap64
+        )
+    }
+
+    /// Integer bit-count builtins: one integer argument, an `int`
+    /// result, lowered in the walker to a portable shift / mask
+    /// sequence. The `ll` forms operate on 64 bits, the rest on 32.
+    pub fn is_int_bit_unary(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Clz
+                | Intrinsic::Ctz
+                | Intrinsic::Popcount
+                | Intrinsic::Clzll
+                | Intrinsic::Ctzll
+                | Intrinsic::Popcountll
+        )
+    }
+
+    /// True for the 64-bit (`ll`) bit-count forms; the rest operate
+    /// on a 32-bit value.
+    pub fn is_bit_unary_64(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Clzll | Intrinsic::Ctzll | Intrinsic::Popcountll
+        )
+    }
+
+    /// Unary FP math intrinsics: one floating argument, a floating
+    /// result of the same precision, lowered to one hardware
+    /// instruction via `Inst::Intrinsic`.
+    pub fn is_fp_unary(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Sqrt
+                | Intrinsic::Sqrtf
+                | Intrinsic::Fabs
+                | Intrinsic::Fabsf
+                | Intrinsic::Floor
+                | Intrinsic::Floorf
+                | Intrinsic::Ceil
+                | Intrinsic::Ceilf
+                | Intrinsic::Trunc
+                | Intrinsic::Truncf
+        )
+    }
+
+    /// True for the single-precision (`float`) intrinsic forms; the
+    /// rest operate on `double`.
+    pub fn is_single_precision(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::Fmaf
+                | Intrinsic::Sqrtf
+                | Intrinsic::Fabsf
+                | Intrinsic::Floorf
+                | Intrinsic::Ceilf
+                | Intrinsic::Truncf
+        )
     }
 }

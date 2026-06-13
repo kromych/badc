@@ -4,12 +4,12 @@ preinc_narrow_lvalue_wraps.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x2b0              // =688
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<preinc_u8_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -70,7 +71,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x1
                	cset	x2, eq
@@ -79,18 +79,18 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u16_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -102,7 +102,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x1
                	cset	x2, eq
@@ -111,18 +110,18 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u32_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -136,7 +135,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x1
                	cset	x2, eq
@@ -146,18 +144,18 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<compound_u8_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -169,7 +167,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x1
                	cset	x2, eq
@@ -178,18 +175,18 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<compound_u16_wrap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -201,7 +198,6 @@ Disassembly of section .text:
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x1
                	cset	x2, eq
@@ -210,18 +206,18 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	cmp	x0, #0x0
                	cset	x2, eq
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<preinc_u8_through_pointer>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -236,7 +232,6 @@ Disassembly of section .text:
                	cmp	x0, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
-               	b	<addr>
                	sxtw	x0, w2
                	cmp	x0, #0x1
                	cset	x1, eq
@@ -244,18 +239,18 @@ Disassembly of section .text:
                	ldurb	w0, [x29, #-0x8]
                	cmp	x0, #0x0
                	cset	x1, eq
-               	b	<addr>
                	cbz	x1, <addr>
                	mov	x1, #0x0                // =0
                	b	<addr>
                	mov	x1, #0x1                // =1
-               	b	<addr>
                	mov	x0, x1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40

@@ -4,14 +4,15 @@ typedef_struct_carrier_reset.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<zero_and_sum>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%eax, %rdx
                	cmpq	$0xa, %rdx
                	jge	<addr>
@@ -26,7 +27,6 @@ Disassembly of section .text:
                	movslq	%eax, %rsi
                	movq	%rsi, %r8
                	incq	%r8
-               	movslq	%r8d, %r8
                	movl	%r8d, (%rdx,%rsi,4)
                	movslq	%ecx, %rcx
                	movslq	%eax, %rdx
@@ -46,6 +46,8 @@ Disassembly of section .text:
                	movl	%eax, 0xa0(%rdi)
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp
@@ -86,4 +88,4 @@ Disassembly of section .text:
                	addq	$0xc0, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

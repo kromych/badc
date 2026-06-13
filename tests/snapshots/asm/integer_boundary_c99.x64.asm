@@ -4,11 +4,13 @@ integer_boundary_c99.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x300, %esi            # imm = 0x300
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -18,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -42,11 +44,10 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -55,14 +56,14 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x160, %rsp            # imm = 0x160
                	movq	%rbx, (%rsp)
                	movq	%r12, 0x8(%rsp)
                	movq	%r14, 0x10(%rsp)
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -77,8 +78,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -97,8 +96,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x66, %ebx
                	movl	%ebx, (%rax)
@@ -111,8 +108,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -131,8 +126,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x68, %ebx
                	movl	%ebx, (%rax)
@@ -145,8 +138,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
@@ -165,8 +156,6 @@ Disassembly of section .text:
                	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
-               	jmp	<addr>
                	leaq	<rip>, %rax
                	movl	$0x6a, %ebx
                	movl	%ebx, (%rax)
@@ -179,8 +168,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	movl	$0xff, %ebx
@@ -198,16 +185,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rbx, %rax
                	xorq	$0xff, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	incq	%rbx
                	jmp	<addr>
@@ -224,15 +209,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
@@ -251,16 +234,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	andq	$0xff, %rax
                	xorq	$0xff, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x7f, %eax
                	jmp	<addr>
@@ -277,13 +258,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$0x7f, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x80, %rbx
                	jmp	<addr>
@@ -300,13 +279,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x80, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	decq	%rax
@@ -324,17 +301,15 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movsbq	%al, %rax
                	andq	$0xff, %rax
                	xorq	$0x7f, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0xffff, %ebx           # imm = 0xFFFF
                	jmp	<addr>
@@ -351,16 +326,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rbx, %rax
                	xorq	$0xffff, %rax           # imm = 0xFFFF
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	incq	%rax
@@ -378,14 +351,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	decq	%rax
@@ -403,16 +374,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0xffff, %rax           # imm = 0xFFFF
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x7fff, %eax           # imm = 0x7FFF
                	jmp	<addr>
@@ -429,13 +398,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$0x7fff, %rax           # imm = 0x7FFF
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x8000, %rbx          # imm = 0x8000
                	jmp	<addr>
@@ -452,13 +419,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x8000, %rbx          # imm = 0x8000
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
@@ -476,16 +441,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x8000, %rax           # imm = 0x8000
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x12345, %eax          # imm = 0x12345
                	movswq	%ax, %rax
@@ -503,14 +466,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movswq	%ax, %rax
                	cmpq	$0x2345, %rax           # imm = 0x2345
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x2a, %rax
                	jmp	<addr>
@@ -527,14 +488,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movslq	%eax, %rax
                	cmpq	$-0x2a, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0xffff, %ebx           # imm = 0xFFFF
                	jmp	<addr>
@@ -551,16 +510,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	%ebx, %eax
                	xorq	$0xffff, %rax           # imm = 0xFFFF
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -576,13 +533,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$0xffff, %rbx           # imm = 0xFFFF
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0xffffffff, %ebx       # imm = 0xFFFFFFFF
                	jmp	<addr>
@@ -599,15 +554,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
                	movq	%rbx, %rax
                	cmpq	%r13, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	incq	%rax
@@ -625,14 +578,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	decq	%rax
@@ -650,15 +601,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	%eax, %eax
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x7fffffff, %eax       # imm = 0x7FFFFFFF
                	jmp	<addr>
@@ -675,13 +624,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$0x7fffffff, %rax       # imm = 0x7FFFFFFF
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x80000000, %rbx      # imm = 0x80000000
                	jmp	<addr>
@@ -698,13 +645,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x80000000, %rbx      # imm = 0x80000000
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -720,13 +665,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x80000000, %rbx      # imm = 0x80000000
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	%ebx, %eax
                	jmp	<addr>
@@ -743,14 +686,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0x80000000, %r13d      # imm = 0x80000000
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x1, %rbx
                	jmp	<addr>
@@ -767,13 +708,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x1, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	incq	%rbx
                	jmp	<addr>
@@ -790,13 +729,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
-               	cmpq	$0x0, %rbx
+               	testq	%rbx, %rbx
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movq	%rbx, %rax
                	decq	%rax
@@ -814,13 +751,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x1, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
                	jmp	<addr>
@@ -837,14 +772,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movabsq	$0x7fffffffffffffff, %r13 # imm = 0x7FFFFFFFFFFFFFFF
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x1, %rax
                	jmp	<addr>
@@ -861,14 +794,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	sarq	$0x1, %rax
                	cmpq	$-0x1, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	jmp	<addr>
@@ -885,15 +816,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	$0x1, %rax
                	movabsq	$0x4000000000000000, %r13 # imm = 0x4000000000000000
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x1, %rax
                	jmp	<addr>
@@ -910,15 +839,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	shrq	$0x20, %rax
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x12c, %rbx           # imm = 0xFED4
                	movsbq	%bl, %r12
@@ -936,14 +863,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movsbq	%r12b, %rax
                	cmpq	$-0x2c, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -959,14 +884,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movsbq	%r12b, %rax
                	cmpq	$-0x2c, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	andq	$0xff, %rbx
                	jmp	<addr>
@@ -983,17 +906,15 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
                	xorq	$0xd4, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -1009,15 +930,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
                	cmpq	$0xd4, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x12345, %eax          # imm = 0x12345
                	movswq	%ax, %rbx
@@ -1035,14 +954,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movswq	%bx, %rax
                	cmpq	$0x2345, %rax           # imm = 0x2345
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -1058,14 +975,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movswq	%bx, %rax
                	cmpq	$0x2345, %rax           # imm = 0x2345
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x1ffff, %eax          # imm = 0x1FFFF
                	movswq	%ax, %rbx
@@ -1083,14 +998,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movswq	%bx, %rax
                	cmpq	$-0x1, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -1106,14 +1019,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movswq	%bx, %rax
                	cmpq	$-0x1, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0xffffffff, %ebx       # imm = 0xFFFFFFFF
                	movl	$0x1, %r12d
@@ -1131,13 +1042,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	%r12, %rbx
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movslq	%ebx, %rax
                	movslq	%r12d, %rcx
@@ -1155,15 +1064,13 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movslq	%eax, %rax
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	setl	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
@@ -1180,14 +1087,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	shlq	$0x1e, %rax
                	cmpq	$0x40000000, %rax       # imm = 0x40000000
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0x1, %eax
                	jmp	<addr>
@@ -1204,16 +1109,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	shlq	$0x1f, %rax
                	movl	%eax, %eax
                	movl	$0x80000000, %r13d      # imm = 0x80000000
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movabsq	$-0x1, %rax
                	jmp	<addr>
@@ -1230,13 +1133,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	cmpq	$-0x1, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
                	jmp	<addr>
@@ -1253,18 +1154,16 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	jmp	<addr>
-               	jmp	<addr>
                	movl	$0xffffffff, %r13d      # imm = 0xFFFFFFFF
                	cmpq	%r13, %rax
                	sete	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
-               	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rax
@@ -1279,7 +1178,6 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movslq	%eax, %rax
-               	jmp	<addr>
                	jmp	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
@@ -1304,4 +1202,5 @@ Disassembly of section .text:
                	addq	$0x160, %rsp            # imm = 0x160
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

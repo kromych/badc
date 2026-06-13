@@ -4,11 +4,13 @@ large_stack_frame.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x230, %esi            # imm = 0x230
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<big>:
                	movslq	%edi, %rdi
                	movslq	%edi, %rax
                	incq	%rax
@@ -18,6 +20,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	movl	$0x28, %eax
                	movslq	%eax, %rax
                	incq	%rax

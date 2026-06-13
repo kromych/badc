@@ -4,17 +4,18 @@ binop_spill_lhs_rhs_in_dst.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<sum_at_high>:
                	movq	%rsi, %r8
                	movslq	%r8d, %r8
                	movslq	%edx, %rdx
                	movslq	(%rdi,%rdx,4), %rax
                	xorq	%rsi, %rsi
-               	jmp	<addr>
                	movslq	%r8d, %rcx
                	cmpq	%rdx, %rcx
                	jg	<addr>
@@ -33,6 +34,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -58,4 +61,5 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

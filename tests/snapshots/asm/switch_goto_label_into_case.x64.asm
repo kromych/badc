@@ -4,15 +4,19 @@ switch_goto_label_into_case.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<classify>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movslq	%edi, %rdi
+               	cmpq	$0x3, %rdi
+               	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	addq	$0x10, %rsp
@@ -33,23 +37,33 @@ Disassembly of section .text:
                	cmpq	$0x5, %rdi
                	setge	%cl
                	movzbq	%cl, %rcx
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x2, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x4, %rdi
+               	jl	<addr>
                	jmp	<addr>
                	cmpq	$0x1, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x2, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x3, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x4, %rdi
                	je	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
                	jmp	<addr>
                	cmpq	$0x8, %rdi
                	setle	%cl
                	movzbq	%cl, %rcx
-               	jmp	<addr>
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
@@ -57,6 +71,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x1, %edi
@@ -110,14 +126,14 @@ Disassembly of section .text:
                	retq
                	xorq	%rdi, %rdi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%rbp
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp

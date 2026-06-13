@@ -3,7 +3,7 @@
 End-to-end programs that exercise badc on something more substantial
 than a fixture. Build with the c5 dialect badc supports today
 (structs / unions / bitfields / enums, arrays of structs, function
-pointers, varargs, `_Thread_local`); see [`../c99-gaps.md`](../c99-gaps.md)
+pointers, varargs, `_Thread_local`); see [`../std-conformance.md`](../std-conformance.md)
 for the divergences from C99.
 
 Each demo runs on **macOS** (aarch64), **Linux** (x86_64 and aarch64),

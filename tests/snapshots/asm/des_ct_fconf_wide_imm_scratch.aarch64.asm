@@ -4,12 +4,12 @@ des_ct_fconf_wide_imm_scratch.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sxtw	x1, w1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -24,6 +24,8 @@ Disassembly of section .text:
                	lsr	x0, x0, x1
                	orr	x0, x2, x0
                	ret
+
+<Fconf>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x230
@@ -859,6 +861,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x230
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -869,7 +873,6 @@ Disassembly of section .text:
                	mov	x21, #0xa5a5            // =42405
                	movk	x21, #0xa5a5, lsl #16
                	mov	x22, x20
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x10
                	b.ge	<addr>

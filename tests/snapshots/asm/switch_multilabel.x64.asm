@@ -4,12 +4,16 @@ switch_multilabel.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<classify>:
                	movslq	%edi, %rdi
+               	cmpq	$0x42, %rdi
+               	jl	<addr>
                	jmp	<addr>
                	xorq	%rax, %rax
                	retq
@@ -21,27 +25,63 @@ Disassembly of section .text:
                	retq
                	xorq	%rax, %rax
                	retq
-               	cmpq	$0x61, %rdi
-               	je	<addr>
+               	cmpq	$0x32, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x62, %rdi
-               	je	<addr>
-               	cmpq	$0x63, %rdi
-               	je	<addr>
-               	cmpq	$0x64, %rdi
-               	je	<addr>
-               	cmpq	$0x41, %rdi
-               	je	<addr>
-               	cmpq	$0x42, %rdi
-               	je	<addr>
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x31, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x33, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x30, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x31, %rdi
                	je	<addr>
+               	jmp	<addr>
                	cmpq	$0x32, %rdi
                	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x41, %rdi
+               	jl	<addr>
+               	jmp	<addr>
                	cmpq	$0x33, %rdi
                	je	<addr>
                	jmp	<addr>
+               	cmpq	$0x41, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x61, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x63, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x42, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x61, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x62, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x64, %rdi
+               	jl	<addr>
+               	jmp	<addr>
+               	cmpq	$0x63, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	cmpq	$0x64, %rdi
+               	je	<addr>
+               	jmp	<addr>
+               	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x61, %edi
@@ -102,7 +142,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x3f, %edi
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp
@@ -110,3 +150,5 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

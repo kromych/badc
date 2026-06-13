@@ -4,18 +4,20 @@ quicksort.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x270              // =624
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	ldrsw	x2, [x0]
                	ldrsw	x3, [x1]
                	str	w3, [x0]
                	str	w2, [x1]
                	mov	x0, #0x0                // =0
                	ret
+
+<partition>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
@@ -32,7 +34,6 @@ Disassembly of section .text:
                	ldrsw	x22, [x20, x21, lsl #2]
                	sub	x0, x23, #0x1
                	sxtw	x24, w0
-               	b	<addr>
                	sxtw	x0, w23
                	cmp	x0, x21
                	b.ge	<addr>
@@ -75,7 +76,8 @@ Disassembly of section .text:
                	bl	<addr>
                	b	<addr>
                	b	<addr>
-               	b	<addr>
+
+<quicksort>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -107,7 +109,6 @@ Disassembly of section .text:
                	mov	x0, x20
                	mov	x2, x22
                	bl	<addr>
-               	b	<addr>
                	mov	x0, #0x0                // =0
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -116,6 +117,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50

@@ -16,7 +16,7 @@ typedef long jmp_buf[64];
 #pragma binding(libc::setjmp,   "_setjmp")
 #pragma binding(libc::longjmp,  "_longjmp")
 int  setjmp(jmp_buf env);
-void longjmp(jmp_buf env, int val);
+_Noreturn void longjmp(jmp_buf env, int val);
 #endif
 
 #ifdef __linux__
@@ -25,7 +25,7 @@ typedef long jmp_buf[64];
 #pragma binding(libc::setjmp,   "setjmp")
 #pragma binding(libc::longjmp,  "longjmp")
 int  setjmp(jmp_buf env);
-void longjmp(jmp_buf env, int val);
+_Noreturn void longjmp(jmp_buf env, int val);
 #endif
 
 #ifdef _WIN32
@@ -58,7 +58,7 @@ typedef long long jmp_buf[32];
 #pragma binding(msvcrt::setjmp, "_setjmp")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int setjmp(long long *env);
-void longjmp(long long *env, int val);
+_Noreturn void longjmp(long long *env, int val);
 
 // CRT-free intrinsic pair. The expression parser turns each
 // call into `Op::Intrinsic <id>` and the AArch64 codegen lowers
@@ -102,7 +102,7 @@ void __c5_msvcrt_longjmp(long long *env, int val);
 #pragma binding(msvcrt::setjmp,  "_setjmp")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int  setjmp(jmp_buf env);
-void longjmp(jmp_buf env, int val);
+_Noreturn void longjmp(jmp_buf env, int val);
 
 #define setjmp(env) \
     __c5_msvcrt_setjmp( \

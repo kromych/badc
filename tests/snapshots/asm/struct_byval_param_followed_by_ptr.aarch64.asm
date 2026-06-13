@@ -4,12 +4,12 @@ struct_byval_param_followed_by_ptr.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x2b0              // =688
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,20 +58,18 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<verify>:
                	sub	sp, sp, #0x10
-               	str	x1, [sp, #-0x10]!
+               	sub	sp, sp, #0x10
                	sub	sp, sp, #0x10
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x1, x29, #0x10
-               	ldur	x3, [x29, #0x20]
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x3]
-               	str	x10, [x1]
-               	ldr	x10, [x3, #0x8]
-               	str	x10, [x1, #0x8]
-               	ldr	x10, [sp], #0x10
+               	sub	x16, x29, #0x10
+               	str	x1, [x16]
+               	str	x2, [x16, #0x8]
+               	mov	x2, x3
                	sub	x1, x29, #0x10
                	ldr	w1, [x1, #0x8]
                	cmp	x1, #0x7
@@ -104,6 +101,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x30
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
@@ -123,7 +122,9 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	adrp	x20, <page>
                	add	x20, x20, #0x120
-               	mov	x2, x20
+               	mov	x3, x20
+               	ldr	x2, [x1, #0x8]
+               	ldr	x1, [x1]
                	bl	<addr>
                	mov	x21, x0
                	sxtw	x0, w21

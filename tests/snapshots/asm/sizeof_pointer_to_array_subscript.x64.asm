@@ -4,11 +4,13 @@ sizeof_pointer_to_array_subscript.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
@@ -139,7 +141,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x8, %rax
                	jge	<addr>
@@ -154,11 +155,9 @@ Disassembly of section .text:
                	movq	%rdx, %rsi
                	addq	$0x3e8, %rsi            # imm = 0x3E8
                	movslq	%esi, %rsi
-               	movswq	%si, %rsi
                	movw	%si, (%rax,%rdx,2)
                	jmp	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x8, %rax
                	jge	<addr>
@@ -242,7 +241,6 @@ Disassembly of section .text:
                	imulq	$0x64, %rsi, %rsi
                	movslq	%esi, %rsi
                	addq	%rdi, %rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdi,4)
                	jmp	<addr>
                	jmp	<addr>
@@ -533,5 +531,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

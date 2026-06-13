@@ -27,6 +27,7 @@ use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::token::Token;
 use super::Compiler;
+use super::types::{is_double_ty, is_float_ty};
 
 impl Compiler {
     /// Rewrite every `code_relocs[i].target_ent_pc` to the
@@ -158,6 +159,49 @@ impl Compiler {
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;
             let binding_idx = self.symbols[sys_idx].val;
+
+            // A trampoline whose libc callee takes or returns a
+            // floating-point scalar forwards control with a frameless
+            // tail jump rather than the integer forwarding body below.
+            // The trampoline is reached only through a function
+            // pointer, so the indirect call already placed each
+            // argument in the host-ABI register its declared type
+            // names (integer and FP alike) and reads the result from
+            // the register class the pointer's type names. A
+            // `jmp/br [iat]` forwards every register class unchanged.
+            // The integer forwarding body routes the libc result
+            // through c5's integer return register; for a `float`
+            // return that runs a widening `fcvt d0,s0`, and since `s0`
+            // and `d0` alias `v0`, the widened double's zero low half
+            // overwrites the `s0` the caller reads (C99 6.2.5p10 /
+            // AAPCS64 6.4.2: a `float` result occupies `s0`). The
+            // `double` case happened to survive because no widening
+            // was emitted, but the tail jump is the correct path for
+            // both. Variadic bindings keep the forwarding body so the
+            // dispatch-table arg repacking stays in scope; no bound
+            // variadic libc routine returns a floating-point scalar.
+            let ret_ty = self.symbols[sys_idx].type_;
+            let touches_fp = is_float_ty(ret_ty)
+                || is_double_ty(ret_ty)
+                || self.symbols[sys_idx]
+                    .params
+                    .iter()
+                    .any(|&p| is_float_ty(p) || is_double_ty(p));
+            if !is_variadic && touches_fp {
+                let mut sb = SsaBuilder::new(ent_pc, 0, false);
+                sb.set_locals(0);
+                sb.set_name(alloc::format!("__c5_sys_{}", self.symbols[sys_idx].name));
+                sb.alloca_init(0);
+                sb.tail_ext(binding_idx);
+                let mut func = sb.finish();
+                func.end_pc = ent_pc;
+                self.synthetic_ssa_funcs.push(func);
+                let synth_idx = self.synthetic_ssa_funcs.len() - 1;
+                self.next_ent_pc += 1;
+                self.synthetic_ssa_funcs[synth_idx].end_pc = self.next_ent_pc;
+                continue;
+            }
+
             // Forwarded arg count. Variadic prefix forwards one
             // extra so dispatch tables (open / fcntl / ioctl)
             // line up.
@@ -199,7 +243,10 @@ impl Compiler {
             let arg_vals: alloc::vec::Vec<_> = (0..nargs_ssa)
                 .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
                 .collect();
-            let r = sb.call_ext(binding_idx, arg_vals, 0);
+            // This forwarding body is reached only for non-FP-touching
+            // bindings (the `touches_fp` shapes take the `tail_ext` path
+            // above), so the result is integer-classed.
+            let r = sb.call_ext(binding_idx, arg_vals, 0, false);
             sb.return_(r);
             let mut func = sb.finish();
             // SsaBuilder doesn't know the ent_pc until the

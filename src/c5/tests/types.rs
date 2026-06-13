@@ -18,6 +18,35 @@ fn warn_int_to_pointer_assignment() {
 }
 
 #[test]
+fn warn_return_type_mismatch() {
+    // `return <expr>;` whose type doesn't match the function return
+    // type warns like an assignment (C99 6.8.6.4p3).
+    let p = compile_fixture("type_warning_return.c");
+    let has = |needle: &str| p.warnings.iter().any(|w| w.contains(needle));
+    assert!(
+        has("pointer assigned to integer in return"),
+        "expected ptr-returned-as-int warning, got: {:?}",
+        p.warnings
+    );
+    assert!(
+        has("integer assigned to pointer in return"),
+        "expected int-returned-as-ptr warning, got: {:?}",
+        p.warnings
+    );
+    assert!(
+        has("incompatible struct types in return"),
+        "expected incompatible-struct return warning, got: {:?}",
+        p.warnings
+    );
+    // The NULL idiom and a matching return stay silent.
+    assert!(
+        !has("ret_null") && !has("ret_ok"),
+        "unexpected warning on a well-typed return: {:?}",
+        p.warnings
+    );
+}
+
+#[test]
 fn cast_silences_int_to_pointer_warning() {
     // Same shape, but with `p = (int *)5;` -- the cast tells the compiler
     // the conversion is intentional, so no warning.

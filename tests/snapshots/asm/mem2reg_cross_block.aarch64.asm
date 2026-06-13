@@ -4,19 +4,18 @@ mem2reg_cross_block.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0xe                // =14
                	mov	x2, #0x0                // =0
                	mov	x1, x2
-               	b	<addr>
                	sxtw	x3, w2
                	cmp	x3, #0x3
                	b.ge	<addr>

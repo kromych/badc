@@ -66,6 +66,31 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
+/// Apply a C99 6.3.1.3 integer conversion to a constant value:
+/// narrow to `bytes` width and re-interpret by the target's
+/// signedness. `_Bool` maps any nonzero value to 1 (6.3.1.2). An
+/// 8-byte target keeps the full `i64` (pointers and `long long`
+/// included). Used by the constant-expression evaluator so a cast
+/// like `(int)UINT_MAX` folds to `-1` at parse time rather than
+/// retaining the un-narrowed operand.
+pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i64) -> i64 {
+    if is_bool {
+        return (v != 0) as i64;
+    }
+    if bytes >= 8 {
+        return v;
+    }
+    let bits = (bytes * 8) as u32;
+    let mask: i64 = ((1u64 << bits) - 1) as i64;
+    let truncated = v & mask;
+    if unsigned {
+        truncated
+    } else {
+        let sign_bit: i64 = 1i64 << (bits - 1);
+        (truncated ^ sign_bit).wrapping_sub(sign_bit)
+    }
+}
+
 /// Drop the unsigned bit. Use to recover the bare band-encoded type
 /// before consulting a helper that classifies by band. Most of the
 /// helpers in this module call this at their entry; outside callers
@@ -121,6 +146,8 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
         (Ty::Short as i64, "short")
     } else if (Ty::LongLong as i64..Ty::LongLong as i64 + FP_BAND_SIZE).contains(&bare) {
         (Ty::LongLong as i64, "long long")
+    } else if (Ty::Bool as i64..Ty::Bool as i64 + FP_BAND_SIZE).contains(&bare) {
+        (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
         // Integer family: char = 0, int = 1, then +2 per `*` level.
         let depth = (bare / 2) as usize;
@@ -180,6 +207,27 @@ pub(super) fn struct_ptr_depth(ty: i64) -> i64 {
 
 pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
+}
+
+/// `ty` is a `_Bool` (or pointer to one). `_Bool` lives in its own
+/// 100-wide band starting at `Ty::Bool` (600); the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `_Bool*` = 602, `_Bool**` = 604, etc.
+pub(crate) fn is_bool_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
+    let base = Ty::Bool as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// Pointer depth within the bool band. Returns 0 for a scalar
+/// `_Bool`, 1 for `_Bool*`, etc.
+pub(super) fn bool_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
+    if is_bool_ty(ty) {
+        (ty - Ty::Bool as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
 }
 
 pub(crate) fn is_float_ty(ty: i64) -> bool {
@@ -245,7 +293,10 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// C99 rule never fires here.
 pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
-    if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 {
+    // `_Bool` (6.3.1.1) and the sub-int integer types all have a
+    // rank below `int` and every value they hold fits in a signed
+    // `int`, so they promote to signed `int`.
+    if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 || stripped == Ty::Bool as i64 {
         Ty::Int as i64
     } else {
         ty
@@ -429,6 +480,8 @@ pub(crate) fn is_pointer_ty(ty: i64) -> bool {
         long_ptr_depth(ty) > 0
     } else if is_short_ty(ty) {
         short_ptr_depth(ty) > 0
+    } else if is_bool_ty(ty) {
+        bool_ptr_depth(ty) > 0
     } else {
         ty >= Ty::Ptr as i64
     }
@@ -455,6 +508,9 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Short as i64) + (Ty::Ptr as i64) {
         // Bare `short*` -- pointee is a 2-byte short.
         2
+    } else if ty == (Ty::Bool as i64) + (Ty::Ptr as i64) {
+        // Bare `_Bool*` -- pointee is a 1-byte `_Bool`.
+        1
     } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
         // Bare `float*` -- pointee is a 4-byte single-precision
         // float; `(float *)p + 1` strides four bytes, and the
@@ -502,6 +558,8 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Short
         || tk == Token::FuncSpec
         || tk == Token::Inline
+        || tk == Token::Noreturn
+        || tk == Token::Atomic
 }
 
 /// True for any token that may start a c5 declaration -- a base-type
@@ -550,7 +608,11 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> LoadKind {
         // `float *` through LoadKind::F32.
         return LoadKind::I64;
     }
-    if stripped == Ty::Char as i64 {
+    if stripped == Ty::Bool as i64 {
+        // `_Bool` is a 1-byte slot holding 0 or 1; always
+        // zero-extends on load.
+        LoadKind::U8
+    } else if stripped == Ty::Char as i64 {
         if unsigned { LoadKind::U8 } else { LoadKind::I8 }
     } else if stripped == Ty::Short as i64 {
         if unsigned {

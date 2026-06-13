@@ -4,11 +4,13 @@ sys_addr_zero_arg.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x2a0, %esi            # imm = 0x2A0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax
@@ -16,7 +18,7 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	callq	*%r11
                	movslq	%eax, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jg	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -28,6 +30,8 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
+
+<__c5_sys_geteuid>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
@@ -35,6 +39,8 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	popq	%rbp
                	retq
+
+<__c5_sys_getpid>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax

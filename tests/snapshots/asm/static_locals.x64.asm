@@ -4,20 +4,23 @@ static_locals.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x230, %esi            # imm = 0x230
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<counter>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<two_statics>:
                	movslq	%edi, %rdi
-               	cmpq	$0x0, %rdi
+               	testq	%rdi, %rdi
                	je	<addr>
                	leaq	<rip>, %rax
                	movl	$0x64, %ecx
@@ -25,37 +28,38 @@ Disassembly of section .text:
                	leaq	<rip>, %rax
                	xorq	%rcx, %rcx
                	movl	%ecx, (%rax)
-               	jmp	<addr>
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx
                	movslq	(%rdx), %rsi
                	movslq	%ecx, %rcx
                	addq	%rsi, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rdx)
                	movslq	(%rax), %rax
                	movslq	%ecx, %rcx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<next_x>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<next_y>:
                	leaq	<rip>, %rax
                	movslq	(%rax), %rcx
                	incq	%rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	movslq	%ecx, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>

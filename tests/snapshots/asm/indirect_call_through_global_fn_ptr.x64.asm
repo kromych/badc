@@ -4,19 +4,22 @@ indirect_call_through_global_fn_ptr.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<do_add>:
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
                	movq	%rsi, %rax
                	addq	%rdx, %rax
-               	movslq	%eax, %rax
                	movl	%eax, (%rdi)
                	xorq	%rax, %rax
                	retq
+
+<driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -42,7 +45,11 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	popq	%rbp
                	jmp	<addr>
+               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

@@ -4,11 +4,13 @@ size_t_is_unsigned.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -21,7 +23,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	popq	%rdx
                	popq	%rax
-               	cmpq	$0x0, %rcx
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
                	addq	$0x30, %rsp
@@ -60,7 +62,6 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	jmp	<addr>
                	movl	%eax, %edx
-               	jmp	<addr>
                	movl	%edx, %eax
                	cmpq	%rcx, %rax
                	je	<addr>

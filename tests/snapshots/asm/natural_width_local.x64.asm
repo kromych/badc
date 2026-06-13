@@ -4,11 +4,13 @@ natural_width_local.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -16,7 +18,6 @@ Disassembly of section .text:
                	movl	$0xc8, %ecx
                	xorq	%rsi, %rsi
                	movq	%rsi, %rdx
-               	jmp	<addr>
                	movslq	%edx, %rdi
                	cmpq	$0x4, %rdi
                	jge	<addr>
@@ -35,30 +36,26 @@ Disassembly of section .text:
                	movq	%rdi, %rdx
                	incq	%rdx
                	movslq	%edx, %rdi
-               	jmp	<addr>
                	andq	$0xff, %rax
                	xorq	$0x2c, %rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%edi, %rax
                	addq	$0x2, %rax
                	movslq	%eax, %rdi
-               	jmp	<addr>
                	movsbq	%cl, %rax
                	cmpq	$-0x38, %rax
                	je	<addr>
                	movslq	%edi, %rax
                	addq	$0x4, %rax
                	movslq	%eax, %rdi
-               	jmp	<addr>
                	movslq	%esi, %rax
                	cmpq	$0xb0, %rax
                	je	<addr>
                	movslq	%edi, %rax
                	addq	$0x8, %rax
                	movslq	%eax, %rdi
-               	jmp	<addr>
                	movslq	%edi, %rax
                	addq	$0x30, %rsp
                	popq	%rbp

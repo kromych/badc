@@ -10,6 +10,9 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use super::super::codegen::Target;
+use super::super::codegen::abi_classify::{FlatField, ScalarKind};
+use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::StructDef;
@@ -54,6 +57,27 @@ impl Compiler {
             self.pointee_size(ty)
         } else {
             1
+        }
+    }
+
+    /// Pointer-arithmetic stride for `ty`. A pointer-to-array
+    /// `T (*p)[N]` carries the flat type of a `T*`, so `fallback`
+    /// (`pointee_size` / `pointee_step`) scales by `sizeof(T)` rather
+    /// than `sizeof(T[N])`. The array's per-element size is seeded
+    /// into the multi-dim stride snapshot when the operand is loaded
+    /// or an array decays; `seeded_stride` is that value (0 when the
+    /// operand is a plain pointer). When it is set, it is the correct
+    /// stride; otherwise fall back.
+    pub(super) fn pointer_to_array_arith_stride(
+        &self,
+        seeded_stride: i64,
+        ty: i64,
+        fallback: i64,
+    ) -> i64 {
+        if is_pointer_ty(ty) && seeded_stride > 1 {
+            seeded_stride
+        } else {
+            fallback
         }
     }
 
@@ -152,6 +176,9 @@ impl Compiler {
             } else {
                 self.structs[struct_id_of(ty)].size
             }
+        } else if ty == Ty::Bool as i64 {
+            // C99 6.2.5p2 / 6.5.3.4: `_Bool` is a 1-byte object.
+            1
         } else if ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {
@@ -200,7 +227,7 @@ impl Compiler {
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)
             }
-        } else if ty == Ty::Char as i64 {
+        } else if ty == Ty::Bool as i64 || ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {
             2
@@ -228,5 +255,235 @@ impl Compiler {
         } else {
             1
         }
+    }
+}
+
+/// Byte width of a non-struct scalar / pointer `ty`, used when
+/// flattening an aggregate's array fields into per-element leaves.
+/// Mirrors the scalar cases of [`Compiler::size_of_type`]; the
+/// `long` width follows the target data model (LP64 vs LLP64).
+fn flat_scalar_size(ty: i64, target: Target) -> u32 {
+    if is_pointer_ty(ty) {
+        return 8;
+    }
+    let bare = ty & !UNSIGNED_BIT;
+    if bare == Ty::Bool as i64 || bare == Ty::Char as i64 {
+        1
+    } else if bare == Ty::Short as i64 {
+        2
+    } else if bare == Ty::Int as i64 || bare == Ty::Float as i64 {
+        4
+    } else if bare == Ty::Long as i64 {
+        if target.is_windows() { 4 } else { 8 }
+    } else {
+        8
+    }
+}
+
+/// Flatten an aggregate's leaf scalar fields into `out` as
+/// `(offset, size, kind)` triples relative to `base_off`, recursing
+/// through nested struct / union values and expanding array fields to
+/// one entry per element. Union members overlap at the same offsets,
+/// which is what the host-ABI classifier needs (an eightbyte covering
+/// any integer member is INTEGER). Bitfields and pointers flatten to
+/// `Int`; scalar `float` / `double` to `F32` / `F64`. Free function so
+/// the AST walker (which holds only `&[StructDef]`, not a `Compiler`)
+/// can build the `AggDesc` the host-ABI classifier consumes.
+pub(crate) fn flatten_struct_fields(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+    base_off: u32,
+    out: &mut Vec<FlatField>,
+) {
+    let sd = &structs[struct_id];
+    for f in &sd.fields {
+        let elem_ty = f.ty;
+        let is_struct_value = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let elem_size = if is_struct_value {
+            structs[struct_id_of(elem_ty)].size as u32
+        } else {
+            flat_scalar_size(elem_ty, target)
+        };
+        let count = if f.array_size > 0 {
+            f.array_size as u32
+        } else {
+            1
+        };
+        for i in 0..count {
+            let off = base_off + f.offset as u32 + i * elem_size;
+            if is_struct_value {
+                flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
+            } else {
+                let bare = elem_ty & !UNSIGNED_BIT;
+                let kind = if is_pointer_ty(elem_ty) {
+                    ScalarKind::Int
+                } else if bare == Ty::Float as i64 {
+                    ScalarKind::F32
+                } else if bare == Ty::Double as i64 {
+                    ScalarKind::F64
+                } else {
+                    ScalarKind::Int
+                };
+                out.push(FlatField {
+                    offset: off,
+                    size: elem_size,
+                    kind,
+                });
+            }
+        }
+    }
+}
+
+/// Build the host-ABI [`AggDesc`] for a by-value aggregate of `ty`,
+/// or `None` when `ty` is not a by-value struct the current phase
+/// routes through the host ABI. Phase 1 covers AArch64 aggregates of
+/// at most 16 bytes (AAPCS64 register / HFA classes); every other
+/// case keeps the existing c5 by-address convention.
+pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
+    if !matches!(
+        target,
+        Target::MacOSAarch64
+            | Target::LinuxAarch64
+            | Target::WindowsAarch64
+            | Target::LinuxX64
+            | Target::WindowsX64
+    ) {
+        return None;
+    }
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return None;
+    }
+    let id = struct_id_of(ty);
+    if id >= structs.len() {
+        return None;
+    }
+    let size = structs[id].size as u32;
+    if size == 0 {
+        return None;
+    }
+    if matches!(target, Target::WindowsX64) {
+        // Win64: only a 1-, 2-, 4-, or 8-byte aggregate is passed by
+        // value in a register; larger ones go by implicit reference,
+        // which keeps the by-address convention.
+        if !matches!(size, 1 | 2 | 4 | 8) {
+            return None;
+        }
+    } else if size > 16 && !matches!(target, Target::LinuxX64) {
+        // AArch64 (AAPCS64) passes a larger aggregate by reference; the
+        // c5 by-address convention already matches that on the wire, so
+        // it is not tagged. System V x86_64 passes it inline on the
+        // stack (MEMORY class), which the marshal / prologue handle, so
+        // LinuxX64 is admitted at any size.
+        return None;
+    }
+    let align = (structs[id].align.max(1)) as u32;
+    let mut fields = Vec::new();
+    flatten_struct_fields(structs, target, id, 0, &mut fields);
+    // Phase 1 routes only integer-class aggregates through the host
+    // ABI. A homogeneous floating-point aggregate (AAPCS64 HFA) would
+    // consume the FP argument bank and shift the placement of any
+    // following floating-point scalar parameter; until the callee /
+    // caller FP-bank accounting handles that, such aggregates keep the
+    // by-address convention. TODO: HFA / mixed int+FP aggregates.
+    if fields.iter().any(|f| f.kind != ScalarKind::Int) {
+        return None;
+    }
+    Some(AggDesc {
+        size,
+        align,
+        fields,
+    })
+}
+
+/// How a function returns a value of its declared return type.
+#[derive(Clone)]
+pub(crate) enum StructReturnAbi {
+    /// Scalar / void / pointer return -- not a by-value aggregate.
+    NotStruct,
+    /// c5 by-address convention: the caller passes a result-temp
+    /// pointer as a hidden argument and the callee writes through it.
+    /// Used on non-host targets and for aggregates the host-ABI path
+    /// does not yet cover (floating-point / mixed members).
+    OutPtr,
+    /// AAPCS64 6.9: an aggregate of at most 16 bytes returned in the
+    /// general-purpose result registers (x0, x1).
+    Regs(AggDesc),
+    /// AAPCS64 6.9: an aggregate larger than 16 bytes returned through
+    /// the caller-supplied indirect-result register x8.
+    Indirect(AggDesc),
+}
+
+/// Classify a function's return-value convention from its declared
+/// return type. Integer-class AArch64 aggregates use the host ABI
+/// (registers or x8); every other aggregate keeps the c5 out-pointer
+/// convention. See [`host_abi_agg_desc`] for the argument-side gate.
+pub(crate) fn struct_return_abi(structs: &[StructDef], target: Target, ty: i64) -> StructReturnAbi {
+    if !is_struct_ty(ty) || struct_ptr_depth(ty) != 0 {
+        return StructReturnAbi::NotStruct;
+    }
+    let aarch64 = matches!(
+        target,
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64
+    );
+    let win64 = matches!(target, Target::WindowsX64);
+    if !aarch64 && !matches!(target, Target::LinuxX64 | Target::WindowsX64) {
+        return StructReturnAbi::OutPtr;
+    }
+    let id = struct_id_of(ty);
+    if id >= structs.len() {
+        return StructReturnAbi::OutPtr;
+    }
+    let size = structs[id].size as u32;
+    if size == 0 {
+        return StructReturnAbi::OutPtr;
+    }
+    let align = (structs[id].align.max(1)) as u32;
+    let mut fields = Vec::new();
+    flatten_struct_fields(structs, target, id, 0, &mut fields);
+    // A <=16B aggregate whose eightbyte/HFA classification places any unit
+    // in a floating-point return register (a pure-FP eightbyte on System V,
+    // an HFA on AAPCS64) keeps the out-pointer convention: the emit path
+    // returns aggregate units only through integer registers. An eightbyte
+    // shared by integer and FP members (a union overlapping a double with an
+    // int/pointer) classifies as Integer and returns in the integer
+    // registers, bit-for-bit. TODO: FP-bank aggregate returns.
+    let returns_in_fp = matches!(
+        crate::c5::codegen::abi_classify::classify_aggregate(size, align, &fields, target.abi(), true),
+        crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
+            if c.contains(&crate::c5::codegen::abi_classify::RegClass::Sse)
+    );
+    if returns_in_fp {
+        return StructReturnAbi::OutPtr;
+    }
+    let desc = AggDesc {
+        size,
+        align,
+        fields,
+    };
+    if win64 {
+        // Win64: a 1-, 2-, 4-, or 8-byte aggregate returns by value in
+        // rax; any other size returns through a caller-allocated buffer
+        // whose pointer is the hidden first integer argument (rcx),
+        // returned in rax -- the c5 out-pointer convention already
+        // matches that, so keep it.
+        if matches!(size, 1 | 2 | 4 | 8) {
+            StructReturnAbi::Regs(desc)
+        } else {
+            StructReturnAbi::OutPtr
+        }
+    } else if size <= 16 {
+        // AAPCS64 6.9 x0/x1; System V AMD64 3.2.3 rax/rdx.
+        StructReturnAbi::Regs(desc)
+    } else if aarch64 {
+        // AAPCS64: > 16 bytes returns through the x8 indirect-result
+        // register.
+        StructReturnAbi::Indirect(desc)
+    } else {
+        // System V AMD64 MEMORY class: the caller passes a hidden
+        // result pointer as the first integer argument and the callee
+        // returns it -- the c5 out-pointer convention already matches,
+        // so keep it.
+        StructReturnAbi::OutPtr
     }
 }

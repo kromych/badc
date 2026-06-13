@@ -4,26 +4,34 @@ macro_arg_blue_paint.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	str	x1, [x0]
                	mov	x0, #0x0                // =0
                	ret
+
+<bare>:
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	ret
+
+<single>:
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	ret
+
+<two_arg>:
                	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	add	x0, x0, #0x7
                	sxtw	x0, w0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20

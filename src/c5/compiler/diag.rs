@@ -10,7 +10,7 @@
 //! (`NULL = 0`, `void *` ~ `char *`) would otherwise drown the
 //! output. Errors short-circuit through `C5Error::Compile`.
 
-use super::super::ast::Expr;
+use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId};
 use super::super::error::C5Error;
 use super::super::token::Ty;
 use super::Compiler;
@@ -19,6 +19,140 @@ use super::types::{
 };
 
 impl Compiler {
+    /// C99 6.9.1p12: reaching the closing brace of a value-returning
+    /// function without executing a `return value;` is a defect (a
+    /// caller that uses the result reads an indeterminate value).
+    /// Reject it, exempting `main` (5.1.2.2.3 supplies a default 0).
+    ///
+    /// The analysis reports a fall-through only when control certainly
+    /// reaches the end. Constructs it does not model precisely --
+    /// `switch`, `goto`, labels -- are treated as not falling through,
+    /// so the diagnostic never fires on a function that uses them. This
+    /// matches the practical guarantee a C programmer expects: a plain
+    /// missing `return` is caught; a hand-rolled jump table is left
+    /// alone.
+    pub(super) fn check_non_void_fall_off(&self) -> Result<(), C5Error> {
+        if self.current_func_returns_void || self.current_function_name == "main" {
+            return Ok(());
+        }
+        let Some(body) = self.ast.body else {
+            return Ok(());
+        };
+        if self.stmt_may_fall_through(body) {
+            return Err(self.compile_err(alloc::format!(
+                "control reaches end of non-void function `{}` without returning a value",
+                self.current_function_name
+            )));
+        }
+        Ok(())
+    }
+
+    /// True when control may reach the statement immediately after
+    /// `id`. Returns `false` for any construct whose exit the analysis
+    /// does not model precisely, so the caller's diagnostic stays
+    /// conservative (no false positives).
+    fn stmt_may_fall_through(&self, id: StmtId) -> bool {
+        match self.ast.stmt(id) {
+            Stmt::Return(_) | Stmt::Goto(_) | Stmt::Break | Stmt::Continue => false,
+            // A call to a `_Noreturn` function does not reach its
+            // continuation; any other expression statement does.
+            Stmt::Expr(e) => !self.expr_is_noreturn_call(*e),
+            Stmt::Decl(_) | Stmt::Asm { .. } => true,
+            Stmt::Compound(items) => {
+                // Control reaches the block's end iff it flows through
+                // every item. The first item that cannot fall through
+                // makes the rest unreachable.
+                let mut reachable = true;
+                for item in items {
+                    if !reachable {
+                        break;
+                    }
+                    reachable = match item {
+                        BlockItem::Stmt(s) => self.stmt_may_fall_through(*s),
+                        BlockItem::Decl(_) => true,
+                    };
+                }
+                reachable
+            }
+            Stmt::If { then_s, else_s, .. } => {
+                let then_ft = self.stmt_may_fall_through(*then_s);
+                match else_s {
+                    Some(e) => then_ft || self.stmt_may_fall_through(*e),
+                    // No else: the false branch reaches the continuation.
+                    None => true,
+                }
+            }
+            // A loop falls through unless it is infinite (a constant
+            // non-zero condition, or none for `for(;;)`) with no `break`
+            // that targets it.
+            Stmt::While { cond, body } | Stmt::DoWhile { body, cond } => {
+                !self.expr_is_nonzero_const(*cond) || self.stmt_has_loop_break(*body)
+            }
+            Stmt::For { cond, body, .. } => {
+                let infinite = cond.is_none_or(|c| self.expr_is_nonzero_const(c));
+                !infinite || self.stmt_has_loop_break(*body)
+            }
+            // Switch / Labeled / Case / Default: control flow not
+            // modelled precisely. Treat as not falling through so the
+            // diagnostic never fires on a function that uses them.
+            _ => false,
+        }
+    }
+
+    /// True when `e` does not return to its continuation: a direct call
+    /// to a `_Noreturn` function, or `__builtin_trap()`.
+    fn expr_is_noreturn_call(&self, e: ExprId) -> bool {
+        match self.ast.expr(e) {
+            Expr::Call { callee, .. } => {
+                let Expr::Ident { sym, .. } = self.ast.expr(*callee) else {
+                    return false;
+                };
+                self.symbols
+                    .get(*sym as usize)
+                    .is_some_and(|s| s.is_noreturn)
+            }
+            Expr::Intrinsic { kind, .. } => *kind == crate::c5::op::Intrinsic::Trap as i64,
+            _ => false,
+        }
+    }
+
+    /// True when `e` is a non-zero integer constant -- an always-taken
+    /// loop condition. Looks through a cast (`while ((Bool)1)`, the
+    /// common boolean-macro spelling): a cast of a constant is still a
+    /// constant. Treating a cast that happens to truncate to zero as
+    /// non-zero would only miss a fall-through, never invent one.
+    fn expr_is_nonzero_const(&self, e: ExprId) -> bool {
+        match self.ast.expr(e) {
+            Expr::IntLit { val, .. } => *val != 0,
+            Expr::Cast { child, .. } => self.expr_is_nonzero_const(*child),
+            _ => false,
+        }
+    }
+
+    /// True when the loop body contains a `break` that targets this
+    /// loop. Descent stops at a nested loop or switch, which captures
+    /// its own `break`.
+    fn stmt_has_loop_break(&self, id: StmtId) -> bool {
+        match self.ast.stmt(id) {
+            Stmt::Break => true,
+            Stmt::While { .. } | Stmt::DoWhile { .. } | Stmt::For { .. } | Stmt::Switch { .. } => {
+                false
+            }
+            Stmt::Compound(items) => items.iter().any(|it| match it {
+                BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
+                BlockItem::Decl(_) => false,
+            }),
+            Stmt::If { then_s, else_s, .. } => {
+                self.stmt_has_loop_break(*then_s)
+                    || else_s.is_some_and(|e| self.stmt_has_loop_break(e))
+            }
+            Stmt::Labeled { body, .. } | Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
+                self.stmt_has_loop_break(*body)
+            }
+            _ => false,
+        }
+    }
+
     /// Append a type-checking / signature-mismatch warning. We never
     /// fail compilation on these -- the codegen has enough info to
     /// keep going, and refusing every type squabble would be hostile

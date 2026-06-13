@@ -4,12 +4,12 @@ alloca_basic.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x2f0              // =752
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<single>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x2, lsl #12   // =0x2000
@@ -79,7 +80,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	cmp	x0, #0x20
                	b.ge	<addr>
@@ -113,6 +113,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	b	<addr>
+
+<dynamic>:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -136,7 +138,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -152,12 +153,10 @@ Disassembly of section .text:
                	mul	x2, x1, x17
                	sxtw	x2, w2
                	sub	x2, x2, #0x3
-               	sxtw	x2, w2
                	str	w2, [x0, x1, lsl #2]
                	b	<addr>
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -181,6 +180,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
+
+<distinct>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x2, lsl #12   // =0x2000
@@ -249,7 +250,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
                	sub	x17, x17, #0x38
                	str	x0, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x2, lsl #12 // =0x2000
                	sub	x16, x16, #0x38
                	ldr	x0, [x16]
@@ -286,7 +286,6 @@ Disassembly of section .text:
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
                	sub	x17, x17, #0x40
                	str	x0, [x17]
-               	b	<addr>
                	sub	x16, x29, #0x2, lsl #12 // =0x2000
                	sub	x16, x16, #0x40
                	ldr	x0, [x16]
@@ -305,6 +304,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<looped>:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -318,7 +319,6 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x8]
                	stur	w0, [x29, #-0x10]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x10]
                	ldursw	x1, [x29, #0x10]
                	cmp	x0, x1
@@ -353,6 +353,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
+
+<inner_alloca_disturbs_outer>:
                	str	x0, [sp, #-0x10]!
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -379,7 +381,6 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	stur	w0, [x29, #-0x18]
-               	b	<addr>
                	ldursw	x0, [x29, #-0x18]
                	cmp	x0, #0x40
                	b.ge	<addr>
@@ -430,6 +431,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20

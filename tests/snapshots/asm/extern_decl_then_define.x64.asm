@@ -4,13 +4,17 @@ extern_decl_then_define.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<peek_via_extern>:
                	leaq	<rip>, %rax
                	retq
+
+<main>:
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx
                	cmpq	%rcx, %rax

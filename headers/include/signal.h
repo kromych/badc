@@ -13,6 +13,15 @@
 
 typedef int sig_atomic_t;
 
+// BSD / POSIX handler type: the disposition passed to and returned by
+// `signal()`. Provided as a common extension; matches the host's
+// `void (*)(int)`.
+typedef void (*sig_t)(int);
+// glibc spells the same handler type `sighandler_t` under _GNU_SOURCE.
+#ifdef __linux__
+typedef void (*sighandler_t)(int);
+#endif
+
 // Disposition values. Pass these to `signal()`'s second argument.
 // `SIG_ERR` is the failure return value, not a disposition.
 #define SIG_DFL  ((void (*)(int))0)
@@ -35,6 +44,7 @@ typedef int sig_atomic_t;
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::signal,      "_signal")
 #pragma binding(libc::raise,       "_raise")
+#pragma binding(libc::kill,        "_kill")
 #pragma binding(libc::sigaction,   "_sigaction")
 #pragma binding(libc::sigemptyset, "_sigemptyset")
 #pragma binding(libc::sigfillset,  "_sigfillset")
@@ -44,6 +54,7 @@ typedef int sig_atomic_t;
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::signal,      "signal")
 #pragma binding(libc::raise,       "raise")
+#pragma binding(libc::kill,        "kill")
 #pragma binding(libc::sigaction,   "sigaction")
 #pragma binding(libc::sigemptyset, "sigemptyset")
 #pragma binding(libc::sigfillset,  "sigfillset")
@@ -57,6 +68,7 @@ typedef int sig_atomic_t;
 
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
+int kill(int pid, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
 // POSIX `sigset_t` is an opaque bag of bits; size differs per

@@ -4,12 +4,12 @@ large_struct_copy.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xe8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x2f0              // =752
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,6 +58,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x490
@@ -108,7 +109,6 @@ Disassembly of section .text:
                	mov	x1, #0x320              // =800
                	str	w1, [x0, #0x208]
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0x28
                	b.ge	<addr>
@@ -120,19 +120,16 @@ Disassembly of section .text:
                	add	x0, x0, #0x10
                	sxtw	x2, w1
                	add	x3, x2, #0x3e8
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x210
                	add	x0, x0, #0xb4
                	sxtw	x2, w1
                	add	x3, x2, #0x7d0
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	sub	x0, x29, #0x210
                	add	x0, x0, #0x158
                	sxtw	x2, w1
                	add	x3, x2, #0xbb8
-               	sxtw	x3, w3
                	str	w3, [x0, x2, lsl #2]
                	b	<addr>
                	sub	x0, x29, #0x420
@@ -293,7 +290,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x20, ne
-               	b	<addr>
                	mov	x21, #0x1               // =1
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x420
@@ -302,13 +298,11 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x21, ne
-               	b	<addr>
                	cbnz	x21, <addr>
                	sub	x0, x29, #0x420
                	ldrsw	x0, [x0, #0xc]
                	cmp	x0, #0x190
                	cset	x21, ne
-               	b	<addr>
                	cbz	x21, <addr>
                	mov	x0, #0x1                // =1
                	ldr	x20, [sp]
@@ -329,7 +323,6 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x20, ne
-               	b	<addr>
                	mov	x21, #0x1               // =1
                	cbnz	x20, <addr>
                	sub	x0, x29, #0x420
@@ -338,13 +331,11 @@ Disassembly of section .text:
                	cset	x0, ne
                	cmp	x0, #0x0
                	cset	x21, ne
-               	b	<addr>
                	cbnz	x21, <addr>
                	sub	x0, x29, #0x420
                	ldrsw	x0, [x0, #0x208]
                	cmp	x0, #0x320
                	cset	x21, ne
-               	b	<addr>
                	cbz	x21, <addr>
                	mov	x0, #0x2                // =2
                	ldr	x20, [sp]
@@ -399,7 +390,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x20, #0x0               // =0
-               	b	<addr>
                	sxtw	x0, w20
                	cmp	x0, #0x28
                	b.ge	<addr>

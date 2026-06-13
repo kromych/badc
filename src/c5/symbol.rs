@@ -20,6 +20,14 @@ pub(crate) struct Symbol {
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
 
+    /// True for a function declared `_Noreturn` / `noreturn` (C11
+    /// 6.7.4) or one of the built-in non-returning library functions
+    /// (`exit`, `abort`, ...). The reachability analysis treats a call
+    /// to such a function as not reaching its continuation, so a
+    /// caller whose last statement is the call does not fall off its
+    /// end.
+    pub is_noreturn: bool,
+
     /// Set on a `Token::Glo` symbol declared with the
     /// `_Thread_local` storage class (C11). Drives the TLS
     /// lowering paths in the per-target writers: ELF .tdata /
@@ -114,6 +122,14 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+    /// True for a typedef of a function TYPE (`typedef RET F(args)`),
+    /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
+    /// type encoding pre-decays both to a function pointer (`RET` plus
+    /// one pointer level), so they are otherwise indistinguishable; a
+    /// declarator needs the distinction because `F *p` over a function
+    /// type forms the pointer-to-function (a function pointer) while
+    /// `F *p` over a function pointer is a pointer to one.
+    pub is_function_type: bool,
 
     /// Set on a `Token::Fun` symbol whose declared return type
     /// was bare `void`. The type encoding (`type_`) still records
@@ -139,11 +155,17 @@ pub(crate) struct Symbol {
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
 
+    /// True for a typedef whose base type is an `enum`. The base
+    /// collapses to `int`, but an enum bitfield reads as unsigned, so
+    /// a field declared with this typedef plus a bitfield width needs
+    /// the unsigned (zero-extending) extraction.
+    pub is_enum_typedef: bool,
+
     /// C99 6.2.2 linkage class of a file-scope identifier.
     /// `Linkage::None` for block-scope names; `Linkage::Internal`
     /// for `static`-qualified file-scope names; `Linkage::External`
     /// for everything else at file scope. Used by the linker
-    /// (when the `linker` feature is enabled) to decide whether
+    /// (when the `full` feature is enabled) to decide whether
     /// this symbol participates in the cross-translation-unit
     /// symbol table -- internal-linkage names stay private to the
     /// translation unit. Inside a single TU compile this field is
@@ -166,6 +188,21 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
+
+    /// True for a block-scope `static` local that shadowed an outer
+    /// binding (a file-scope object of the same name). The local is
+    /// promoted to `Glo` class for its data-segment storage but keeps
+    /// block scope (C99 6.2.1, 6.2.4p3), so the function-exit cleanup
+    /// must restore the shadowed outer binding even though the
+    /// symbol's class is no longer `Loc`. Cleared on restore.
+    pub is_scope_static: bool,
+
+    /// True for a `typedef` declared at the function-body top level
+    /// (C99 6.7.7, 6.2.1: block scope). The name binds to `Typedef`
+    /// class for the function body but must not leak to file scope,
+    /// so the function-exit cleanup restores the shadowed outer
+    /// binding even though the class is not `Loc`. Cleared on restore.
+    pub is_scope_typedef: bool,
 
     /// True once the parser has emitted any reference to this
     /// symbol after its declaration -- a read, a write, an

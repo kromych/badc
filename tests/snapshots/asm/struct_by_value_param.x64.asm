@@ -4,24 +4,20 @@ struct_by_value_param.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<sum_pair>:
                	popq	%r10
                	subq	$0x10, %rsp
-               	movq	%rdi, (%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rax
-               	movq	0x10(%rbp), %rcx
-               	pushq	%r11
-               	movq	(%rcx), %r11
-               	movq	%r11, (%rax)
-               	popq	%r11
+               	movq	%rdi, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
                	movslq	(%rax), %rax
                	leaq	-0x8(%rbp), %rcx
@@ -62,6 +58,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -72,6 +70,7 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	movl	%ecx, 0x4(%rax)
                	leaq	-0x8(%rbp), %rdi
+               	movq	(%rdi), %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	cmpq	$0xa, %rax
@@ -100,4 +99,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

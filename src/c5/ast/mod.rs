@@ -83,6 +83,31 @@ pub(crate) enum UnOp {
     Deref,
 }
 
+/// C11 7.17 generic atomic operation. The operand width is the
+/// pointee type of the first argument; the walker lowers each kind
+/// to ordinary load / store / read-modify-write on that width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AtomicKind {
+    /// `atomic_load(p)` -- yield `*p`.
+    Load,
+    /// `atomic_store(p, v)` -- `*p = v`, no value.
+    Store,
+    /// `atomic_exchange(p, v)` -- store `v`, yield the prior `*p`.
+    Exchange,
+    /// `atomic_fetch_add/sub/and/or/xor(p, v)` -- apply the binary
+    /// operator to `*p` and `v`, store the result, yield the prior
+    /// `*p`.
+    FetchAdd,
+    FetchSub,
+    FetchAnd,
+    FetchOr,
+    FetchXor,
+    /// `atomic_compare_exchange_strong(p, expected, desired)` --
+    /// if `*p == *expected`, store `desired` and yield 1; otherwise
+    /// store `*p` into `*expected` and yield 0.
+    CompareExchangeStrong,
+}
+
 /// Storage-unit width + bit position for a bitfield reference. The
 /// parser resolves these from the struct-field metadata at parse
 /// time; the walker emits the load + shift + mask sequence.
@@ -151,6 +176,9 @@ pub(crate) enum Expr {
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
     /// instead.
     Unary { op: UnOp, child: ExprId, ty: i64 },
+    /// `&&label` -- GCC labels-as-values. The address of a local
+    /// label as a `void *`, consumed by `Stmt::GotoIndirect`.
+    LabelAddr(LabelId),
     /// `lhs op rhs`. C99 6.5 operator-by-operator semantics; `op`
     /// is already the post-usual-arithmetic-conversion variant
     /// the parser picked (e.g. `Add` vs `Fadd`).
@@ -263,6 +291,39 @@ pub(crate) enum Expr {
         args: Vec<ExprId>,
         ty: i64,
     },
+    /// C11 7.17 atomic operation (`atomic_load`, `atomic_store`,
+    /// `atomic_exchange`, `atomic_fetch_*`,
+    /// `atomic_compare_exchange_strong`). `args` holds the pointer
+    /// plus the operation's value / expected / desired operands;
+    /// `ty` is the result type (the pointee type for the value-
+    /// producing forms, `int` for the predicate and store forms).
+    /// The walker lowers each kind to load / store / RMW on the
+    /// pointee width.
+    Atomic {
+        kind: AtomicKind,
+        args: Vec<ExprId>,
+        /// Pointee type of the first argument -- drives the load /
+        /// store width. Distinct from `ty` because the store and
+        /// compare-exchange forms have a result type (`void` / `int`)
+        /// that differs from the operand width.
+        elem_ty: i64,
+        ty: i64,
+    },
+    /// `(type){ initializer-list }` -- C99 6.5.2.5 compound
+    /// literal at block scope. The parser reserves a frame slot
+    /// (automatic storage, lifetime = enclosing block per 6.5.2.5p5)
+    /// and snapshots the initializer; the walker emits the init at
+    /// the evaluation point (so non-constant elements observe the
+    /// surrounding evaluation order) and yields the slot's address
+    /// for array / struct objects, or the loaded scalar value.
+    /// `array_size` is 0 for a scalar / struct literal, > 0 for an
+    /// array literal.
+    CompoundLiteral {
+        slot_off: i64,
+        ty: i64,
+        array_size: i64,
+        init: LocalInit,
+    },
 }
 
 /// One item inside a compound statement. C99 6.8.2's
@@ -317,6 +378,9 @@ pub(crate) enum Stmt {
     Return(Option<ExprId>),
     /// `goto label;` (C99 6.8.6.1).
     Goto(LabelId),
+    /// `goto *expr;` -- GCC computed goto. `target` evaluates to a
+    /// label address produced by `Expr::LabelAddr`.
+    GotoIndirect(ExprId),
     /// `label: body` (C99 6.8.1) -- the goto target.
     Labeled { label: LabelId, body: StmtId },
     /// Inline assembly. `text` is the assembler source; `clobbers`
@@ -457,6 +521,9 @@ pub(crate) struct FinishedFunction {
     /// Byte size of the returned struct when `returns_struct`
     /// is true. Zero otherwise.
     pub return_struct_size: i64,
+    /// Declared return type tag. The walker classifies the host-ABI
+    /// return convention (registers / x8 / out-pointer) from it.
+    pub return_ty: i64,
     /// `slot` operand for the function's `Inst::AllocaInit`. Non-
     /// zero when the body contains an `alloca` call: codegen
     /// reserves a per-frame arena and uses this local slot for
@@ -560,6 +627,16 @@ impl Ast {
                 } if *class == Token::Glo as i64 && !*is_thread_local => {
                     *val += data_base;
                 }
+                Expr::CompoundLiteral { init, .. } => match init {
+                    LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
+                    LocalInit::Runtime {
+                        zero_init: Some((off, _)),
+                        ..
+                    } => {
+                        *off += data_base;
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -747,9 +824,20 @@ fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
         | Expr::PostInc { ty, .. }
         | Expr::Comma { ty, .. }
         | Expr::ShortCircuit { ty, .. }
-        | Expr::Intrinsic { ty, .. } => f(ty),
+        | Expr::Intrinsic { ty, .. }
+        | Expr::Atomic { ty, .. } => f(ty),
         Expr::Cast { to_ty, .. } => f(to_ty),
+        Expr::CompoundLiteral { ty, init, .. } => {
+            f(ty);
+            if let LocalInit::Runtime { elements, .. } = init {
+                for e in elements {
+                    f(&mut e.ty);
+                }
+            }
+        }
         Expr::Sizeof(_) => {}
+        // No `ty` field; `&&label` is always a `void *`.
+        Expr::LabelAddr(_) => {}
     }
 }
 

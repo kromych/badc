@@ -27,7 +27,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+use crate::{Compiler, NativeOptions, Target};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
 /// through WINE if the environment opts in via `BADC_RUN_WINE`.
@@ -139,12 +139,18 @@ fn build_and_run_with_options(
     // one whose `#pragma dylib` / `#pragma binding` directives end
     // up on `program.dylibs` and whose `#define __BADC_WINDOWS__` reaches
     // any conditional source.
-    let program =
-        match Compiler::with_target(super::with_prelude(src), Target::WindowsX64).compile() {
-            Ok(p) => p,
-            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-        };
-    let bytes = match emit_native_with_options(&program, Target::WindowsX64, opts) {
+    // Compile as a relocatable TU (no entry-point synthesis), matching
+    // the CLI's user-source path, so `environ` stays an extern
+    // reference resolved by the runtime rather than a tentative def
+    // that collides with `runtime.c` at link time.
+    let copts = crate::CompileOptions::default().with_no_entry_point(true);
+    let program = match Compiler::with_options(super::with_prelude(src), Target::WindowsX64, copts)
+        .compile()
+    {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match super::link_executable_with_runtime(&program, Target::WindowsX64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -382,8 +388,12 @@ fn build_pe_bytes(src: &str) -> Vec<u8> {
     // the allocator to the full pool so the codegen_test pressure knobs
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-        emit_native_with_options(&program, Target::WindowsX64, NativeOptions::default())
-            .expect("emit_native")
+        crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            Target::WindowsX64,
+            NativeOptions::default(),
+        )
+        .expect("emit_native")
     })
 }
 
@@ -545,6 +555,9 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("size_t_via_stdio.c", 3),
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
+    ("libc_fp_classify.c", 0),
+    ("libc_math_fdim_scalbn.c", 0),
+    ("libc_fileno_isblank.c", 0),
     ("pragma_entrypoint.c", 23),
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
@@ -594,6 +607,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("sizeof_basic.c", 0),
     ("sizeof_expr.c", 0),
     ("type_warning_int_to_ptr.c", 0),
+    ("type_warning_return.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
     // c5-side vprintf -- the variadic walk happens in c5 source,
@@ -614,7 +628,86 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("fp_param_after_int_overflow.c", 0),
     ("float_double_mix.c", 0),
     ("fma_contraction.c", 0),
+    ("hex_float_literal.c", 0),
+    ("bool_normalize_c99.c", 0),
+    ("compound_literal_block.c", 0),
+    ("struct_arg_in_registers.c", 0),
+    ("struct_arg_by_stack.c", 0),
+    ("wide_char_utf8.c", 0),
+    ("local_aggregate_runtime_init.c", 0),
+    ("aggregate_init_struct_member_copy.c", 0),
+    ("computed_goto.c", 0),
+    ("label_addr_array_init.c", 0),
+    ("sieve_of_eratosthenes.c", 0),
+    ("static_neg_infinity_init.c", 0),
+    ("sub_word_return_narrow.c", 0),
+    ("fp_const_return.c", 0),
+    ("struct_array_init_from_lvalue.c", 0),
+    ("array_range_designator.c", 0),
+    ("bitfield_mixed_base_packing.c", 0),
+    ("flex_array_member_sizing.c", 0),
+    ("variadic_struct_return.c", 0),
+    ("variadic_union_struct_return.c", 0),
+    ("union_fp_member_regs_return.c", 0),
+    ("fn_ptr_float_return.c", 0),
+    ("fn_ptr_float_arg.c", 0),
+    ("variadic_fn_ptr_init.c", 0),
+    ("flexible_array_member.c", 0),
+    ("sizeof_array_type_and_binding.c", 0),
+    ("designator_override_and_braced_string.c", 0),
+    ("multidim_array_init.c", 0),
+    ("macro_paste_stringize_unexpanded.c", 0),
+    ("line_directive.c", 0),
+    ("float_global_init.c", 0),
+    ("func_name_array.c", 0),
+    ("unary_plus_init_and_param_shadow.c", 0),
+    ("fn_ptr_multi_deref.c", 0),
+    ("stringize_whitespace.c", 0),
+    ("kr_old_style_def.c", 0),
+    ("fn_ptr_return_type.c", 0),
+    ("fn_returning_fn_ptr.c", 0),
+    ("duff_switch_into_loop.c", 0),
+    ("empty_macro_arg_and_string_rows.c", 0),
+    ("inline_arg_count_mismatch.c", 0),
+    ("block_scope_extern.c", 0),
+    ("extern_incomplete_struct_completion.c", 0),
+    ("const_member_address_init.c", 0),
+    ("const_float_div_zero.c", 0),
+    ("array_of_struct_brace_elision.c", 0),
+    ("local_struct_array_runtime_init.c", 0),
+    ("scanf_fscanf_binding.c", 0),
+    ("builtin_bit_count.c", 0),
+    ("builtin_bswap_expect.c", 0),
+    ("builtin_frame_address.c", 0),
+    ("zero_length_array.c", 0),
+    ("nested_compound_literal.c", 0),
+    ("indirect_struct_return.c", 0),
+    ("indirect_struct_return_outptr.c", 0),
+    ("bitfield_incdec.c", 0),
+    ("c11_atomic_specifier.c", 0),
+    ("c11_atomic_ops.c", 0),
+    ("inline_asm_hint.c", 0),
+    ("compound_assign_int_fp.c", 0),
+    ("signal_sig_t.c", 0),
+    ("math_classify.c", 0),
+    ("switch_unsigned_negative_case.c", 0),
+    ("enum_bitfield_unsigned.c", 0),
+    ("addr_of_intrinsic_math.c", 0),
+    ("addr_of_intrinsic_math_float.c", 0),
+    ("fn_ptr_float_arg_narrow.c", 0),
+    ("struct_array_elided_runtime.c", 0),
+    ("fn_type_typedef_field.c", 0),
+    ("fn_type_typedef_local.c", 0),
+    ("fn_type_typedef_cast.c", 0),
+    ("nested_runtime_init.c", 0),
+    ("anon_union_init.c", 0),
+    ("builtin_trap.c", 0),
+    ("struct_multi_byval.c", 0),
+    ("struct_arg_two_eightbyte.c", 0),
+    ("struct_return_by_value.c", 0),
+    ("cast_fn_ptr_call.c", 0),
     ("fma_numeric_kernels.c", 0),
+    ("fp_unary_intrinsic.c", 0),
     ("param_incoming_reg_clobber.c", 0),
     ("indexed_load_store.c", 0),
     ("struct_field_displacement.c", 0),
@@ -728,10 +821,13 @@ fn original_c4_compiles_and_runs_hello_pe() {
     path.push("c4.c");
     let src = std::fs::read_to_string(&path).expect("read c4.c");
     // c4.c reads its first user argv entry as the source file to
-    // compile-and-run. Hand it the canonical hello.c and expect
-    // the c4-VM to print "Hello 123" and exit 0.
+    // compile-and-run. Hand it the c4-subset self-host fixture and
+    // expect the c4-VM to print "Hello 123" and exit 0.
     let mut hello_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    hello_path.push("hello.c");
+    hello_path.push("tests");
+    hello_path.push("fixtures");
+    hello_path.push("c");
+    hello_path.push("c4_selfhost_hello.c");
     let outcome = build_and_run(
         &src,
         "c4-self-host",
@@ -742,6 +838,96 @@ fn original_c4_compiles_and_runs_hello_pe() {
         RunOutcome::Signal(s) => panic!("c4 self-host PE killed by signal {s}"),
         RunOutcome::BuildError(e) => panic!("c4 self-host PE build error: {e}"),
         RunOutcome::HostCannotRun => {} // already logged above
+    }
+}
+
+#[test]
+fn dll_export_load_unload_reload_cycle() {
+    // A c5-built loader EXE resolves a c5-built DLL at runtime through
+    // LoadLibraryA + GetProcAddress, calls the export, FreeLibrary's
+    // it, then repeats the load / call / unload once more. Exercises
+    // the PE export directory (GetProcAddress by name) and a clean
+    // unload followed by a reload of a c5 shared library. The DLL sits
+    // beside the loader in the temp directory and is loaded by bare
+    // name, which the loader's application directory resolves.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let uniq = format!(
+        "{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    );
+
+    let dll_src = "int answer(void) { return 42; }\n#pragma export(answer)\n";
+    let dll_prog = Compiler::with_target(dll_src.to_string(), Target::WindowsX64)
+        .compile()
+        .expect("compile dll");
+    let dll_name = format!("badc-pe64-ansdll-{uniq}.dll");
+    // Record the DLL's own name in its export directory, as the CLI
+    // does from the `-o` basename.
+    let dll_bytes = super::super::codegen::emit_native_with_options_named(
+        &dll_prog,
+        Target::WindowsX64,
+        NativeOptions::new().with_shared_library(),
+        Some(&dll_name),
+    )
+    .expect("emit dll");
+    let dll_path = std::env::temp_dir().join(&dll_name);
+    std::fs::write(&dll_path, &dll_bytes).expect("write dll");
+
+    let loader_src = format!(
+        r#"#include <windows.h>
+typedef int (*answer_fn)(void);
+int main(void) {{
+    HANDLE h = LoadLibraryA("{dll}");
+    if (!h) return 1;
+    answer_fn f = (answer_fn)GetProcAddress(h, "answer");
+    if (!f) {{ FreeLibrary(h); return 2; }}
+    int r = f();
+    if (!FreeLibrary(h)) return 3;
+    HANDLE h2 = LoadLibraryA("{dll}");
+    if (!h2) return 4;
+    answer_fn f2 = (answer_fn)GetProcAddress(h2, "answer");
+    if (!f2) {{ FreeLibrary(h2); return 5; }}
+    r += f2();
+    FreeLibrary(h2);
+    return r;
+}}
+"#,
+        dll = dll_name
+    );
+    let loader_prog = Compiler::with_options(
+        loader_src,
+        Target::WindowsX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile loader");
+    let loader_bytes = super::link_executable_with_runtime(
+        &loader_prog,
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .expect("emit loader");
+    let loader_path = std::env::temp_dir().join(format!("badc-pe64-ansloader-{uniq}.exe"));
+    std::fs::write(&loader_path, &loader_bytes).expect("write loader");
+
+    let outcome = run_pe(&loader_path, &[]);
+    let _ = std::fs::remove_file(&dll_path);
+    let _ = std::fs::remove_file(&loader_path);
+    match outcome {
+        Some(Ok(o)) => {
+            let code = o.status.code();
+            assert_eq!(
+                code,
+                Some(84),
+                "loader exit {:?} != 84 (42 + 42 over a load / unload / reload cycle); stderr: {}",
+                code,
+                String::from_utf8_lossy(&o.stderr)
+            );
+        }
+        Some(Err(e)) => panic!("exec loader PE: {e}"),
+        None => eprintln!("skip dll_export_load_unload_reload_cycle: no PE runner on this host"),
     }
 }
 

@@ -4,17 +4,16 @@ local_array_partial_init_zero.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0xb0
                	mov	x2, #0x0                // =0
-               	b	<addr>
                	sxtw	x1, w2
                	cmp	x1, #0x28
                	b.ge	<addr>
@@ -34,6 +33,8 @@ Disassembly of section .text:
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<sum_partial_init>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x80
@@ -76,7 +77,6 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	b	<addr>
                	sxtw	x2, w1
                	cmp	x2, #0x19
                	b.ge	<addr>
@@ -98,6 +98,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10

@@ -34,13 +34,23 @@ use super::error::C5Error;
 use super::program::Program;
 
 mod aarch64;
+// Host-ABI aggregate classifier. Consumed by `plan_call_args` and
+// the walker once struct arguments / returns route through the host
+// ABI; the rules + unit tests land first as a standalone unit.
+#[allow(dead_code)]
+pub(crate) mod abi_classify;
+#[cfg(feature = "native-emit")]
 mod dwarf;
+#[cfg(feature = "native-emit")]
 mod dwarf_reloc;
+#[cfg(feature = "native-emit")]
 mod elf;
-#[cfg(feature = "std")]
+#[cfg(feature = "native-emit")]
 mod elf_reloc;
 mod jit;
+#[cfg(feature = "native-emit")]
 mod mach_o;
+#[cfg(feature = "native-emit")]
 mod pe;
 pub(crate) mod ssa_alloc;
 pub(crate) mod ssa_build;
@@ -262,6 +272,35 @@ pub(crate) enum ArgPlacement {
     /// (post-`shadow_space`, post-scratch-allocation). 8-byte
     /// stride.
     Stack(u32),
+    /// An aggregate passed by value in up to four register slots
+    /// (`regs[0..n]`), one per eightbyte / HFA member. Each
+    /// [`ClassReg`] names the concrete register and whether it is an
+    /// integer or FP register; the emitter loads the k-th slot from
+    /// `[arg_addr + 8*k]`. C99 aggregates pass at most two GPRs
+    /// (System V eightbytes) or four FP registers (AAPCS64 HFA), so
+    /// four slots suffice and the placement stays `Copy`.
+    StructRegs { regs: [ClassReg; 4], n: u8 },
+    /// An aggregate passed by an implicit reference: the caller
+    /// copies it to a temporary and passes the pointer in this
+    /// integer register (index into `Abi::int_arg_regs`).
+    StructByRefReg(u8),
+    /// As `StructByRefReg`, but the implicit-reference pointer
+    /// overflows to the outgoing-args stack at `[sp + offset]`.
+    StructByRefStack(u32),
+    /// An aggregate passed wholly on the outgoing-args stack: the
+    /// caller copies `size` bytes to `[sp + off]` (System V MEMORY
+    /// class, or a register-bank-exhausted small aggregate).
+    StructStack { off: u32, size: u32 },
+}
+
+/// One register slot of an [`ArgPlacement::StructRegs`]: the
+/// concrete register number plus whether it is an FP register, so
+/// the emitter picks the integer vs FP load without re-deriving the
+/// class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ClassReg {
+    pub reg: u8,
+    pub is_fp: bool,
 }
 
 /// Per-call argument plan + the host outgoing-args reservation
@@ -303,12 +342,167 @@ pub(super) fn plan_call_args(
     fp_arg_mask: u32,
     abi: Abi,
 ) -> CallPlan {
+    plan_call_args_aggs(arg_count, fixed_args, fp_arg_mask, abi, &[], false)
+}
+
+/// One call argument's aggregate classification, for the
+/// struct-aware planner. `class` comes from
+/// [`abi_classify::classify_aggregate`]; `size` is the aggregate's
+/// byte size (needed for the stack reservation when it is passed by
+/// memory or by an implicit-reference copy).
+#[derive(Clone)]
+#[allow(dead_code)] // constructed by the per-arch emit's struct path
+pub(crate) struct ArgAgg {
+    pub class: abi_classify::AggClass,
+    pub size: u32,
+}
+
+/// Struct-aware [`plan_call_args`]. `aggs[i]` is `Some` when
+/// `args[i]` is an aggregate passed by value; the scalar arms are
+/// identical to the no-aggregate planner. `ret_via_first_int`
+/// reserves the first integer argument register for a hidden
+/// return-value pointer (System V MEMORY / Win64 oversize return);
+/// AAPCS64 uses x8 instead and passes `false`.
+pub(super) fn plan_call_args_aggs(
+    arg_count: usize,
+    fixed_args: usize,
+    fp_arg_mask: u32,
+    abi: Abi,
+    aggs: &[Option<ArgAgg>],
+    ret_via_first_int: bool,
+) -> CallPlan {
+    use abi_classify::{AggClass, RegClass};
     let mut placements = alloc::vec::Vec::with_capacity(arg_count);
     let int_max = abi.int_arg_regs.len();
-    let mut int_idx = 0usize;
+    let mut int_idx = if ret_via_first_int { 1 } else { 0 };
     let mut fp_idx = 0usize;
     let mut stack_used: u32 = 0;
     for i in 0..arg_count {
+        // Aggregate argument: classify into registers / by-reference
+        // / by-stack per the host ABI. A variadic aggregate on the
+        // macOS AAPCS64 variadic ABI rides the overflow stack like
+        // every other variadic argument (the callee's va_arg reads it
+        // from there); on the register-save variadic ABIs it stays in
+        // the argument registers and the callee spills them to its
+        // save area.
+        if let Some(Some(agg)) = aggs.get(i) {
+            let aligned = (agg.size + 7) & !7;
+            if i >= fixed_args && abi.variadic_on_stack {
+                let off = stack_used;
+                stack_used += aligned;
+                placements.push(ArgPlacement::StructStack {
+                    off,
+                    size: agg.size,
+                });
+                continue;
+            }
+            // Win64 (Microsoft x64) places arguments positionally: each
+            // argument, including an aggregate, occupies the single
+            // register slot for its position rather than a separate
+            // integer / SSE bank. The host-ABI path tags only
+            // {1,2,4,8}-byte aggregates here, each one GPR; place it at
+            // `int_arg_regs[i]` so it lines up with the scalar
+            // positional placement above, then overflow to the stack.
+            if abi.position_indexed_args {
+                let placement = if i < int_max {
+                    let mut regs = [ClassReg {
+                        reg: 0,
+                        is_fp: false,
+                    }; 4];
+                    regs[0] = ClassReg {
+                        reg: abi.int_arg_regs[i],
+                        is_fp: false,
+                    };
+                    ArgPlacement::StructRegs { regs, n: 1 }
+                } else {
+                    let off = stack_used;
+                    stack_used += aligned;
+                    ArgPlacement::StructStack {
+                        off,
+                        size: agg.size,
+                    }
+                };
+                placements.push(placement);
+                continue;
+            }
+            let placement = match &agg.class {
+                AggClass::Regs(classes) => {
+                    let need_int = classes.iter().filter(|c| **c == RegClass::Integer).count();
+                    let need_fp = classes.iter().filter(|c| **c == RegClass::Sse).count();
+                    if int_idx + need_int <= int_max && fp_idx + need_fp <= 8 {
+                        let mut regs = [ClassReg {
+                            reg: 0,
+                            is_fp: false,
+                        }; 4];
+                        let mut n = 0u8;
+                        for c in classes {
+                            regs[n as usize] = match c {
+                                RegClass::Integer => {
+                                    let r = abi.int_arg_regs[int_idx];
+                                    int_idx += 1;
+                                    ClassReg {
+                                        reg: r,
+                                        is_fp: false,
+                                    }
+                                }
+                                RegClass::Sse => {
+                                    let r = fp_idx as u8;
+                                    fp_idx += 1;
+                                    ClassReg {
+                                        reg: r,
+                                        is_fp: true,
+                                    }
+                                }
+                            };
+                            n += 1;
+                        }
+                        ArgPlacement::StructRegs { regs, n }
+                    } else {
+                        // AAPCS64 6.4.2: once an aggregate spills to
+                        // the stack the integer register file is
+                        // exhausted for the rest of the call.
+                        int_idx = int_max;
+                        let off = stack_used;
+                        stack_used += aligned;
+                        ArgPlacement::StructStack {
+                            off,
+                            size: agg.size,
+                        }
+                    }
+                }
+                AggClass::ByRef => {
+                    if int_idx < int_max {
+                        let r = abi.int_arg_regs[int_idx];
+                        int_idx += 1;
+                        ArgPlacement::StructByRefReg(r)
+                    } else {
+                        let off = stack_used;
+                        stack_used += 8;
+                        ArgPlacement::StructByRefStack(off)
+                    }
+                }
+                AggClass::ByStack => {
+                    let off = stack_used;
+                    stack_used += aligned;
+                    ArgPlacement::StructStack {
+                        off,
+                        size: agg.size,
+                    }
+                }
+                AggClass::ReturnIndirect => {
+                    // Not an argument classification; treat as
+                    // by-stack defensively.
+                    let off = stack_used;
+                    stack_used += aligned;
+                    ArgPlacement::StructStack {
+                        off,
+                        size: agg.size,
+                    }
+                }
+            };
+            placements.push(placement);
+            continue;
+        }
         let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
         let is_variadic = i >= fixed_args;
         let force_stack = is_variadic && abi.variadic_on_stack;
@@ -377,8 +571,11 @@ pub(super) fn plan_call_args(
     // shadow_space on each store.
     if abi.shadow_space > 0 {
         for p in placements.iter_mut() {
-            if let ArgPlacement::Stack(off) = p {
-                *off += abi.shadow_space;
+            match p {
+                ArgPlacement::Stack(off)
+                | ArgPlacement::StructByRefStack(off)
+                | ArgPlacement::StructStack { off, .. } => *off += abi.shadow_space,
+                _ => {}
             }
         }
     }
@@ -403,6 +600,21 @@ pub(super) fn plan_call_args(
 /// the parameter from its incoming register or home cell).
 pub(crate) fn plan_param_regs(n_params: usize, fp_mask: u32, abi: Abi) -> CallPlan {
     plan_call_args(n_params, n_params, fp_mask, abi)
+}
+
+/// Struct-aware [`plan_param_regs`]: resolves each parameter's
+/// incoming placement, with `aggs[k]` describing an aggregate
+/// parameter passed by value. Mirrors the caller's
+/// [`plan_call_args_aggs`] so both ends agree on register
+/// assignment.
+#[allow(dead_code)] // called by the per-arch callee prologue's struct path
+pub(crate) fn plan_param_regs_aggs(
+    n_params: usize,
+    fp_mask: u32,
+    abi: Abi,
+    aggs: &[Option<ArgAgg>],
+) -> CallPlan {
+    plan_call_args_aggs(n_params, n_params, fp_mask, abi, aggs, false)
 }
 
 /// The floating-point argument mask, with every FP bit cleared when the
@@ -480,6 +692,10 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
         } else {
             ReturnExt::Sign32
         };
+    }
+    if bare == Ty::Bool as i64 {
+        // `_Bool` holds 0 / 1 in the low byte; zero-extend.
+        return ReturnExt::Zero8;
     }
     if bare == Ty::Short as i64 {
         return if unsigned {
@@ -1044,6 +1260,12 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
+    /// The shared library's own name, recorded in the image so a
+    /// consumer that links against it by name references the file it
+    /// loads at runtime (PE export-directory Name, Mach-O
+    /// `LC_ID_DYLIB` install name). `None` falls back to the
+    /// per-format default. Set to the `-o` basename for `--shared`.
+    pub shared_lib_name: Option<alloc::string::String>,
     /// Bytecode PC of a user-defined `DllMain`. Mirror of
     /// [`Program::dllmain_pc`]; only the PE writer reads it,
     /// and only for [`OutputKind::SharedLibrary`] output.
@@ -1435,6 +1657,7 @@ impl NativeOptions {
 /// This is the zero-options shorthand; pass `NativeOptions` via
 /// [`emit_native_with_options`] to enable optimization knobs like
 /// the register allocator.
+#[cfg(feature = "native-emit")]
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())
 }
@@ -1442,12 +1665,56 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 /// Variant of [`emit_native`] that accepts user-controllable
 /// [`NativeOptions`]. `options.optimize` gates the SSA optimization
 /// passes (see [`NativeOptions::optimize`]).
+#[cfg(feature = "native-emit")]
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C5Error> {
-    let build = lower_for(program, target, options)?;
+    emit_native_with_options_named(program, target, options, None)
+}
+
+/// Variant of [`emit_native_with_options`] that records the shared
+/// library's own name in the image (PE export-directory Name, Mach-O
+/// `LC_ID_DYLIB` install name) so a consumer linking against it by name
+/// references the file it loads at runtime. `shared_lib_name` is the
+/// `-o` basename for `--shared`; `None` falls back to the per-format
+/// default and is ignored for non-shared output.
+#[cfg(feature = "native-emit")]
+pub fn emit_native_with_options_named(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+    shared_lib_name: Option<&str>,
+) -> Result<Vec<u8>, C5Error> {
+    let mut build = lower_for(program, target, options)?;
+    if options.output_kind == OutputKind::SharedLibrary {
+        build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
+    }
+    write_for(program, &build, target)
+}
+
+/// Test-only: emit a complete native image for a single program,
+/// satisfying the PE entry stub's `__c5_*` runtime-helper references
+/// that the bare single-TU path cannot link (production links them
+/// from the embedded startup runtime). The injected symbols point at
+/// the program entry; the image is inspected for structure, not run.
+/// ELF / Mach-O ignore the extra names.
+#[cfg(all(test, feature = "native-emit"))]
+pub(crate) fn emit_native_single_tu_for_test(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<alloc::vec::Vec<u8>, C5Error> {
+    let mut build = lower_for(program, target, options)?;
+    let pc = build.pc_to_native.len();
+    build.pc_to_native.push(build.entry_offset);
+    // The entry adapter targets `__c5_entry`; the real link path
+    // supplies it from the startup runtime.
+    build
+        .func_names
+        .push(alloc::string::String::from("__c5_entry"));
+    build.func_ent_pcs.push(pc);
     write_for(program, &build, target)
 }
 
@@ -1570,9 +1837,9 @@ fn append_build_info(build: &mut Build) {
 /// and its source `program`. Internal entry point shared between
 /// [`emit_native_with_options`] (single-TU path) and the linker's
 /// MergedNative-to-Build synthesizer (multi-TU `.o` link path). The
-/// synthesizer is gated behind the `linker` + `std` features; the
+/// synthesizer is gated behind the `full` + `std` features; the
 /// no-default-features build has no consumer for this entry point.
-#[cfg(all(feature = "linker", feature = "std"))]
+#[cfg(all(feature = "full", feature = "std"))]
 pub(crate) fn write_native_image(
     program: &Program,
     build: &Build,
@@ -1581,6 +1848,7 @@ pub(crate) fn write_native_image(
     write_for(program, build, target)
 }
 
+#[cfg(feature = "native-emit")]
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {

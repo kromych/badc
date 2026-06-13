@@ -4,11 +4,13 @@ struct_linked_list.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -16,7 +18,6 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rsp)
                	xorq	%rbx, %rbx
                	movq	%rbx, %r12
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x5, %rax
                	jge	<addr>
@@ -35,8 +36,7 @@ Disassembly of section .text:
                	movq	%r12, 0x8(%rcx)
                	jmp	<addr>
                	xorq	%rcx, %rcx
-               	jmp	<addr>
-               	cmpq	$0x0, %r12
+               	testq	%r12, %r12
                	je	<addr>
                	movslq	%ecx, %rax
                	movslq	(%r12), %rcx
@@ -52,5 +52,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

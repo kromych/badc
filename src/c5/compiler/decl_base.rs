@@ -43,6 +43,10 @@ pub(super) struct IntModifiers {
     pub saw_signed: bool,
     pub saw_unsigned: bool,
     pub saw_short: bool,
+    /// True when the base type spelled `_Bool`. Tracked separately
+    /// because `_Bool` is a distinct C99 type, not an `int`
+    /// modifier; the implicit-int path must yield `Ty::Bool`.
+    pub saw_bool: bool,
     pub long_count: u8,
     /// True if any int-style modifier was observed -- drives the
     /// "implicit int" rule (`unsigned x;` becomes `unsigned int x;`).
@@ -64,6 +68,11 @@ impl IntModifiers {
     /// -> `Ty::Short`; bare `int` -> `Ty::Int`. Adds the
     /// `UNSIGNED_BIT` when `saw_unsigned` is set.
     pub fn int_base(&self) -> i64 {
+        if self.saw_bool {
+            // `_Bool` does not combine with any other integer
+            // modifier in valid C, so it wins outright.
+            return Ty::Bool as i64;
+        }
         let base = if self.saw_long_long() {
             Ty::LongLong as i64
         } else if self.saw_long() {
@@ -106,6 +115,8 @@ impl Compiler {
         m: &mut IntModifiers,
     ) -> Result<bool, C5Error> {
         if self.lex.tk == Token::IntMod {
+            // `_Bool` is the only keyword mapped to `IntMod`.
+            m.saw_bool = true;
             m.saw_int_mod = true;
         } else if self.lex.tk == Token::Signed {
             m.saw_signed = true;
@@ -176,6 +187,10 @@ impl Compiler {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
         self.pending.base_was_void = false;
+        // Same for the function-type-typedef marker: a cast or sizeof
+        // operand whose base was a function-type typedef must not leave
+        // the flag set for a following declarator.
+        self.pending.base_is_function_type = false;
         // Same reset for the long-double marker -- a binding
         // declared `double f(...)` after one declared `long
         // double g(...)` must not inherit g's marker.
@@ -188,13 +203,37 @@ impl Compiler {
         // this one base-type parse.
         self.pending.typedef_base_array_size = 0;
         self.pending.typedef_fn_proto = None;
+        self.pending.fn_ptr_param_types = None;
         // Leading modifier soup -- the order doesn't matter; we
         // collect everything we see, then look at the next token
         // for the type keyword.
         let mut m = IntModifiers::default();
         while is_decl_modifier(self.lex.tk) {
+            // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
+            // Distinct from the `_Atomic` qualifier handled below: here
+            // `_Atomic` names the type rather than qualifying a later
+            // one. c5 does not model atomicity, so the declared type is
+            // the unqualified inner type-name (base plus any abstract
+            // pointer declarator inside the parentheses).
+            if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                self.next()?; // _Atomic
+                self.next()?; // (
+                let mut inner = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp {
+                    self.next()?;
+                    inner += Ty::Ptr as i64;
+                }
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+                }
+                self.next()?; // )
+                return Ok(inner);
+            }
             if self.lex.tk == Token::Inline {
                 self.pending_is_inline = true;
+            }
+            if self.lex.tk == Token::Noreturn {
+                self.pending_noreturn = true;
             }
             if !self.try_consume_int_modifier(&mut m)? {
                 // const / volatile / restrict / _Atomic / etc. --
@@ -277,15 +316,19 @@ impl Compiler {
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                self.pending.base_is_function_type =
+                    self.symbols[self.lex.curr_id_idx].is_function_type;
                 // A function-pointer typedef records the pointed-to
-                // function's prototype; carry it to the bound
-                // declarator so an indirect call through the variable
-                // can split fixed vs variadic arguments per the host
-                // variadic ABI.
+                // function's prototype; carry it to the bound declarator
+                // so an indirect call through the variable narrows each
+                // argument to its declared parameter type and splits
+                // fixed vs variadic arguments per the host variadic ABI.
                 self.pending.typedef_fn_proto = Some((
                     self.symbols[self.lex.curr_id_idx].params.len(),
                     self.symbols[self.lex.curr_id_idx].is_variadic,
                 ));
+                self.pending.fn_ptr_param_types =
+                    Some(self.symbols[self.lex.curr_id_idx].params.clone());
             }
             // Propagate the bare-void flag through the typedef so
             // `(VOID)` in parameter position is recognised as the

@@ -4,20 +4,21 @@ static_locals.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x230              // =560
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	adrp	x0, <page>
                	add	x0, x0, #0xe0
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<two_statics>:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	adrp	x0, <page>
@@ -28,41 +29,42 @@ Disassembly of section .text:
                	add	x0, x0, #0xf0
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
-               	b	<addr>
                	adrp	x0, <page>
                	add	x0, x0, #0xe8
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	str	w1, [x0]
                	adrp	x2, <page>
                	add	x2, x2, #0xf0
                	ldrsw	x3, [x2]
                	sxtw	x1, w1
                	add	x1, x3, x1
-               	sxtw	x1, w1
                	str	w1, [x2]
                	ldrsw	x0, [x0]
                	sxtw	x1, w1
                	add	x0, x0, x1
                	sxtw	x0, w0
                	ret
+
+<next_x>:
                	adrp	x0, <page>
                	add	x0, x0, #0xf8
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<next_y>:
                	adrp	x0, <page>
                	add	x0, x0, #0x100
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
-               	sxtw	x1, w1
                	str	w1, [x0]
                	sxtw	x0, w1
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>

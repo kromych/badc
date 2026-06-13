@@ -4,12 +4,12 @@ bitfields.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x230              // =560
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -54,15 +54,14 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	str	w1, [x0]
                	sub	x0, x29, #0x10
-               	add	x0, x0, #0x4
-               	ldr	w1, [x0]
+               	ldr	w1, [x0, #0x4]
                	mov	x17, #0xffff00000000    // =281470681743360
                	movk	x17, #0xffff, lsl #48
                	and	x1, x1, x17
                	mov	x2, #0x5678             // =22136
                	movk	x2, #0x1234, lsl #16
                	orr	x1, x1, x2
-               	str	w1, [x0]
+               	str	w1, [x0, #0x4]
                	sub	x0, x29, #0x10
                	mov	x1, #0x3e7              // =999
                	str	w1, [x0, #0x8]

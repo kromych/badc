@@ -4,12 +4,12 @@ fp_param_ternary.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xd8]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x270              // =624
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
@@ -51,7 +51,6 @@ Disassembly of section .text:
                	cbz	x0, <addr>
                	ldr	x0, [x0]
                	str	x0, [x21, x20, lsl #3]
-               	b	<addr>
                	ldr	x0, [x21, x20, lsl #3]
                	ldr	x20, [sp]
                	ldr	x21, [sp, #0x8]
@@ -59,84 +58,60 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<pick>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	str	s0, [x1]
                	mov	x17, #0x1               // =1
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	sub	x0, x29, #0x10
                	str	s0, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fneg	s0, s0
                	sub	x0, x29, #0x10
                	str	s0, [x0]
-               	b	<addr>
                	sub	x16, x29, #0x10
                	ldr	s0, [x16]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<grad_dot>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
                	sxtw	x0, w0
-               	sub	x1, x29, #0x8
-               	str	s0, [x1]
-               	sub	x1, x29, #0x10
-               	fmov	d0, d1
-               	str	s0, [x1]
                	mov	x17, #0x1               // =1
                	and	x1, x0, x17
                	cbz	x1, <addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	sub	x1, x29, #0x28
                	str	s0, [x1]
                	b	<addr>
-               	sub	x16, x29, #0x8
-               	ldr	s0, [x16]
                	fneg	s0, s0
                	sub	x1, x29, #0x28
                	str	s0, [x1]
-               	b	<addr>
                	sub	x16, x29, #0x28
                	ldr	s0, [x16]
-               	sub	x1, x29, #0x18
-               	str	s0, [x1]
                	mov	x17, #0x2               // =2
                	and	x0, x0, x17
                	cbz	x0, <addr>
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
                	sub	x0, x29, #0x30
-               	str	s0, [x0]
+               	str	s1, [x0]
                	b	<addr>
-               	sub	x16, x29, #0x10
-               	ldr	s0, [x16]
-               	fneg	s0, s0
+               	fneg	s1, s1
                	sub	x0, x29, #0x30
-               	str	s0, [x0]
-               	b	<addr>
+               	str	s1, [x0]
                	sub	x16, x29, #0x30
-               	ldr	s0, [x16]
-               	sub	x0, x29, #0x20
-               	str	s0, [x0]
-               	sub	x16, x29, #0x18
-               	ldr	s0, [x16]
-               	sub	x16, x29, #0x20
                	ldr	s1, [x16]
                	fadd	s0, s0, s1
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10

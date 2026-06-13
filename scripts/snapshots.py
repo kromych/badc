@@ -123,7 +123,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path) -> bool:
     text = proc.stderr.decode("utf-8", errors="replace")
     text = "\n".join(
         line for line in text.splitlines()
-        if not line.startswith("badc: produced a Linux/")
+        if not line.startswith("info: produced a Linux/")
     )
     text = text.replace(str(src), src.name)
     if text and not text.endswith("\n"):

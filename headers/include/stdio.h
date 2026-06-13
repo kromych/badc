@@ -66,6 +66,15 @@
 struct __c5_FILE { char __opaque[256]; };
 typedef struct __c5_FILE FILE;
 
+// C99 7.19.1: `fpos_t` records a stream position for `fgetpos` /
+// `fsetpos`. Like `FILE` it is opaque -- programs pass `fpos_t *`
+// through the bound libc routines and never inspect the bytes. The
+// buffer is sized for the widest host layout (glibc's `fpos_t` is 16
+// bytes; macOS and Windows use 8) and the union member forces the
+// 8-byte alignment the libc fields expect.
+struct __c5_fpos_t { union { char __opaque[16]; long long __align; } __u; };
+typedef struct __c5_fpos_t fpos_t;
+
 // Standard streams. These are real libc globals exported by the
 // platform's C runtime. c5 has no GOT-style data-symbol
 // trampoline, so reading `extern FILE *stdout;` directly would
@@ -90,6 +99,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vfprintf,  "_vfprintf")
 #pragma binding(libc::vsprintf,  "_vsprintf")
 #pragma binding(libc::vsnprintf, "_vsnprintf")
+#pragma binding(libc::scanf,     "_scanf")
+#pragma binding(libc::fscanf,    "_fscanf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::fopen,     "_fopen")
 #pragma binding(libc::freopen,   "_freopen")
@@ -112,6 +123,10 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
 #pragma binding(libc::ftell,     "_ftell")
+#pragma binding(libc::fseeko,    "_fseeko")
+#pragma binding(libc::ftello,    "_ftello")
+#pragma binding(libc::fgetpos,   "_fgetpos")
+#pragma binding(libc::fsetpos,   "_fsetpos")
 #pragma binding(libc::rewind,    "_rewind")
 #pragma binding(libc::fflush,    "_fflush")
 #pragma binding(libc::feof,      "_feof")
@@ -139,6 +154,7 @@ typedef struct __c5_FILE FILE;
 // `FILE *` stream. Used by archive / pipe consumers that get a
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "_fdopen")
+#pragma binding(libc::fileno,    "_fileno")
 #endif
 
 #ifdef __linux__
@@ -151,6 +167,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vfprintf,  "vfprintf")
 #pragma binding(libc::vsprintf,  "vsprintf")
 #pragma binding(libc::vsnprintf, "vsnprintf")
+#pragma binding(libc::scanf,     "scanf")
+#pragma binding(libc::fscanf,    "fscanf")
 #pragma binding(libc::sscanf,    "sscanf")
 #pragma binding(libc::fopen,     "fopen")
 #pragma binding(libc::freopen,   "freopen")
@@ -173,6 +191,10 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
 #pragma binding(libc::ftell,     "ftell")
+#pragma binding(libc::fseeko,    "fseeko")
+#pragma binding(libc::ftello,    "ftello")
+#pragma binding(libc::fgetpos,   "fgetpos")
+#pragma binding(libc::fsetpos,   "fsetpos")
 #pragma binding(libc::rewind,    "rewind")
 #pragma binding(libc::fflush,    "fflush")
 #pragma binding(libc::feof,      "feof")
@@ -197,6 +219,7 @@ typedef struct __c5_FILE FILE;
 // `FILE *` stream. Used by archive / pipe consumers that get a
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "fdopen")
+#pragma binding(libc::fileno,    "fileno")
 #endif
 
 #ifdef _WIN32
@@ -228,6 +251,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
 #pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
+#pragma binding(msvcrt::scanf,     "scanf")
+#pragma binding(msvcrt::fscanf,    "fscanf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
@@ -250,6 +275,8 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::perror,    "perror")
 #pragma binding(msvcrt::fseek,     "fseek")
 #pragma binding(msvcrt::ftell,     "ftell")
+#pragma binding(msvcrt::fgetpos,   "fgetpos")
+#pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
 #pragma binding(msvcrt::fflush,    "fflush")
 #pragma binding(msvcrt::feof,      "feof")
@@ -358,6 +385,7 @@ typedef struct __c5_FILE FILE;
 // POSIX-style `fdopen` -- msvcrt only exposes the underscored
 // form, so the portable spelling binds to the same entry point.
 #pragma binding(msvcrt::fdopen,         "_fdopen")
+#pragma binding(msvcrt::fileno,         "_fileno")
 #pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
@@ -383,6 +411,10 @@ int snprintf(char *buf, int size, char *fmt, ...);
 // binds both to the same `_snprintf` / `_vsnprintf` entry.
 int _snprintf(char *buf, int size, char *fmt, ...);
 int _vsnprintf(char *buf, int size, char *fmt, char *ap);
+// C99 7.19.6.4 scanf, 7.19.6.2 fscanf -- formatted input from stdin
+// and from a stream. The string sibling sscanf reads from a buffer.
+int scanf(char *fmt, ...);
+int fscanf(FILE *stream, char *fmt, ...);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by
@@ -391,6 +423,8 @@ FILE *freopen(char *path, char *mode, FILE *stream);
 int fclose(FILE *stream);
 int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);
+// POSIX.1: the integer file descriptor underlying a stream.
+int fileno(FILE *stream);
 int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);
@@ -414,6 +448,14 @@ int puts(char *s);
 int perror(char *s);
 int fseek(FILE *stream, int offset, int whence);
 int ftell(FILE *stream);
+// POSIX large-file variants (off_t is 64-bit). Not provided on Windows
+// msvcrt under these names (`_fseeki64` / `_ftelli64` differ).
+#ifndef _WIN32
+int fseeko(FILE *stream, long offset, int whence);
+long ftello(FILE *stream);
+#endif
+int fgetpos(FILE *stream, fpos_t *pos);
+int fsetpos(FILE *stream, const fpos_t *pos);
 int rewind(FILE *stream);
 int fflush(FILE *stream);
 int feof(FILE *stream);

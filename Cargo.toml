@@ -3,6 +3,22 @@ name = "badc"
 version = "0.0.8"
 edition = "2024"
 license = "MIT"
+description = "A quick, slim cross-platform C99 compiler with a JIT and native ELF / PE / Mach-O backends."
+repository = "https://github.com/kromych/badc"
+readme = "README.md"
+keywords = ["c", "compiler", "c99", "jit", "cross-compiler"]
+categories = ["compilers", "development-tools"]
+# The bundled C headers and runtime are `include_str!`'d into the
+# library at build time, so they must ship in the published package.
+include = [
+    "src/**/*.rs",
+    "lib/**",
+    "headers/**",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+]
 
 [lib]
 name = "badc"
@@ -11,26 +27,52 @@ path = "src/lib.rs"
 [[bin]]
 name = "badc"
 path = "src/main.rs"
-required-features = ["std", "linker"]
+required-features = ["std", "full"]
+
+# The CLI integration tests drive the `badc` binary (`CARGO_BIN_EXE_badc`)
+# and the native object / link APIs, so they only build under `full`.
+# Declaring it here keeps `cargo build/clippy --all-targets` under the
+# default (host-JIT) features from compiling them, the same way the bin
+# is skipped.
+[[test]]
+name = "cli_linker_smoke"
+path = "tests/cli_linker_smoke.rs"
+required-features = ["full"]
+
+[[test]]
+name = "cli_fixture_smoke"
+path = "tests/cli_fixture_smoke.rs"
+required-features = ["full"]
 
 [features]
-default = ["std", "linker"]
+# The default library is the host-arch JIT only (lexer / parser /
+# preprocessor / codegen passes / `jit_run`). On-disk native output
+# (`native-emit`) and the cross-TU linker it pulls in (`full`) are
+# opt-in. The `badc` binary declares them in `required-features`, and
+# the repo's build / test / CI invocations pass `--features full`.
+default = ["std"]
 # Enables the StdHost adapter (file IO, env vars, real stdin/stdout) and
 # the std::error::Error impl on C5Error (the c5-dialect error type).
 # Without it, the library builds under no_std + alloc and callers must
 # supply their own Host impl.
 std = []
-# Enables the cross-translation-unit linker: writing and reading c5
-# bytecode object files (ELF wrapper, `.o`) and ar(5) archives
-# (`.a`), plus the `link_units` driver that merges objects into a
-# single Program ready for the existing native code emitters. Adds
-# storage-class linkage tracking (external vs internal) and the
-# corresponding undefined-symbol relocation machinery. Required by
-# the `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`).
-# Library callers that don't need multi-TU artifacts can opt out
-# with `default-features = false, features = ["std"]` to keep the
-# library footprint slim.
-linker = []
+# Enables on-disk native output: the per-format container writers
+# (ELF / PE / Mach-O) and `emit_native*`, which turn a lowered program
+# into an executable / object image. Without it the library keeps the
+# in-memory JIT (`jit_run`) and the codegen passes but cannot write a
+# native binary. Requires `std`.
+native-emit = ["std"]
+# The full standalone-compiler feature set the `badc` binary needs.
+# Pulls in `native-emit` and adds the cross-translation-unit linker:
+# writing and reading c5 bytecode object files (ELF wrapper, `.o`) and
+# ar(5) archives (`.a`), plus the `link_units` driver that merges
+# objects into a single Program ready for the native code emitters.
+# Adds storage-class linkage tracking (external vs internal) and the
+# corresponding undefined-symbol relocation machinery. Required by the
+# `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`). Library callers
+# that want only the host JIT can opt out with `default-features =
+# false, features = ["std"]`.
+full = ["native-emit"]
 # Exposes the register-allocator pressure knobs (per-bank GPR / FP
 # count caps) to the test harness and the `badc` CLI (`--max-gpr=N`,
 # `--max-fpr=N`, and the `BADC_MAX_GPR` / `BADC_MAX_FPR` environment

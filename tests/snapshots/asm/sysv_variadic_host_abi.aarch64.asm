@@ -4,12 +4,12 @@ sysv_variadic_host_abi.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sub	sp, sp, #0xc0
                	str	x0, [sp]
                	str	x1, [sp, #0x8]
@@ -55,7 +55,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	sxtw	x2, w0
                	mov	x1, #0x0                // =0
-               	b	<addr>
                	sxtw	x0, w1
                	cmp	x0, #0xa
                	b.ge	<addr>
@@ -97,7 +96,6 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	add	x2, x2, x0
                	b	<addr>
-               	b	<addr>
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -119,6 +117,8 @@ Disassembly of section .text:
                	fcvtzs	x0, d0
                	add	x2, x2, x0
                	b	<addr>
+
+<fsum>:
                	sub	sp, sp, #0xc0
                	str	x0, [sp]
                	str	x1, [sp, #0x8]
@@ -161,7 +161,6 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	mov	x1, #0x0                // =0
                	scvtf	d0, x1
-               	b	<addr>
                	sxtw	x0, w1
                	ldursw	x2, [x29, #0x10]
                	cmp	x0, x2
@@ -196,6 +195,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70

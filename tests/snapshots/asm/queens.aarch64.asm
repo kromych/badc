@@ -4,16 +4,15 @@ queens.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	sxtw	x1, w1
                	sxtw	x2, w2
                	mov	x4, #0x0                // =0
-               	b	<addr>
                	sxtw	x3, w4
                	cmp	x3, x1
                	b.ge	<addr>
@@ -40,7 +39,6 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #32
                	movk	x17, #0xffff, lsl #48
                	mul	x6, x3, x17
-               	b	<addr>
                	sxtw	x3, w4
                	ldrsw	x3, [x0, x3, lsl #2]
                	cmp	x3, x2
@@ -55,6 +53,8 @@ Disassembly of section .text:
                	ret
                	b	<addr>
                	b	<addr>
+
+<solve>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -77,7 +77,6 @@ Disassembly of section .text:
                	ret
                	mov	x22, #0x0               // =0
                	mov	x23, x22
-               	b	<addr>
                	sxtw	x0, w22
                	cmp	x0, #0x8
                	b.ge	<addr>
@@ -111,6 +110,8 @@ Disassembly of section .text:
                	add	x0, x23, x0
                	sxtw	x23, w0
                	b	<addr>
+
+<main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40

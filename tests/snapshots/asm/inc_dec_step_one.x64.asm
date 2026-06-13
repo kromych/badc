@@ -4,31 +4,40 @@ inc_dec_step_one.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<plus_one>:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	retq
+
+<minus_one>:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	decq	%rax
                	movslq	%eax, %rax
                	retq
+
+<plus_one_l>:
                	movq	%rdi, %rax
                	incq	%rax
                	retq
+
+<minus_neg_one>:
                	movq	%rdi, %rax
                	incq	%rax
                	retq
+
+<count_up>:
                	movslq	%edi, %rdi
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%ecx, %rdx
                	cmpq	%rdi, %rdx
                	jge	<addr>
@@ -42,10 +51,14 @@ Disassembly of section .text:
                	jmp	<addr>
                	movslq	%eax, %rax
                	retq
+
+<wrap>:
                	movl	%edi, %eax
                	incq	%rax
                	movl	%eax, %eax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x29, %eax
@@ -90,7 +103,7 @@ Disassembly of section .text:
                	movl	%eax, %eax
                	incq	%rax
                	movl	%eax, %eax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
@@ -107,3 +120,4 @@ Disassembly of section .text:
                	xorq	%rax, %rax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)

@@ -4,29 +4,25 @@ many_args_host_stack_overflow.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<sum_eleven>:
                	popq	%r10
-               	subq	$0x50, %rsp
-               	movq	0x50(%rsp), %rax
-               	movq	%rax, (%rsp)
-               	movq	0x58(%rsp), %rax
-               	movq	%rax, 0x10(%rsp)
-               	movq	0x60(%rsp), %rax
-               	movq	%rax, 0x20(%rsp)
-               	movq	0x68(%rsp), %rax
-               	movq	%rax, 0x30(%rsp)
-               	movq	0x70(%rsp), %rax
-               	movq	%rax, 0x40(%rsp)
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
-               	subq	$0x10, %rsp
+               	subq	$0xb0, %rsp
+               	movq	0xb0(%rsp), %rax
+               	movq	%rax, 0x60(%rsp)
+               	movq	0xb8(%rsp), %rax
+               	movq	%rax, 0x70(%rsp)
+               	movq	0xc0(%rsp), %rax
+               	movq	%rax, 0x80(%rsp)
+               	movq	0xc8(%rsp), %rax
+               	movq	%rax, 0x90(%rsp)
+               	movq	0xd0(%rsp), %rax
+               	movq	%rax, 0xa0(%rsp)
                	pushq	%r10
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -135,6 +131,8 @@ Disassembly of section .text:
                	addq	$0xb0, %rsp
                	pushq	%r11
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -169,3 +167,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

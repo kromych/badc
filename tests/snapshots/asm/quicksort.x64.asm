@@ -4,17 +4,21 @@ quicksort.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x270, %esi            # imm = 0x270
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<swap>:
                	movslq	(%rdi), %rax
                	movslq	(%rsi), %rcx
                	movl	%ecx, (%rdi)
                	movl	%eax, (%rsi)
                	xorq	%rax, %rax
                	retq
+
+<partition>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -32,7 +36,6 @@ Disassembly of section .text:
                	decq	%rax
                	movslq	%eax, %r10
                	movq	%r10, 0x28(%rsp)
-               	jmp	<addr>
                	movslq	%r15d, %rax
                	cmpq	%r12, %rax
                	jge	<addr>
@@ -88,7 +91,8 @@ Disassembly of section .text:
                	callq	<addr>
                	jmp	<addr>
                	jmp	<addr>
-               	jmp	<addr>
+
+<quicksort>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -120,7 +124,6 @@ Disassembly of section .text:
                	movq	%rbx, %rdi
                	movq	%r14, %rdx
                	callq	<addr>
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -131,6 +134,8 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -210,4 +215,4 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

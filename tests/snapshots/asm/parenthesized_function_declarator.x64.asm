@@ -4,23 +4,28 @@ parenthesized_function_declarator.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<one>:
                	movslq	%edi, %rdi
                	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rax
                	retq
+
+<two>:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax
                	movq	%rdi, %rcx
                	shlq	$0x1, %rcx
-               	movslq	%ecx, %rcx
                	movl	%ecx, (%rax)
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
@@ -40,17 +45,16 @@ Disassembly of section .text:
                	addq	$0x30, %rsp
                	popq	%rbp
                	retq
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	sete	%dl
                	movzbq	%dl, %rdx
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	movslq	(%rax), %rax
                	cmpq	$0xa, %rax
                	setne	%dl
                	movzbq	%dl, %rdx
-               	jmp	<addr>
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -68,4 +72,3 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

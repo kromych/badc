@@ -166,7 +166,12 @@ impl Compiler {
             // parameter or expression.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             self.ty = full_ty;
-            if param_idx == usize::MAX {
+            // An unnamed parameter, or any parameter of a function-pointer
+            // declarator's prototype, records its type without binding a
+            // name: the prototype's parameter names have no linkage and a
+            // name that shadows an enclosing prototype's parameter must not
+            // trip the duplicate-parameter check.
+            if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
                 types.push(full_ty);
                 if self.lex.tk == ',' {
                     self.next()?;
@@ -193,6 +198,19 @@ impl Compiler {
             // `*p = ...` against the rebind looks like a fn-ptr
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
+            // A function-pointer parameter records its pointee signature's
+            // parameter types so an indirect call through it narrows each
+            // argument to its declared type (the common callback shape).
+            let fnptr_pp = if fn_ptr_indirection > 0 {
+                self.pending.fn_ptr_param_types.take()
+            } else {
+                None
+            };
+            if let Some(pp_types) = fnptr_pp {
+                self.symbols[param_idx].params = pp_types;
+                self.symbols[param_idx].is_variadic =
+                    matches!(self.pending.typedef_fn_proto.take(), Some((_, true)));
+            }
 
             args.push(param_idx);
             types.push(full_ty);

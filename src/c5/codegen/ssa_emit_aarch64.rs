@@ -50,13 +50,13 @@ use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
-    enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br,
-    enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d,
-    enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x,
-    enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d, enc_ldp_post,
-    enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm, enc_ldrb_imm,
-    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv, enc_msub,
-    enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
+    enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
+    enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d,
+    enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
+    enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
+    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
+    enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
     enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
     enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
@@ -284,7 +284,25 @@ fn param_placements(func: &FunctionSsa, abi: super::Abi) -> alloc::vec::Vec<supe
     if !spills_named_params_on_entry(func, abi) || func.n_params == 0 {
         return alloc::vec::Vec::new();
     }
-    super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements
+    if func.param_aggs.iter().all(Option::is_none) {
+        return super::plan_param_regs(func.n_params, func.param_fp_mask, abi).placements;
+    }
+    let aggs: Vec<Option<super::ArgAgg>> = func
+        .param_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &func.agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect();
+    super::plan_param_regs_aggs(func.n_params, func.param_fp_mask, abi, &aggs).placements
 }
 
 /// `(n_reg, n_stack)` split of the declared parameters: how many land
@@ -776,6 +794,10 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // GCC `&&label`: each `Inst::BlockAddr` emits an `ADR rd, .`
+    // placeholder; `(site, target_block, rd)` is resolved against the
+    // final `block_offsets` once every block has been laid out.
+    let mut block_addr_fixups: Vec<(usize, BlockId, Reg)> = Vec::new();
     // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
     // and read by `Inst::Intrinsic { kind: Alloca }`; zero
     // means the function doesn't use alloca.
@@ -806,6 +828,37 @@ pub(super) fn emit_function(
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            // GCC `&&label`: materialize the block's address with a
+            // PC-relative ADR. Handled here (not emit_inst) because the
+            // fixup resolves against this function's local block_offsets
+            // once every block is laid out -- walker IR leaves
+            // block.start_pc at 0, so the pc_to_native path can't be used.
+            if let Inst::BlockAddr(tb) = inst {
+                let rd = match int_or_spill_scratch(place, &scratch) {
+                    Some(r) => r,
+                    None => {
+                        bail("BlockAddr: dst not int reg / spill", v, place);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                let adr_site = code.len();
+                emit(code, enc_adr(rd, 0));
+                block_addr_fixups.push((adr_site, *tb, rd));
+                if let Place::Spill(slot) = place {
+                    let sp_off = spill_off(frame, slot);
+                    emit_sp_str_x_auto(code, rd, sp_off);
+                }
+                continue;
+            }
             let data_fixups_pre_inst = data_fixups.len();
             if !emit_inst(
                 code,
@@ -893,12 +946,16 @@ pub(super) fn emit_function(
         match block.terminator {
             Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
             Terminator::Jmp(t) => {
-                branch_fixups.push(BranchFixup {
-                    site: code.len(),
-                    target: t,
-                    kind: LocalBranchKind::B,
-                });
-                emit(code, enc_b(0));
+                // Fall through when the target is the next block in
+                // layout rather than emitting a branch to it.
+                if t as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: t,
+                        kind: LocalBranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
             }
             Terminator::Bz {
                 cond,
@@ -1050,6 +1107,33 @@ pub(super) fn emit_function(
                     emit(code, enc_b(0));
                 }
             }
+            Terminator::GotoIndirect { target } => {
+                // GCC computed goto: branch to the code address in
+                // `target` (materialized by Inst::BlockAddr). Move it
+                // into a register and `br`.
+                let tplace = alloc
+                    .places
+                    .get(target as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let rt = match materialize_int(code, tplace, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        bail("GotoIndirect: target Place not int", target, tplace);
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+                        return false;
+                    }
+                };
+                emit(code, enc_br(rt));
+            }
             Terminator::TailExt(binding_idx) => {
                 // Tail-jump through the GOT-patched trampoline:
                 // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
@@ -1074,6 +1158,27 @@ pub(super) fn emit_function(
                 super::aarch64::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
         }
+    }
+    // Patch each `&&label` ADR against its block's final offset.
+    for (site, target_block, rd) in &block_addr_fixups {
+        let target_off = block_offsets[*target_block as usize] as i64;
+        let rel = target_off - *site as i64;
+        // ADR has a signed 21-bit byte immediate (+/-1 MiB).
+        if !(-(1 << 20)..(1 << 20)).contains(&rel) {
+            bail_msg("BlockAddr: ADR target out of +/-1MiB range");
+            code.truncate(snapshot);
+            fixups.truncate(fixups_snapshot);
+            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+            data_fixups.truncate(data_fixups_snapshot);
+            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
+            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+            tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+            macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
+            return false;
+        }
+        let word = enc_adr(*rd, rel as i32);
+        code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
     }
     // Patch the recorded branches.
     for fx in &branch_fixups {
@@ -1408,6 +1513,18 @@ fn emit_prologue(
                     Some(super::ArgPlacement::IntReg(r)) => {
                         emit(code, enc_str_pre(Reg(r), Reg(31), -16))
                     }
+                    // Aggregate parameter passed in registers: reserve
+                    // its 16-byte cell here but leave the incoming
+                    // argument registers untouched. The body reads the
+                    // aggregate from a parser-reserved body local, not
+                    // from this cell; `emit_struct_param_scatter` (run
+                    // after the frame is established) stores the
+                    // argument registers straight into that local. The
+                    // cell is reserved only so the surrounding
+                    // `LocalAddr` slot offsets stay stable.
+                    Some(super::ArgPlacement::StructRegs { .. }) => {
+                        emit_sub_sp_imm(code, 16);
+                    }
                     // No register source (stack-passed or out of range):
                     // the overflow restripe above already filled the
                     // cell; reserve its 16 bytes without a store.
@@ -1434,6 +1551,61 @@ fn emit_prologue(
         emit_stack_alloc(code, frame.frame_bytes, abi, Reg(16));
     }
     emit_prologue_saved_regs(code, alloc, frame);
+    emit_struct_param_scatter(code, func, abi, frame);
+    if func.indirect_result_slot != 0 {
+        // AAPCS64 6.9: save the caller-supplied x8 indirect-result
+        // pointer into its body local; `return s;` writes the
+        // aggregate result through it.
+        emit_local_addr(code, Place::IntReg(16), func.indirect_result_slot, frame);
+        emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+    }
+}
+
+/// Store each register-passed aggregate parameter's incoming argument
+/// registers into its parser-reserved body local. Runs after the
+/// frame is established (fp set, frame allocated, callee saves done)
+/// so the body local's fp-relative address is valid; the argument
+/// registers (x0..x7 / d0..d7) still hold the caller-supplied values
+/// at this point, as nothing between the entry and here clobbers
+/// them. The body reads the aggregate from this local, so the entry
+/// 16-byte argument cell stays unused (the walker emits no entry copy
+/// for a tagged aggregate parameter).
+fn emit_struct_param_scatter(
+    code: &mut Vec<u8>,
+    func: &FunctionSsa,
+    abi: super::Abi,
+    frame: Frame,
+) {
+    if func.param_aggs.iter().all(Option::is_none) {
+        return;
+    }
+    let placements = param_placements(func, abi);
+    for (i, agg) in func.param_aggs.iter().enumerate() {
+        if agg.is_none() {
+            continue;
+        }
+        let Some(super::ArgPlacement::StructRegs { regs, n }) = placements.get(i) else {
+            continue;
+        };
+        let slot = func.param_local_slots.get(i).copied().unwrap_or(0);
+        if slot >= 0 {
+            continue;
+        }
+        // Materialise the body local's address into scratch.primary,
+        // then store each eightbyte at offset 8k from it. scratch
+        // (x16/x17) is never an argument register, so the source
+        // registers in `regs` are untouched.
+        emit_local_addr(code, Place::IntReg(16), slot, frame);
+        for (k, cr) in regs.iter().take(*n as usize).enumerate() {
+            let off = (k as u32) * 8;
+            if cr.is_fp {
+                emit(code, enc_fmov_d_to_x(Reg(17), cr.reg));
+                emit(code, enc_str_imm(Reg(17), Reg(16), off));
+            } else {
+                emit(code, enc_str_imm(Reg(cr.reg), Reg(16), off));
+            }
+        }
+    }
 }
 
 /// Save the allocator-reported callee-saved GPRs + FP regs at the
@@ -1702,6 +1874,9 @@ fn emit_inst(
             }
             true
         }
+        // Inst::BlockAddr is handled in emit_function's block loop
+        // (it needs the local block_offsets table for its PC-relative
+        // fixup), so it never reaches emit_inst.
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
         Inst::Load { addr, disp, kind } => emit_load(
             code,
@@ -1757,6 +1932,10 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => emit_call(
             code,
             dst,
@@ -1771,11 +1950,16 @@ fn emit_inst(
             variadic_targets.contains(target_pc),
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
         ),
         Inst::CallExt {
             binding_idx,
             args,
             fp_arg_mask,
+            ..
         } => emit_call_ext(
             code,
             dst,
@@ -1797,6 +1981,10 @@ fn emit_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            arg_aggs,
+            ret_agg,
+            ret_slot_local,
+            ..
         } => emit_call_indirect(
             code,
             dst,
@@ -1810,6 +1998,10 @@ fn emit_inst(
             abi,
             *fp_return,
             *fp_arg_mask,
+            arg_aggs,
+            &func.agg_descs,
+            *ret_agg,
+            *ret_slot_local,
         ),
         Inst::Mcpy {
             dst: d,
@@ -1823,6 +2015,7 @@ fn emit_inst(
             *kind,
             args,
             dst,
+            v,
             alloc,
             frame,
             scratch,
@@ -2187,6 +2380,14 @@ fn emit_va_arg_aapcs64(
     // argument to an eightbyte; a double overflow argument occupies one).
     let (off_field, top_field, reg_step): (u32, u32, u32) =
         if is_fp { (28, 16, 16) } else { (24, 8, 8) };
+    // A by-value aggregate (integer class) spans `ceil(size/8)` eightbytes
+    // in consecutive integer registers / overflow slots, so the cursor
+    // advances by that span rather than a single eightbyte. A scalar's
+    // size is at most 8, leaving the advance unchanged.
+    let size = (descriptor & 0xffff) as u32;
+    let slot_bytes = (size + 7) & !7u32;
+    let reg_advance = if is_fp { reg_step } else { slot_bytes.max(8) };
+    let stack_advance = if is_fp { 8 } else { slot_bytes.max(8) };
     let dst_reg = if let Place::IntReg(r) = dst {
         Some(r)
     } else {
@@ -2205,10 +2406,10 @@ fn emit_va_arg_aapcs64(
     // borrow = top ; borrow = top + offs (the argument address).
     emit(code, enc_ldr_imm(borrow, ap, top_field));
     emit(code, enc_add_reg(borrow, borrow, scratch.primary));
-    // x16 = offs + reg_step (the next offset) ; write it back (32-bit).
+    // x16 = offs + advance (the next offset) ; write it back (32-bit).
     emit(
         code,
-        enc_add_imm(scratch.primary, scratch.primary, reg_step),
+        enc_add_imm(scratch.primary, scratch.primary, reg_advance),
     );
     emit(code, enc_str32_imm(scratch.primary, ap, off_field));
     // Land the address uniformly in x16.
@@ -2219,9 +2420,9 @@ fn emit_va_arg_aapcs64(
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
     code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
-    // x16 = __stack ; borrow = __stack + 8 (next cursor) ; write back.
+    // x16 = __stack ; borrow = __stack + advance (next cursor) ; write back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
-    emit(code, enc_add_imm(borrow, scratch.primary, 8));
+    emit(code, enc_add_imm(borrow, scratch.primary, stack_advance));
     emit(code, enc_str_imm(borrow, ap, 0));
     // --- done: x16 holds the argument address. ---
     let done_lbl = code.len();
@@ -2257,6 +2458,7 @@ fn emit_intrinsic(
     kind: i64,
     args: &[u32],
     dst: Place,
+    v: super::super::ir::ValueId,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2451,18 +2653,20 @@ fn emit_intrinsic(
             // Windows arm64 (`variadic_int_only`), both of which lay
             // variadic arguments at 8-byte stride (the incoming stack,
             // respectively the gr-save area + stack overflow). args[0] =
-            // &ap.
-            let va_stride: u32 = 8;
-            // `__builtin_va_arg(self, descriptor)`: args[0] is the
-            // va_list-storage address, args[1] the packed
-            // `(kind << 16) | size` type descriptor. These stack-based
-            // ABIs (macOS arm64, Windows aarch64, the Linux aarch64
-            // c5-internal cdecl) walk a single region at a fixed stride,
-            // so the kind descriptor is unused; only args[0] matters.
+            // &ap, args[1] = the packed `(kind << 16) | size` descriptor.
+            // A scalar occupies one eightbyte; a by-value aggregate spans
+            // `ceil(size/8)` consecutive eightbytes, so the cursor
+            // advances by the aggregate's eightbyte span. va_arg returns
+            // the slot address; the caller's load / Mcpy reads `size`
+            // bytes from it.
             if args.is_empty() {
                 bail_msg("VaArg: expected at least the ap argument");
                 return false;
             }
+            let va_stride: u32 = match args.get(1).and_then(|a| func.insts.get(*a as usize)) {
+                Some(super::super::ir::Inst::Imm(d)) => (((*d & 0xffff) as u32 + 7) & !7).max(8),
+                _ => 8,
+            };
             let ap_place = alloc
                 .places
                 .get(args[0] as usize)
@@ -2750,6 +2954,100 @@ fn emit_intrinsic(
         // fma / fmaf lower to Inst::Fma at the call site, so they never
         // reach the Inst::Intrinsic dispatch.
         I::Fma | I::Fmaf => false,
+        I::Trap => {
+            // `brk #0` (0xD4200000) raises a breakpoint / illegal-state
+            // exception. Execution does not continue past it.
+            emit(code, 0xD420_0000u32);
+            true
+        }
+        I::CpuRelax => {
+            // `yield` (0xD503203F), the AArch64 spin-loop hint.
+            emit(code, 0xD503_203Fu32);
+            true
+        }
+        I::Sqrt
+        | I::Sqrtf
+        | I::Fabs
+        | I::Fabsf
+        | I::Floor
+        | I::Floorf
+        | I::Ceil
+        | I::Ceilf
+        | I::Trunc
+        | I::Truncf => {
+            if args.len() != 1 {
+                bail_msg("unary FP intrinsic: expected 1 arg");
+                return false;
+            }
+            let src_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let is_f32 = alloc.is_f32(v);
+            let dn = match materialize_fp_for(code, args[0], src_place, SCRATCH_FP0, frame, alloc) {
+                Some(r) => r,
+                None => return false,
+            };
+            let dd = match dst {
+                Place::FpReg(r) => r,
+                Place::Spill(_) => SCRATCH_FP1,
+                _ => return false,
+            };
+            use super::aarch64::{
+                enc_fabs_d, enc_fabs_s, enc_frintm_d, enc_frintm_s, enc_frintp_d, enc_frintp_s,
+                enc_frintz_d, enc_frintz_s, enc_fsqrt_d, enc_fsqrt_s,
+            };
+            let inst = match intrinsic {
+                I::Sqrt | I::Sqrtf if is_f32 => enc_fsqrt_s(dd, dn),
+                I::Sqrt | I::Sqrtf => enc_fsqrt_d(dd, dn),
+                I::Fabs | I::Fabsf if is_f32 => enc_fabs_s(dd, dn),
+                I::Fabs | I::Fabsf => enc_fabs_d(dd, dn),
+                I::Floor | I::Floorf if is_f32 => enc_frintm_s(dd, dn),
+                I::Floor | I::Floorf => enc_frintm_d(dd, dn),
+                I::Ceil | I::Ceilf if is_f32 => enc_frintp_s(dd, dn),
+                I::Ceil | I::Ceilf => enc_frintp_d(dd, dn),
+                _ if is_f32 => enc_frintz_s(dd, dn),
+                _ => enc_frintz_d(dd, dn),
+            };
+            emit(code, inst);
+            if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_d_auto(code, dd, sp_off);
+            }
+            true
+        }
+        I::FrameAddress => {
+            // __builtin_frame_address(0): the current frame pointer (x29).
+            // The level argument (args[0]) is ignored; only level 0 is
+            // supported. Materialise through scratch when the dst spilled.
+            let rd = match dst {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => Reg(16),
+                _ => {
+                    bail_msg("FrameAddress: dst not int reg / spill");
+                    return false;
+                }
+            };
+            emit(code, enc_add_imm(rd, Reg(29), 0));
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
+        I::Clz
+        | I::Ctz
+        | I::Popcount
+        | I::Clzll
+        | I::Ctzll
+        | I::Popcountll
+        | I::Bswap16
+        | I::Bswap32
+        | I::Bswap64 => {
+            // The integer bit-count and byte-swap builtins are lowered to a
+            // portable shift / mask sequence in the walker; they never reach
+            // codegen as an `Inst::Intrinsic`.
+            bail_msg("intrinsic: bit builtin reached codegen");
+            false
+        }
     }
 }
 
@@ -2843,17 +3141,25 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // FP-returning libc fns hand the result back in d0 on
-    // AAPCS64; bridge it into x0 so the rest of the c5 model
-    // (which reads every return through the integer accumulator
-    // chain) sees the bit pattern. Sub-word integer returns
-    // receive the same signed / unsigned extension sequence on
-    // x0 that the pool path applies.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
-    if returns_fp || imp.returns_long_double {
+    if returns_fp {
+        // A float / double result is FP-classed (`Inst::CallExt::fp_return`)
+        // and already sits in d0 (double) / s0 (single) on AAPCS64. An f32
+        // value is FP-classed as the single in s0 -- the same form
+        // `FpCast(F64ToF32)` produces and `StoreLocal F32` / `FpCast(F32ToF64)`
+        // consume -- so route it into the FP place dst with no widening and
+        // no GPR bridge. (The prior GPR-bridged path widened to d0 because
+        // the integer-class convention carried the f64-widened bits.)
+        move_call_result(code, dst, frame, true);
+        return true;
+    }
+    // Long double is not FP-classed (is_floating_scalar excludes it), so it
+    // is bridged through x0 like an integer return; sub-word integer
+    // returns receive the same sign / zero extension the pool path applies.
+    if imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
         let ext = super::return_extension(return_type_tag, target);
@@ -2920,6 +3226,35 @@ fn target_for_ext(abi: super::Abi) -> Target {
 /// pass to resolve. Result lands in x0; the SSA emit moves it to
 /// the inst's `dst` if needed.
 #[allow(clippy::too_many_arguments)]
+/// Build the per-argument aggregate classification slice the
+/// struct-aware planner consumes: `arg_aggs[k] = Some(i)` resolves
+/// to `agg_descs[i]` classified for `abi`. Returns an empty vector
+/// when no argument is an aggregate (the scalar fast path).
+fn build_arg_aggs(
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    abi: super::Abi,
+) -> Vec<Option<super::ArgAgg>> {
+    if arg_aggs.iter().all(Option::is_none) {
+        return Vec::new();
+    }
+    arg_aggs
+        .iter()
+        .map(|o| {
+            o.map(|idx| {
+                let d = &agg_descs[idx as usize];
+                super::ArgAgg {
+                    class: super::abi_classify::classify_aggregate(
+                        d.size, d.align, &d.fields, abi, false,
+                    ),
+                    size: d.size,
+                }
+            })
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_call(
     code: &mut Vec<u8>,
     dst: Place,
@@ -2934,7 +3269,12 @@ fn emit_call(
     callee_is_variadic: bool,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
 ) -> bool {
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     if callee_is_variadic
         && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
     {
@@ -2963,13 +3303,20 @@ fn emit_call(
         //    callee spills both banks into its general / vector register
         //    save area; `va_start` records the offsets and `va_arg` walks
         //    the areas then the overflow stack.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
         if !marshal_args(code, &plan, args, alloc, scratch, frame) {
             return false;
         }
+        // A variadic callee may still return an aggregate by value; load
+        // the indirect-result pointer into x8 for a >16-byte return and
+        // recover the eightbytes from x0/x1 afterwards, as the
+        // non-variadic path does. Without this the struct result is
+        // dropped (the scalar bridge leaves the result slot unwritten).
+        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
         fixups.push(Fixup {
             native_offset: code.len(),
             target_ent_pc: target_pc,
@@ -2979,7 +3326,16 @@ fn emit_call(
         if plan.scratch_bytes > 0 {
             emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        move_call_result(code, dst, frame, fp_return);
+        finish_call_result(
+            code,
+            ret_agg,
+            ret_slot_off,
+            agg_descs,
+            dst,
+            frame,
+            scratch,
+            fp_return,
+        );
         return true;
     }
     // Every aarch64 variadic callee is marshaled by a host-ABI branch
@@ -2997,13 +3353,14 @@ fn emit_call(
     // register placement, since a floating-point constant rides an
     // integer register as its `Imm` bit pattern. Feeding the mask to
     // the planner routes the FP args to d0..d7 instead of x0..x7.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
     if !marshal_args(code, &plan, args, alloc, scratch, frame) {
         return false;
     }
+    setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
     // Branch placeholder + fixup. The pool path's apply_fixups
     // resolves `target_ent_pc` -> `pc_to_native` once
     // the map is final.
@@ -3016,12 +3373,64 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // Move the return value into the call's dst Place. The
-    // c5-internal convention returns every value (including an f64
-    // bit pattern) in x0; `move_call_result` reinterprets it into
-    // the FP register file when `fp_return`.
-    move_call_result(code, dst, frame, fp_return);
+    finish_call_result(
+        code,
+        ret_agg,
+        ret_slot_off,
+        agg_descs,
+        dst,
+        frame,
+        scratch,
+        fp_return,
+    );
     true
+}
+
+/// Before a call returning an aggregate larger than 16 bytes, point
+/// the AAPCS64 x8 indirect-result register at the caller's result
+/// temp. Runs after `marshal_args` so the argument registers are
+/// already set; the slot address is recomputed from fp.
+fn setup_indirect_result(
+    code: &mut Vec<u8>,
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
+    agg_descs: &[super::super::ir::AggDesc],
+    frame: Frame,
+) {
+    if let Some(ai) = ret_agg
+        && agg_descs[ai as usize].size > 16
+    {
+        emit_local_addr(code, Place::IntReg(8), ret_slot_off, frame);
+    }
+}
+
+/// Materialise a call's result. An aggregate of at most 16 bytes
+/// arrives in x0/x1 and is stored into the result temp; a larger one
+/// was written through x8 by the callee, so nothing remains. A scalar
+/// return uses the standard register bridge.
+#[allow(clippy::too_many_arguments)]
+fn finish_call_result(
+    code: &mut Vec<u8>,
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
+    agg_descs: &[super::super::ir::AggDesc],
+    dst: Place,
+    frame: Frame,
+    scratch: &ScratchPool,
+    fp_return: bool,
+) {
+    if let Some(ai) = ret_agg {
+        let size = agg_descs[ai as usize].size;
+        if size <= 16 {
+            emit_local_addr(code, Place::IntReg(scratch.primary.0), ret_slot_off, frame);
+            emit(code, enc_str_imm(Reg(0), scratch.primary, 0));
+            if size > 8 {
+                emit(code, enc_str_imm(Reg(1), scratch.primary, 8));
+            }
+        }
+        return;
+    }
+    move_call_result(code, dst, frame, fp_return);
 }
 
 /// Common return-value bridge shared by `emit_call` and
@@ -3095,7 +3504,12 @@ fn emit_call_indirect(
     abi: super::Abi,
     fp_return: bool,
     fp_arg_mask: u32,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
+    ret_agg: Option<u32>,
+    ret_slot_off: i64,
 ) -> bool {
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let target_place = alloc
         .places
         .get(target as usize)
@@ -3136,10 +3550,15 @@ fn emit_call_indirect(
     if target_r.0 != target_reg.0 {
         emit_mov_reg(code, target_reg, target_r);
     }
-    if callee_variadic
-        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
+    if (callee_variadic
+        && (abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic()))
+        || !aggs.is_empty()
+        || ret_agg.is_some()
     {
-        // Host variadic ABI through a function pointer: the named
+        // Host ABI through a function pointer, taken for a host
+        // variadic callee or any call passing an aggregate by value
+        // (aggregates are placed by `marshal_args`, which the
+        // c5-stack push path below does not handle): the named
         // arguments follow AAPCS64 (int / FP bank) and the variadic tail
         // rides the host stack at 8-byte stride (macOS,
         // `variadic_on_stack`), the integer register bank then the
@@ -3149,18 +3568,29 @@ fn emit_call_indirect(
         // target pointer is already captured in `target_reg` (a
         // non-arg-passing scratch), so `marshal_args` will not clobber
         // it. `blr` through the captured register.
-        let plan = super::plan_call_args(args.len(), fixed_args, fp_arg_mask, abi);
+        let plan =
+            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
         if plan.scratch_bytes > 0 {
             emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
         if !marshal_args(code, &plan, args, alloc, scratch, frame) {
             return false;
         }
+        setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, frame);
         emit(code, enc_blr(target_reg));
         if plan.scratch_bytes > 0 {
             emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
         }
-        move_call_result(code, dst, frame, fp_return);
+        finish_call_result(
+            code,
+            ret_agg,
+            ret_slot_off,
+            agg_descs,
+            dst,
+            frame,
+            scratch,
+            fp_return,
+        );
         return true;
     }
     // Indirect calls keep the c5-stack push shape regardless of
@@ -3207,7 +3637,7 @@ fn emit_call_indirect(
     // overflow (args
     // past 8) stays on the c5 stack at `[sp + i*16]`, which the
     // callee prologue's overflow restripe loop also reads from.
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    let plan = super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -3225,6 +3655,14 @@ fn emit_call_indirect(
                 let src_off = plan.scratch_bytes + (i as u32) * 16;
                 emit(code, enc_ldr_imm(scratch.primary, Reg(31), src_off));
                 emit(code, enc_str_imm(scratch.primary, Reg(31), off));
+            }
+            // This path plans with the scalar `plan_call_args`, so
+            // aggregate placements never occur here.
+            super::ArgPlacement::StructRegs { .. }
+            | super::ArgPlacement::StructByRefReg(_)
+            | super::ArgPlacement::StructByRefStack(_)
+            | super::ArgPlacement::StructStack { .. } => {
+                unreachable!("aggregate arg placement on the scalar indirect path")
             }
         }
     }
@@ -3751,8 +4189,92 @@ fn emit_store_local(
     scratch: &ScratchPool,
 ) -> bool {
     if matches!(kind, StoreKind::F32) {
-        bail_msg("StoreLocal: F32 routes through LocalAddr + Store");
-        return false;
+        // `float` local store. A single-precision value (C99 6.3.1.8)
+        // is already an f32 in the s-view (`str s`, no narrow); a wider
+        // f64 value narrows via `fcvt Sd, Dn` first. Mirrors the
+        // `Store` F32 path so a mem2reg-promoted slot round-trips
+        // identically to the prior address-taken `LocalAddr + Store`.
+        let value_place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        // `str s` takes the byte offset scaled by 4; the slot offset is
+        // 4-aligned. A displacement past the unsigned-offset range falls
+        // back to materialising the address in a scratch register.
+        let store_to_slot = |code: &mut Vec<u8>, sn: u8| -> bool {
+            let bytes = local_slot_off(off, frame);
+            if let Ok(disp) = i32::try_from(bytes)
+                && disp >= 0
+                && (disp as u32).is_multiple_of(4)
+                && (disp as u32) < 16380
+            {
+                emit(
+                    code,
+                    super::aarch64::enc_str_s_imm(sn, Reg(29), disp as u32),
+                );
+                true
+            } else if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+                false
+            } else {
+                emit(
+                    code,
+                    super::aarch64::enc_str_s_imm(sn, scratch.secondary, 0),
+                );
+                true
+            }
+        };
+        if alloc.is_f32(value) {
+            let sn = match materialize_fp_f32(code, value_place, SCRATCH_FP0, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("StoreLocal F32: value not fp reg / spill");
+                    return false;
+                }
+            };
+            if !store_to_slot(code, sn) {
+                return false;
+            }
+            if let Some(rd) = fp_reg(dst) {
+                if rd != sn {
+                    emit(code, super::aarch64::enc_fmov_s_s(rd, sn));
+                }
+            } else if let Place::Spill(slot) = dst {
+                emit_sp_str_d_auto(code, sn, spill_off(frame, slot));
+            }
+            return true;
+        }
+        // Wider f64 value: narrow into SCRATCH_FP1 (outside the d0..d15
+        // pool) so an allocator-held source d-reg whose f64 value is
+        // still live is not clobbered by the S-view write.
+        let dn = match value_place {
+            Place::FpReg(r) => r,
+            Place::IntReg(_) | Place::Spill(_) => {
+                let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                emit(code, enc_fmov_x_to_d(SCRATCH_FP0, rs));
+                SCRATCH_FP0
+            }
+            Place::None => {
+                bail_msg("StoreLocal F32: value None");
+                return false;
+            }
+        };
+        emit(code, super::aarch64::enc_fcvt_s_d(SCRATCH_FP1, dn));
+        if !store_to_slot(code, SCRATCH_FP1) {
+            return false;
+        }
+        if let Some(rd) = fp_reg(dst) {
+            if rd != dn {
+                emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+                emit(code, enc_fmov_x_to_d(rd, scratch.primary));
+            }
+        } else if let Place::Spill(slot) = dst {
+            emit_sp_str_d_auto(code, dn, spill_off(frame, slot));
+        }
+        return true;
     }
     if matches!(kind, StoreKind::F64) {
         // `double` local store: a single 8-byte FP store; no narrow.
@@ -4890,6 +5412,7 @@ fn emit_phi_predecessor_moves(
             fall_through,
             ..
         } => alloc::vec![target, fall_through],
+        Terminator::GotoIndirect { .. } => func.computed_goto_targets.clone(),
         Terminator::Return(_) | Terminator::TailExt(_) => alloc::vec![],
     };
     for succ in succs {
@@ -5249,13 +5772,36 @@ fn marshal_args(
         }
     }
 
+    // Integer-register placements plus aggregate base addresses are
+    // one parallel register move. A scalar `IntReg` arg moves
+    // src->target; a `StructRegs` arg positions its base address into
+    // its own first eightbyte register `regs[0]`, from which the
+    // eightbytes load below (the base register is overwritten by its
+    // own eightbyte last). Routing the base through that per-aggregate
+    // register -- never a shared scratch -- keeps one aggregate's load
+    // from clobbering another aggregate's still-pending base, which a
+    // naive sequential scheme does when two aggregates' register
+    // ranges overlap. `schedule_int_reg_moves` breaks cycles via
+    // scratch.primary.
     let mut int_moves: Vec<(u8, u8)> = Vec::new();
     for (i, &placement) in plan.placements.iter().enumerate() {
-        if let super::ArgPlacement::IntReg(r) = placement
-            && let Place::IntReg(s) = arg_place(i)
-            && s != r
-        {
-            int_moves.push((s, r));
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != r
+                {
+                    int_moves.push((s, r));
+                }
+            }
+            super::ArgPlacement::StructRegs { regs, n } if n > 0 => {
+                let dst = regs[0].reg;
+                if let Place::IntReg(s) = arg_place(i)
+                    && s != dst
+                {
+                    int_moves.push((s, dst));
+                }
+            }
+            _ => {}
         }
     }
     schedule_int_reg_moves(code, &mut int_moves, scratch.primary);
@@ -5287,6 +5833,99 @@ fn marshal_args(
         }
     }
 
+    // Aggregate bases that were not already register-resident (spill /
+    // computed) materialise into the aggregate's first eightbyte
+    // register, the same destination the move loop used for the
+    // register-resident case.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        if let super::ArgPlacement::StructRegs { regs, n } = placement
+            && n > 0
+            && !matches!(arg_place(i), Place::IntReg(_))
+        {
+            let dst = regs[0].reg;
+            let src = match materialize_int_shifted(
+                code,
+                arg_place(i),
+                Reg(dst),
+                frame,
+                plan.scratch_bytes,
+            ) {
+                Some(rr) => rr,
+                None => return false,
+            };
+            if src.0 != dst {
+                emit_mov_reg(code, Reg(dst), src);
+            }
+        }
+    }
+
+    // Load each aggregate's eightbytes from the base now in `regs[0]`.
+    // The high eightbytes load first; `regs[0]` (the base) is read
+    // last, overwritten by its own eightbyte. Integer-only here
+    // (homogeneous floating-point aggregates are excluded upstream),
+    // so every eightbyte register is general-purpose.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        match placement {
+            super::ArgPlacement::StructRegs { regs, n } => {
+                debug_assert!(
+                    !regs.iter().take(n as usize).any(|c| c.is_fp),
+                    "aarch64 marshal: floating-point aggregate eightbyte not supported"
+                );
+                let base = regs[0].reg;
+                for k in (1..n as usize).rev() {
+                    emit(
+                        code,
+                        enc_ldr_imm(Reg(regs[k].reg), Reg(base), (k as u32) * 8),
+                    );
+                }
+                emit(code, enc_ldr_imm(Reg(base), Reg(base), 0));
+            }
+            super::ArgPlacement::StructStack { off, size } => {
+                let ap = arg_place(i);
+                let src = match materialize_int_shifted(
+                    code,
+                    ap,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                if src.0 != scratch.primary.0 {
+                    emit_mov_reg(code, scratch.primary, src);
+                }
+                // Copy `size` bytes from [scratch.primary] to
+                // [sp + off] in 8-byte words plus a sub-word tail.
+                let mut copied = 0u32;
+                while copied + 8 <= size {
+                    emit(
+                        code,
+                        enc_ldr_imm(scratch.secondary, scratch.primary, copied),
+                    );
+                    emit(code, enc_str_imm(scratch.secondary, Reg(31), off + copied));
+                    copied += 8;
+                }
+                while copied < size {
+                    emit(
+                        code,
+                        enc_ldrb_imm(scratch.secondary, scratch.primary, copied),
+                    );
+                    emit(code, enc_strb_imm(scratch.secondary, Reg(31), off + copied));
+                    copied += 1;
+                }
+            }
+            super::ArgPlacement::StructByRefReg(_) | super::ArgPlacement::StructByRefStack(_) => {
+                // Not produced for AAPCS64 in this phase: >16-byte
+                // aggregates keep the existing address-passing
+                // convention (untagged scalar pointer argument).
+                bail_msg("aarch64 marshal: by-reference aggregate arg not yet emitted");
+                return false;
+            }
+            _ => {}
+        }
+    }
+
     true
 }
 
@@ -5300,15 +5939,54 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
 ) {
-    // Move the return value into x0. c5's calling convention
-    // ferries every return value (including f64 bit patterns)
-    // through the int return register, matching the pool path's
-    // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
-    // `fmov x, d`; int values flow through the standard
-    // materialise + mov. NO_VALUE marks an implicit return with
-    // no live accumulator -- harmless because c5 calls never
-    // read the result of a void-returning function.
-    if value != super::super::ir::NO_VALUE {
+    // Host-ABI aggregate return (AAPCS64 6.9). `value` is the
+    // struct's address. An aggregate of at most 16 bytes returns its
+    // eightbytes in x0/x1; a larger one is copied through the caller-
+    // supplied x8 pointer (saved to `indirect_result_slot` by the
+    // prologue) and that pointer is returned in x0.
+    if let Some(ai) = func.ret_agg {
+        let size = func.agg_descs[ai as usize].size;
+        let place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let saddr = materialize_int(code, place, scratch.primary, frame).unwrap_or(scratch.primary);
+        if saddr.0 != scratch.primary.0 {
+            emit_mov_reg(code, scratch.primary, saddr);
+        }
+        let base = scratch.primary;
+        if size <= 16 {
+            if size > 8 {
+                emit(code, enc_ldr_imm(Reg(1), base, 8));
+            }
+            emit(code, enc_ldr_imm(Reg(0), base, 0));
+        } else {
+            let dst = scratch.secondary;
+            emit_local_addr(code, Place::IntReg(dst.0), func.indirect_result_slot, frame);
+            emit(code, enc_ldr_imm(dst, dst, 0));
+            let mut copied = 0u32;
+            while copied + 8 <= size {
+                emit(code, enc_ldr_imm(Reg(0), base, copied));
+                emit(code, enc_str_imm(Reg(0), dst, copied));
+                copied += 8;
+            }
+            while copied < size {
+                emit(code, enc_ldrb_imm(Reg(0), base, copied));
+                emit(code, enc_strb_imm(Reg(0), dst, copied));
+                copied += 1;
+            }
+            emit_mov_reg(code, Reg(0), dst);
+        }
+    } else if value != super::super::ir::NO_VALUE {
+        // Move the return value into x0. c5's calling convention
+        // ferries every return value (including f64 bit patterns)
+        // through the int return register, matching the pool path's
+        // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
+        // `fmov x, d`; int values flow through the standard
+        // materialise + mov. NO_VALUE marks an implicit return with
+        // no live accumulator -- harmless because c5 calls never
+        // read the result of a void-returning function.
         let place = alloc
             .places
             .get(value as usize)
@@ -5319,16 +5997,30 @@ fn emit_return(
         // low 32 bits of d0, which a d-register copy / 8-byte FP load
         // preserves. The value's producing instruction determines the
         // register file even when the allocator spilled it.
-        let returns_fp = (value as usize) < func.insts.len()
-            && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]);
+        let returns_fp = func.ret_is_fp
+            || ((value as usize) < func.insts.len()
+                && super::ssa_alloc::produces_fp_result(&func.insts[value as usize]));
         if let Place::FpReg(r) = place {
             if r != 0 {
                 emit(code, super::aarch64::enc_fmov_d_d(0, r));
             }
         } else if returns_fp {
-            if let Place::Spill(slot) = place {
-                let sp_off = spill_off(frame, slot);
-                emit_sp_ldr_d_auto(code, 0, sp_off);
+            // The function returns a floating-point scalar in d0 but the
+            // value is GPR / spill resident -- a bare FP constant
+            // materializes as an integer immediate, and any value whose
+            // producing instruction is integer-classed lands in a GPR.
+            // The 8 bytes hold the f64 bit pattern (the low 32 are an
+            // f32's s0); reinterpret them into d0.
+            match place {
+                Place::Spill(slot) => {
+                    let sp_off = spill_off(frame, slot);
+                    emit_sp_ldr_d_auto(code, 0, sp_off);
+                }
+                _ => {
+                    let src = materialize_int(code, place, scratch.primary, frame)
+                        .unwrap_or(scratch.primary);
+                    emit(code, enc_fmov_x_to_d(0, src));
+                }
             }
         } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
             && src.0 != 0

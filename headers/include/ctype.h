@@ -73,3 +73,7 @@ int islower(int c);
 int isupper(int c);
 int tolower(int c);
 int toupper(int c);
+// C99 7.4.1.3: blank is space or horizontal tab in the C locale.
+static inline int isblank(int c) {
+    return c == 0x20 || c == 0x09;
+}

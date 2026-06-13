@@ -4,11 +4,13 @@ des_ct_fconf_wide_imm_scratch.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<rotl>:
                	movslq	%esi, %rsi
                	movl	%edi, %eax
                	movq	%rax, %rcx
@@ -26,6 +28,8 @@ Disassembly of section .text:
                	popq	%rcx
                	orq	%rcx, %rax
                	retq
+
+<Fconf>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x5f0, %rsp            # imm = 0x5F0
@@ -695,6 +699,8 @@ Disassembly of section .text:
                	addq	$0x5f0, %rsp            # imm = 0x5F0
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -704,7 +710,6 @@ Disassembly of section .text:
                	xorq	%rbx, %rbx
                	movl	$0xa5a5a5a5, %r12d      # imm = 0xA5A5A5A5
                	movq	%rbx, %r14
-               	jmp	<addr>
                	movslq	%ebx, %rax
                	cmpq	$0x10, %rax
                	jge	<addr>
@@ -743,5 +748,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

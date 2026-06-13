@@ -4,12 +4,12 @@ struct_array_designator.aarch64:	file format elf64-littleaarch64
 Disassembly of section .text:
 
 <.text>:
-               	ldr	x0, [sp]
-               	add	x1, sp, #0x8
-               	bl	<addr>
-               	adrp	x16, <page>
-               	ldr	x16, [x16, #0xc0]
-               	blr	x16
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, #0x220              // =544
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
@@ -22,7 +22,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0x4]
                	cmp	x1, #0xb
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
@@ -35,7 +34,6 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0xc]
                	cmp	x1, #0x0
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20
@@ -48,7 +46,6 @@ Disassembly of section .text:
                	ldrsw	x0, [x0, #0x14]
                	cmp	x0, #0x1f
                	cset	x2, ne
-               	b	<addr>
                	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x20

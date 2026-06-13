@@ -149,6 +149,15 @@ pub struct MergedNative {
     /// `DW_CFA_advance_loc <prologue_size>` ahead of the
     /// post-prologue CFA rule.
     pub prologue_ends: BTreeMap<String, u64>,
+    /// Defined `STT_FUNC STB_LOCAL` (static) functions as
+    /// `(name, merged_text_offset)`, rebased by the per-unit text base.
+    /// Kept as a flat list separate from `defined` -- which is
+    /// name-keyed and drives global reloc resolution -- so a static
+    /// `foo` cannot shadow a global `foo` in another unit and two
+    /// units' same-named statics both survive. The synth path adds them
+    /// to `Build::func_names` so the static symbol table and DWARF name
+    /// the program's own static functions.
+    pub local_funcs: Vec<(String, u64)>,
     /// Per-thread TLS image for the merged executable. The first
     /// [`Self::tls_init_size`] bytes are the initialised `.tdata`
     /// template; the remainder is `.tbss` zero-fill. The per-format
@@ -365,6 +374,26 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             prologue_ends
                 .entry(fn_name.to_string())
                 .or_insert(merged_offset);
+        }
+    }
+
+    // Pass 2.2 -- defined static functions. `STT_FUNC` `STB_LOCAL`
+    // Text symbols, rebased by the unit text base. Kept as a flat list
+    // (not a name-keyed map) so two units' same-named statics both
+    // survive. The `STT_FUNC` filter excludes the synthetic
+    // prologue-end `STT_NOTYPE` anchors collected above.
+    let mut local_funcs: Vec<(String, u64)> = Vec::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for sym in &obj.symbols {
+            // STB_GLOBAL = 1, STT_FUNC = 2.
+            if sym.binding == 1
+                || sym.kind != 2
+                || !matches!(sym.section, NativeSymSection::Text)
+                || sym.name.is_empty()
+            {
+                continue;
+            }
+            local_funcs.push((sym.name.clone(), text_bases[i] as u64 + sym.value));
         }
     }
 
@@ -919,6 +948,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         debug_info_text_relocs,
         debug_line_text_relocs,
         prologue_ends,
+        local_funcs,
         tls_data,
         tls_init_size,
     })

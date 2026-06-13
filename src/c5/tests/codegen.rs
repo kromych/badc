@@ -18,7 +18,7 @@ fn entry_pc_points_at_main() {
 /// so they're invisible at runtime but easy to find on disk.
 #[test]
 fn build_info_marker_appears_in_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
     // `BUILD_INFO` starts with `BADC\n\tv<version>` (see
     // `src/lib.rs`). Probe the first line of the marker as a
@@ -32,8 +32,12 @@ fn build_info_marker_appears_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
         let found = bytes.windows(needle.len()).any(|w| w == needle);
         assert!(
             found,
@@ -52,7 +56,7 @@ fn build_info_marker_appears_in_every_target() {
 /// scan per target.
 #[test]
 fn with_debug_info_false_strips_dwarf_for_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
     let needle = b"debug_info";
     for target in [
@@ -62,14 +66,17 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let on =
-            emit_native_with_options(&program, target, NativeOptions::new().with_debug_info(true))
-                .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
+        let on = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::new().with_debug_info(true),
+        )
+        .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
         assert!(
             on.windows(needle.len()).any(|w| w == needle),
             "{target:?}: expected `debug_info` section name in the DWARF-on (`-g`) image"
         );
-        let off = emit_native_with_options(
+        let off = crate::c5::codegen::emit_native_single_tu_for_test(
             &program,
             target,
             NativeOptions::new().with_debug_info(false),
@@ -105,7 +112,7 @@ fn with_debug_info_false_strips_dwarf_for_every_target() {
 /// Mach-O `__LINKEDIT` symbol entries).
 #[test]
 fn plt_trampoline_local_names_appear_in_every_target() {
-    use crate::{NativeOptions, Target, emit_native_with_options};
+    use crate::{NativeOptions, Target};
     // Call `printf` so the resolver pulls it in as an import on
     // every target (the test prelude `#include <stdio.h>` is
     // already wired up via `compile_str`). With the import in
@@ -122,8 +129,12 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         Target::WindowsX64,
         Target::WindowsAarch64,
     ] {
-        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+            &program,
+            target,
+            NativeOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
         let occurrences = bytes.windows(needle.len()).filter(|w| *w == needle).count();
         assert!(
             occurrences >= 2,
@@ -131,6 +142,112 @@ fn plt_trampoline_local_names_appear_in_every_target() {
              import + local PLT-trampoline symbol), found {occurrences}"
         );
     }
+}
+
+/// A profiler attributes a sample by `[st_value, st_value + st_size)`,
+/// so every defined function must carry a non-zero `st_size` in the ELF
+/// `.symtab` -- perf / `nm` / `gdb` otherwise cannot name the address.
+/// The static `priv` exercises the merged-path local-symbol carry
+/// (`link_native_objects` -> `local_funcs` -> synth `func_names`), which
+/// a previous globals-only attempt missed; `pub` / `main` cover the
+/// global path. Link the program and confirm all three appear as sized
+/// `STT_FUNC` symbols.
+#[test]
+fn defined_functions_get_sized_symtab_entries() {
+    use crate::{NativeOptions, Target};
+    // Compile without the header prelude: the program needs no libc,
+    // and pulling the prelude would drag a tentative `environ` into the
+    // link alongside the runtime's definition.
+    let program = super::compile_str_bare(
+        "static int priv(int x){return x*x;} \
+         int pub(int x){return priv(x)+1;} \
+         int main(){return pub(7);}",
+    );
+    let bytes =
+        super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
+            .expect("link LinuxX64");
+    let funcs = elf_func_symbols(&bytes);
+    for name in ["priv", "pub", "main"] {
+        let size = funcs.iter().find(|(n, _)| n == name).map(|(_, s)| *s);
+        assert!(
+            matches!(size, Some(s) if s > 0),
+            "function `{name}` must have a non-zero .symtab st_size; got {size:?} \
+             (all FUNC symbols: {funcs:?})"
+        );
+    }
+}
+
+/// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
+/// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
+/// size regression above.
+fn elf_func_symbols(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u64)> {
+    let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap());
+    let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    let shoff = u64a(0x28) as usize;
+    let shentsize = u16a(0x3a) as usize;
+    let shnum = u16a(0x3c) as usize;
+    // SHT_SYMTAB == 2; its sh_link names the matching .strtab section.
+    let mut symtab_sh = None;
+    for i in 0..shnum {
+        let sh = shoff + i * shentsize;
+        if u32a(sh + 4) == 2 {
+            symtab_sh = Some(sh);
+            break;
+        }
+    }
+    let Some(sh) = symtab_sh else {
+        return alloc::vec::Vec::new();
+    };
+    let sym_off = u64a(sh + 0x18) as usize;
+    let sym_len = u64a(sh + 0x20) as usize;
+    let strsh = shoff + (u32a(sh + 0x28) as usize) * shentsize;
+    let str_off = u64a(strsh + 0x18) as usize;
+    let mut out = alloc::vec::Vec::new();
+    let mut p = sym_off;
+    while p + 24 <= sym_off + sym_len {
+        let st_name = u32a(p) as usize;
+        let st_info = b[p + 4];
+        let st_size = u64a(p + 16);
+        if st_info & 0xf == 2 {
+            let s = str_off + st_name;
+            let e = b[s..].iter().position(|&c| c == 0).map_or(s, |n| s + n);
+            out.push((
+                alloc::string::String::from_utf8_lossy(&b[s..e]).into_owned(),
+                st_size,
+            ));
+        }
+        p += 24;
+    }
+    out
+}
+
+/// A block whose unconditional `Jmp` targets the next block in layout
+/// must fall through, not emit a jump to the immediately-following
+/// instruction (`e9 00 00 00 00` -- `jmp rel32 = 0` -- on x86-64). Such
+/// dead jumps inflate the dynamic branch count and code size. Compile a
+/// branchy function and confirm the byte sequence is absent.
+#[test]
+fn jmp_to_next_block_falls_through() {
+    use crate::{NativeOptions, Target};
+    let program = super::compile_str_bare(
+        "int f(int x){ int r; if(x>0){r=1;}else{r=2;} return r+x; } \
+         int main(){ return f(3); }",
+    );
+    let bytes = crate::c5::codegen::emit_native_single_tu_for_test(
+        &program,
+        Target::LinuxX64,
+        NativeOptions::new().with_optimize(),
+    )
+    .expect("emit LinuxX64");
+    let dead = bytes
+        .windows(5)
+        .filter(|w| *w == [0xe9, 0x00, 0x00, 0x00, 0x00])
+        .count();
+    assert_eq!(
+        dead, 0,
+        "found {dead} `jmp +0` (dead fall-through jump) byte sequences"
+    );
 }
 
 /// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
@@ -414,7 +531,7 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
 /// caught without a Windows box.
 #[test]
 fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
-    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    use crate::{Compiler, NativeOptions, Target};
     let src = r#"
         #include <stdarg.h>
         int vsum(int count, ...) {
@@ -438,8 +555,12 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     // (BADC_MAX_GPR / BADC_MAX_FPR) do not perturb the encoding.
     let bytes =
         crate::c5::codegen::ssa_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
-            emit_native_with_options(&program, Target::WindowsAarch64, NativeOptions::default())
-                .expect("emit_native windows-arm64")
+            crate::c5::codegen::emit_native_single_tu_for_test(
+                &program,
+                Target::WindowsAarch64,
+                NativeOptions::default(),
+            )
+            .expect("emit_native windows-arm64")
         });
 
     // Callee gr-save spill of x7: `str x7, [sp, #0x38]` (the eighth and
@@ -467,5 +588,37 @@ fn c5_internal_variadic_lowers_to_win_arm64_host_abi() {
     assert!(
         !contains_bytes(&bytes, &add_stride16),
         "win-arm64 must not emit the 16-byte c5 cdecl va_list stride for this function"
+    );
+}
+
+/// A program defining its own `__c5_entry` links freestanding: the
+/// embedded runtime is not linked (no `__c5_exit` / `environ`), the
+/// image entry is `__c5_entry`, and the default `main` need not exist.
+#[test]
+fn user_defined_c5_entry_links_freestanding() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    let src = "\
+        #pragma dylib(libc, \"libc.so.6\")\n\
+        #pragma binding(libc::exit, \"exit\")\n\
+        extern void exit(int);\n\
+        void __c5_entry(void *sp, long off) { (void)sp; (void)off; exit(0); }\n";
+    let program = Compiler::with_options(
+        src.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    // Links without a `main` and without the embedded runtime.
+    let bytes = super::link_freestanding(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("freestanding link must not require `main`");
+    let has = |needle: &str| bytes.windows(needle.len()).any(|w| w == needle.as_bytes());
+    assert!(
+        !has("__c5_exit"),
+        "freestanding image must not pull in the runtime __c5_exit"
+    );
+    assert!(
+        !has("environ"),
+        "freestanding image must not pull in the runtime environ"
     );
 }

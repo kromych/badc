@@ -4,11 +4,13 @@ indexed_load_store.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<work>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -18,7 +20,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rcx
                	xorq	%r8, %r8
                	movq	%r8, %rax
-               	jmp	<addr>
                	movslq	%eax, %r9
                	cmpq	%rdx, %r9
                	jge	<addr>
@@ -63,11 +64,12 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x8, %rax
                	jge	<addr>
@@ -80,7 +82,6 @@ Disassembly of section .text:
                	movslq	%ecx, %rdx
                	movq	%rdx, %rsi
                	incq	%rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdx,4)
                	leaq	-0x40(%rbp), %rax
                	movslq	%ecx, %rdx
@@ -88,7 +89,6 @@ Disassembly of section .text:
                	incq	%rsi
                	movslq	%esi, %rsi
                	imulq	$0xa, %rsi, %rsi
-               	movslq	%esi, %rsi
                	movl	%esi, (%rax,%rdx,4)
                	jmp	<addr>
                	leaq	-0x20(%rbp), %rdi
@@ -101,9 +101,7 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	addq	$0x70, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)

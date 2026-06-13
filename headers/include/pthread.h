@@ -38,8 +38,13 @@
 #pragma binding(libc::pthread_cond_init,        "_pthread_cond_init")
 #pragma binding(libc::pthread_cond_destroy,     "_pthread_cond_destroy")
 #pragma binding(libc::pthread_cond_wait,        "_pthread_cond_wait")
+#pragma binding(libc::pthread_cond_timedwait,   "_pthread_cond_timedwait")
 #pragma binding(libc::pthread_cond_signal,      "_pthread_cond_signal")
 #pragma binding(libc::pthread_cond_broadcast,   "_pthread_cond_broadcast")
+#pragma binding(libc::pthread_attr_init,        "_pthread_attr_init")
+#pragma binding(libc::pthread_attr_destroy,     "_pthread_attr_destroy")
+#pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
+#pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
@@ -50,6 +55,9 @@
 #define PTHREAD_MUTEX_SIZE 64
 // pthread_t is an opaque pointer-sized handle.
 #define PTHREAD_T_SIZE     8
+// macOS detach-state value passed to pthread_attr_setdetachstate.
+#define PTHREAD_CREATE_DETACHED 2
+#define PTHREAD_CREATE_JOINABLE 1
 #endif
 
 #ifdef __linux__
@@ -69,8 +77,13 @@
 #pragma binding(libc::pthread_cond_init,        "pthread_cond_init")
 #pragma binding(libc::pthread_cond_destroy,     "pthread_cond_destroy")
 #pragma binding(libc::pthread_cond_wait,        "pthread_cond_wait")
+#pragma binding(libc::pthread_cond_timedwait,   "pthread_cond_timedwait")
 #pragma binding(libc::pthread_cond_signal,      "pthread_cond_signal")
 #pragma binding(libc::pthread_cond_broadcast,   "pthread_cond_broadcast")
+#pragma binding(libc::pthread_attr_init,        "pthread_attr_init")
+#pragma binding(libc::pthread_attr_destroy,     "pthread_attr_destroy")
+#pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
+#pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_key_create,       "pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
@@ -81,6 +94,9 @@
 // 64 covers both with room.
 #define PTHREAD_MUTEX_SIZE 64
 #define PTHREAD_T_SIZE     8
+// glibc detach-state value passed to pthread_attr_setdetachstate.
+#define PTHREAD_CREATE_DETACHED 1
+#define PTHREAD_CREATE_JOINABLE 0
 #endif
 
 #ifdef _WIN32
@@ -89,6 +105,8 @@
 // come from <windows.h>.
 #define PTHREAD_MUTEX_SIZE 64
 #define PTHREAD_T_SIZE     8
+#define PTHREAD_CREATE_DETACHED 1
+#define PTHREAD_CREATE_JOINABLE 0
 #endif
 
 // Static-storage initialisers for the opaque-buffer mutex /
@@ -152,8 +170,13 @@ int pthread_mutexattr_destroy(char *attr);
 int pthread_cond_init(char *cond, char *attr);
 int pthread_cond_destroy(char *cond);
 int pthread_cond_wait(char *cond, char *mutex);
+int pthread_cond_timedwait(char *cond, char *mutex, char *abstime);
 int pthread_cond_signal(char *cond);
 int pthread_cond_broadcast(char *cond);
+int pthread_attr_init(char *attr);
+int pthread_attr_destroy(char *attr);
+int pthread_attr_setdetachstate(char *attr, int detachstate);
+int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_key_create(pthread_key_t *key, int *destructor);
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, char *val);

@@ -42,6 +42,10 @@ impl Compiler {
                 continue;
             }
             let mut bt = Ty::Int as i64;
+            // Set when the base type is an `enum`; recorded on a
+            // typedef so an enum bitfield declared through it reads
+            // unsigned.
+            let mut base_is_enum = false;
             // Reset the bare-`void` side channel for this
             // declaration. Set further down if the base-type loop
             // matches `Token::Void`; consumed by the function-decl
@@ -75,6 +79,9 @@ impl Compiler {
             let mut static_seen = false;
             let mut extern_seen = false;
             let mut m = decl_base::IntModifiers::default();
+            // `_Noreturn` scopes to this declaration; clear the carrier
+            // so it cannot leak onto the next one.
+            self.pending_noreturn = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -94,6 +101,9 @@ impl Compiler {
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
+                    }
+                    if self.lex.tk == Token::Noreturn {
+                        self.pending_noreturn = true;
                     }
                     self.next()?;
                 } else {
@@ -135,6 +145,7 @@ impl Compiler {
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
+                base_is_enum = true;
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 // Aggregate (struct or union) declaration. Three
                 // shapes:
@@ -155,15 +166,20 @@ impl Compiler {
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.base_is_function_type =
+                        self.symbols[self.lex.curr_id_idx].is_function_type;
                     // A function-pointer typedef records the pointed-to
                     // function's prototype (`params` + `is_variadic`).
                     // Carry it to the bound declarator so an indirect
-                    // call through the variable can split fixed vs
+                    // call through the variable narrows each argument to
+                    // its declared parameter type and splits fixed vs
                     // variadic arguments per the host variadic ABI.
                     self.pending.typedef_fn_proto = Some((
                         self.symbols[self.lex.curr_id_idx].params.len(),
                         self.symbols[self.lex.curr_id_idx].is_variadic,
                     ));
+                    self.pending.fn_ptr_param_types =
+                        Some(self.symbols[self.lex.curr_id_idx].params.clone());
                 }
                 // C99 6.7.7 paragraph 3: a typedef whose alias is
                 // an array contributes its dimension to the
@@ -257,7 +273,11 @@ impl Compiler {
                 // places every argument as fixed regardless, and
                 // synthesising placeholder parameter types would feed the
                 // call-site argument type-check a spurious mismatch.
-                if let Some((proto_fixed, true)) = self.pending.typedef_fn_proto.take() {
+                let fnptr_proto = self.pending.typedef_fn_proto.take();
+                if let Some(types) = self.pending.fn_ptr_param_types.take() {
+                    self.symbols[id_idx].params = types;
+                    self.symbols[id_idx].is_variadic = matches!(fnptr_proto, Some((_, true)));
+                } else if let Some((proto_fixed, true)) = fnptr_proto {
                     self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
                     self.symbols[id_idx].is_variadic = true;
                 }
@@ -310,15 +330,19 @@ impl Compiler {
                     // parsing). For a typedef there's no body to put
                     // those locals into scope for, so we restore each
                     // param's shadowed binding right after.
-                    let (typedef_ty, typedef_fpi, typedef_params) =
+                    let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
                         if self.lex.tk == '(' && preconsumed_params.is_none() {
                             self.next()?; // consume `(`
                             let pp = self.parse_function_params()?;
                             for &p in &pp.indices {
                                 Self::restore_shadowed_symbol(&mut self.symbols[p]);
                             }
+                            // `typedef RET NAME(args);` -- a function TYPE.
+                            // The type is pre-decayed to a function pointer
+                            // (`RET` + one pointer level); the flag lets a
+                            // later `NAME *p` declarator absorb the first `*`.
                             let fty = ty + Ty::Ptr as i64;
-                            (fty, 1i64, Some(pp))
+                            (fty, 1i64, Some(pp), true)
                         } else if let Some(pp) = preconsumed_params {
                             // `typedef RET (*NAME)(args);`: the `(*NAME)`
                             // nested declarator already consumed the
@@ -330,9 +354,9 @@ impl Compiler {
                             for &p in &pp.indices {
                                 Self::restore_shadowed_symbol(&mut self.symbols[p]);
                             }
-                            (ty, fn_ptr_indirection, Some(pp))
+                            (ty, fn_ptr_indirection, Some(pp), false)
                         } else {
-                            (ty, fn_ptr_indirection, None)
+                            (ty, fn_ptr_indirection, None, false)
                         };
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
@@ -352,6 +376,8 @@ impl Compiler {
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
+                    self.symbols[id_idx].is_enum_typedef = base_is_enum;
+                    self.symbols[id_idx].is_function_type = typedef_is_fn_type;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }
@@ -362,13 +388,16 @@ impl Compiler {
                         self.pending.typedef_fn_proto.take()
                     {
                         // `typedef RET (*NAME)(args)`: the declarator
-                        // captured the pointee signature's prototype
-                        // (c5 otherwise skips it). Record the
-                        // named-parameter count and variadic-ness so a
-                        // fn-pointer variable declared through the
-                        // typedef can split fixed vs variadic arguments
-                        // per the host variadic ABI.
-                        self.symbols[id_idx].params = alloc::vec![0i64; proto_fixed];
+                        // captured the pointee signature's prototype.
+                        // Record the parameter types (so a fn-pointer
+                        // variable declared through the typedef narrows
+                        // each argument to its declared type) and the
+                        // variadic-ness.
+                        self.symbols[id_idx].params = self
+                            .pending
+                            .fn_ptr_param_types
+                            .take()
+                            .unwrap_or_else(|| alloc::vec![0i64; proto_fixed]);
                         self.symbols[id_idx].is_variadic = proto_variadic;
                     }
                     if self.lex.tk == ',' {
@@ -507,7 +536,7 @@ impl Compiler {
                     // `parse_decl_base_type` per param and clears
                     // the side channel as part of its reset.
                     let ret_was_long_double = self.pending.base_was_long_double;
-                    let params = if let Some(pp) = preconsumed_params {
+                    let mut params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
                         self.next()?;
@@ -519,6 +548,18 @@ impl Compiler {
                     // both prototypes and bodied definitions.
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
+                    // C11 6.7.4: `_Noreturn` on any declaration of the
+                    // function marks the symbol so the reachability
+                    // analysis treats a call to it as not reaching its
+                    // continuation. The standard non-returning library
+                    // functions carry `_Noreturn` in the bundled
+                    // headers, so a name reused without that declaration
+                    // is not flagged. The flag is sticky -- a later
+                    // plain redeclaration of an already-`_Noreturn`
+                    // function keeps it.
+                    if self.pending_noreturn {
+                        self.symbols[id_idx].is_noreturn = true;
+                    }
                     // Carry the bare-`void` return marker onto the
                     // symbol so the body-emit path zeroes the
                     // accumulator before the trailing return, and so a
@@ -647,6 +688,67 @@ impl Compiler {
                             self.symbols[id_idx].name
                         )));
                     }
+                    // C99 6.9.1: an old-style (K&R) definition lists the
+                    // parameter names in the declarator and gives their
+                    // types in declarations between the `)` and the
+                    // body; unlisted parameters keep the default int.
+                    // Each declaration names one or more of the
+                    // parameters already bound by parse_function_params,
+                    // so update those symbols' types in place.
+                    while self.lex.tk != '{' && self.lex.tk != 0 {
+                        // A parameter declaration may lead with storage-
+                        // class specifiers (`register short *p;`) and may
+                        // omit the type, in which case it is int (C99
+                        // 6.9.1 / 6.7.2p2). Stop when the next token is
+                        // neither a specifier nor a type nor a parameter
+                        // name -- that is the function body.
+                        let mut saw_specifier = false;
+                        while self.lex.tk == Token::FuncSpec
+                            || self.lex.tk == Token::Static
+                            || self.lex.tk == Token::Extern
+                            || self.lex.tk == Token::TypeQual
+                        {
+                            self.next()?;
+                            saw_specifier = true;
+                        }
+                        let base = if self.lex_is_type_start() {
+                            self.parse_decl_base_type()?
+                        } else if saw_specifier || self.lex.tk == Token::Id {
+                            Ty::Int as i64
+                        } else {
+                            break;
+                        };
+                        while self.lex.tk != ';' && self.lex.tk != 0 {
+                            let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
+                            if decl_idx != usize::MAX {
+                                // An array parameter is adjusted to a
+                                // pointer to the element type (6.7.5.3p7).
+                                if decl_arr != 0 {
+                                    decl_ty += Ty::Ptr as i64;
+                                }
+                                if let Some(pos) =
+                                    params.indices.iter().position(|&pi| pi == decl_idx)
+                                {
+                                    self.symbols[decl_idx].type_ = decl_ty;
+                                    params.types[pos] = decl_ty;
+                                } else {
+                                    return Err(self.compile_err(
+                                        "old-style parameter declaration names a non-parameter",
+                                    ));
+                                }
+                            }
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                            }
+                        }
+                        if self.lex.tk == ';' {
+                            self.next()?;
+                        }
+                    }
+                    // Re-record the signature now that old-style
+                    // declarations may have refined the parameter types.
+                    self.symbols[id_idx].params = params.types.clone();
+
                     if self.lex.tk != '{' {
                         return Err(self.compile_err("bad function definition"));
                     }
@@ -660,8 +762,6 @@ impl Compiler {
                     self.current_func_return_ty = return_ty;
                     self.current_func_returns_void = self.symbols[id_idx].returns_void;
                     self.current_function_name = self.symbols[id_idx].name.clone();
-                    let returns_struct =
-                        is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
 
                     // c5 callers push args right-to-left (cdecl-style), so
                     // the i'th declared param ends up at `[bp + 16*(i+1)]`,
@@ -670,13 +770,21 @@ impl Compiler {
                     // Variadic args follow after the last declared, at
                     // val = N+2, N+3, ... -- which is what stdarg.h walks.
                     //
-                    // Functions returning a struct value get a hidden
-                    // out-pointer at val=2 (the caller pre-allocates a
-                    // result temp and pushes its address as the first
-                    // arg); declared params start at val=3 in that
-                    // case. Variadic + struct-return aren't useful
-                    // together so we don't bother optimising for it.
-                    let param_base = if returns_struct { 3 } else { 2 };
+                    // A function returning a struct value through the c5
+                    // out-pointer convention gets a hidden out-pointer at
+                    // val=2 (the caller pre-allocates a result temp and
+                    // pushes its address as the first arg); declared params
+                    // start at val=3. Host-ABI returns (AAPCS64 registers
+                    // or x8) carry no hidden argument, so their params start
+                    // at val=2 like any other function.
+                    let param_base = if matches!(
+                        super::struct_return_abi(&self.structs, self.target, return_ty),
+                        super::StructReturnAbi::OutPtr
+                    ) {
+                        3
+                    } else {
+                        2
+                    };
                     for (i, &idx) in params.indices.iter().enumerate() {
                         self.symbols[idx].val = (i as i64) + param_base;
                     }
@@ -694,7 +802,19 @@ impl Compiler {
                     // when it lowers a call to this name, so any
                     // call placed before the body sees the post-body
                     // ent_pc once parsing reaches here.
-                    self.symbols[id_idx].val = ent_pc as i64;
+                    //
+                    // When a parameter shares the function's name (C99
+                    // 6.2.1: the parameter shadows the function inside
+                    // the body), the live binding at `id_idx` is the
+                    // parameter, holding its stack slot. Write the entry
+                    // pc onto the shadowed function binding (`h_val`),
+                    // which the function-exit cleanup restores, so the
+                    // parameter's slot survives the body.
+                    if params.indices.contains(&id_idx) {
+                        self.symbols[id_idx].h_val = ent_pc as i64;
+                    } else {
+                        self.symbols[id_idx].val = ent_pc as i64;
+                    }
                     self.symbols[id_idx].defined_here = true;
                     // A body trumps any earlier `extern T f();`
                     // forward declaration -- the function is now
@@ -807,6 +927,14 @@ impl Compiler {
                             // level (and the inner blocks reached
                             // through parse_block_stmt).
                             self.parse_static_assert()?;
+                        } else if self.lex.tk == Token::Typedef {
+                            // C99 6.7.7: a typedef may appear at the
+                            // function-body top level. `lex_is_type_start`
+                            // does not cover the `typedef` storage-class
+                            // keyword, so dispatch it here (the nested
+                            // blocks reach the same handler through
+                            // parse_block_stmt).
+                            self.parse_block_typedef(None)?;
                         } else if self.lex_is_type_start() {
                             let item_before = self.ast_stmts_snapshot();
                             self.parse_function_body_local_decl()?;
@@ -895,6 +1023,10 @@ impl Compiler {
                         0
                     };
 
+                    // C99 6.9.1p12: a value-returning function must not
+                    // reach its closing brace without a `return value;`.
+                    // Run before `ast_finish_function` moves the body AST.
+                    self.check_non_void_fall_off()?;
                     self.ast_finish_function(
                         ent_pc,
                         n_params,
@@ -903,6 +1035,7 @@ impl Compiler {
                         param_local_slots,
                         returns_struct_finish,
                         return_struct_size_finish,
+                        ret_ty_for_finish,
                         alloca_top_slot_finish,
                     );
                     self.current_function_name.clear();
@@ -1036,7 +1169,14 @@ impl Compiler {
                     // read or branch is unambiguously dead.
                     self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
-                        if sym.class == Token::Loc as i64 {
+                        // Block-scope locals (`Loc`) and `static` locals
+                        // (promoted to `Glo` but block-scoped) both unbind
+                        // at function exit so a file-scope object of the
+                        // same name reappears.
+                        if sym.class == Token::Loc as i64
+                            || sym.is_scope_static
+                            || sym.is_scope_typedef
+                        {
                             Self::restore_shadowed_symbol(sym);
                         }
                     }
@@ -1059,6 +1199,27 @@ impl Compiler {
                     }
                     let was_extern_only_decl =
                         extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+                    // `extern struct S s;` while `struct S` is still
+                    // incomplete cannot reserve storage (its size is
+                    // unknown), and C99 6.9.2 makes it a pure declaration
+                    // anyway. Record an undefined external reference; the
+                    // defining declaration that follows the struct's
+                    // completion allocates the bytes. Without this the
+                    // permissive single-TU fallback below would reserve a
+                    // wrong-sized slot and the next global would overlap.
+                    if was_extern_only_decl
+                        && is_struct_ty(ty)
+                        && struct_ptr_depth(ty) == 0
+                        && self.structs[struct_id_of(ty)].fields.is_empty()
+                    {
+                        self.symbols[id_idx].is_extern_decl = true;
+                        self.symbols[id_idx].defined_here = false;
+                        self.symbols[id_idx].type_ = ty;
+                        if self.lex.tk == ',' {
+                            self.next()?;
+                        }
+                        continue;
+                    }
                     if was_extern_only_decl {
                         self.symbols[id_idx].is_extern_decl = true;
                     } else {
@@ -1118,7 +1279,19 @@ impl Compiler {
                                     self.compile_err("array initializer must start with `{{`")
                                 );
                             }
-                            let count = self.lex.count_top_level_groups_in_array() as i64;
+                            let sid = struct_id_of(ty);
+                            // C99 6.7.8p20 brace elision: when no element
+                            // carries its own braces, the flat value list
+                            // fills consecutive struct elements, each
+                            // consuming the struct's scalar slot count.
+                            let groups = self.lex.count_top_level_groups_in_array();
+                            let count = if groups > 0 {
+                                groups as i64
+                            } else {
+                                let items = self.lex.count_top_level_items_in_array();
+                                let slots = self.struct_flat_init_slots(sid).max(1);
+                                items.div_ceil(slots) as i64
+                            };
                             self.next()?;
                             self.align_data_to_8();
                             let off = self.data.len() as i64;
@@ -1126,7 +1299,6 @@ impl Compiler {
                             for _ in 0..(count * elem_size as i64) {
                                 self.data.push(0);
                             }
-                            let sid = struct_id_of(ty);
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' {
                                 // C99 6.7.8p7 array designator on a
@@ -1162,8 +1334,11 @@ impl Compiler {
                                 if self.lex.tk == '{' {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
-                                    return Err(self
-                                        .compile_err("struct array element must be a brace list"));
+                                    // Brace-elided element: fill the
+                                    // struct's fields from the flat list
+                                    // until it is full, leaving the rest
+                                    // for the next element.
+                                    self.fill_struct_fields(sid, here, false)?;
                                 }
                                 i += 1;
                                 if self.lex.tk == ',' {
@@ -1184,7 +1359,7 @@ impl Compiler {
                             }
                             continue;
                         }
-                        self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                        self.pending.init_inner_dims = self.inner_dims_of(id_idx);
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
@@ -1292,6 +1467,13 @@ impl Compiler {
                         // stay zero.
                         if self.lex.tk == Token::Assign {
                             self.next()?;
+                            // A file-scope aggregate may be initialised by a
+                            // compound literal naming its own type (C99
+                            // 6.5.2.5): `static T g = (T){ ... };`. Drop the
+                            // redundant `(T)` so the brace dispatch below sees
+                            // `{ ... }`. A scalar `(int){5}` falls through to
+                            // parse_global_initializer's single-value path.
+                            self.skip_opt_compound_literal_cast()?;
                             if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
                                     return Err(self.compile_err(
@@ -1345,12 +1527,14 @@ impl Compiler {
                                         )));
                                     }
                                     let here = var_offset + idx * elem_size as i64;
+                                    // C99 6.7.8p20: the braces around each
+                                    // struct element may be elided, in which
+                                    // case the flat list fills that element's
+                                    // fields in order.
                                     if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
-                                        return Err(self.compile_err(
-                                            "struct array element must be a brace list",
-                                        ));
+                                        self.fill_struct_fields(sid, here, false)?;
                                     }
                                     idx += 1;
                                     if self.lex.tk == ',' {
@@ -1364,7 +1548,7 @@ impl Compiler {
                                         "array `_Thread_local` initialisers are not supported",
                                     ));
                                 }
-                                self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                                self.pending.init_inner_dims = self.inner_dims_of(id_idx);
                                 self.pending.init_target_array_size = array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {

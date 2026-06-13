@@ -58,9 +58,17 @@ pub fn write_native_image_from_merged(
     subsystem: Option<crate::c5::preprocessor::Subsystem>,
     output_kind: OutputKind,
     target: Target,
+    shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
-    let (program, build) =
-        synth_program_and_build(merged, plt, entry_name, subsystem, output_kind, target)?;
+    let (program, build) = synth_program_and_build(
+        merged,
+        plt,
+        entry_name,
+        subsystem,
+        output_kind,
+        target,
+        shared_lib_name,
+    )?;
     write_native_image(&program, &build, target)
 }
 
@@ -71,6 +79,7 @@ fn synth_program_and_build(
     subsystem: Option<crate::c5::preprocessor::Subsystem>,
     output_kind: OutputKind,
     target: Target,
+    shared_lib_name: Option<&str>,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -156,6 +165,21 @@ fn synth_program_and_build(
             func_prologue_native.insert(pc, post_native as usize);
         }
     }
+    // Static (`STB_LOCAL`) functions get the same treatment as the
+    // global Text symbols above, so the static symbol table and DWARF
+    // name the program's own static functions too.
+    for (name, offset) in &merged.local_funcs {
+        let pc = *offset as usize;
+        func_ent_pcs.push(pc);
+        func_names.push(name.clone());
+        if pc_to_native.len() < pc + 1 {
+            pc_to_native.resize(pc + 1, usize::MAX);
+        }
+        pc_to_native[pc] = pc;
+        if let Some(&post_native) = merged.prologue_ends.get(name) {
+            func_prologue_native.insert(pc, post_native as usize);
+        }
+    }
 
     let build = Build {
         text: merged.text.clone(),
@@ -201,6 +225,11 @@ fn synth_program_and_build(
         code_relocs,
         exports: exports.clone(),
         output_kind,
+        shared_lib_name: if output_kind == OutputKind::SharedLibrary {
+            shared_lib_name.map(alloc::string::String::from)
+        } else {
+            None
+        },
         dllmain_pc: None,
         // Multi-TU links carry pre-baked DWARF byte streams from
         // every input unit (`linker/link::link_native_objects`
@@ -701,6 +730,7 @@ mod tests {
             debug_info_text_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: alloc::collections::BTreeMap::new(),
+            local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
         }

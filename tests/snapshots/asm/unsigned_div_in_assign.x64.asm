@@ -4,11 +4,13 @@ unsigned_div_in_assign.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<outer>:
                	movq	(%rdi), %rax
                	movl	$0x18, %ecx
                	pushq	%rax
@@ -32,6 +34,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -48,7 +52,6 @@ Disassembly of section .text:
                	xorq	%rcx, %rcx
                	jmp	<addr>
                	movl	$0x1, %ecx
-               	jmp	<addr>
                	movq	%rcx, %rax
                	addq	$0x20, %rsp
                	popq	%rbp

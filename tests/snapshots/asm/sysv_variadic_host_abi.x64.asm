@@ -4,11 +4,13 @@ sysv_variadic_host_abi.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<mix>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xe0, %rsp
@@ -41,7 +43,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movslq	%eax, %rdx
                	xorq	%rcx, %rcx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0xa, %rax
                	jge	<addr>
@@ -57,7 +58,7 @@ Disassembly of section .text:
                	idivq	%rsi
                	movq	%rdx, %rax
                	popq	%rdx
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -79,7 +80,6 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	addq	%rax, %rdx
                	jmp	<addr>
-               	jmp	<addr>
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r13
                	movl	0x4(%r13), %r10d
@@ -95,6 +95,8 @@ Disassembly of section .text:
                	cvttsd2si	%xmm0, %rax
                	addq	%rax, %rdx
                	jmp	<addr>
+
+<fsum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0xe0, %rsp
@@ -124,7 +126,6 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rax)
                	xorq	%rcx, %rcx
                	cvtsi2sd	%rcx, %xmm0
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	movslq	-0xe0(%rbp), %rdx
                	cmpq	%rdx, %rax
@@ -152,6 +153,8 @@ Disassembly of section .text:
                	addq	$0xe0, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x90, %rsp
@@ -225,7 +228,7 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	movq	%rax, %rcx
@@ -245,4 +248,4 @@ Disassembly of section .text:
                	addq	$0x90, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

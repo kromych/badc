@@ -229,6 +229,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Imm(_)
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
+                | Inst::BlockAddr(_)
                 | Inst::LocalAddr(_)
                 | Inst::TlsAddr(_)
                 | Inst::Binop { .. }
@@ -304,6 +305,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
@@ -382,6 +384,13 @@ mod tests {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,

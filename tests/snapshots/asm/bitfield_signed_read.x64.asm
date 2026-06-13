@@ -4,11 +4,13 @@ bitfield_signed_read.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
@@ -136,7 +138,7 @@ Disassembly of section .text:
                	andq	$0x7, %rax
                	shlq	$0x3d, %rax
                	sarq	$0x3d, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jle	<addr>
                	movl	$0x18, %eax
                	addq	$0x20, %rsp
@@ -148,7 +150,7 @@ Disassembly of section .text:
                	andq	$0x1fffff, %rax         # imm = 0x1FFFFF
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jl	<addr>
                	movl	$0x19, %eax
                	addq	$0x20, %rsp
@@ -161,17 +163,15 @@ Disassembly of section .text:
                	orq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
                	movzwq	(%rax), %rcx
-               	andq	$-0x4, %rcx
-               	movl	$0x3, %edx
+               	andq	$-0x3001, %rcx          # imm = 0xCFFF
+               	movl	$0x3000, %edx           # imm = 0x3000
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x18(%rbp), %rax
-               	addq	$0x4, %rax
                	movzwq	(%rax), %rcx
-               	andq	$-0xd, %rcx
-               	movl	$0x4, %edx
+               	andq	$-0xc001, %rcx          # imm = 0xFFFF3FFF
+               	movl	$0x4000, %edx           # imm = 0x4000
                	orq	%rdx, %rcx
                	movw	%cx, (%rax)
                	leaq	-0x18(%rbp), %rax
@@ -184,7 +184,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	movzwq	0x4(%rax), %rax
+               	movzwq	(%rax), %rax
+               	sarq	$0xc, %rax
                	andq	$0x3, %rax
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
@@ -195,8 +196,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	movzwq	0x4(%rax), %rax
-               	sarq	$0x2, %rax
+               	movzwq	(%rax), %rax
+               	sarq	$0xe, %rax
                	andq	$0x3, %rax
                	shlq	$0x3e, %rax
                	sarq	$0x3e, %rax
@@ -208,7 +209,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x6, %eax
                	leaq	-0x18(%rbp), %rcx
-               	movzwq	0x4(%rcx), %rcx
+               	movzwq	(%rcx), %rcx
+               	sarq	$0xc, %rcx
                	andq	$0x3, %rcx
                	shlq	$0x3e, %rcx
                	sarq	$0x3e, %rcx
@@ -224,4 +226,4 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

@@ -4,17 +4,18 @@ typedef_array_outer_dim.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<fill_and_sum>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%eax, %rdx
                	cmpq	$0x4, %rdx
                	jge	<addr>
@@ -54,6 +55,8 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	jmp	<addr>
                	jmp	<addr>
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x230, %rsp            # imm = 0x230
@@ -68,7 +71,6 @@ Disassembly of section .text:
                	retq
                	xorq	%rcx, %rcx
                	movq	%rcx, %rbx
-               	jmp	<addr>
                	movslq	%ecx, %rax
                	cmpq	$0x40, %rax
                	jge	<addr>
@@ -93,7 +95,7 @@ Disassembly of section .text:
                	retq
                	leaq	-0x200(%rbp), %rax
                	movq	(%rax), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	movq	%rax, %rcx
@@ -132,4 +134,3 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

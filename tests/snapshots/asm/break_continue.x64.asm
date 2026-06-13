@@ -4,14 +4,15 @@ break_continue.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x220, %esi            # imm = 0x220
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<main>:
                	xorq	%rcx, %rcx
                	movq	%rcx, %rax
-               	jmp	<addr>
                	movslq	%eax, %rdx
                	cmpq	$0xa, %rdx
                	jge	<addr>
@@ -33,7 +34,7 @@ Disassembly of section .text:
                	cqto
                	idivq	%rsi
                	popq	%rax
-               	cmpq	$0x0, %rdx
+               	testq	%rdx, %rdx
                	jne	<addr>
                	jmp	<addr>
                	movslq	%ecx, %rcx
@@ -41,4 +42,4 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movslq	%ecx, %rcx
                	jmp	<addr>
-               	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

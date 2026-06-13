@@ -53,8 +53,11 @@ pub(crate) fn promotable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
     touched
 }
 
-/// Successor block ids of a terminator, in branch order.
-pub(crate) fn successors(term: &Terminator) -> Vec<BlockId> {
+/// Successor block ids of a terminator, in branch order. For
+/// `GotoIndirect` the successors are the function's address-taken
+/// label blocks (`cg_targets`, from `FunctionSsa::computed_goto_targets`);
+/// pass an empty slice for functions with no computed goto.
+pub(crate) fn successors(term: &Terminator, cg_targets: &[BlockId]) -> Vec<BlockId> {
     match term {
         Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
         Terminator::Bz {
@@ -67,6 +70,7 @@ pub(crate) fn successors(term: &Terminator) -> Vec<BlockId> {
             fall_through,
             ..
         } => alloc::vec![*target, *fall_through],
+        Terminator::GotoIndirect { .. } => cg_targets.to_vec(),
         Terminator::Return(_) | Terminator::TailExt(_) => Vec::new(),
     }
 }
@@ -76,7 +80,7 @@ pub(crate) fn successors(term: &Terminator) -> Vec<BlockId> {
 pub(crate) fn predecessors(func: &FunctionSsa) -> Vec<Vec<BlockId>> {
     let mut preds: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); func.blocks.len()];
     for (idx, block) in func.blocks.iter().enumerate() {
-        for succ in successors(&block.terminator) {
+        for succ in successors(&block.terminator, &func.computed_goto_targets) {
             preds[succ as usize].push(idx as BlockId);
         }
     }
@@ -101,7 +105,10 @@ fn postorder(func: &FunctionSsa) -> Vec<BlockId> {
     visited[0] = true;
     stack.push((0, 0));
     while let Some(&(b, si)) = stack.last() {
-        let succ = successors(&func.blocks[b as usize].terminator);
+        let succ = successors(
+            &func.blocks[b as usize].terminator,
+            &func.computed_goto_targets,
+        );
         if si < succ.len() {
             stack.last_mut().unwrap().1 += 1;
             let s = succ[si];
@@ -286,7 +293,7 @@ fn slot_live_in_sets(func: &FunctionSsa, promotable: &BTreeSet<i64>) -> Vec<BTre
         changed = false;
         for b in (0..nblocks).rev() {
             let mut live_out: BTreeSet<i64> = BTreeSet::new();
-            for s in successors(&func.blocks[b].terminator) {
+            for s in successors(&func.blocks[b].terminator, &func.computed_goto_targets) {
                 live_out.extend(live_in[s as usize].iter().copied());
             }
             let mut ni = gen_set[b].clone();
@@ -404,6 +411,7 @@ pub(crate) fn insert_phis(
         }
         match &mut block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => remap(cond),
+            Terminator::GotoIndirect { target } => remap(target),
             Terminator::Return(v) => {
                 if *v != NO_VALUE {
                     remap(v);
@@ -441,6 +449,7 @@ fn for_each_operand_mut(inst: &mut Inst, mut f: impl FnMut(&mut ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::LoadLocal { .. }
@@ -786,6 +795,14 @@ pub(crate) fn with_phi_promote_override<R>(value: bool, f: impl FnOnce() -> R) -
 }
 
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
+    // A function with a computed goto is left in its unpromoted,
+    // single-block-numbering form: phi insertion at a block reached by
+    // an indirect branch (whose predecessors are every address-taken
+    // label) is not modeled, and the `Inst::BlockAddr` / terminator
+    // successor sets key on block ids that the rewrite would renumber.
+    if !func.computed_goto_targets.is_empty() {
+        return Vec::new();
+    }
     // Opt out of promotion for A/B measurement against the unpromoted
     // frame-slot codegen. Diagnostic only: read under the `codegen_test`
     // feature so a production build never consults the environment.
@@ -1048,7 +1065,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 // phi's place. Order matches the dom-tree walk; the
                 // BlockId tag makes lookup positional-independent.
                 let term = func.blocks[b as usize].terminator;
-                for succ in successors(&term) {
+                for succ in successors(&term, &func.computed_goto_targets) {
                     for (slot, phi_id) in &phis_at[succ as usize].clone() {
                         if let Some(&val) = current.get(slot) {
                             if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
@@ -1155,6 +1172,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
                 *cond = resolve(&redirect, *cond);
             }
+            Terminator::GotoIndirect { target } => {
+                *target = resolve(&redirect, *target);
+            }
             Terminator::Return(v) => {
                 if *v != NO_VALUE {
                     *v = resolve(&redirect, *v);
@@ -1208,6 +1228,13 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             param_fp_mask: 0,
+            agg_descs: alloc::vec::Vec::new(),
+            param_aggs: alloc::vec::Vec::new(),
+            param_local_slots: alloc::vec::Vec::new(),
+            ret_agg: None,
+            ret_is_fp: false,
+            indirect_result_slot: 0,
+            computed_goto_targets: Vec::new(),
             insts,
             blocks,
             extern_call_refs: Vec::new(),

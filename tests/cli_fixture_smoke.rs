@@ -113,3 +113,44 @@ fn every_fixture_compiles_standalone_for_linux() {
         );
     }
 }
+
+// A quoted `#include "header"` resolves against the directory of the
+// including file, not the process working directory (C99 6.10.2p2).
+// Compiling `sub/main.c` from the parent directory must still find
+// `sub/helper.h`; a CWD-relative-only search would miss it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn quoted_include_resolves_relative_to_including_file() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = std::env::temp_dir().join(format!("badc-qinc-{}", std::process::id()));
+    let sub = dir.join("sub");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&sub).expect("create temp dir");
+    std::fs::write(sub.join("helper.h"), "int helper(void) { return 42; }\n")
+        .expect("write header");
+    std::fs::write(
+        sub.join("main.c"),
+        "#include \"helper.h\"\nint main(void) { return helper(); }\n",
+    )
+    .expect("write main");
+    let exe = dir.join("prog");
+    let out = Command::new(badc)
+        .arg(sub.join("main.c"))
+        .arg("-o")
+        .arg(&exe)
+        .current_dir(&dir) // CWD is the parent, not sub/.
+        .output()
+        .expect("run badc");
+    assert!(
+        out.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let run = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        run.status.code(),
+        Some(42),
+        "quoted-include program returned wrong value"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

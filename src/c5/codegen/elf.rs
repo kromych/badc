@@ -446,6 +446,92 @@ fn emit_start_stub_aarch64(
     result
 }
 
+/// Native offset within `build.text` of a function the entry adapter
+/// targets, resolved through the merged symbol tables (`func_names` ->
+/// `func_ent_pcs` -> `pc_to_native`). `None` when the symbol is absent
+/// -- no startup runtime linked (single-TU or freestanding output) --
+/// which selects the self-contained `_start` instead.
+fn symbol_text_offset(build: &Build, name: &str) -> Option<u64> {
+    let idx = build.func_names.iter().position(|n| n == name)?;
+    let ent_pc = build.func_ent_pcs[idx];
+    Some(build.pc_to_native[ent_pc] as u64)
+}
+
+/// Byte length of the entry adapter -- the minimal shim that loads the
+/// initial stack pointer and the image-base offset into the first two
+/// argument registers and calls `__c5_entry`.
+fn entry_adapter_len(machine: Machine) -> u64 {
+    match machine {
+        Machine::X86_64 => 17,
+        Machine::Aarch64 => 24,
+    }
+}
+
+/// Emit the entry adapter at the head of the code blob. `entry_off` is
+/// `__c5_entry`'s offset within `build.text` (which follows the adapter
+/// at `entry_adapter_len`); `image_off` is the adapter's own offset
+/// from the image base, passed in the second argument register so a
+/// freestanding entry can recover the base. The adapter does not
+/// return -- `__c5_entry` ends in `exit`.
+fn emit_entry_adapter(
+    machine: Machine,
+    abi: Abi,
+    code: &mut Vec<u8>,
+    entry_off: u64,
+    image_off: u64,
+) {
+    let stub_len = entry_adapter_len(machine);
+    match machine {
+        Machine::X86_64 => {
+            // xor ebp, ebp -- outermost frame marker.
+            code.extend_from_slice(&[0x31, 0xed]);
+            // mov rdi, rsp -- arg0 = initial stack pointer.
+            code.extend_from_slice(&[0x48, 0x89, 0xe7]);
+            // mov esi, image_off -- arg1 (zero-extended into rsi).
+            code.push(0xbe);
+            code.extend_from_slice(&(image_off as u32).to_le_bytes());
+            // call __c5_entry (rel32). The kernel hands `_start` a
+            // 16-aligned rsp; `call` pushes 8 so `__c5_entry` sees the
+            // SysV-required `(rsp + 8) % 16 == 0`.
+            let call_end = code.len() as u64 + 5;
+            let target = stub_len + entry_off;
+            let rel = target as i64 - call_end as i64;
+            code.push(0xe8);
+            code.extend_from_slice(&(rel as i32).to_le_bytes());
+            // ud2 -- unreachable.
+            code.extend_from_slice(&[0x0f, 0x0b]);
+        }
+        Machine::Aarch64 => {
+            use aarch64::Reg;
+            let arg0 = Reg(abi.int_arg_regs[0]);
+            let arg1 = Reg(abi.int_arg_regs[1]);
+            // mov x29, #0 -- clear the frame pointer.
+            aarch64::emit(code, aarch64::enc_movz(Reg(29), 0, 0));
+            // mov arg0, sp -- arg0 = initial stack pointer.
+            aarch64::emit(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
+            // arg1 = image_off (32-bit, via movz + movk).
+            aarch64::emit(
+                code,
+                aarch64::enc_movz(arg1, (image_off & 0xffff) as u16, 0),
+            );
+            aarch64::emit(
+                code,
+                aarch64::enc_movk(arg1, ((image_off >> 16) & 0xffff) as u16, 1),
+            );
+            // b __c5_entry -- tail call. AAPCS64 keeps sp 16-aligned
+            // and `b` doesn't disturb it; `__c5_entry` ends in `exit`,
+            // so no return address is needed.
+            let b_pc = code.len() as u64;
+            let target = stub_len + entry_off;
+            let rel_insns = ((target as i64 - b_pc as i64) / 4) as i32;
+            aarch64::emit(code, aarch64::enc_b(rel_insns));
+            // brk #1 -- unreachable.
+            aarch64::emit(code, 0xd420_0020);
+        }
+    }
+    debug_assert_eq!(code.len() as u64, stub_len);
+}
+
 // ------------------------------------------------------------------
 // Dynamic-linking metadata.
 //
@@ -496,14 +582,16 @@ fn build_dynstr(
     (bytes, name_offsets, lib_offsets, export_offsets)
 }
 
-/// Build the static `.symtab` + `.strtab` for the
-/// PLT-trampoline pool. One local `STT_FUNC` per import, plus
-/// the SHT_SYMTAB sentinel at index 0. Returns
-/// `(symtab_bytes, strtab_bytes)`.
+/// Build the static `.symtab` + `.strtab`: the SHT_SYMTAB sentinel at
+/// index 0, one local `STT_FUNC` per import trampoline, then one local
+/// `STT_FUNC` per defined function (named, with its address and length)
+/// so the output is profilable without DWARF. Returns
+/// `(symtab_bytes, strtab_bytes)`. All symbols are local, so the
+/// section header's `sh_info` stays at the symbol count.
 ///
 /// `text_vmaddr` is the runtime vmaddr of `build.text[0]` (i.e.
 /// `code_vmaddr + stub_len`), so each symbol's `st_value` resolves
-/// to the trampoline's actual instruction address.
+/// to the actual instruction address.
 fn build_plt_symtab(
     build: &super::Build,
     text_vmaddr: u64,
@@ -562,6 +650,45 @@ fn build_plt_symtab(
                 st_shndx: 6,
                 st_value,
                 st_size: trampoline_size,
+            },
+        );
+    }
+    // One local STT_FUNC per defined function so a profiler / `nm` /
+    // `gdb` can attribute an address to a function and its length
+    // without DWARF (perf maps a sample by `[st_value, st_value +
+    // st_size)`, so a zero size leaves the function unattributable).
+    // `func_names` covers global and static functions on the merged
+    // path. The size is the span to the next function or trampoline
+    // start, capped at the text length; collecting all of them as
+    // boundaries handles any code layout.
+    let text_len = build.text.len() as u64;
+    let mut boundaries: Vec<u64> = build
+        .func_ent_pcs
+        .iter()
+        .map(|&pc| build.pc_to_native[pc] as u64)
+        .collect();
+    boundaries.extend(build.plt_trampoline_offsets.iter().map(|&o| o as u64));
+    boundaries.push(text_len);
+    boundaries.sort_unstable();
+    for (i, name) in build.func_names.iter().enumerate() {
+        let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
+        let end = boundaries
+            .iter()
+            .copied()
+            .find(|&b| b > start)
+            .unwrap_or(text_len);
+        let st_name = strtab.len() as u32;
+        strtab.extend_from_slice(name.as_bytes());
+        strtab.push(0);
+        write_struct(
+            &mut symtab,
+            &Elf64Sym {
+                st_name,
+                st_info: (STB_LOCAL << 4) | STT_FUNC,
+                st_other: 0,
+                st_shndx: 6,
+                st_value: text_vmaddr + start,
+                st_size: end.saturating_sub(start),
             },
         );
     }
@@ -1023,13 +1150,23 @@ pub(super) fn write(
     // programs that print via stdio still get glibc's
     // end-of-process flush.
     let use_libc_exit = build.imports.imports.iter().any(|i| i.local_name == "exit");
+    // When the startup runtime is linked it defines `__c5_entry`; the
+    // image entry is then a minimal adapter that hands the stack
+    // pointer + image-base offset to it and `__c5_entry` runs the
+    // process startup. Without it (single-TU or freestanding output)
+    // the self-contained `_start` reads argc/argv and exits directly.
+    let c5_entry_offset = if is_shared {
+        None
+    } else {
+        symbol_text_offset(build, "__c5_entry")
+    };
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
-    // `dlsym`. Executables keep the existing stub that
-    // tail-calls libc `exit` (when libc is available) or
-    // direct-syscalls (when it isn't).
+    // `dlsym`.
     let stub_len = if is_shared {
         0
+    } else if c5_entry_offset.is_some() {
+        entry_adapter_len(machine)
     } else {
         start_stub_len(machine, use_libc_exit)
     };
@@ -1116,6 +1253,12 @@ pub(super) fn write(
     // libraries that emit no stub at all. `None` short-circuits
     // the writer's later GOT-fixup patch.
     let exit_adrp_offset = if is_shared {
+        None
+    } else if let Some(entry_off) = c5_entry_offset {
+        // The adapter reaches `__c5_entry` (in `build.text`, past the
+        // adapter) with a relative call and exits through it, so there
+        // is no libc-exit GOT slot to patch here.
+        emit_entry_adapter(machine, build.abi, &mut code, entry_off, code_off);
         None
     } else {
         emit_start_stub(
@@ -2249,6 +2392,7 @@ mod tests {
             code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
+            shared_lib_name: None,
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),

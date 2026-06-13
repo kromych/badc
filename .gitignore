@@ -82,14 +82,6 @@ demos/chibicc/*
 !demos/chibicc/smoke.py
 !demos/chibicc/self_host.py
 !demos/chibicc/README.md
-# scc -- k0ga's Simple C Compiler. `setup.py` fetches the
-# upstream commit snapshot from the vendor-deps mirror and
-# unpacks it under `demos/scc/src/`; the smoke harness walks
-# `tests/cc/execute/*.c` and tallies a pass count against the
-# committed BASELINE. Only the runner scripts are committed.
-demos/scc/*
-!demos/scc/setup.py
-!demos/scc/smoke.py
 # tinycc -- Fabrice Bellard's TCC, multi-TU build for the
 # x86_64 / aarch64 backends across ELF / Mach-O / PE.
 # `setup.py` fetches the pinned `mob` commit snapshot. Only
@@ -100,6 +92,15 @@ demos/tinycc/*
 !demos/tinycc/smoke.py
 !demos/tinycc/self_host.py
 !demos/tinycc/README.md
+# quickjs -- Fabrice Bellard's JavaScript engine. `setup.py`
+# fetches the pinned upstream archive from the vendor-deps
+# mirror and extracts the qjs sources + the pure-JS test suite;
+# only the runner scripts + the REPL-blob stub are committed.
+demos/quickjs/*
+!demos/quickjs/setup.py
+!demos/quickjs/smoke.py
+!demos/quickjs/repl_stub.c
+!demos/quickjs/README.md
 # lua -- Lua 5.5.0 interpreter + the upstream test suite.
 # `setup.py` fetches the two pinned tarballs from the
 # vendor-deps mirror and extracts the interpreter sources under

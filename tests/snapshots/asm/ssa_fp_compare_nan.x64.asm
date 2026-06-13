@@ -4,11 +4,13 @@ ssa_fp_compare_nan.x64:	file format elf64-x86-64
 Disassembly of section .text:
 
 <.text>:
-               	movq	(%rsp), %rdi
-               	leaq	0x8(%rsp), %rsi
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$0x2b0, %esi            # imm = 0x2B0
                	callq	<addr>
-               	movq	%rax, %rdi
-               	callq	*<rip>
+               	ud2
+
+<__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -18,7 +20,7 @@ Disassembly of section .text:
                	movslq	%ebx, %rbx
                	leaq	<rip>, %r12
                	movq	(%r12,%rbx,8), %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
@@ -42,11 +44,10 @@ Disassembly of section .text:
                	movq	(%rax,%rbx,8), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movq	(%rax), %rax
                	movq	%rax, (%r12,%rbx,8)
-               	jmp	<addr>
                	movq	(%r12,%rbx,8), %rax
                	movq	%rax, %rcx
                	movq	(%rsp), %rbx
@@ -55,6 +56,8 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
+
+<nan_value>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
@@ -67,6 +70,8 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
+
+<main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
@@ -82,22 +87,20 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	orq	$0x1, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	seta	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x2, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -107,24 +110,22 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x4, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14
                	setae	%al
                	movzbq	%al, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x8, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -134,12 +135,11 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x10, %rbx
-               	jmp	<addr>
                	xorq	%rax, %rax
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15
@@ -149,12 +149,11 @@ Disassembly of section .text:
                	setp	%r10b
                	movzbq	%r10b, %r10
                	orq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	jne	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x20, %rbx
-               	jmp	<addr>
                	movsd	0x18(%rsp), %xmm14
                	movsd	0x18(%rsp), %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -163,12 +162,11 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x40, %rbx
-               	jmp	<addr>
                	movsd	0x18(%rsp), %xmm14
                	movsd	0x18(%rsp), %xmm15
                	ucomisd	%xmm15, %xmm14
@@ -177,14 +175,13 @@ Disassembly of section .text:
                	setnp	%r10b
                	movzbq	%r10b, %r10
                	andq	%r10, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	movslq	%ebx, %rax
                	movq	%rax, %rbx
                	orq	$0x80, %rbx
-               	jmp	<addr>
                	movslq	%ebx, %rax
-               	cmpq	$0x0, %rax
+               	testq	%rax, %rax
                	je	<addr>
                	leaq	<rip>, %rdi
                	movslq	%ebx, %rsi

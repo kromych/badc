@@ -30,6 +30,7 @@ mod run_compile;
 mod sizeof_expr;
 mod stmt;
 mod type_layout;
+pub(crate) use type_layout::{StructReturnAbi, host_abi_agg_desc, struct_return_abi};
 pub(crate) mod types;
 
 /// Captured enum tag + constants for DWARF emission. C99 6.7.2.2
@@ -121,6 +122,22 @@ pub struct StructField {
     /// function-to-pointer no-op decay instead of emitting a
     /// spurious `Li` that loads through code memory.
     pub fn_ptr_indirection: i64,
+    /// Parameter type tags of a function-pointer field, captured from
+    /// the field declarator's prototype (mirrors `Symbol::params`).
+    /// Empty for a non-function-pointer field or one declared without a
+    /// prototype. A `s.fp(args)` / `s->fp(args)` call reads this to
+    /// narrow each argument to its declared parameter type (C99
+    /// 6.5.2.2p7), matching the direct-identifier and array-element
+    /// call paths.
+    pub params: Vec<i64>,
+    /// Non-zero for a field promoted from an anonymous union (C11
+    /// 6.7.2.1p13). All members of one anonymous union share the same
+    /// value; the same id groups them so a brace-list initializer
+    /// treats the whole union as a single positional sub-object
+    /// (C99 6.7.8: one initializer fills the first member). Zero for a
+    /// regular field and for anonymous-struct members, which keep
+    /// distinct positions.
+    pub anon_union_group: u32,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -280,6 +297,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// symbol.
     pub fn_ptr_indirection: Option<i64>,
 
+    /// Set when the base type of the declarator currently being parsed
+    /// came from a function-TYPE typedef (`typedef RET F(args)`), so the
+    /// declarator absorbs the first `*` (it forms the pointer-to-function
+    /// the typedef already half-encodes). Consumed and cleared by
+    /// `parse_declarator`.
+    pub base_is_function_type: bool,
+
     /// Override stride for the next `[i]` postfix index. When we
     /// load the address of a 2D-array variable (`T xs[N][M]`),
     /// the first subscript should scale the index by
@@ -310,15 +334,17 @@ pub(in crate::c5::compiler) struct Pending {
     pub end_of_expr_stride: i64,
     pub end_of_expr_strides_tail: Vec<i64>,
 
-    /// Per-row element count for the next 2D-array initializer.
-    /// Set by callers of `collect_array_initializer` when the
-    /// declarator has a `[N][M]` shape so a nested `{ ... }`
-    /// row that lists fewer than M values can be zero-padded to
-    /// keep subsequent rows on the right stride. Zero means
-    /// "flatten without padding" (1D arrays, struct-array
-    /// initializers that own their layout). The collector
-    /// reads-and-clears this on entry.
-    pub init_inner_dim: i64,
+    /// Inner dimensions (below the outermost) for the next
+    /// `collect_array_initializer` call, outermost first. Set by
+    /// callers from the declarator's `array_dims[1..]` so a nested
+    /// `{ ... }` at each level can be zero-padded to the element count
+    /// its sub-array spans (the product of the dimensions below it),
+    /// keeping every level on the right stride for N-dim arrays. Empty
+    /// means "flatten without padding" (1D arrays, struct-array
+    /// initializers that own their layout). The collector reads-and-
+    /// clears this on entry and reinstates the tail before recursing
+    /// into a nested brace.
+    pub init_inner_dims: alloc::vec::Vec<i64>,
 
     /// Target array bound for the next `collect_array_initializer`
     /// call. Set by callers that know the declarator's `[N]` so
@@ -355,6 +381,31 @@ pub(in crate::c5::compiler) struct Pending {
     /// arm64 variadic ABI). `None` for non-fn-pointer base types.
     /// Cleared by every base-type parse.
     pub typedef_fn_proto: Option<(usize, bool)>,
+    /// The pointed-to function's parameter type tags, captured by the
+    /// fn-pointer declarator alongside `typedef_fn_proto`. Lets an
+    /// indirect call narrow each argument to its declared parameter type
+    /// instead of applying the default argument promotions. `None` when
+    /// the prototype carries no types (an empty parameter list).
+    pub fn_ptr_param_types: Option<alloc::vec::Vec<i64>>,
+    /// Parameter type tags of the function pointer that an in-progress
+    /// postfix indirect call (`tbl[i](args)`, `(*fp)(args)`) will call.
+    /// The flat type tag in the accumulator carries only the callee's
+    /// return type, not its parameter list, so this side-channel ferries
+    /// the parameters from the producing symbol (a function-pointer array
+    /// element or a dereferenced function-pointer variable) to the call's
+    /// argument loop, which narrows each argument to its declared type
+    /// (C99 6.5.2.2p7) the same way the direct-identifier call path does.
+    /// Set at the array-decay and identifier-load sites, preserved across
+    /// a subscript index parse, cleared at a `.`/`->` field access and at
+    /// each statement boundary so it cannot reach an unrelated call.
+    pub indirect_callee_params: Option<alloc::vec::Vec<i64>>,
+    /// Set while parsing a function-pointer declarator's parameter list.
+    /// The parameters form a prototype: their names are irrelevant, so
+    /// `parse_function_params` records each type without binding the name
+    /// (a named parameter that shadows an enclosing function's parameter --
+    /// a callback type nested in another prototype -- must not trip the
+    /// duplicate-parameter check).
+    pub parsing_fn_ptr_proto: bool,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -463,14 +514,18 @@ impl Default for Pending {
             base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
+            base_is_function_type: false,
             index_stride: 0,
             index_strides_tail: Vec::new(),
             end_of_expr_stride: 0,
             end_of_expr_strides_tail: Vec::new(),
-            init_inner_dim: 0,
+            init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
             typedef_fn_proto: None,
+            fn_ptr_param_types: None,
+            indirect_callee_params: None,
+            parsing_fn_ptr_proto: false,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
@@ -534,6 +589,12 @@ pub struct Compiler {
     /// and reset after, so it scopes to the immediately following
     /// declarator only.
     pending_is_inline: bool,
+
+    /// True when the most recent decl-spec parse consumed a
+    /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
+    /// commit time onto `Symbol::is_noreturn` and reset after, so it
+    /// scopes to the immediately following declarator only.
+    pending_noreturn: bool,
 
     /// Per-function AST. The arena is reset at every function
     /// entry; the SSA walker reads from these snapshots at codegen
@@ -1068,8 +1129,22 @@ impl Compiler {
         // gains 8 bytes of reserved padding at offset 0.
         let data: Vec<u8> = alloc::vec![0u8; 8];
 
+        let lex = {
+            let mut l = Lexer::new(preprocessed);
+            // `wchar_t` is 2 bytes (UTF-16) on Windows, 4 bytes on the
+            // Unix targets; wide literals follow suit.
+            l.wchar_bytes = if matches!(
+                target,
+                super::codegen::Target::WindowsX64 | super::codegen::Target::WindowsAarch64
+            ) {
+                2
+            } else {
+                4
+            };
+            l
+        };
         Self {
-            lex: Lexer::new(preprocessed),
+            lex,
             symbols,
             symbol_index,
             deferred_error,
@@ -1082,6 +1157,7 @@ impl Compiler {
             max_loc_offs: 0,
             uses_alloca_in_current_fn: false,
             pending_is_inline: false,
+            pending_noreturn: false,
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),

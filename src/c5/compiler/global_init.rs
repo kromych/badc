@@ -75,6 +75,17 @@ impl Compiler {
                 // skip handles abstract function-pointer declarators
                 // (`(SYSCALL)`, `(int (*)(int))`, etc.) without us
                 // having to model the declarator grammar twice.
+                //
+                // TODO: discarding the cast type drops the C99 6.3.1.3
+                // width narrowing for a narrowing integer cast that is a
+                // sub-operand of a file-scope scalar initializer (e.g.
+                // `int a = ((int)UINT_MAX == -1);` folds the comparison
+                // on the un-narrowed operand). The final store narrows to
+                // the variable's type, so a top-level cast is unaffected;
+                // only mid-expression casts diverge. The fix is to route
+                // scalar global initializers through the const_expr.rs
+                // evaluator (which applies the narrowing) rather than this
+                // local mini-grammar.
                 let mut depth: i64 = 1;
                 while depth > 0 && self.lex.tk != 0 {
                     if self.lex.tk == '(' {
@@ -287,6 +298,33 @@ impl Compiler {
             }
             let target_idx = self.lex.curr_id_idx;
             let target_class = self.symbols[target_idx].class;
+            // `&func` (C99 6.3.2.1p4): the address-of operator on a
+            // function designator yields the same function-pointer
+            // value as the bare name, so route it through the same
+            // CodeReloc path as `static int (*fp)() = func;`.
+            if target_class == Token::Fun as i64 || target_class == Token::Sys as i64 {
+                if is_thread_local {
+                    return Err(self.compile_err_at(
+                        line,
+                        "function-pointer initializer for `_Thread_local` not supported",
+                    ));
+                }
+                let mut sym_idx = target_idx;
+                if target_class == Token::Sys as i64 {
+                    sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
+                }
+                self.symbols[sym_idx].was_referenced = true;
+                let ent_pc = self.symbols[sym_idx].val;
+                self.next()?;
+                let bytes = (ent_pc as u64).to_le_bytes();
+                self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: var_offset as u64,
+                    target_ent_pc: ent_pc as u64,
+                });
+                self.code_reloc_sym_idx.push(sym_idx);
+                return Ok(());
+            }
             if target_class != Token::Glo as i64 {
                 return Err(self.compile_err_at(
                     line,
@@ -370,13 +408,41 @@ impl Compiler {
             let stripped = var_ty & !UNSIGNED_BIT;
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
-        if var_is_float
-            && (self.lex.tk == Token::FloatNum
-                || (self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit())
-                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?))
-        {
+        // A float literal, a parenthesised float expression, or either of
+        // those behind a leading unary sign signals a float-valued
+        // initializer that must route through the f64 folder rather than
+        // the integer evaluator (whose `value as f64` would coerce a
+        // float result to an integer first). `-INFINITY` expands to
+        // `-(1.0e+308 * 10.0)`, so the sign precedes a parenthesised
+        // float expression.
+        let init_is_float = if !var_is_float {
+            false
+        } else if self.lex.tk == Token::FloatNum {
+            true
+        } else if self.lex.tk == '(' {
+            self.contents_until_close_paren_have_float_pub()?
+        } else if self.lex.tk == Token::SubOp || self.lex.tk == Token::AddOp {
+            let snap = self.lex.snapshot();
+            self.next()?;
+            let ahead = self.lex.tk == Token::FloatNum
+                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?);
+            self.lex.restore(snap);
+            ahead
+        } else {
+            false
+        };
+        if init_is_float {
             let bits = self.parse_const_float_expr()?;
-            let value = bits.to_bits() as i64;
+            // A `float` slot is 4 bytes: narrow the f64 constant to
+            // the f32 pattern, otherwise the low 4 bytes of the f64
+            // bits (zero for many values) land in the slot. `double`
+            // keeps the full 8-byte pattern.
+            let value = self.to_storage_bits(
+                bits.to_bits() as i64,
+                super::initializer::InitElemReloc::Float64Bits,
+                var_ty,
+            );
+            let size = self.size_of_type(var_ty);
             let bytes = value.to_le_bytes();
             let segment = if is_thread_local {
                 &mut self.tls_data
@@ -384,10 +450,10 @@ impl Compiler {
                 &mut self.data
             };
             let off = var_offset as usize;
-            debug_assert!(off + 8 <= segment.len());
-            segment[off..off + 8].copy_from_slice(&bytes);
+            debug_assert!(off + size <= segment.len());
+            segment[off..off + size].copy_from_slice(&bytes[..size]);
             if is_thread_local {
-                let end = off + 8;
+                let end = off + size;
                 if end > self.tls_init_size {
                     self.tls_init_size = end;
                 }
@@ -403,12 +469,21 @@ impl Compiler {
 
         // C99 6.7.8p11 / 6.3.1.4: an integer constant initializing a
         // floating object is converted to the floating value; storing
-        // the integer's bit pattern would leave a denormal. Mirror the
-        // float-literal path above, which stores the f64 bit pattern.
+        // the integer's bit pattern would leave a denormal. Narrow to
+        // the slot's width (f32 for `float`, f64 for `double`).
         let value = if var_is_float {
-            (value as f64).to_bits() as i64
+            self.to_storage_bits(
+                (value as f64).to_bits() as i64,
+                super::initializer::InitElemReloc::Float64Bits,
+                var_ty,
+            )
         } else {
             value
+        };
+        let write_size = if var_is_float {
+            self.size_of_type(var_ty)
+        } else {
+            8
         };
 
         let bytes = value.to_le_bytes();
@@ -421,8 +496,8 @@ impl Compiler {
         // Both segments preallocated 8 zero bytes for this
         // variable; we overwrite the slot with the
         // initializer's bytes.
-        debug_assert!(off + 8 <= segment.len());
-        segment[off..off + 8].copy_from_slice(&bytes);
+        debug_assert!(off + write_size <= segment.len());
+        segment[off..off + write_size].copy_from_slice(&bytes[..write_size]);
 
         if is_thread_local {
             // Move the .tdata/.tbss boundary so this slot is

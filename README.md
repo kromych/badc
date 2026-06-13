@@ -6,32 +6,72 @@
 [![OS](https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-informational)](#native-compilation)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64-informational)](#native-compilation)
 
-`badc` (other name ideas were `betsy` and `badseed`) is a rather
-small compiler of a pretty large chunk of the C language as defined in
-the C99 standard. It used to be a bad one when the projects just started out
-and the name stuck. It supports separate translation units and has a small
-linker inside it as well.
+`badc` is a rather small cross-platform compiler of the C language as
+defined in the C99 standard, plus some C11 and later. `badc` used to be a
+bad one for some time when the projects just started out, and the name stuck.
 
-Its small footprint and embedded headers (which
-you can override) give a fun one-executable experience. Its codebase
-of moderate size can be a good pedagogical material. It lowers through
-an SSA intermediate representation and a graph-coloring register
-allocator, but stops short of the exquisite optimization passes a
-production toolchain runs. All told, to stay slim, it's unlikely to surpass
-the ability of multi-gigabyte compiler suites to squeeze the last drop
-of perf from the machine, and that's fine
+> There is some compiler-building jargon in this document, you can safely skip it,
+> and jump to the usage section right away.
 
-`badc` produces real native binaries (macOs Mach-O, Linux ELF, or
-Windows PE32+), on any of five targets, from any host - macOS (ARM64),
-Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
-(can be omitted). Can also JIT into the machine code and recognize being
-used as `#!` so that C source code becomes a script.
+`badc`'s small footprint and embedded headers (which you can override) give
+a fun one-executable experience. Its codebase of moderate size can be
+a good pedagogical material. It lowers through an SSA intermediate
+representation and a graph-coloring register allocator, but doesn't go for
+the exquisite optimization passes a titan toolchain like clang, gcc or msvc
+run. All told, to stay slim, it's unlikely to surpass the ability of
+multi-gigabyte compiler suites to squeeze the last drop of perf from the
+machine, and that's fine. `badc` tries hard not to get in the way with
+assumptions on the runtime library, and `--freestanding` as available
+should you need that.
+
+A fun extension is that `badc` can automatically add the header(s)
+for the standard library so the bare `hello.c` with
+
+```c
+int main() {
+    puts("Hello");
+    return 0;
+}
+```
+
+works:
+
+```console
+info: auto-including <stdio.h> for undeclared `puts`
+info: wrote file hello for target `macos-aarch64`
+```
+
+`badc` is able to produce the debug information so that the binaries it generates
+can be debugged and/or their performance can be profiled (use `-g`).
+
+`badc` optimizes when you specify `-O` and can produce code that's faster
+than `clang -O0`, especially on ARM64. To get an idea of the codegen
+quality, take a look at `./tests/snapshots` with assembly and SSA snapshots
+of the test fixtures. The optimized binary is supported on any modern ARM64
+processor, and on x86_64 processors not older than Intel Hasswell and AMD Zen
+(circa 2013, the optimizer uses FMA3 instructions).
+
+`badc` produces real native binaries (macOS Mach-O, Linux ELF, or
+Windows PE32+), on any of five targets, from any host - macOS (ARM64), Linux
+(ARM64, x86_64), Windows ({ARM64,x86_64} x {console, GUI, NT}). It supports
+separate translation units and has a small linker (i.e. no relaxations or LTO)
+inside it as well.
+
+`badc` can also JIT-compile into the machine code in-process so no binary is written
+to the disk. Finally, it recognizes being used as `#!` so that C source code becomes
+a (fast) script.
+
+For the _true_ compiler heads there is the `--dump-ssa` option which prints each
+function's SSA IR plus the register allocator's per-value placement to stderr before
+lowering.
 
 There are various demo's under [`demos`](./demos/):
 
 * Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
-* GUI demos for macOS, Linux and Windows (`gui_hello`),
-* Maze builder and solver - TBD,
+* `maze.c ` - maze builder and solver,
+* `gui_hello` - GUI demos for macOS, Linux and Windows,
+* `wdm_driver`, `nt_hello`, `nt_loader` - examples of the Windows native (NT) executable, Windows driver,
+* `efi_hello` - a UEFI binary,
 * `sqlite3` - the most famous embedded database,
 * `miniz` - compression, CRC32, integers, bit twiddling,
 * `kissfft` - floating points, Fast Fourier Transform,
@@ -44,63 +84,136 @@ There are various demo's under [`demos`](./demos/):
 * `tweetNacCl`, `MonoCypher`, `BearSSL` - cryptography
 * `Lua` - the embeddable scripting language
 
-It can also run the code JIT-ted in-process so no binary is written
-to the disk. That option might be useful for using `badc` to run the
-C code as a script. Finally, there's an option to run the IR (intermediate
-representation) with tracking pointer access and bounds to catch
-memory issues.
+Besides these, there are some fun test fixtures implementing Horner scheme, RK4,
+8-Queens and more.
 
-It started out as a Rust port of Robert Swierczek's
+Finally, there's an option to run the IR (intermediate representation) with
+tracking pointer access and bounds to catch memory issues.
+
+## Lineage
+
+It started out as a Rust port of Robert Swierczek's C compiler in 4 functions
 [c4](https://github.com/rswier/c4) and grew from there. There has been
 enough divergence from the original to call the dialect **c5**. Due to
 that facetious naming the source tree spells that out as the `c5` module
 and `C5Error` type.
 
-The original `c4.c` compiler ships as a test fixture and self-hosts:
+The venerable 4-function `c4.c` compiler ships as a test fixture and self-hosts:
 
 ```sh
 badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
 ./c4 hello.c                       # which then runs hello.c
 ```
 
-or you can really crank the fun up with something like
+And you can really crank the fun up with something like
 
 ```sh
-    badc --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
+badc -O --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 ```
 
 to run it quadro-nested :)
 
-## How to install
+During the development, the `badc` compiler was "spiraling" out from the stack IR execution
+and evolving frontend to the 3-operand IR and SSA IR and the optimizing backend.
 
-If you have Rust installed, clone the repo install it with
+## How to install and first steps
+
+You can download one of the binary release packages matching your
+hardware and the OS. There is one small binary inside, and that's
+all you should need to start using `badc`.
+
+If you have Rust installed, clone the repo, and install it with
 
 ```sh
-cargo install --path .
+cargo install --path . --features full
 ```
 
-Now `badc` is available on the PATH.
+or just
 
-If you don't have Rust installed, download one of the binary release packages
-matching you hardware and the OS.
+```sh
+cargo install badc --features full
+```
+
+if you're not interested in building from the source code.
+
+The `--features full` is required for the command-line compiler: the
+crate's default feature set is the host-architecture JIT library alone
+(so `cargo add badc` pulls in a slim dependency), and the `badc` binary
+additionally needs the native object writers and the cross-translation-unit
+linker, which the `full` feature enables.
+
+Now `badc` is available on the PATH.
 
 ## Hello, ~~world~~, 123!
 
 A first run:
 
 ```sh
-$ cargo run --quiet -- --jit hello.c # runs native code in-process
-
+badc --jit hello.c # runs native code in-process
+```
+```console
 Hello 123
 ```
 
 or
 
 ```sh
-cargo run --quiet -- hello.c     # Produces native binary
-./hello                          # produced by the previous line
+badc -O hello.c     # Produces native optimized binary
+./hello             # produced by the previous line
+```
 
+```console
 Hello 123
+```
+
+Here's a quick debugging session:
+
+```sh
+badc -g hello.c     # Build with the debug information
+```
+```console
+info: wrote file hello for target macos-aarch64
+```
+
+Now run under the debugger (`lldb`, `gdb`, `rr`), set breakpoints, check out the local variables:
+
+```console
+lldb ./hello
+
+(lldb) target create "./hello"
+Current executable set to '/Users/krom/src/compilers/badc/hello' (arm64).
+(lldb) b main
+Breakpoint 1: where = hello`main + 16 at hello.c:5, address = 0x00000001000006fc
+(lldb) l
+note: No source available
+(lldb) run
+Process 19800 launched: '/Users/krom/src/compilers/badc/hello' (arm64)
+Process 19800 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 1.1
+    frame #0: 0x00000001000006fc hello`main at hello.c:5
+   2    #include <stdlib.h>
+   3
+   4    int main() {
+-> 5        int a = 123;
+   6        printf("Hello %d\n", a);
+   7        return 0;
+   8    }
+Target 0: (hello) stopped.
+
+(lldb) n
+Process 19800 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = step over
+    frame #0: 0x0000000100000704 hello`main at hello.c:6
+   3
+   4    int main() {
+   5        int a = 123;
+-> 6        printf("Hello %d\n", a);
+   7        return 0;
+   8    }
+Target 0: (hello) stopped.
+
+(lldb) v
+(int) a = 123
 ```
 
 The first non-flag argument is the source file. By default `badc`
@@ -133,16 +246,18 @@ which case the shebang line picks the mode (`#!/usr/bin/env badc
 
 Five targets, cross-compile from any host to any of them:
 
-| `--target=`               | format        | dylibs                              |
-|---------------------------|---------------|-------------------------------------|
-| `macos-aarch64` (default) | Mach-O        | `/usr/lib/libSystem.B.dylib`        |
-| `linux-aarch64`           | ELF           | `libc.so.6`, `libdl.so.2`           |
-| `linux-x64`               | ELF           | same                                |
-| `windows-x64`             | PE32+         | `msvcrt.dll`, `kernel32.dll`        |
-| `windows-arm64`           | PE32+         | same                                |
+| `--target=`     | format        |
+|-----------------|---------------|
+| `macos-aarch64` | Mach-O        |
+| `linux-aarch64` | ELF           |
+| `linux-x64`     | ELF           |
+| `windows-x64`   | PE32+         |
+| `windows-arm64` | PE32+         |
 
 ```sh
-badc tests/fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
+# Running on the macOS host:
+
+badc tests/fixtures/c/c4.c -o c4-native
 ./c4-native hello.c
 
 badc --target=linux-aarch64 tests/fixtures/c/c4.c -o c4-arm
@@ -154,13 +269,6 @@ wine c4.exe hello.c
 
 The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
 or under WINE on Linux (x86_64, ARM64).
-
-What the native backend executes faithfully: every fixture in
-`tests/fixtures/c/` that runs under the VM and isn't a deliberate
-safety-net check. The Mach-O, ELF, and PE paths are mirrored
-test-for-test. What native mode doesn't have: the VM's runtime
-safety net (`--track-pointers`, code-vs-data separation checks).
-Use `--interp` if you want those.
 
 ### Multiple translation units
 
@@ -183,8 +291,8 @@ for the name table, and `.rela.text` carrying the relocations
 the linker applies once each unit's final position is known.
 The target is pinned at `-c` time, and the objects are also
 linkable by `ld` / `lld`. Archives are ar(5) with a SysV-style
-symbol index. The `linker` cargo feature -- on by default --
-gates the entire pipeline; library consumers that don't need
+symbol index. The `full` cargo feature gates the entire
+pipeline; library consumers that don't need
 multi-TU artifacts can opt out via
 `default-features = false, features = ["std"]` to keep the
 footprint slim.
@@ -198,23 +306,10 @@ remaining objects or archive members.
 ### What is supported
 
 A summary of what the dialect parses + lowers, and where it
-diverges from C99, lives in [`c99-gaps.md`](c99-gaps.md). Short
-version: c5 covers most of the language (full preprocessor, the
-integer + float arithmetic surface, structs / unions / bitfields
-/ enums / typedef, function pointers, varargs, `_Thread_local`,
-anonymous struct/union members, `#pragma pack(N)`, ...) on the
-host platform's data model (LP64 on macOS / Linux, LLP64 on
-Windows). The doc enumerates rejected idioms, divergent
-behaviour, and the c5-only extensions (`#pragma dylib` /
-`binding` / `export` / `entrypoint` / `subsystem`,
-`#pragma once`, the SSA interpreter, the in-process JIT).
-
-One implementation choice worth flagging up front: **bare `char`
-is unsigned** on every target (a 1-byte zero-extending load),
-matching the AArch64 platform-ABI default. Use `signed char`
-where the sign matters; gcc and clang differ on this per host
-architecture, so portable code that walks bytes by sign already
-spells `signed char` explicitly.
+diverges from C99, lives in [`std-conformance.md`](std-conformance.md). Short
+version: c5 covers most of the language and few features of the later standards.
+The doc enumerates rejected idioms, divergent behavior, and the c5-only extensions
+(`#pragma dylib` / `binding` / `export` / `entrypoint` / `subsystem`).
 
 #### From the pre-processor side
 
@@ -233,10 +328,9 @@ with user identifiers:
     __linux__                            // Linux targets only
 ```
 
-The MSVC mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
+The MSVC/MinGW mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
 / `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
-and is opted into per translation unit with
-`-include msvc_compat.h`.
+and is opted into per translation unit with `-include msvc_compat.h`.
 
 ### Headers and bindings
 
@@ -266,10 +360,8 @@ forcing you to pull in everything they name.
 
 #### Source-driven build flags via `#pragma`
 
-c5 follows a "source picks, compiler honours" pattern for
-build-time choices that historically lived on the build
-driver's command line. The same shape covers dylib bindings,
-exports, alignment, the entry-point name, and the Windows
+`badc` uses `#pragma`'s to lighten the command line. One can specify
+dylib bindings, exports, alignment, the entry-point name, and the Windows
 subsystem -- every knob lives next to the code it configures
 so the source carries enough context to build with a bare
 `badc <file>`.
@@ -344,7 +436,7 @@ inside the badc process:
 badc --jit tests/fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
 ```
 
-Five hosts ship today:
+Five hosts are supported:
 
 | host           | mapping                                                              |
 |----------------|----------------------------------------------------------------------|
@@ -363,9 +455,6 @@ ws2_32, ...) + `GetProcAddress`. macOS uses Apple's `MAP_JIT` +
 per-thread W^X toggle for the hardware-enforced W^X on Apple
 Silicon.
 
-`--dump-ssa` prints each function's SSA IR plus the register
-allocator's per-value placement to stderr before lowering.
-
 For more, one can use `objdump`, `readelf`, etc.
 
 ### Optimizations
@@ -376,23 +465,10 @@ handful of cheap rewrites run unconditionally; `--optimize`
 adds a set of SSA passes on top.
 
 Always on: drop self-`mov`s and fuse compare + branch into
-`cmp` / `b.cond` (or `cmp` / `jcc`) without materializing a 0/1
+`cmp` / `b.cond` (or `cmp` / `jcc`) without materializing a `0`/`1`
 boolean in between. The register allocator builds an
 interference graph over phi-congruence classes and colors it
 greedily, spilling to frame slots only under pressure.
-
-`--optimize` (or `-O`) adds, in pipeline order:
-
-* **mem2reg.** Promote address-free local slots to SSA values,
-  dropping their frame load / store traffic.
-* **Inlining.** Inline leaf callees whose body fits under the
-  `--inline-cap=N` instruction budget (default 64; 0 disables).
-* **Rotate recognition.** Collapse `(x >> c) | (x << (W - c))`
-  chains to a single rotate.
-* **Branch const-fold, immediate dedup, redundant-extend
-  drop.** Fold constant branch conditions, share materialized
-  immediates across a function, and remove sign/zero extends
-  whose result already has the needed width.
 
 `examples/bench.rs` runs a few pure-computation workloads
 (`fib32`, `quicksort-50k`, `matmul-50`) through the VM and the
@@ -444,13 +520,18 @@ construct the VM with `Vm::with_host(program, my_host)`. Everything
 else -- lexer, parser, preprocessor, VM dispatch, pointer tracking,
 native backends -- runs on `extern crate alloc`.
 
-The CLI binary always builds with the default `std` feature.
+The CLI binary requires the `std` and `full` features (see the
+install section above).
 
 ## Tests
 
 ```sh
-cargo test
+cargo test --features full
 ```
+
+`--features full` runs the full suite. A bare `cargo test` exercises
+only the host-only JIT library (the default feature set), gating out
+the `native*`, `linker`, and `dwarf` modules that emit on-disk images.
 
 Tests are split by what they exercise. `lexer`, `parser`, and
 `codegen` drive each phase directly. `programs` and `intrinsics`
@@ -495,7 +576,7 @@ CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. Every
 runner additionally runs the demo smokes -- sqlite3, miniz,
 kissfft, bzip2, tweetnacl, monocypher, bearssl, lua, stb,
-chibicc, tinycc, scc, gui_hello, nt_loader -- end-to-end (or
+chibicc, tinycc, gui_hello, nt_loader -- end-to-end (or
 build-only for the GUI demos, which need a display). See
 [`demos/`](./demos/) for what each exercises. The PE-via-
 WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`

@@ -12,7 +12,7 @@ Each lane:
      builds + fetches its own caches.
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release --lib`.
-  4. Run demos sqlite3 / lua / miniz / stb / tweetnacl smoke).
+  4. Run the demos sqlite3 / lua / miniz / monocypher / stb / tweetnacl.
 
 Usage (one `--box` flag per remote lane):
 
@@ -45,7 +45,10 @@ GATING_DEMOS = (
     "demos/sqlite3/smoke.py",
     "demos/lua/smoke.py",
     "demos/miniz/smoke.py",
+    "demos/monocypher/smoke.py",
+    "demos/stb/smoke.py",
     "demos/tweetnacl/smoke.py",
+    "demos/quickjs/smoke.py",
 )
 
 
@@ -112,8 +115,6 @@ def sync_linux(box: Box, github_token: str) -> int:
         "-az",
         "--delete-excluded",
         "--exclude=target",
-        "--exclude=demos/scc/.cache",
-        "--exclude=demos/scc/src",
         "--exclude=demos/*/.cache",
         "--exclude=demos/*/.work",
         "--exclude=.git",
@@ -126,11 +127,15 @@ def sync_linux(box: Box, github_token: str) -> int:
 
 
 def remote_run_linux(box: Box, github_token: str) -> int:
+    # `set -o pipefail` so a failing build / test / demo propagates its
+    # exit status through the `| tail` truncation; without it the pipe
+    # exits with tail's status (0) and a red lane reports green.
     inner = (
+        f"set -o pipefail && "
         f"cd {box.remote_path} && "
         f"export GITHUB_TOKEN={shlex.quote(github_token)} && "
-        f"cargo build --release --locked 2>&1 | tail -3 && "
-        f"cargo test --release --lib 2>&1 | tail -3 && "
+        f"cargo build --release --locked --features full 2>&1 | tail -3 && "
+        f"cargo test --release --lib --features full 2>&1 | tail -3 && "
         + " && ".join(f"python3 {d} 2>&1 | tail -2" for d in GATING_DEMOS)
     )
     return stream(box.short, ["ssh", box.host, inner])
@@ -149,7 +154,6 @@ def sync_windows(box: Box, github_token: str) -> int:
             "--exclude=.git",
             "--exclude=demos/*/.cache",
             "--exclude=demos/*/.work",
-            "--exclude=demos/scc/src",
             "--exclude=._*",
             ".",
         ],
@@ -159,8 +163,22 @@ def sync_windows(box: Box, github_token: str) -> int:
     if tar.returncode != 0:
         sys.stdout.write(f"[{box.short}] tar failed: {tar.stderr}\n")
         return tar.returncode
+    # The tarball must land where the extraction reads it. Windows
+    # OpenSSH scp resolves a bare `/tmp/...` target against the SFTP root
+    # (typically the user's home drive), not `C:\tmp`, so create `C:\tmp`
+    # and scp to the explicit `C:/tmp/...` path the extraction uses --
+    # otherwise the extraction silently runs against a stale tarball from
+    # an earlier run.
+    mkdir = subprocess.run(
+        ["ssh", box.host, 'cmd /c "mkdir C:\\tmp 2>NUL & exit /b 0"'],
+        capture_output=True,
+        text=True,
+    )
+    if mkdir.returncode != 0:
+        sys.stdout.write(f"[{box.short}] mkdir C:\\tmp failed: {mkdir.stderr}\n")
+        return mkdir.returncode
     scp = subprocess.run(
-        ["scp", str(archive), f"{box.host}:/tmp/badc-tree.tar.gz"],
+        ["scp", str(archive), f"{box.host}:C:/tmp/badc-tree.tar.gz"],
         capture_output=True,
         text=True,
     )
@@ -189,8 +207,8 @@ def remote_run_windows(box: Box, github_token: str) -> int:
     inner = (
         f"cd /d {remote_path} && "
         f"set GITHUB_TOKEN={github_token} && "
-        f"cargo build --release --locked && "
-        f"cargo test --release --lib && "
+        f"cargo build --release --locked --features full && "
+        f"cargo test --release --lib --features full && "
         f"{demo_cmd}"
     )
     # Quote the entire command so the outer ssh-side cmd /c treats the
@@ -238,7 +256,7 @@ def main() -> int:
         ).stdout.strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
         sys.stdout.write(
-            "warning: `gh auth token` failed; scc setup.py will 404 on private repo\n"
+            "warning: `gh auth token` failed; vendored-demo setup.py fetches will 404 on the private mirror\n"
         )
 
     results: dict[str, int] = {}

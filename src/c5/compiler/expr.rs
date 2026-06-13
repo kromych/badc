@@ -1850,17 +1850,11 @@ impl Compiler {
                     // C99 6.5.3.3p3: result has the promoted operand type and
                     // follows that type's overflow rules. Negating the
                     // type-minimum overflows past the type width, so a 32-bit
-                    // result is renormalized to its declared width (mask
-                    // unsigned, sign-extend signed) -- otherwise `-INT_MIN`
-                    // leaves the high half clear and a later 64-bit read
-                    // (Shr, widen to long) sees the wrong value.
+                    // result is renormalized to its declared width -- otherwise
+                    // `-INT_MIN` leaves the high half clear and a later 64-bit
+                    // read (Shr, widen to long) sees the wrong value.
                     if self.size_of_type(self.ty) == 4 {
-                        if is_unsigned_ty(self.ty) {
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                        } else {
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, 32);
-                            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, 32);
-                        }
+                        self.renormalize_to_width(self.ty);
                     }
                 }
             }
@@ -2602,17 +2596,11 @@ impl Compiler {
                 self.ast_binop(crate::c5::ir::BinOp::Shl);
                 // The shift can push bits past the result type's width into
                 // the 64-bit accumulator, so a 32-bit result is renormalized
-                // to its declared width -- mask for unsigned, sign-extend for
-                // signed -- so a later 64-bit read (arithmetic >>, widen to
-                // long) sees the right value, matching the arithmetic binops.
-                // A 64-bit result is already full width.
+                // to its declared width so a later 64-bit read (arithmetic >>,
+                // widen to long) sees the right value, matching the arithmetic
+                // binops. A 64-bit result is already full width.
                 if self.size_of_type(result_ty) == 4 {
-                    if is_unsigned_ty(result_ty) {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                    } else {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, 32);
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, 32);
-                    }
+                    self.renormalize_to_width(result_ty);
                     self.ty = result_ty;
                 }
             } else if self.lex.tk == Token::ShrOp {

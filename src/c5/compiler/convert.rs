@@ -119,22 +119,13 @@ impl Compiler {
         self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
     }
 
-    /// After an Add / Sub / Mul, normalize the 64-bit accumulator
-    /// to the C99 6.3.1.8 common type's storage width.
-    ///
-    /// Unsigned common type: mask with `(1 << N) - 1`. C99 mandates
-    /// wrap-modulo-2^N; without this `(uint)0xFFFFFFFF + 1u` leaves
-    /// 0x100000000 in the 64-bit register, and any consumer that
-    /// widens the result before it reaches a typed slot
-    /// (a long-typed slot, a variadic FP boundary, an
-    /// immediately-following cast) reads the wider value.
-    ///
-    /// Signed common type: signed-int overflow is undefined behavior
-    /// per C99 6.5p5, but clang and gcc both consistently truncate
-    /// the result to the type's width and sign-extend back. c5
-    /// matches that convention via `Shl K; Shr K` where `K = 64 -
-    /// width_bits`. So `(int)50000 * (int)50000` becomes
-    /// 0x9502F900 sign-extended = -1794967296.
+    /// After an Add / Sub / Mul, renormalize the 64-bit accumulator to
+    /// the C99 6.3.1.8 common type's storage width. Without it
+    /// `(uint)0xFFFFFFFF + 1u` leaves 0x100000000 in the register and any
+    /// consumer that widens the result before a typed slot (a long-typed
+    /// slot, a variadic FP boundary, an immediately-following cast) reads
+    /// the wider value; `(int)50000 * (int)50000` reads as a positive
+    /// 0x9502F900 instead of -1794967296.
     pub(super) fn maybe_mask_to_unsigned_width(&mut self, lhs_ty: i64, rhs_ty: i64) {
         if is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
             return;
@@ -143,27 +134,34 @@ impl Compiler {
             return;
         }
         let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
-        let common_size = self.size_of_type(common);
-        if is_unsigned_ty(common) {
-            let mask: i64 = match common_size {
+        self.renormalize_to_width(common);
+    }
+
+    /// Renormalize the 64-bit accumulator to the storage width of an
+    /// integer type `ty` after an operation that can overflow that width.
+    ///
+    /// Unsigned: mask with `(1 << N) - 1` (C99 6.2.5p9 wrap-modulo-2^N).
+    /// Signed: `Shl K; Shr K` with `K = 64 - width_bits`, truncating to
+    /// the width and sign-extending back (matches clang/gcc for the
+    /// overflow that 6.5p5 leaves undefined). Width 8 fills the
+    /// accumulator and needs nothing. Integer promotion already widens
+    /// char/short to int, so a narrow type reaching the signed path is
+    /// `int` (or LLP64 `long`), size 4. The shift pair folds to a single
+    /// `sxtw`/`movslq` at emit time.
+    pub(super) fn renormalize_to_width(&mut self, ty: i64) {
+        let size = self.size_of_type(ty);
+        if !matches!(size, 1 | 2 | 4) {
+            return;
+        }
+        if is_unsigned_ty(ty) {
+            let mask: i64 = match size {
                 1 => 0xff,
                 2 => 0xffff,
-                4 => 0xffff_ffff,
-                _ => return,
+                _ => 0xffff_ffff,
             };
             self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         } else {
-            // Signed: integer promotion already widens char / short
-            // to int, so the only narrow signed common type that
-            // reaches here is `int` (size 4), or `long` on LLP64
-            // (also size 4). Width-8 signed types fill the
-            // accumulator and need no normalization.
-            let shift_bits: i64 = match common_size {
-                1 => 56,
-                2 => 48,
-                4 => 32,
-                _ => return,
-            };
+            let shift_bits = 64 - size as i64 * 8;
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift_bits);
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift_bits);
         }

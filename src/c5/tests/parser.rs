@@ -525,13 +525,10 @@ fn pragma_export_with_global_data_is_refused() {
 }
 
 #[test]
-fn libc_call_with_struct_arg_is_refused() {
-    // The c5-internal struct ABI uses caller-pushes-address +
-    // callee-copies-on-entry. Real platform ABIs (SysV/Win64/AAPCS64)
-    // pack the bytes into argument registers instead. We don't
-    // implement the platform path yet, so calling a Token::Sys
-    // function with a struct-by-value argument is refused at
-    // compile time rather than emitting a silently-wrong call.
+fn libc_call_with_struct_arg_compiles() {
+    // A struct passed by value to a Token::Sys (libc) call is packed into the
+    // platform-ABI argument registers (SysV / AAPCS64), no longer refused. The
+    // runtime ABI is locked in by libc_struct_arg_by_value.c.
     let mut src = super::with_prelude(
         "struct P { int x; int y; };\n\
          int main() {\n\
@@ -541,17 +538,10 @@ fn libc_call_with_struct_arg_is_refused() {
              return 0;\n\
          }",
     );
-    // `write` is a Token::Sys binding declared in unistd.h; its
-    // 2nd arg is a `void*`, not a struct, so the c5 grammar
-    // here passes the struct by value, which trips our refusal.
     src.push('\0');
-    let res = Compiler::new(src).compile();
-    let err = res.expect_err("expected struct-by-value-to-libc to fail");
-    let msg = err.to_string();
     assert!(
-        msg.contains("struct passed by value")
-            || msg.contains("struct-arg convention isn't implemented"),
-        "expected platform-ABI struct refusal, got: {msg}"
+        Compiler::new(src).compile().is_ok(),
+        "struct-by-value to a libc binding should compile"
     );
 }
 

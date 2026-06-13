@@ -2983,6 +2983,7 @@ fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call_ext(
             code,
@@ -2996,6 +2997,8 @@ fn emit_inst(
             target,
             plt_call_fixups,
             imports,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
@@ -5516,6 +5519,8 @@ fn emit_call_ext(
     target: Target,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -5527,7 +5532,11 @@ fn emit_call_ext(
     } else {
         args.len()
     };
-    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    // With no by-value struct argument this reduces to the scalar
+    // `plan_call_args` placement; a tagged aggregate rides through the
+    // host-ABI argument-register packing instead.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
+    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     let xmm_used = plan
         .placements
         .iter()

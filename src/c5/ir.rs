@@ -243,6 +243,12 @@ pub(crate) enum Inst {
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
         /// without it an FP libc result is force-bridged through a GPR.
         fp_return: bool,
+        /// Per-argument aggregate tags, as for [`Self::Call::arg_aggs`]:
+        /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of a
+        /// by-value struct laid out by `agg_descs[i]`, so the emitter packs
+        /// its bytes into the platform-ABI argument registers. Empty for the
+        /// common scalar-only libc call.
+        arg_aggs: Vec<Option<u32>>,
     },
     /// Tail-jump to an external symbol. Used only as the body
     /// of an address-take trampoline; never has a defined value

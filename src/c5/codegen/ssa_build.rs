@@ -357,7 +357,9 @@ impl SsaBuilder {
     /// travels with the instruction through the optimizer.
     pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
         match &mut self.func.insts[v as usize] {
-            Inst::Call { arg_aggs: a, .. } | Inst::CallIndirect { arg_aggs: a, .. } => {
+            Inst::Call { arg_aggs: a, .. }
+            | Inst::CallIndirect { arg_aggs: a, .. }
+            | Inst::CallExt { arg_aggs: a, .. } => {
                 *a = arg_aggs;
             }
             _ => {}
@@ -969,6 +971,7 @@ impl SsaBuilder {
             args,
             fp_arg_mask,
             fp_return,
+            arg_aggs: alloc::vec::Vec::new(),
         })
     }
 

@@ -178,6 +178,7 @@ fn fmt_inst(inst: &Inst) -> String {
             args,
             fp_arg_mask,
             fp_return,
+            ..
         } => {
             // Most external calls are integer-returning; show `fp_return`
             // only when set so the common case keeps a stable form.

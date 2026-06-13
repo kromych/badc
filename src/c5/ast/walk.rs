@@ -2125,8 +2125,41 @@ impl<'a> Walker<'a> {
                         // 6.2.5p10) so the result rides d0 / xmm0
                         // without a GPR bridge; a `float` result
                         // additionally carries the f32 tag.
+                        // A by-value struct argument to a libc binding is
+                        // packed into the platform-ABI argument registers
+                        // (SysV / AAPCS64: <= 16 bytes), not passed by the
+                        // c5-internal address convention. Tag each struct arg
+                        // so the emitter classifies and marshals it.
+                        let mut ext_arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                        let nparams = self.symbols[*sym as usize].params.len();
+                        for i in 0..arg_vals.len() {
+                            let arg_ty = if i < nparams {
+                                self.symbols[*sym as usize].params[i]
+                            } else {
+                                match expr_ty(self.ast.expr(args[i])) {
+                                    Some(t) => t,
+                                    None => continue,
+                                }
+                            };
+                            if is_struct_ty(arg_ty)
+                                && struct_ptr_depth(arg_ty) == 0
+                                && let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                    self.structs,
+                                    self.target,
+                                    arg_ty,
+                                )
+                            {
+                                if ext_arg_aggs.is_empty() {
+                                    ext_arg_aggs = alloc::vec![None; arg_vals.len()];
+                                }
+                                ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                            }
+                        }
                         let fp_return = is_floating_scalar(*ty);
                         let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
+                        if !ext_arg_aggs.is_empty() {
+                            b.set_call_arg_aggs(call, ext_arg_aggs);
+                        }
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }

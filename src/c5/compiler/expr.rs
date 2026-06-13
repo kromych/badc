@@ -815,34 +815,11 @@ impl Compiler {
                             }
                         }
 
-                        // Refuse passing a struct by value to a
-                        // Token::Sys callee. The c5-internal "push
-                        // the address" convention works for c5-to-c5
-                        // calls (the callee copies into a fresh local
-                        // on entry); platform ABIs for libc instead
-                        // expect the bytes packed into argument
-                        // registers (SysV/AAPCS64: 1-2 GPRs for
-                        // structs <= 16 bytes; Win64: a single GPR
-                        // for <= 8 bytes, hidden pointer otherwise).
-                        // Flag the mismatch loudly.
-                        // TODO: split a small struct argument into the
-                        // ABI's argument registers instead of rejecting.
-                        if self.symbols[id_idx].class == Token::Sys as i64
-                            && is_struct_ty(self.ty)
-                            && struct_ptr_depth(self.ty) == 0
-                        {
-                            return Err(self.compile_err_at(
-                                arg_line,
-                                format!(
-                                    "argument {} of `{}` is a struct passed by value, \
-                                 but the platform-ABI struct-arg convention isn't \
-                                 implemented for Token::Sys calls. Pass `&s` (a \
-                                 pointer to the struct) instead.",
-                                    nargs + 1,
-                                    fn_name_for_warn
-                                ),
-                            ));
-                        }
+                        // A struct passed by value to a Token::Sys callee is
+                        // packed into the platform-ABI argument registers by
+                        // the walker + emitter (the same host-ABI path c5-to-c5
+                        // calls use); the by-value struct argument is no longer
+                        // rejected here.
                         // Snapshot the arg's AST ExprId before the
                         // Si consumes both vstack and acc. The Call
                         // node built below uses these in source

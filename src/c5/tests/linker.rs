@@ -422,56 +422,26 @@ fn export_all_executable_exposes_dynamic_symbols() {
         )
         .expect("write executable")
     };
-    // Collect the names in the `.dynsym` (the loader-visible dynamic
-    // symbols) of an ELF64 image. `.symtab` -- where every executable
-    // already carries `host_api` -- is ignored; only a dynamic export
-    // is visible to a `dlopen`'d module.
-    let dynsym_names = |img: &[u8]| -> alloc::vec::Vec<alloc::string::String> {
-        let u32a = |o: usize| u32::from_le_bytes(img[o..o + 4].try_into().unwrap());
-        let u64a = |o: usize| u64::from_le_bytes(img[o..o + 8].try_into().unwrap());
-        let shoff = u64a(0x28) as usize;
-        let shentsize = u16::from_le_bytes(img[0x3a..0x3c].try_into().unwrap()) as usize;
-        let shnum = u16::from_le_bytes(img[0x3c..0x3e].try_into().unwrap()) as usize;
-        let mut out = alloc::vec::Vec::new();
-        for i in 0..shnum {
-            let sh = shoff + i * shentsize;
-            if u32a(sh + 4) != 11 {
-                continue; // SHT_DYNSYM
-            }
-            let off = u64a(sh + 24) as usize;
-            let size = u64a(sh + 32) as usize;
-            let strtab_idx = u32a(sh + 40) as usize;
-            let str_sh = shoff + strtab_idx * shentsize;
-            let str_off = u64a(str_sh + 24) as usize;
-            let mut p = off;
-            while p + 24 <= off + size {
-                let name_idx = u32a(p) as usize;
-                let mut e = str_off + name_idx;
-                while img[e] != 0 {
-                    e += 1;
-                }
-                if let Ok(s) = core::str::from_utf8(&img[str_off + name_idx..e])
-                    && !s.is_empty()
-                {
-                    out.push(s.to_string());
-                }
-                p += 24;
-            }
-        }
-        out
-    };
+    // `.symtab` carries `host_api` in every executable; only a
+    // `.dynsym` entry is visible to a `dlopen`'d module, so read the
+    // dynamic table through the linker's ELF record reader.
+    use crate::c5::linker::object::{read_dynamic_symbol_names, read_elf_header};
     let exported = build_exe(true);
     assert_eq!(
-        u16::from_le_bytes(exported[0x10..0x12].try_into().unwrap()),
+        read_elf_header(&exported).expect("read header").e_type,
         2,
         "executable must be ET_EXEC"
     );
     assert!(
-        dynsym_names(&exported).iter().any(|n| n == "host_api"),
+        read_dynamic_symbol_names(&exported)
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_api"),
         "an --export-all executable must export host_api in .dynsym"
     );
     assert!(
-        !dynsym_names(&build_exe(false))
+        !read_dynamic_symbol_names(&build_exe(false))
+            .expect("parse .dynsym")
             .iter()
             .any(|n| n == "host_api"),
         "an ordinary executable must not export host_api dynamically"

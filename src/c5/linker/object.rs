@@ -59,21 +59,21 @@ const ELF64_RELA_SIZE: usize = core::mem::size_of::<Elf64Rela>();
 // sanity checks at the bottom of this block lock the sizes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Elf64Ehdr {
-    e_ident: [u8; 16],
-    e_type: u16,
-    e_machine: u16,
-    e_version: u32,
-    e_entry: u64,
-    e_phoff: u64,
-    e_shoff: u64,
-    e_flags: u32,
-    e_ehsize: u16,
-    e_phentsize: u16,
-    e_phnum: u16,
-    e_shentsize: u16,
-    e_shnum: u16,
-    e_shstrndx: u16,
+pub(crate) struct Elf64Ehdr {
+    pub(crate) e_ident: [u8; 16],
+    pub(crate) e_type: u16,
+    pub(crate) e_machine: u16,
+    pub(crate) e_version: u32,
+    pub(crate) e_entry: u64,
+    pub(crate) e_phoff: u64,
+    pub(crate) e_shoff: u64,
+    pub(crate) e_flags: u32,
+    pub(crate) e_ehsize: u16,
+    pub(crate) e_phentsize: u16,
+    pub(crate) e_phnum: u16,
+    pub(crate) e_shentsize: u16,
+    pub(crate) e_shnum: u16,
+    pub(crate) e_shstrndx: u16,
 }
 
 #[repr(C)]
@@ -110,11 +110,22 @@ struct Elf64Rela {
     r_addend: i64,
 }
 
+/// ELF note header: the fixed prefix before a note's name and
+/// descriptor payloads.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Elf64Nhdr {
+    n_namesz: u32,
+    n_descsz: u32,
+    n_type: u32,
+}
+
 const _: () = {
     assert!(core::mem::size_of::<Elf64Ehdr>() == 64);
     assert!(core::mem::size_of::<Elf64Shdr>() == 64);
     assert!(core::mem::size_of::<Elf64Sym>() == 24);
     assert!(core::mem::size_of::<Elf64Rela>() == 24);
+    assert!(core::mem::size_of::<Elf64Nhdr>() == 12);
 };
 
 /// Read a `#[repr(C)]` ELF record at byte offset `off`. Bounds-
@@ -137,6 +148,56 @@ fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
     // host's byte order so the in-memory pattern matches the
     // on-disk pattern.
     Ok(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(off) as *const T) })
+}
+
+/// `SHT_DYNSYM` -- the loader-visible dynamic symbol table.
+#[cfg(test)]
+const SHT_DYNSYM: u32 = 11;
+
+/// Read the ELF64 file header. `e_type` `2` is `ET_EXEC`, `3` is
+/// `ET_DYN`; `e_machine` and `e_phnum` follow the spec.
+#[cfg(test)]
+pub(crate) fn read_elf_header(bytes: &[u8]) -> Result<Elf64Ehdr, C5Error> {
+    read_struct(bytes, 0)
+}
+
+/// Collect the names in every `.dynsym` of a linked ELF64 image
+/// (executable or shared object). Reads through the `#[repr(C)]`
+/// section-header and symbol records rather than fixed byte offsets so
+/// the on-disk layout is named, not magic. Empty names are skipped.
+#[cfg(test)]
+pub(crate) fn read_dynamic_symbol_names(bytes: &[u8]) -> Result<Vec<String>, C5Error> {
+    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    let read_cstr = |off: usize| -> String {
+        let start = off;
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != 0 {
+            end += 1;
+        }
+        String::from_utf8_lossy(&bytes[start..end]).into_owned()
+    };
+    let mut names = Vec::new();
+    for i in 0..ehdr.e_shnum as usize {
+        let sh: Elf64Shdr =
+            read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)?;
+        if sh.sh_type != SHT_DYNSYM {
+            continue;
+        }
+        let strtab: Elf64Shdr = read_struct(
+            bytes,
+            ehdr.e_shoff as usize + sh.sh_link as usize * ehdr.e_shentsize as usize,
+        )?;
+        let entsize = sh.sh_entsize as usize;
+        let count = (sh.sh_size as usize).checked_div(entsize).unwrap_or(0);
+        for j in 0..count {
+            let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+            let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
+            if !name.is_empty() {
+                names.push(name);
+            }
+        }
+    }
+    Ok(names)
 }
 
 /// Which architecture's relocations the object uses. Drives the
@@ -694,11 +755,12 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
-        while cur + 12 <= body.len() {
-            let namesz = u32::from_le_bytes(body[cur..cur + 4].try_into().unwrap()) as usize;
-            let descsz = u32::from_le_bytes(body[cur + 4..cur + 8].try_into().unwrap()) as usize;
-            let ntype = u32::from_le_bytes(body[cur + 8..cur + 12].try_into().unwrap());
-            cur += 12;
+        while cur + core::mem::size_of::<Elf64Nhdr>() <= body.len() {
+            let nhdr: Elf64Nhdr = read_struct(body, cur)?;
+            let namesz = nhdr.n_namesz as usize;
+            let descsz = nhdr.n_descsz as usize;
+            let ntype = nhdr.n_type;
+            cur += core::mem::size_of::<Elf64Nhdr>();
             let name_end = cur.saturating_add(namesz);
             if name_end > body.len() {
                 break;
@@ -867,17 +929,14 @@ fn parse_rela(bytes: &[u8], sh: &Elf64Shdr) -> Result<Vec<NativeReloc>, C5Error>
     let count = body.len() / entsize;
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
-        let off = i * entsize;
-        let r_offset = u64::from_le_bytes(body[off..off + 8].try_into().unwrap());
-        let r_info = u64::from_le_bytes(body[off + 8..off + 16].try_into().unwrap());
-        let r_addend = i64::from_le_bytes(body[off + 16..off + 24].try_into().unwrap());
-        let sym_idx = (r_info >> 32) as u32;
-        let rtype = (r_info & 0xffff_ffff) as u32;
+        let rela: Elf64Rela = read_struct(body, i * entsize)?;
+        // ELF64 `r_info` packs the symbol index in the high 32 bits and
+        // the relocation type in the low 32 (ELF64_R_SYM / _R_TYPE).
         out.push(NativeReloc {
-            offset: r_offset,
-            sym_idx: sym_idx as usize,
-            rtype,
-            addend: r_addend,
+            offset: rela.r_offset,
+            sym_idx: (rela.r_info >> 32) as usize,
+            rtype: (rela.r_info & 0xffff_ffff) as u32,
+            addend: rela.r_addend,
         });
     }
     Ok(out)

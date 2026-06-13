@@ -37,7 +37,7 @@ mod image;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
-mod object;
+pub(crate) mod object;
 #[cfg(feature = "std")]
 mod synth_build;
 

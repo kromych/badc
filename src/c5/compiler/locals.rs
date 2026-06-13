@@ -495,7 +495,40 @@ impl Compiler {
         let arr_ty = ty + Ty::Ptr as i64;
         let mut i: i64 = 0;
         while self.lex.tk != '}' {
-            if i >= count {
+            // Optional designator: `[N] = ...` (C99 6.7.8p6) or the GCC
+            // range form `[a ... b] = ...`. Sets the write cursor; a
+            // range fills every slot in `[a, b]` with the same value.
+            let mut range_end = i;
+            if self.lex.tk == Token::Brak {
+                self.next()?;
+                let a = self.parse_constant_int()?;
+                if a < 0 {
+                    return Err(self.compile_err(format!(
+                        "array designator index must be non-negative (got {a})"
+                    )));
+                }
+                let mut b = a;
+                if self.lex.tk == Token::Ellipsis {
+                    self.next()?;
+                    b = self.parse_constant_int()?;
+                    if b < a {
+                        return Err(self.compile_err(format!(
+                            "array range designator high {b} below low {a}"
+                        )));
+                    }
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after array designator index"));
+                }
+                self.next()?;
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err("`=` expected after array designator"));
+                }
+                self.next()?;
+                i = a;
+                range_end = b;
+            }
+            if range_end >= count {
                 return Err(self.compile_err(format!(
                     "too many initializers for `{}`",
                     self.symbols[loc_idx].name
@@ -503,29 +536,35 @@ impl Compiler {
             }
             self.expr(Token::Assign as i64)?;
             if let Some(rhs) = self.ast_acc.take() {
-                let array_id = self.ast_emit_ident(loc_idx as u32, arr_ty);
-                let idx_id = self.ast_emit_int_lit(i * elem_size, Ty::Int as i64);
-                let pos = self.ast_src_pos();
-                let index_id = self.ast.push_expr(
-                    super::super::ast::Expr::Index {
-                        array: array_id,
-                        idx: idx_id,
-                        ty,
-                    },
-                    pos,
-                );
-                let assign_id = self.ast.push_expr(
-                    super::super::ast::Expr::Assign {
-                        lhs: index_id,
-                        rhs,
-                        ty,
-                    },
-                    pos,
-                );
-                self.ast
-                    .push_stmt(super::super::ast::Stmt::Expr(assign_id), pos);
+                // Fill `[i, range_end]`. A range reuses the value node;
+                // the walker re-walks it per store, which is safe for the
+                // side-effect-free constant / label-address values a
+                // static initializer holds.
+                for slot in i..=range_end {
+                    let array_id = self.ast_emit_ident(loc_idx as u32, arr_ty);
+                    let idx_id = self.ast_emit_int_lit(slot * elem_size, Ty::Int as i64);
+                    let pos = self.ast_src_pos();
+                    let index_id = self.ast.push_expr(
+                        super::super::ast::Expr::Index {
+                            array: array_id,
+                            idx: idx_id,
+                            ty,
+                        },
+                        pos,
+                    );
+                    let assign_id = self.ast.push_expr(
+                        super::super::ast::Expr::Assign {
+                            lhs: index_id,
+                            rhs,
+                            ty,
+                        },
+                        pos,
+                    );
+                    self.ast
+                        .push_stmt(super::super::ast::Stmt::Expr(assign_id), pos);
+                }
             }
-            i += 1;
+            i = range_end + 1;
             if self.lex.tk == ',' {
                 self.next()?;
             }

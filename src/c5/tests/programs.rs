@@ -166,6 +166,13 @@ fn sieve_of_eratosthenes() {
 }
 
 #[test]
+fn array_range_designator() {
+    // GCC `[a ... b] = value` fills the inclusive range; covers constant
+    // data and a label-address dispatch table.
+    assert_eq!(run_fixture("array_range_designator.c"), 0);
+}
+
+#[test]
 fn flexible_array_member() {
     // A flexible array member contributes no storage but decays to a
     // pointer-to-element at the field offset for `p->v[i]`.

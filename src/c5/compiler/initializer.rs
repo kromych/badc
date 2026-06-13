@@ -310,6 +310,9 @@ impl Compiler {
         // from there. Track the cursor here so designated and
         // positional entries can interleave per 6.7.8p17.
         let mut cursor: usize = 0;
+        // Set by a GCC range designator `[a ... b] = value` to the
+        // one-past-the-last scalar index the next value fills.
+        let mut desig_range_end: Option<usize> = None;
         while self.lex.tk != '}' {
             // Array designator `[N] = ...`. Single-level only --
             // nested designators (`[N].field = ...`) aren't
@@ -324,6 +327,18 @@ impl Compiler {
                         "array designator index must be non-negative (got {n})"
                     )));
                 }
+                // GCC range designator `[a ... b] = value`: fill every
+                // sub-array in `[a, b]` with the value.
+                let mut hi = n;
+                if self.lex.tk == Token::Ellipsis {
+                    self.next()?;
+                    hi = self.parse_constant_int()?;
+                    if hi < n {
+                        return Err(self.compile_err(format!(
+                            "array range designator high {hi} below low {n}"
+                        )));
+                    }
+                }
                 if self.lex.tk != ']' {
                     return Err(self.compile_err("`]` expected after array designator index"));
                 }
@@ -336,6 +351,11 @@ impl Compiler {
                 // which spans `child_span` scalars (1 at the innermost
                 // level).
                 cursor = n as usize * child_span.max(1);
+                desig_range_end = if hi > n {
+                    Some((hi as usize + 1) * child_span.max(1))
+                } else {
+                    None
+                };
             }
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
@@ -421,11 +441,14 @@ impl Compiler {
             // both `Data` (string / `&global`) and `Code` (function
             // pointer) get a true reloc; integer constants don't.
             let (value, reloc) = self.parse_constant_init_value()?;
-            if elements.len() <= cursor {
-                elements.resize(cursor + 1, (0, InitElemReloc::None));
+            // A range designator fills `[cursor, end)` with the value;
+            // a plain entry fills the single slot at `cursor`.
+            let end = desig_range_end.take().unwrap_or(cursor + 1);
+            if elements.len() < end {
+                elements.resize(end, (0, InitElemReloc::None));
             }
-            elements[cursor] = (value, reloc);
-            cursor += 1;
+            elements[cursor..end].fill((value, reloc));
+            cursor = end;
             if self.lex.tk == ',' {
                 self.next()?;
             }

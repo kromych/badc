@@ -421,6 +421,7 @@ pub(crate) fn walk_function(
         ret_in_regs,
         ret_indirect,
         indirect_result_slot,
+        scalar_return_ty: return_ty,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -506,6 +507,10 @@ struct Walker<'a> {
     /// s;` copies the value through the saved x8 pointer in
     /// `indirect_result_slot`, then returns that pointer.
     ret_indirect: bool,
+    /// The function's declared scalar return type (C99 6.8.6.4). A
+    /// `char` / `short` return is narrowed to this width before
+    /// `Terminator::Return`.
+    scalar_return_ty: i64,
     /// Body-local slot holding the saved x8 indirect-result pointer
     /// when `ret_indirect` is true; zero otherwise.
     indirect_result_slot: i64,
@@ -684,7 +689,33 @@ impl<'a> Walker<'a> {
                     b.return_(out_ptr);
                     return Ok(true);
                 }
-                let v = self.walk_expr_rvalue(b, *e)?;
+                let mut v = self.walk_expr_rvalue(b, *e)?;
+                // C99 6.8.6.4 / 6.3.1.1: the returned value is converted to
+                // the function's return type. For a `char` / `short` return
+                // the ABI carries an `int`-promoted value, so a body result
+                // wider than the declared type (e.g. `(x << 8) | (x >> 8)`
+                // in a `uint16_t`-returning byte-swap) must be narrowed to
+                // the type's width here; without it the caller reads the
+                // un-narrowed bits. Integer-and-wider returns already ride
+                // the result register at full width. `_Bool` is excluded: its
+                // conversion is a boolean `!= 0` (6.3.1.2), not a width mask,
+                // and the rvalue walk already normalizes it to 0/1.
+                let stripped = self.scalar_return_ty & !UNSIGNED_BIT;
+                let rs = type_size_bytes(self.scalar_return_ty, self.target);
+                if !is_floating_scalar(self.scalar_return_ty)
+                    && !is_pointer_ty(self.scalar_return_ty)
+                    && stripped != Ty::Bool as i64
+                    && (rs == 1 || rs == 2)
+                {
+                    if (self.scalar_return_ty & UNSIGNED_BIT) != 0 {
+                        let mask: i64 = if rs == 1 { 0xff } else { 0xffff };
+                        v = b.binop_imm(BinOp::And, v, mask);
+                    } else {
+                        let bits = 64i64 - (rs as i64) * 8;
+                        let shifted = b.binop_imm(BinOp::Shl, v, bits);
+                        v = b.binop_imm(BinOp::Shr, shifted, bits);
+                    }
+                }
                 b.return_(v);
                 Ok(true)
             }
@@ -3776,7 +3807,7 @@ mod tests {
             &[],
             false,
             0,
-            0,
+            Ty::Int as i64,
             0,
         )
         .expect("walk");

@@ -173,6 +173,12 @@ fn static_neg_infinity_init() {
 }
 
 #[test]
+fn sub_word_return_narrow() {
+    // A char/short return narrows its body value to the declared type.
+    assert_eq!(run_fixture("sub_word_return_narrow.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

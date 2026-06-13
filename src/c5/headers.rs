@@ -95,6 +95,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("dirent.h", include_str!("../../headers/include/dirent.h")),
     ("ftw.h", include_str!("../../headers/include/ftw.h")),
+    ("fts.h", include_str!("../../headers/include/fts.h")),
     ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),

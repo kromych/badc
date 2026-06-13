@@ -70,4 +70,15 @@ typedef long fsfilcnt_t;
 typedef int socklen_t;
 typedef int key_t;
 
+/* glibc's <sys/types.h> makes `fd_set` and the `FD_*` macros visible
+** (under __USE_MISC, on by default), so POSIX code that reaches select()
+** through <sys/types.h> alone -- without <sys/select.h> and without a
+** configure-detected HAVE_SYS_SELECT_H -- still sees the type. The
+** select surface is POSIX; on Windows `fd_set` comes from ws2_32, so
+** the transitive include is gated off there. <sys/select.h> guards with
+** `#pragma once`, so a direct include elsewhere stays a no-op. */
+#ifndef __BADC_WINDOWS__
+#include <sys/select.h>
+#endif
+
 #endif

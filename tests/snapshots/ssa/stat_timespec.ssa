@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=28
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x7
     v2   LocalAddr(-26)                                   -> x6
-    v3   CallExt { binding_idx=24, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=25, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v4   Imm(1)                                           -> x0

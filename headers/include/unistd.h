@@ -54,6 +54,7 @@
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
 #pragma binding(libc::fork,      "_fork")
+#pragma binding(libc::vfork,     "_vfork")
 #pragma binding(libc::execvp,    "_execvp")
 #pragma binding(libc::execve,    "_execve")
 #pragma binding(libc::setgid,    "_setgid")
@@ -123,6 +124,7 @@
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::pipe,      "pipe")
 #pragma binding(libc::fork,      "fork")
+#pragma binding(libc::vfork,     "vfork")
 #pragma binding(libc::execvp,    "execvp")
 #pragma binding(libc::execve,    "execve")
 #pragma binding(libc::setgid,    "setgid")
@@ -212,6 +214,7 @@ int dup(int fd);
 int dup2(int oldfd, int newfd);
 int pipe(int *fds);
 int fork();
+int vfork();
 int execvp(char *file, char **argv);
 int execve(char *path, char **argv, char **envp);
 int setgid(int gid);

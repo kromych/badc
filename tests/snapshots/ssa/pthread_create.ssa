@@ -19,15 +19,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=9
     v0   AllocaInit(0)                                    -> -
     v1   Imm(0)                                           -> x3
     v2   Imm(2)                                           -> x6
-    v3   CallExt { binding_idx=96, args=[v1, v2], fp_arg_mask=0x0 } -> x12
+    v3   CallExt { binding_idx=98, args=[v1, v2], fp_arg_mask=0x0 } -> x12
     v4   Imm(0)                                           -> x0
     v5   LoadLocal { off=-1, kind=I64 }                   -> x0
     v6   ImmData(16)                                      -> x6
-    v7   CallExt { binding_idx=97, args=[v3, v6], fp_arg_mask=0x0 } -> x14
+    v7   CallExt { binding_idx=99, args=[v3, v6], fp_arg_mask=0x0 } -> x14
     v8   Imm(0)                                           -> x0
     v9   LoadLocal { off=-1, kind=I64 }                   -> x0
     v10  ImmData(31)                                      -> x6
-    v11  CallExt { binding_idx=97, args=[v3, v10], fp_arg_mask=0x0 } -> x12
+    v11  CallExt { binding_idx=99, args=[v3, v10], fp_arg_mask=0x0 } -> x12
     v12  Imm(0)                                           -> x0
     v13  LocalAddr(-4)                                    -> x7
     v14  ImmCode(ent_pc=0)                                -> x2

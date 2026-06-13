@@ -354,9 +354,7 @@ Disassembly of section .text:
                	ldur	w0, [x29, #-0x50]
                	mov	x17, #0x3f800000        // =1065353216
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	adrp	x0, <page>

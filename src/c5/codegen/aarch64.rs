@@ -315,6 +315,13 @@ pub(super) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xAA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
+/// to a W register clears the upper 32 bits of the X register, so this is
+/// also the one-instruction zero-extension of the low word (`x & 0xffffffff`).
+pub(super) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
+    0x2A00_03E0 | ((rn.0 as u32) << 16) | (rd.0 as u32)
+}
+
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
 pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)

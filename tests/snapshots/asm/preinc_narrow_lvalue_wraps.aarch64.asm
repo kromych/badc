@@ -129,9 +129,7 @@ Disassembly of section .text:
                	movk	x0, #0xffff, lsl #16
                	mov	x2, #0x0                // =0
                	add	x0, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x0, x17
+               	mov	w1, w0
                	cmp	x1, #0x0
                	b.ne	<addr>
                	mov	x2, #0x1                // =1
@@ -139,9 +137,7 @@ Disassembly of section .text:
                	cmp	x1, #0x1
                	cset	x2, eq
                	cbz	x2, <addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x2, eq
                	cbz	x2, <addr>

@@ -94,9 +94,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x55              // =85
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	b	<addr>
@@ -229,9 +227,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
@@ -242,9 +238,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x41              // =65
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
@@ -265,9 +259,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	sub	x17, x29, #0x2, lsl #12 // =0x2000
@@ -278,9 +270,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0, #0xf]
                	mov	x17, #0x42              // =66
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x0, ne
                	sub	x17, x29, #0x2, lsl #12 // =0x2000

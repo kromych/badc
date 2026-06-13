@@ -8,8 +8,7 @@
 
 `badc` is a rather small cross-platform compiler of the C language as
 defined in the C99 standard, plus some C11 and later. `badc` used to be a
-bad one for quite some time when the projects just started out, and
-the name stuck.
+bad one for some time when the projects just started out, and the name stuck.
 
 > There is some compiler-building jargon in this document, you can safely skip it,
 > and jump to the usage section right away.
@@ -21,7 +20,9 @@ representation and a graph-coloring register allocator, but doesn't go for
 the exquisite optimization passes a titan toolchain like clang, gcc or msvc
 run. All told, to stay slim, it's unlikely to surpass the ability of
 multi-gigabyte compiler suites to squeeze the last drop of perf from the
-machine, and that's fine.
+machine, and that's fine. `badc` tries hard not to get in the way with
+assumptions on the runtime library, and `--freestanding` as available
+should you need that.
 
 A fun extension is that `badc` can automatically add the header(s)
 for the standard library so the bare `hello.c` with
@@ -305,22 +306,10 @@ remaining objects or archive members.
 ### What is supported
 
 A summary of what the dialect parses + lowers, and where it
-diverges from C99, lives in [`c99-gaps.md`](c99-gaps.md). Short
-version: c5 covers most of the language (full preprocessor, the
-integer + float arithmetic surface, structs / unions / bitfields
-/ enums / typedef, function pointers, varargs, `_Thread_local`,
-anonymous struct/union members, `#pragma pack(N)`, ...) on the
-host platform's data model (LP64 on macOS / Linux, LLP64 on
-Windows). The doc enumerates rejected idioms, divergent
-behavior, and the c5-only extensions (`#pragma dylib` /
-`binding` / `export` / `entrypoint` / `subsystem`,
-the SSA interpreter, the in-process JIT).
-
-Note that that **bare `char` is unsigned** on every target
-(a 1-byte zero-extending load), matching the AArch64 platform-ABI default.
-Use `signed char` where the sign matters; gcc and clang differ on this per host
-architecture, so portable code that walks bytes by sign already
-spells `signed char` explicitly.
+diverges from C99, lives in [`std-conformance.md`](std-conformance.md). Short
+version: c5 covers most of the language and few features of the later standards.
+The doc enumerates rejected idioms, divergent behavior, and the c5-only extensions
+(`#pragma dylib` / `binding` / `export` / `entrypoint` / `subsystem`).
 
 #### From the pre-processor side
 

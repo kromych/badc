@@ -178,7 +178,7 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
   loader symbol resolution and shared-library export.
 - `#pragma entrypoint(<name>)` -- override the default `main` entry point
   (e.g. `WinMain`).
-- `#pragma subsystem(console | windows)` -- the Windows PE optional-header
+- `#pragma subsystem(console | windows | native | driver)` -- the Windows PE optional-header
   `Subsystem` field; ignored on non-PE targets.
 - `#pragma once`.
 - `--interp` (SSA interpreter with pointer tracking), `--jit` (in-process),

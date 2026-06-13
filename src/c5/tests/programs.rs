@@ -206,6 +206,13 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn global_init_paren_operand() {
+    // C99 6.6: a parenthesised operand + binary operator in a constant
+    // initializer folds with full precedence (`(1) << 5`).
+    assert_eq!(run_fixture("global_init_paren_operand.c"), 0);
+}
+
+#[test]
 fn function_type_typedef_declaration() {
     // C99 6.9.1: a function declared via a function-type typedef (no pointer)
     // is a function, so a following definition is a redeclaration.

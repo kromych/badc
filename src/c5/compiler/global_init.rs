@@ -69,6 +69,7 @@ impl Compiler {
         // isn't a type start, this is a parenthesised expression --
         // recurse on the inner and require the closing `)`.
         if self.lex.tk == '(' {
+            let pre_paren = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
                 // Discard the cast destination type. Counted-paren
@@ -101,13 +102,40 @@ impl Compiler {
                 }
                 return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
             }
-            // Parenthesised expression: recurse on the inner and
-            // consume the matching `)`.
-            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-            if self.lex.tk == ')' {
+            // Parenthesised expression. Peek past the matching `)`: a
+            // trailing operator means the parentheses wrap a sub-operand of a
+            // larger constant expression (`(1) << 5`), which the
+            // constant-expression evaluator below folds with full operator
+            // precedence. A complete value -- `(&x)`, `(func)`, `(123)`, with
+            // `,` / `;` / `}` next -- keeps the local recursion that handles
+            // address and function-reference constants.
+            let after_open = self.lex.snapshot();
+            let mut depth: i64 = 1;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                }
                 self.next()?;
             }
-            return Ok(());
+            let trailing_operator = !(self.lex.tk == ','
+                || self.lex.tk == ';'
+                || self.lex.tk == '}'
+                || self.lex.tk == ')'
+                || self.lex.tk == 0);
+            if trailing_operator {
+                // Re-parse the whole initializer through the float / integer
+                // constant-expression path below.
+                self.lex.restore(pre_paren);
+            } else {
+                self.lex.restore(after_open);
+                self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+                if self.lex.tk == ')' {
+                    self.next()?;
+                }
+                return Ok(());
+            }
         }
         // Bare function reference in a global initializer:
         // `static int (*fp)() = func;`. The value is the function's

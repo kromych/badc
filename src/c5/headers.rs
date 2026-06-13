@@ -77,6 +77,11 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("utime.h", include_str!("../../headers/include/utime.h")),
     ("netdb.h", include_str!("../../headers/include/netdb.h")),
     (
+        "sys/utsname.h",
+        include_str!("../../headers/include/sys/utsname.h"),
+    ),
+    ("grp.h", include_str!("../../headers/include/grp.h")),
+    (
         "netinet/in.h",
         include_str!("../../headers/include/netinet/in.h"),
     ),

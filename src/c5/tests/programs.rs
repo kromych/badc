@@ -206,6 +206,12 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn posix_unix_headers() {
+    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h.
+    assert_eq!(run_fixture("posix_unix_headers.c"), 0);
+}
+
+#[test]
 fn socket_headers_abi() {
     // Bundled socket headers expose the address structs with the platform ABI.
     assert_eq!(run_fixture("socket_headers_abi.c"), 0);

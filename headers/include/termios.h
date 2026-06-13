@@ -41,6 +41,8 @@ struct termios {
 #define IGNCR  0x00000080
 #define ICRNL  0x00000100
 #define IXON   0x00000200
+#define IXOFF  0x00000400
+#define IXANY  0x00000800
 // c_oflag
 #define OPOST  0x00000001
 // c_cflag
@@ -88,6 +90,8 @@ struct termios {
 #define IGNCR  0000200
 #define ICRNL  0000400
 #define IXON   0002000
+#define IXOFF  0010000
+#define IXANY  0004000
 // c_oflag
 #define OPOST  0000001
 // c_cflag
@@ -127,6 +131,8 @@ struct termios {
 #define IGNCR  0000200
 #define ICRNL  0000400
 #define IXON   0002000
+#define IXOFF  0010000
+#define IXANY  0004000
 #define OPOST  0000001
 #define CSIZE  0000060
 #define CS8    0000060

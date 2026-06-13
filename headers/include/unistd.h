@@ -48,6 +48,7 @@
 #pragma binding(libc::isatty,    "_isatty")
 #pragma binding(libc::readlink,  "_readlink")
 #pragma binding(libc::mkdir,     "_mkdir")
+#pragma binding(libc::mknod,     "_mknod")
 #pragma binding(libc::dup,       "_dup")
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
@@ -115,6 +116,7 @@
 #pragma binding(libc::isatty,    "isatty")
 #pragma binding(libc::readlink,  "readlink")
 #pragma binding(libc::mkdir,     "mkdir")
+#pragma binding(libc::mknod,     "mknod")
 #pragma binding(libc::dup,       "dup")
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::pipe,      "pipe")
@@ -200,6 +202,9 @@ int usleep(int microseconds);
 int isatty(int fd);
 int readlink(char *path, char *buf, int n);
 int mkdir(char *path, int mode);
+// POSIX: create a filesystem node. The device argument is unused for
+// regular / FIFO nodes; callers pass 0.
+int mknod(char *path, int mode, int dev);
 int dup(int fd);
 int dup2(int oldfd, int newfd);
 int pipe(int *fds);

@@ -98,9 +98,9 @@ type drops the return type's own function-pointer level.
 
 C99 features rejected (all rare in current source): `_Complex` /
 `_Imaginary` (6.2.5), `_Pragma` (6.10.9), universal character names
-(6.4.3), digraphs and trigraphs (6.4.6 / 5.2.1.1), K&R identifier-list
-function declarators (obsolescent, 6.11.7), and `++` / `--` on a `float`
-lvalue. `inline` / `__inline` / `__inline__` and `_Noreturn` are accepted
+(6.4.3), digraphs and trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list
+function declarators (obsolescent, 6.11.7).
+`inline` / `__inline` / `__inline__` and `_Noreturn` are accepted
 but inert (no inlining, no `noreturn` propagation). `__STDC_VERSION__` /
 `__STDC_HOSTED__` are not predefined.
 

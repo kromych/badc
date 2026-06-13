@@ -206,6 +206,13 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn float_increment_decrement() {
+    // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
+    // 6.5.2.4), prefix yielding the new value and postfix the prior.
+    assert_eq!(run_fixture("float_increment_decrement.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

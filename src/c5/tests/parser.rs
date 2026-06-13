@@ -595,14 +595,15 @@ fn float_modulo_rejected() {
 }
 
 #[test]
-fn float_increment_not_yet_implemented() {
-    // `f++` on a float would need to lower to `f = f + 1.0`, but
-    // the current `++/--` lowering hard-codes integer arithmetic
-    // (immediate 1 plus add) over the lvalue load. The float path
-    // is still ahead of us.
-    expect_compile_error(
-        "int main() { float x; x = 1.0; x++; return 0; }",
-        "floating-point ++/-- not yet implemented",
+fn float_increment_compiles() {
+    // C99 6.5.3.1 / 6.5.2.4: `++` / `--` apply to any real floating type,
+    // adding or subtracting 1. The lowering routes a floating lvalue
+    // through the FP add path (runtime values pinned by the
+    // float_increment_decrement fixture).
+    assert!(
+        Compiler::new("int main() { float x = 1.0f; x++; --x; return 0; }".to_string())
+            .compile()
+            .is_ok()
     );
 }
 

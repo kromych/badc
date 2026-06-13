@@ -1914,9 +1914,6 @@ impl Compiler {
                     self.record_local_store(idx, line);
                 }
                 self.mark_emit_other();
-                if is_floating_scalar(self.ty) {
-                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
-                }
                 self.ast_psh();
                 // A pointer-to-array (`T (*p)[N]`) looks like a plain
                 // `T*` in the flat type, so `pointee_step` would scale by
@@ -2942,9 +2939,6 @@ impl Compiler {
                     self.record_local_store(idx, line);
                 }
                 self.mark_emit_other();
-                if is_floating_scalar(self.ty) {
-                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
-                }
                 self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
                 self.ast_binop(if self.lex.tk == Token::Inc {

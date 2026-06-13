@@ -2651,7 +2651,7 @@ impl<'a> Walker<'a> {
                 let store_kind = store_kind_for(*ty, self.target);
                 let place = self.rmw_place(b, *lvalue, store_kind)?;
                 let old = place.load(b, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind);
                 // C99 6.5.3.1p3 + 6.5.16.2: the value of `++E` is
                 // the post-update value of E in E's type. Reload
@@ -2659,18 +2659,21 @@ impl<'a> Walker<'a> {
                 // surrounding test like `(++p) == 0` sees the
                 // wrapped u8/u16/u32 value rather than the wider
                 // Add result that overflows past the storage width.
-                Ok(if matches!(kind, LoadKind::I64) {
-                    stepped
-                } else {
-                    place.load(b, kind)
-                })
+                // A floating result is already at storage width.
+                Ok(
+                    if matches!(kind, LoadKind::I64) || is_floating_scalar(*ty) {
+                        stepped
+                    } else {
+                        place.load(b, kind)
+                    },
+                )
             }
             Expr::PostInc { lvalue, by, ty } => {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let place = self.rmw_place(b, *lvalue, store_kind)?;
                 let old = place.load(b, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind);
                 // C99 6.5.2.4p3: the expression's value is the
                 // pre-update value (`old`).
@@ -2867,6 +2870,34 @@ impl<'a> Walker<'a> {
     /// `ValueId` of the lvalue's *address*. The `Assign` rhs and
     /// `Unary{AddrOf}` cases drive into this path; the rvalue
     /// walker re-enters from this address with a matching load.
+    /// Add `by` (+1 / -1) to a loaded scalar for `++` / `--`. Integer
+    /// lvalues take the immediate-form add; a real floating lvalue (C99
+    /// 6.5.3.1 / 6.5.2.4) adds `1.0` of its own precision through the FP
+    /// path, since `BinOp::Add` would operate on the bit pattern.
+    fn increment_value(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        old: super::super::ir::ValueId,
+        by: i64,
+        ty: i64,
+    ) -> super::super::ir::ValueId {
+        if !is_floating_scalar(ty) {
+            return b.binop_imm(BinOp::Add, old, by);
+        }
+        // Run in double and narrow back for a `float`, matching the
+        // compound-assign path (C99 6.3.1.5). A direct single-precision
+        // `fadd` is correct on the native targets but the SSA interpreter
+        // does not lower it, so route both precisions through the f64 add.
+        let one = b.imm((by as f64).to_bits() as i64);
+        if is_float_ty(ty) {
+            let wide = b.fp_widen_to_f64(old);
+            let res = b.binop(BinOp::Fadd, wide, one);
+            b.fp_narrow_to_f32(res)
+        } else {
+            b.binop(BinOp::Fadd, old, one)
+        }
+    }
+
     /// Resolve where a read-modify-write operator targets its lvalue. A
     /// non-thread-local `Token::Loc` Ident of integer-class storage width
     /// keeps its frame slot so mem2reg can promote it; the float-stored

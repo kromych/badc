@@ -449,6 +449,74 @@ fn export_all_executable_exposes_dynamic_symbols() {
 }
 
 #[test]
+fn shared_object_relocates_internal_data_pointers() {
+    // A function / data pointer baked into a shared object's static data
+    // must carry an R_*_RELATIVE relocation so it tracks the runtime load
+    // base (C: a `static const` table of pointers in a dlopen'd module);
+    // an executable maps at a fixed base and needs none. Without it the
+    // table holds link-time addresses and dereferences garbage at load.
+    use crate::c5::linker::object::count_dynamic_relocs_of_type;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_RELATIVE: u32 = 8;
+    let program = Compiler::with_target(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             static int f1(void) {{ return 1; }}\n\
+             static int f2(void) {{ return 2; }}\n\
+             typedef int (*fn_t)(void);\n\
+             static const fn_t tab[2] = {{ f1, f2 }};\n\
+             int use_tab(int i) {{ return tab[i](); }}\n\
+             int main(void) {{ return use_tab(0) + use_tab(1); }}\n"
+        ),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let so = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write shared library");
+    let so_rel = count_dynamic_relocs_of_type(&so, R_X86_64_RELATIVE).expect("count so relocs");
+    assert!(
+        so_rel >= 2,
+        "shared object must relocate the two internal function pointers, got {so_rel}"
+    );
+    let plt2 = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt2,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write executable");
+    let exe_rel = count_dynamic_relocs_of_type(&exe, R_X86_64_RELATIVE).expect("count exe relocs");
+    assert_eq!(
+        exe_rel, 0,
+        "executable maps at a fixed base and must emit no RELATIVE relocs, got {exe_rel}"
+    );
+}
+
+#[test]
 fn export_all_round_trips_into_shared_library() {
     // `--export-all` (`CompileOptions::export_all_functions`) exports
     // every non-static function without a `#pragma export`. The names

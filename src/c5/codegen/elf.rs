@@ -119,6 +119,11 @@ const SHN_UNDEF: u16 = 0;
 // Relocation types we emit.
 const R_AARCH64_GLOB_DAT: u64 = 1025;
 const R_X86_64_GLOB_DAT: u64 = 6;
+// `R_*_RELATIVE`: the loader writes `load_bias + r_addend` into the slot.
+// Used in a shared object for an internal absolute pointer (a function /
+// data pointer baked into static data) so it tracks the runtime load base.
+const R_AARCH64_RELATIVE: u64 = 1027;
+const R_X86_64_RELATIVE: u64 = 8;
 
 /// Maximum supported page size, used both for `p_align` and for
 /// VA spacing between adjacent `PT_LOAD` segments. Distros build
@@ -319,6 +324,14 @@ fn r_glob_dat(machine: Machine) -> u64 {
     match machine {
         Machine::Aarch64 => R_AARCH64_GLOB_DAT,
         Machine::X86_64 => R_X86_64_GLOB_DAT,
+    }
+}
+
+/// `R_*_RELATIVE` relocation type. Different value on each arch.
+fn r_relative(machine: Machine) -> u64 {
+    match machine {
+        Machine::Aarch64 => R_AARCH64_RELATIVE,
+        Machine::X86_64 => R_X86_64_RELATIVE,
     }
 }
 
@@ -1236,7 +1249,16 @@ pub(super) fn write(
     let dynstr_off = dynsym_off + dynsym.len() as u64;
     let hash_off = dynstr_off + dynstr.len() as u64;
     let rela_off = hash_off + hash.len() as u64;
-    let rela_size = (n_imports as u64) * ELF64_RELA_SIZE;
+    // A shared object turns each internal absolute pointer in static data
+    // (a function / data pointer initializer) into an R_*_RELATIVE
+    // relocation so it tracks the runtime load base; an executable maps at
+    // its link-time vmaddr, so the baked bytes are final and need none.
+    let n_relative = if is_shared {
+        build.data_relocs.len() + build.code_relocs.len()
+    } else {
+        0
+    };
+    let rela_size = (n_imports as u64 + n_relative as u64) * ELF64_RELA_SIZE;
     let code_off = round_up(rela_off + rela_size, 16);
 
     // Build the code blob: _start stub + build.text (with shifted
@@ -1690,8 +1712,42 @@ pub(super) fn write(
     out.extend_from_slice(&hash);
     debug_assert_eq!(out.len() as u64, rela_off);
 
-    // .rela.dyn
-    let rela = build_rela_dyn(got_vmaddr, n_imports, machine);
+    // .rela.dyn -- GLOB_DAT for imports, then (shared object only) one
+    // R_*_RELATIVE per internal absolute pointer in static data so it
+    // tracks the runtime load base. The slot keeps its baked link-time
+    // value; a RELA loader overwrites it with `load_bias + r_addend`,
+    // where the addend is that same link-time target address.
+    let mut rela = build_rela_dyn(got_vmaddr, n_imports, machine);
+    if is_shared {
+        let r_type = r_relative(machine);
+        for r in &build.data_relocs {
+            let addend = data_vmaddr + r.target_offset;
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: data_vmaddr + r.data_offset,
+                    r_info: r_type,
+                    r_addend: addend as i64,
+                },
+            );
+        }
+        for r in &build.code_relocs {
+            let native_off = build
+                .pc_to_native
+                .get(r.target_ent_pc as usize)
+                .copied()
+                .unwrap_or(0);
+            let addend = code_vmaddr + stub_len + native_off as u64;
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: data_vmaddr + r.data_offset,
+                    r_info: r_type,
+                    r_addend: addend as i64,
+                },
+            );
+        }
+    }
     debug_assert_eq!(rela.len() as u64, rela_size);
     out.extend_from_slice(&rela);
 

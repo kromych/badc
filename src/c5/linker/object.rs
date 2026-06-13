@@ -154,6 +154,33 @@ fn read_struct<T: Copy>(bytes: &[u8], off: usize) -> Result<T, C5Error> {
 #[cfg(test)]
 const SHT_DYNSYM: u32 = 11;
 
+/// Count the dynamic relocations of a given type (`r_info & 0xffffffff`)
+/// across every `SHT_RELA` section of a linked ELF64 image. Used to
+/// confirm a shared object carries `R_*_RELATIVE` entries for its
+/// internal absolute pointers.
+#[cfg(test)]
+pub(crate) fn count_dynamic_relocs_of_type(bytes: &[u8], r_type: u32) -> Result<usize, C5Error> {
+    const SHT_RELA: u32 = 4;
+    let ehdr: Elf64Ehdr = read_struct(bytes, 0)?;
+    let mut n = 0;
+    for i in 0..ehdr.e_shnum as usize {
+        let sh: Elf64Shdr =
+            read_struct(bytes, ehdr.e_shoff as usize + i * ehdr.e_shentsize as usize)?;
+        if sh.sh_type != SHT_RELA {
+            continue;
+        }
+        let entsize = sh.sh_entsize as usize;
+        let count = (sh.sh_size as usize).checked_div(entsize).unwrap_or(0);
+        for j in 0..count {
+            let rela: Elf64Rela = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
+            if (rela.r_info & 0xffff_ffff) as u32 == r_type {
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
 /// Read the ELF64 file header. `e_type` `2` is `ET_EXEC`, `3` is
 /// `ET_DYN`; `e_machine` and `e_phnum` follow the spec.
 #[cfg(test)]

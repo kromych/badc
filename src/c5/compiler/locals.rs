@@ -1534,6 +1534,36 @@ impl Compiler {
             }
             self.ast_psh();
             self.expr(Token::Assign as i64)?;
+            // C99 6.7.9p13: in a brace-elision context (`!braced`, e.g. an
+            // array element `T arr[N] = { a, b }` with struct-typed `a`,
+            // `b`), an element may be initialized by a single expression of
+            // the element's struct/union type, copying the whole object. When
+            // the first field's initializer parses to the enclosing struct's
+            // own type, it is such a copy, not elision into the first scalar
+            // field. The staged address is the object base (first field at
+            // offset 0); copy the bytes and finish this object. Without this
+            // the struct expression is misassigned to the first field.
+            if !braced
+                && field_idx == 0
+                && field.offset == 0
+                && is_struct_ty(self.ty)
+                && struct_ptr_depth(self.ty) == 0
+                && struct_id_of(self.ty) == sid
+            {
+                let value = self.ast_acc;
+                let elem_ty = self.ty;
+                self.ast_assign();
+                if let Some(value) = value {
+                    self.pending_local_runtime_elements.push(
+                        super::super::ast::RuntimeInitElement {
+                            offset: total_offset,
+                            value,
+                            ty: elem_ty,
+                        },
+                    );
+                }
+                return Ok(());
+            }
             // C99 6.7.8p13: a struct/union member may be initialized by a
             // single expression of compatible struct/union type; the
             // walker copies its bytes (Mcpy). A scalar value for a struct

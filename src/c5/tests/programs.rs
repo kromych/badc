@@ -185,6 +185,13 @@ fn fp_const_return() {
 }
 
 #[test]
+fn struct_array_init_from_lvalue() {
+    // An array-of-struct element initialized by a compatible struct
+    // expression copies the whole object (C99 6.7.9p13).
+    assert_eq!(run_fixture("struct_array_init_from_lvalue.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.

@@ -22,7 +22,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0xf0
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	bl	<addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0xfa
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0

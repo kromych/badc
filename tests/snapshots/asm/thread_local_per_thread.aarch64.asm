@@ -59,18 +59,18 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x22, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x108
+               	add	x1, x1, <lo12>
                	mov	x0, x22
                	bl	<addr>
                	mov	x23, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x117
+               	add	x1, x1, <lo12>
                	mov	x0, x22
                	bl	<addr>
                	mov	x22, x0
                	sub	x0, x29, #0x20
                	adrp	x2, <page>
-               	add	x2, x2, #0x308
+               	add	x2, x2, <lo12>
                	mov	x9, x23
                	str	x21, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!

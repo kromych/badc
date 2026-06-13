@@ -113,10 +113,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x90
                	adrp	x2, <page>
-               	add	x2, x2, #0xd0
+               	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, #0xd5
+               	add	x1, x1, <lo12>
                	mov	x3, #0x64               // =100
                	bl	<addr>
                	sub	x16, x29, #0x78
@@ -149,9 +149,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, #0xd9
+               	add	x1, x1, <lo12>
                	adrp	x2, <page>
-               	add	x2, x2, #0xdd
+               	add	x2, x2, <lo12>
                	mov	x3, #0x1                // =1
                	bl	<addr>
                	sub	x16, x29, #0x88

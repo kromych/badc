@@ -48,7 +48,7 @@ Disassembly of section .text:
                	str	x10, [x0, #0x10]
                	ldr	x10, [sp], #0x10
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	sub	x2, x29, #0x8
                	ldrsw	x2, [x2]
                	sub	x3, x29, #0x8
@@ -213,14 +213,14 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	sub	x0, x29, #0x8
                	adrp	x1, <page>
-               	add	x1, x1, #0xd8
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x18
                	adrp	x1, <page>
-               	add	x1, x1, #0xe0
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -235,7 +235,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x20
                	adrp	x1, <page>
-               	add	x1, x1, #0xec
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldrb	w10, [x1]
                	strb	w10, [x0]
@@ -248,7 +248,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x30
                	adrp	x1, <page>
-               	add	x1, x1, #0xf0
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -257,7 +257,7 @@ Disassembly of section .text:
                	ldr	x10, [sp], #0x10
                	sub	x0, x29, #0x48
                	adrp	x1, <page>
-               	add	x1, x1, #0x100
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -289,7 +289,7 @@ Disassembly of section .text:
                	bl	<addr>
                	add	sp, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ldr	x0, [x0]
                	mov	x17, #0x1a12            // =6674
                	cmp	x0, x17

@@ -43,7 +43,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xd8
+               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	mov	x0, #0x4004000000000000 // =4612811918334230528
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xe8
+               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xf0
+               	add	x0, x0, <lo12>
                	ldr	s0, [x0]
                	fcvt	d0, s0
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xf8
+               	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	mov	x0, #0x3ff0000000000000 // =4607182418800017408
                	fmov	d1, x0
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x100
+               	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	mov	x0, #0x4004000000000000 // =4612811918334230528
                	fmov	d1, x0
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x108
+               	add	x0, x0, <lo12>
                	ldr	d0, [x0]
                	mov	x0, #0x4008000000000000 // =4613937818241073152
                	fmov	d1, x0

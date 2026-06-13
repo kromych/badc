@@ -12,7 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	sxtw	x0, w0
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	ret
 
 <main>:
@@ -24,7 +24,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	mov	x0, #0x0                // =0
                	adrp	x20, <page>
-               	add	x20, x20, #0xe8
+               	add	x20, x20, <lo12>
                	ldr	x1, [x20]
                	mov	x9, x1
                	str	x0, [sp, #-0x10]!
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x21, <page>
-               	add	x21, x21, #0x248
+               	add	x21, x21, <lo12>
                	mov	x0, #0x0                // =0
                	mov	x9, x21
                	str	x0, [sp, #-0x10]!

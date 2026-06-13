@@ -11,7 +11,7 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	cmp	x1, #0xa
                	b.eq	<addr>

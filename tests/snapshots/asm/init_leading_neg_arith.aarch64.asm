@@ -11,7 +11,7 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0, #0x8]
                	mov	x17, #0xb9b0            // =47536
                	movk	x17, #0xffff, lsl #16

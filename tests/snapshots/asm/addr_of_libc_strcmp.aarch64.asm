@@ -17,11 +17,11 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x19, [sp, #0x10]
                	adrp	x20, <page>
-               	add	x20, x20, #0x5c8
+               	add	x20, x20, <lo12>
                	adrp	x0, <page>
-               	add	x0, x0, #0xd8
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xdc
+               	add	x1, x1, <lo12>
                	mov	x9, x20
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xe4
+               	add	x1, x1, <lo12>
                	mov	x9, x20
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -61,9 +61,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xe8
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xec
+               	add	x1, x1, <lo12>
                	mov	x9, x20
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -82,16 +82,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0xf0
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xf3
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x21, x0
                	adrp	x0, <page>
-               	add	x0, x0, #0xf6
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xf9
+               	add	x1, x1, <lo12>
                	mov	x9, x20
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!

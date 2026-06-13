@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0xf0
+               	add	x21, x21, <lo12>
                	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
                	ldr	x0, [x21, x20, lsl #3]
@@ -32,15 +32,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x108
+               	add	x2, x2, <lo12>
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x10e
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x115
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	str	w17, [x16, #0x1c]
                	adrp	x0, <page>
-               	add	x0, x0, #0x11c
+               	add	x0, x0, <lo12>
                	ldur	x1, [x29, #0x10]
                	ldursw	x2, [x29, #0x18]
                	bl	<addr>
@@ -135,14 +135,14 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x2, [x0]
                	adrp	x0, <page>
-               	add	x0, x0, #0x124
+               	add	x0, x0, <lo12>
                	sxtw	x1, w20
                	bl	<addr>
                	sxtw	x0, w0
                	b	<addr>
                	sub	x0, x29, #0x20
                	adrp	x0, <page>
-               	add	x0, x0, #0x12e
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	mov	x0, #0x0                // =0
@@ -157,7 +157,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	add	x0, x0, #0x130
+               	add	x0, x0, <lo12>
                	mov	x1, #0x3                // =3
                	mov	x2, #0xb                // =11
                	mov	x3, #0x16               // =22

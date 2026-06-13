@@ -18,7 +18,7 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	adrp	x0, <page>
-               	add	x0, x0, #0x108
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0

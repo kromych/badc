@@ -154,7 +154,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x18
                	sub	x2, x29, #0x38
                	adrp	x3, <page>
-               	add	x3, x3, #0xd0
+               	add	x3, x3, <lo12>
                	bl	<addr>
                	sub	x0, x29, #0x8
                	ldrb	w0, [x0]

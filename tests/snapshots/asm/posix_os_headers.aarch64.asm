@@ -51,7 +51,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	ldrsw	x0, [x0, #0x4]
                	adrp	x1, <page>
-               	add	x1, x1, #0x110
+               	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0

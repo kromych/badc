@@ -15,27 +15,27 @@ Disassembly of section .text:
                	sub	sp, sp, #0x90
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x553
+               	add	x1, x1, <lo12>
                	str	x1, [x0]
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x560
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x8]
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x570
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x10]
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x590
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x18]
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x5d0
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x20]
                	sub	x0, x29, #0x70
                	adrp	x1, <page>
-               	add	x1, x1, #0x610
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x28]
                	sub	x0, x29, #0x70
                	ldr	x0, [x0]

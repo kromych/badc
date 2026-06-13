@@ -25,7 +25,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	sxtw	x2, w1
                	add	x0, x0, x2
                	ldrb	w0, [x0]
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	add	x2, x0, x2
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	sxtw	x3, w2
                	add	x0, x0, x3
                	mov	x3, #0x1                // =1
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x1
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	sxtw	x3, w1
                	add	x0, x0, x3
                	ldrb	w0, [x0]

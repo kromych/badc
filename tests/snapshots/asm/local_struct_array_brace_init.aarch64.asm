@@ -40,7 +40,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0xb0
                	sub	x0, x29, #0x30
                	adrp	x1, <page>
-               	add	x1, x1, #0xdc
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x98
                	adrp	x1, <page>
-               	add	x1, x1, #0x11b
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]

@@ -19,10 +19,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, #0x238
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x238
+               	add	x2, x2, <lo12>
                	cmp	x0, x2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1

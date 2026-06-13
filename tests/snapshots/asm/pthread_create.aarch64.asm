@@ -27,18 +27,18 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x21, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0xf8
+               	add	x1, x1, <lo12>
                	mov	x0, x21
                	bl	<addr>
                	mov	x22, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x107
+               	add	x1, x1, <lo12>
                	mov	x0, x21
                	bl	<addr>
                	mov	x21, x0
                	sub	x0, x29, #0x20
                	adrp	x2, <page>
-               	add	x2, x2, #0x2c8
+               	add	x2, x2, <lo12>
                	mov	x9, x22
                	str	x20, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!

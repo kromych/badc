@@ -53,13 +53,13 @@ Disassembly of section .text:
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
                	adrp	x20, <page>
-               	add	x20, x20, #0xd0
+               	add	x20, x20, <lo12>
                	adrp	x21, <page>
-               	add	x21, x21, #0xdb
+               	add	x21, x21, <lo12>
                	adrp	x22, <page>
-               	add	x22, x22, #0xe6
+               	add	x22, x22, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0xf1
+               	add	x1, x1, <lo12>
                	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x0
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, #0xfc
+               	add	x1, x1, <lo12>
                	mov	x0, x21
                	bl	<addr>
                	cmp	x0, #0x0
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x1, <page>
-               	add	x1, x1, #0x107
+               	add	x1, x1, <lo12>
                	mov	x0, x22
                	bl	<addr>
                	cmp	x0, #0x0
@@ -133,9 +133,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	add	x0, x0, #0x112
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0x11d
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>
@@ -164,9 +164,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x128
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0x12d
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>

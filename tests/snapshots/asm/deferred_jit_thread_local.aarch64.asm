@@ -12,7 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	sxtw	x0, w0
                	adrp	x1, <page>
-               	add	x1, x1, #0xe0
+               	add	x1, x1, <lo12>
                	str	w0, [x1, x0, lsl #2]
                	ldrsw	x0, [x1, x0, lsl #2]
                	ret

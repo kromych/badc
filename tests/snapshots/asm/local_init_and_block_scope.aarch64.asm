@@ -26,7 +26,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x1, #0x41               // =65
                	adrp	x2, <page>
-               	add	x2, x2, #0xd0
+               	add	x2, x2, <lo12>
                	mov	x3, #0x1                // =1
                	stur	w3, [x29, #-0x20]
                	mov	x3, #0x3                // =3

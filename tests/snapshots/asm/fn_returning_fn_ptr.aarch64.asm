@@ -23,7 +23,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	adrp	x1, <page>
-               	add	x1, x1, #0x238
+               	add	x1, x1, <lo12>
                	b	<addr>
                	mov	x1, #0x0                // =0
                	mov	x0, x1

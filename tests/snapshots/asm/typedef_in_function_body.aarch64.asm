@@ -48,7 +48,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x2, <page>
-               	add	x2, x2, #0xd0
+               	add	x2, x2, <lo12>
                	ldrsw	x2, [x2]
                	cmp	x2, #0x64
                	b.eq	<addr>

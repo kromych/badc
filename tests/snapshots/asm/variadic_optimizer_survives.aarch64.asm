@@ -114,7 +114,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	mov	x1, #0x2a               // =42
                	mov	x2, #0x7                // =7
                	bl	<addr>

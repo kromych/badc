@@ -175,7 +175,7 @@ Disassembly of section .text:
                	str	x20, [sp]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, #0xd0
+               	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	mov	x3, #0x2                // =2
                	bl	<addr>
@@ -199,7 +199,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
-               	add	x1, x1, #0xd2
+               	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sub	x16, x29, #0x90

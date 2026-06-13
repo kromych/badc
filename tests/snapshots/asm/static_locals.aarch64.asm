@@ -11,7 +11,7 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
@@ -22,20 +22,20 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0xe8
+               	add	x0, x0, <lo12>
                	mov	x1, #0x64               // =100
                	str	w1, [x0]
                	adrp	x0, <page>
-               	add	x0, x0, #0xf0
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	str	w1, [x0]
                	adrp	x0, <page>
-               	add	x0, x0, #0xe8
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
                	adrp	x2, <page>
-               	add	x2, x2, #0xf0
+               	add	x2, x2, <lo12>
                	ldrsw	x3, [x2]
                	sxtw	x1, w1
                	add	x1, x3, x1
@@ -48,7 +48,7 @@ Disassembly of section .text:
 
 <next_x>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xf8
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
@@ -57,7 +57,7 @@ Disassembly of section .text:
 
 <next_y>:
                	adrp	x0, <page>
-               	add	x0, x0, #0x100
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]

@@ -71,7 +71,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x238
+               	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
                	mov	x2, #0x5                // =5
                	mov	x9, x0
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x24c
+               	add	x0, x0, <lo12>
                	mov	x1, #0x9                // =9
                	mov	x2, #0x2                // =2
                	bl	<addr>
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x24c
+               	add	x0, x0, <lo12>
                	mov	x1, #0x8                // =8
                	mov	x2, #0x3                // =3
                	mov	x9, x0

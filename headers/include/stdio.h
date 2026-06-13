@@ -123,6 +123,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
 #pragma binding(libc::ftell,     "_ftell")
+#pragma binding(libc::fseeko,    "_fseeko")
+#pragma binding(libc::ftello,    "_ftello")
 #pragma binding(libc::fgetpos,   "_fgetpos")
 #pragma binding(libc::fsetpos,   "_fsetpos")
 #pragma binding(libc::rewind,    "_rewind")
@@ -189,6 +191,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
 #pragma binding(libc::ftell,     "ftell")
+#pragma binding(libc::fseeko,    "fseeko")
+#pragma binding(libc::ftello,    "ftello")
 #pragma binding(libc::fgetpos,   "fgetpos")
 #pragma binding(libc::fsetpos,   "fsetpos")
 #pragma binding(libc::rewind,    "rewind")
@@ -444,6 +448,12 @@ int puts(char *s);
 int perror(char *s);
 int fseek(FILE *stream, int offset, int whence);
 int ftell(FILE *stream);
+// POSIX large-file variants (off_t is 64-bit). Not provided on Windows
+// msvcrt under these names (`_fseeki64` / `_ftelli64` differ).
+#ifndef _WIN32
+int fseeko(FILE *stream, long offset, int whence);
+long ftello(FILE *stream);
+#endif
 int fgetpos(FILE *stream, fpos_t *pos);
 int fsetpos(FILE *stream, const fpos_t *pos);
 int rewind(FILE *stream);

@@ -12,3 +12,12 @@
 
 #include <alloca.h>
 #include <stdlib.h>
+
+// glibc allocation introspection: `malloc_usable_size` returns the number
+// of usable bytes in an allocation. macOS spells it `malloc_size` in
+// <malloc/malloc.h>; Windows spells it `_msize`. Programs that account
+// their own heap usage (e.g. a language runtime) reach for it here.
+#ifdef __linux__
+#pragma binding(libc::malloc_usable_size, "malloc_usable_size")
+size_t malloc_usable_size(void *ptr);
+#endif

@@ -17,6 +17,10 @@ typedef int sig_atomic_t;
 // `signal()`. Provided as a common extension; matches the host's
 // `void (*)(int)`.
 typedef void (*sig_t)(int);
+// glibc spells the same handler type `sighandler_t` under _GNU_SOURCE.
+#ifdef __linux__
+typedef void (*sighandler_t)(int);
+#endif
 
 // Disposition values. Pass these to `signal()`'s second argument.
 // `SIG_ERR` is the failure return value, not a disposition.

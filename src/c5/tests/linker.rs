@@ -379,6 +379,213 @@ fn pragma_export_round_trips_into_shared_library() {
 }
 
 #[test]
+fn export_all_executable_exposes_dynamic_symbols() {
+    // The same exports go into an executable's `.dynsym` (the
+    // `-rdynamic` behavior) so a `dlopen`'d module resolves the host's
+    // symbols from the global scope. An `--export-all` executable is
+    // ET_EXEC and carries its exported symbol name; an ordinary
+    // executable does not export it.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let build_exe = |export_all: bool| -> alloc::vec::Vec<u8> {
+        let copts = CompileOptions::default().with_export_all_functions(export_all);
+        let program = Compiler::with_options(
+            alloc::format!(
+                "{TEST_PRELUDE}\
+                 int host_api(int x) {{ return x + 1; }}\n\
+                 int main(void) {{ return host_api(0); }}\n"
+            ),
+            Target::LinuxX64,
+            copts,
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects(&[obj]).expect("link");
+        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        write_native_image_from_merged(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            Target::LinuxX64,
+            None,
+        )
+        .expect("write executable")
+    };
+    // `.symtab` carries `host_api` in every executable; only a
+    // `.dynsym` entry is visible to a `dlopen`'d module, so read the
+    // dynamic table through the linker's ELF record reader.
+    use crate::c5::linker::object::{read_dynamic_symbol_names, read_elf_header};
+    let exported = build_exe(true);
+    assert_eq!(
+        read_elf_header(&exported).expect("read header").e_type,
+        2,
+        "executable must be ET_EXEC"
+    );
+    assert!(
+        read_dynamic_symbol_names(&exported)
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_api"),
+        "an --export-all executable must export host_api in .dynsym"
+    );
+    assert!(
+        !read_dynamic_symbol_names(&build_exe(false))
+            .expect("parse .dynsym")
+            .iter()
+            .any(|n| n == "host_api"),
+        "an ordinary executable must not export host_api dynamically"
+    );
+}
+
+#[test]
+fn shared_object_relocates_internal_data_pointers() {
+    // A function / data pointer baked into a shared object's static data
+    // must carry an R_*_RELATIVE relocation so it tracks the runtime load
+    // base (C: a `static const` table of pointers in a dlopen'd module);
+    // an executable maps at a fixed base and needs none. Without it the
+    // table holds link-time addresses and dereferences garbage at load.
+    use crate::c5::linker::object::count_dynamic_relocs_of_type;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    const R_X86_64_RELATIVE: u32 = 8;
+    let program = Compiler::with_target(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             static int f1(void) {{ return 1; }}\n\
+             static int f2(void) {{ return 2; }}\n\
+             typedef int (*fn_t)(void);\n\
+             static const fn_t tab[2] = {{ f1, f2 }};\n\
+             int use_tab(int i) {{ return tab[i](); }}\n\
+             int main(void) {{ return use_tab(0) + use_tab(1); }}\n"
+        ),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let so = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write shared library");
+    let so_rel = count_dynamic_relocs_of_type(&so, R_X86_64_RELATIVE).expect("count so relocs");
+    assert!(
+        so_rel >= 2,
+        "shared object must relocate the two internal function pointers, got {so_rel}"
+    );
+    let plt2 = emit_x86_64_plt(&mut merged).expect("plt");
+    let exe = write_native_image_from_merged(
+        &merged,
+        &plt2,
+        "main",
+        None,
+        OutputKind::Executable,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write executable");
+    let exe_rel = count_dynamic_relocs_of_type(&exe, R_X86_64_RELATIVE).expect("count exe relocs");
+    assert_eq!(
+        exe_rel, 0,
+        "executable maps at a fixed base and must emit no RELATIVE relocs, got {exe_rel}"
+    );
+}
+
+#[test]
+fn export_all_round_trips_into_shared_library() {
+    // `--export-all` (`CompileOptions::export_all_functions`) exports
+    // every non-static function without a `#pragma export`. The names
+    // ride the same `.note.badc` NT_BADC_EXPORTS record through emit ->
+    // parse -> link and the shared-library writer promotes them; a
+    // `static` function keeps internal linkage and is omitted.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let copts = CompileOptions::default().with_export_all_functions(true);
+    let program = Compiler::with_options(
+        alloc::format!(
+            "{TEST_PRELUDE}\
+             static int internal_fn(int x) {{ return x + 2; }}\n\
+             int api_one(int x) {{ return x + 1; }}\n\
+             int api_two(int x) {{ return api_one(x) + internal_fn(x); }}\n\
+             int main(void) {{ return api_two(1); }}\n"
+        ),
+        Target::LinuxX64,
+        copts,
+    )
+    .compile()
+    .expect("compile");
+    let names: alloc::vec::Vec<&str> = program.exports.iter().map(|e| e.name.as_str()).collect();
+    assert!(
+        names.contains(&"api_one") && names.contains(&"api_two"),
+        "both non-static functions must auto-export: {names:?}"
+    );
+    assert!(
+        !names.contains(&"internal_fn"),
+        "a static function must not export: {names:?}"
+    );
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    assert!(
+        obj.exports.contains(&"api_one".to_string())
+            && obj.exports.contains(&"api_two".to_string()),
+        "auto-exports must round-trip through the `.note.badc` record"
+    );
+    assert!(
+        !obj.exports.contains(&"internal_fn".to_string()),
+        "a static function must not round-trip"
+    );
+    let mut merged = link_native_objects(&[obj]).expect("link");
+    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let so = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "",
+        None,
+        OutputKind::SharedLibrary,
+        Target::LinuxX64,
+        None,
+    )
+    .expect("write shared library");
+    assert_eq!(
+        u16::from_le_bytes(so[0x10..0x12].try_into().unwrap()),
+        3,
+        "shared library must be ET_DYN"
+    );
+}
+
+#[test]
 fn win64_dll_records_requested_name() {
     // A Win64 DLL records its own name in the export directory so a
     // consumer linking against it by name references the file it loads

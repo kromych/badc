@@ -141,9 +141,7 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x4               // =4
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x20, ne
                	cbz	x20, <addr>
@@ -164,9 +162,7 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x6               // =6
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x20, ne
                	cbz	x20, <addr>
@@ -195,9 +191,7 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x4               // =4
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>
@@ -218,9 +212,7 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x6               // =6
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	cset	x1, ne
                	cbz	x1, <addr>

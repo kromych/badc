@@ -40,9 +40,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x4]
                	mov	x17, #0x1               // =1
                	eor	x1, x1, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
@@ -52,9 +50,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0, #0x7]
                	mov	x17, #0x9               // =9
                	eor	x1, x1, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	cmp	x1, #0x0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

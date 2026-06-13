@@ -91,6 +91,11 @@ Compile knobs:
                            `info: wrote file <path>` line emitted
                            after each output write). Errors and
                            warnings are unaffected.
+  --export-all             Export every non-static function in native
+                           output (Mach-O / ELF / PE) so a runtime
+                           dlopen consumer can dlsym it without a
+                           #pragma export. Applies to --shared and
+                           executable output.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -206,6 +211,13 @@ fn main() {
     // Errors and warnings still print; only informational lines
     // are quieted.
     let mut quiet = false;
+    // `--export-all` exports every non-static function in the dynamic
+    // symbol table / export trie of native output, so a runtime
+    // `dlopen` consumer can `dlsym` it without a source-level `#pragma
+    // export`. Applies to shared-library and executable output on every
+    // native target (Mach-O / ELF / PE); a host executable that loads
+    // plugin modules sets it so the modules resolve the host's symbols.
+    let mut export_all = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -366,6 +378,8 @@ fn main() {
             // progress, `info: wrote file <path>` lines). Errors
             // and warnings remain on stderr unchanged.
             "-q" | "--quiet" => quiet = true,
+            // Export every non-static function (dlopen/dlsym visibility).
+            "--export-all" => export_all = true,
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -758,6 +772,7 @@ fn main() {
                 .with_source_label(src_path.to_string())
                 .with_show_includes(show_includes)
                 .with_warn_dead_store(warn_dead_store)
+                .with_export_all_functions(export_all)
                 .with_no_entry_point(true);
             let mut compiler = Compiler::with_options(src_bytes, target, copts);
             if show_includes {
@@ -988,7 +1003,12 @@ fn main() {
         // through the native path: ELF PT_TLS, the PE TLS directory +
         // `_tls_index` note, and the Mach-O TLV descriptors + fixups
         // note.
-        let mut merged = match badc::link_native_objects(&native_objs) {
+        // A shared library may reference symbols the host executable
+        // supplies at `dlopen` time; let an unresolved global become a
+        // load-time import instead of a link error.
+        let allow_undefined = mode == Mode::SharedLibrary;
+        let mut merged = match badc::link_native_objects_with_options(&native_objs, allow_undefined)
+        {
             Ok(m) => m,
             Err(e) => {
                 eprint_diagnostic(format!("badc: {e}"));

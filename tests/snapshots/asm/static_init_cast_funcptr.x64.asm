@@ -67,6 +67,7 @@ Disassembly of section .text:
 <real_negate>:
                	movslq	%edi, %rdi
                	imulq	$-0x1, %rdi, %rax
+               	movslq	%eax, %rax
                	retq
 
 <main>:
@@ -181,4 +182,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, 0x41(%rdx)
+               	addb	%al, (%rax)

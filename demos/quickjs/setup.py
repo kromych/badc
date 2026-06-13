@@ -70,6 +70,15 @@ TESTS = (
     "test_worker.js",
     "test_worker_module.js",
 )
+# Native extension modules and their test scripts, exercised by a runtime
+# dlopen of a badc-built shared object (POSIX only; the smoke skips them on
+# Windows). Each keeps its upstream subdirectory under `demos/quickjs/`.
+MODULE_FILES = (
+    "tests/bjson.c",
+    "tests/test_bjson.js",
+    "examples/point.c",
+    "examples/test_point.js",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -104,6 +113,12 @@ def main(argv: list[str] | None = None) -> int:
         for name in TESTS:
             member = tf.getmember(f"{prefix}/tests/{name}")
             with tf.extractfile(member) as src, (tests_dir / name).open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+        for rel in MODULE_FILES:
+            member = tf.getmember(f"{prefix}/{rel}")
+            out = qjs_dir / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with tf.extractfile(member) as src, out.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
 
     if args.verbose:

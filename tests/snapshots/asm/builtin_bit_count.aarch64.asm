@@ -31,9 +31,7 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	lsr	x1, x0, #16
                	orr	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -80,9 +78,7 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	lsr	x1, x0, #16
                	orr	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -129,9 +125,7 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	lsr	x1, x0, #16
                	orr	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -180,9 +174,7 @@ Disassembly of section .text:
                	orr	x0, x0, x1
                	lsr	x1, x0, #16
                	orr	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -224,9 +216,7 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	and	x1, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	lsr	x2, x1, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -266,9 +256,7 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	and	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -308,9 +296,7 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	and	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -351,9 +337,7 @@ Disassembly of section .text:
                	movk	x1, #0xffff, lsl #32
                	movk	x1, #0xffff, lsl #48
                	and	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -966,9 +950,7 @@ Disassembly of section .text:
                	orr	x1, x1, x2
                	lsr	x2, x1, #16
                	orr	x1, x1, x2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	lsr	x2, x1, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16
@@ -1011,9 +993,7 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	eor	x0, x0, x17
                	and	x0, x1, x0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	lsr	x1, x0, #1
                	mov	x17, #0x5555            // =21845
                	movk	x17, #0x5555, lsl #16

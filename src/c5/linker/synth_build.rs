@@ -339,7 +339,16 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             // `local_name` field is preserved as a back-reference
             // for diagnostics; the writer reads `real_symbol`.
             local_name: name.clone(),
-            real_symbol: name.clone(),
+            // A flat-namespace import (a host symbol a shared library
+            // references) carries the raw C name from the relocation,
+            // not a `#pragma binding`'s pre-shaped `real_symbol`. Mach-O
+            // prepends the leading underscore the loader matches against
+            // the host's exported `_name`; ELF uses the name verbatim.
+            real_symbol: if merged.flat_imports.contains(name) && target == Target::MacOSAarch64 {
+                alloc::format!("_{name}")
+            } else {
+                name.clone()
+            },
             // `import_dylib_map` carries the per-import dylib
             // assignment the .o writer recorded. An import
             // missing from the map falls back to dylib 0 (the
@@ -347,6 +356,7 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             // produced before NT_BADC_BINDING_MAP landed still
             // round-trip.
             dylib_index: merged.import_dylib_map.get(name).copied().unwrap_or(0) as usize,
+            flat_lookup: merged.flat_imports.contains(name),
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -710,6 +720,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
+            flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
@@ -785,6 +796,23 @@ mod tests {
         merged.imports = alloc::vec!["malloc".to_string()];
         let imports = synth_imports(&merged, Target::LinuxAarch64);
         assert_eq!(imports.imports[0].real_symbol, "malloc");
+    }
+
+    #[test]
+    fn synth_imports_marks_flat_lookup() {
+        // A host symbol a shared library references (recorded in
+        // `flat_imports`) is flagged for flat-namespace resolution and,
+        // on Mach-O, gains the leading underscore the loader matches
+        // against the host's exported name. ELF keeps the name verbatim.
+        let mut merged = tiny_aarch64_main();
+        merged.imports = alloc::vec!["JS_ToIndex".to_string()];
+        merged.flat_imports.insert("JS_ToIndex".to_string());
+        let mac = synth_imports(&merged, Target::MacOSAarch64);
+        assert!(mac.imports[0].flat_lookup, "must be flat-lookup on macOS");
+        assert_eq!(mac.imports[0].real_symbol, "_JS_ToIndex");
+        let elf = synth_imports(&merged, Target::LinuxAarch64);
+        assert!(elf.imports[0].flat_lookup, "must be flat-lookup on ELF");
+        assert_eq!(elf.imports[0].real_symbol, "JS_ToIndex");
     }
 
     #[test]

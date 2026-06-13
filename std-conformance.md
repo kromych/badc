@@ -64,14 +64,17 @@ rejected. The unbraced `char a[N] = "abc"` works; the brace-wrapped variant
 shares one parse limitation. Other compound-literal shapes (scalar, struct,
 array, including non-constant element values) work at file and block scope.
 
-### `volatile` is accepted but not honored, severity 4
+### `volatile` and `const` accepted but not enforced, severity 4
 
 `volatile` is parsed at every position and discarded. c5 does not guarantee
 that a `volatile` access is preserved or unreordered against other memory
 accesses, so memory-mapped-IO code that relies on the access actually
-happening is not safe. `const` and `restrict` are likewise accepted as
-no-ops; for those the no-op is sound (const violations are undefined,
-`restrict` is an aliasing hint).
+happening is not safe. `const` is likewise accepted but not enforced: c5
+does not diagnose assignment to a `const`-qualified object (a 6.5.16.1
+constraint violation) or the discarding of `const` in a conversion, so a
+program that modifies a `const` object compiles without the required
+diagnostic. `restrict` is accepted as a sound no-op -- it is only an
+aliasing hint with no observable semantics.
 
 ### `sizeof` an abstract function-pointer declarator, severity 5
 
@@ -90,15 +93,6 @@ such a function *through a function-pointer variable*
 indirection as a single scalar on the flat type, so `p` and
 `int (**)(int)` collapse to the same encoding, and the indirect-call result
 type drops the return type's own function-pointer level.
-
-### Windows `&fabsf`, severity 5
-
-`fabsf` is an MSVC compiler intrinsic that neither `msvcrt.dll` nor
-`ucrtbase.dll` exports, so taking its address has no library symbol to
-resolve to on Windows. Its direct (instruction) call works everywhere, and
-the other single-precision intrinsics (`sqrtf`, `floorf`, `ceilf`,
-`truncf`) and all double-precision ones resolve their address on every
-target.
 
 ### Not implemented, severity 4-5
 

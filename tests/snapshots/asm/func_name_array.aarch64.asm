@@ -36,9 +36,7 @@ Disassembly of section .text:
                	add	x1, x4, x1
                	ldrsb	x1, [x1]
                	eor	x1, x3, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	cmp	x1, #0x0
                	b.eq	<addr>
                	b	<addr>

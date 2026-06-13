@@ -50,30 +50,32 @@ fn ent_pc=0 n_params=3 variadic=false locals=3
     terminator Return(v35)   (exit_acc=v35)
   block 5  start_pc=0
     v36  Extend { value=v31, kind=I32 }                   -> x0
-    v37  BinopI { op=mul, lhs=v36, rhs_imm=-1 }           -> x9
-    v38  Imm(0)                                           -> x0
-    terminator Jmp(b6)   (exit_acc=v37)
+    v37  BinopI { op=mul, lhs=v36, rhs_imm=-1 }           -> x0
+    v38  BinopI { op=shl, lhs=v37, rhs_imm=32 }           -> x0
+    v39  BinopI { op=shr, lhs=v38, rhs_imm=32 }           -> x9
+    v40  Imm(0)                                           -> x0
+    terminator Jmp(b6)   (exit_acc=v39)
   block 6  start_pc=0
-    v39  Phi { incoming=[b11:v31, b5:v37], kind=I64 }     -> x9
-    v40  LoadLocal { off=2, kind=I64 }                    -> x0
-    v41  Extend { value=v9, kind=I32 }                    -> x0
-    v42  BinopI { op=shl, lhs=v41, rhs_imm=2 }            -> x11
-    v43  Binop { op=add, lhs=v1, rhs=v42 }                -> x11
-    v44  LoadIndexed { base=v1, index=v41, scale=4, kind=I32 } -> x0
-    v45  LoadLocal { off=4, kind=I32 }                    -> x11
-    v46  Binop { op=eq, lhs=v44, rhs=v5 }                 -> x0
-    terminator Bz { cond=v46, target=b8, fall=b7 }   (exit_acc=v46)
+    v41  Phi { incoming=[b11:v31, b5:v39], kind=I64 }     -> x9
+    v42  LoadLocal { off=2, kind=I64 }                    -> x0
+    v43  Extend { value=v9, kind=I32 }                    -> x0
+    v44  BinopI { op=shl, lhs=v43, rhs_imm=2 }            -> x11
+    v45  Binop { op=add, lhs=v1, rhs=v44 }                -> x11
+    v46  LoadIndexed { base=v1, index=v43, scale=4, kind=I32 } -> x0
+    v47  LoadLocal { off=4, kind=I32 }                    -> x11
+    v48  Binop { op=eq, lhs=v46, rhs=v5 }                 -> x0
+    terminator Bz { cond=v48, target=b8, fall=b7 }   (exit_acc=v48)
   block 7  start_pc=0
-    v47  Imm(1)                                           -> x0
-    terminator Return(v47)   (exit_acc=v47)
+    v49  Imm(1)                                           -> x0
+    terminator Return(v49)   (exit_acc=v49)
   block 8  start_pc=0
-    v48  Extend { value=v22, kind=I32 }                   -> x0
-    v49  Extend { value=v39, kind=I32 }                   -> x8
-    v50  Binop { op=eq, lhs=v48, rhs=v49 }                -> x0
-    terminator Bz { cond=v50, target=b10, fall=b9 }   (exit_acc=v50)
+    v50  Extend { value=v22, kind=I32 }                   -> x0
+    v51  Extend { value=v41, kind=I32 }                   -> x8
+    v52  Binop { op=eq, lhs=v50, rhs=v51 }                -> x0
+    terminator Bz { cond=v52, target=b10, fall=b9 }   (exit_acc=v52)
   block 9  start_pc=0
-    v51  Imm(1)                                           -> x0
-    terminator Return(v51)   (exit_acc=v51)
+    v53  Imm(1)                                           -> x0
+    terminator Return(v53)   (exit_acc=v53)
   block 10  start_pc=0
     terminator Jmp(b2)
   block 11  start_pc=0

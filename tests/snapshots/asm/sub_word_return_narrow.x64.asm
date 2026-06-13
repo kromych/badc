@@ -16,6 +16,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
                	shlq	$0x8, %rax
+               	movslq	%eax, %rax
                	orq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	retq
@@ -32,6 +33,7 @@ Disassembly of section .text:
                	movswq	%di, %rdi
                	movq	%rdi, %rax
                	shlq	$0x8, %rax
+               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	retq
 
@@ -49,6 +51,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	shrq	$0x8, %rcx
                	shlq	$0x8, %rax
+               	movslq	%eax, %rax
                	orq	%rcx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x1234, %rax           # imm = 0x1234
@@ -70,6 +73,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x140, %eax            # imm = 0x140
                	shlq	$0x8, %rax
+               	movslq	%eax, %rax
                	movswq	%ax, %rax
                	cmpq	$0x4000, %rax           # imm = 0x4000
                	je	<addr>

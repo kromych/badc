@@ -50,12 +50,8 @@ Disassembly of section .text:
                	b.hs	<addr>
                	mov	x2, x1
                	b	<addr>
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x2, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x2, x17
+               	mov	w2, w0
+               	mov	w0, w2
                	cmp	x0, x1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

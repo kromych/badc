@@ -1847,15 +1847,14 @@ impl Compiler {
                     let operand_ty = self.ty;
                     self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, -1);
                     self.ty = integer_promote(operand_ty);
-                    // C99 6.5.3.3p3: result has the promoted operand
-                    // type and follows that type's overflow rules.
-                    // For `unsigned int` (4-byte unsigned that does
-                    // not promote down) wrap modulo 2^32, otherwise
-                    // the 64-bit Mul leaves the sign-extended high
-                    // half set and a downstream Or / Shr operates
-                    // on the wider pattern.
-                    if is_unsigned_ty(self.ty) && self.size_of_type(self.ty) == 4 {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
+                    // C99 6.5.3.3p3: result has the promoted operand type and
+                    // follows that type's overflow rules. Negating the
+                    // type-minimum overflows past the type width, so a 32-bit
+                    // result is renormalized to its declared width -- otherwise
+                    // `-INT_MIN` leaves the high half clear and a later 64-bit
+                    // read (Shr, widen to long) sees the wrong value.
+                    if self.size_of_type(self.ty) == 4 {
+                        self.renormalize_to_width(self.ty);
                     }
                 }
             }
@@ -2583,22 +2582,26 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AddOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Shl);
                 // C99 6.5.7: `E1 << E2` has the type of `E1` after
-                // integer promotion. `char` / `short` (signed or
-                // unsigned, size 1 or 2) promote to signed `int`.
-                // Wider operands keep their type. For an unsigned
-                // size-4 LHS the result needs a mask back to 32 bits
-                // because bits shifted past bit 31 survive in the
-                // 64-bit accumulator.
+                // integer promotion, not `E2` (the shift count).
+                // `char` / `short` (signed or unsigned, size 1 or 2)
+                // promote to signed `int`; wider operands keep their
+                // type. Set the result type before building the AST
+                // node so it carries the correct signedness -- a later
+                // cast reads the operand's type to decide whether to
+                // sign-extend.
                 let lhs_size = self.size_of_type(t);
-                if lhs_size <= 2 {
-                    self.ty = Ty::Int as i64;
-                } else {
-                    if is_unsigned_ty(t) && lhs_size == 4 {
-                        self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                    }
-                    self.ty = t;
+                let result_ty = if lhs_size <= 2 { Ty::Int as i64 } else { t };
+                self.ty = result_ty;
+                self.ast_binop(crate::c5::ir::BinOp::Shl);
+                // The shift can push bits past the result type's width into
+                // the 64-bit accumulator, so a 32-bit result is renormalized
+                // to its declared width so a later 64-bit read (arithmetic >>,
+                // widen to long) sees the right value, matching the arithmetic
+                // binops. A 64-bit result is already full width.
+                if self.size_of_type(result_ty) == 4 {
+                    self.renormalize_to_width(result_ty);
+                    self.ty = result_ty;
                 }
             } else if self.lex.tk == Token::ShrOp {
                 self.next()?;

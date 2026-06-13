@@ -82,7 +82,9 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   LoadLocal { off=2, kind=I32 }                    -> x0
     v4   BinopI { op=mul, lhs=v1, rhs_imm=-1 }            -> x0
-    terminator Return(v4)   (exit_acc=v4)
+    v5   BinopI { op=shl, lhs=v4, rhs_imm=32 }            -> x0
+    v6   BinopI { op=shr, lhs=v5, rhs_imm=32 }            -> x0
+    terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=8 ---
 ; name=main
 fn ent_pc=8 n_params=0 variadic=false locals=9

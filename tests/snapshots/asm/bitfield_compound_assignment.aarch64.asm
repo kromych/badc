@@ -344,9 +344,7 @@ Disassembly of section .text:
                	udiv	x17, x1, x2
                	msub	x1, x17, x2, x1
                	eor	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x15               // =21

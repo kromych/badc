@@ -64,9 +64,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #0x30]
                	sub	x0, x0, #0x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	add	x1, x20, x0
                	ldur	w0, [x29, #0x30]
                	mov	x17, #0xffff            // =65535

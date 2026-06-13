@@ -5094,6 +5094,11 @@ fn emit_binop_imm(
         BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
         BinOp::Add => imm12.map(|v| enc_add_imm(rd, rn, v)),
         BinOp::Sub => imm12.map(|v| enc_sub_imm(rd, rn, v)),
+        // `x & 0xffffffff` zero-extends the low word; a 32-bit move does
+        // it in one instruction, avoiding the load-imm64 + and-register
+        // pair (the immediate has no logical-immediate-AND short form
+        // the rest of this path would otherwise use).
+        BinOp::And if rhs_imm as u64 == 0xffff_ffff => Some(super::aarch64::enc_mov_w_w(rd, rn)),
         _ => None,
     };
     if let Some(word) = used_peephole {

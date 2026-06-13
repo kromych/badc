@@ -77,13 +77,9 @@ Disassembly of section .text:
                	lsl	x5, x0, #10
                	sxtw	x5, w5
                	lsl	x6, x0, #1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x6, x6, x17
+               	mov	w6, w6
                	lsl	x7, x0, #8
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x7, x7, x17
+               	mov	w7, w7
                	lsl	x8, x0, #5
                	lsl	x0, x0, #16
                	sxtw	x1, w1
@@ -99,20 +95,12 @@ Disassembly of section .text:
                	sxtw	x2, w5
                	add	x1, x1, x2
                	sxtw	x1, w1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x2, x6, x17
+               	mov	w2, w6
                	add	x1, x1, x2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x2, x7, x17
+               	mov	w1, w1
+               	mov	w2, w7
                	add	x1, x1, x2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	add	x1, x1, x8
                	add	x20, x1, x0
                	adrp	x0, <page>

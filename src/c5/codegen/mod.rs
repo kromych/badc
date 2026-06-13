@@ -743,6 +743,12 @@ pub(crate) struct ResolvedImport {
     /// binding resolves through. Determines the LC_LOAD_DYLIB /
     /// DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR the writer emits.
     pub dylib_index: usize,
+    /// `true` when this import resolves through the runtime's flat
+    /// namespace rather than [`Self::dylib_index`]'s dylib: a host
+    /// symbol a shared library references and the loader supplies at
+    /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
+    /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
+    pub flat_lookup: bool,
     /// `true` if the binding's prototype ended with `, ...)`. The
     /// lowering reads this to decide whether the call site needs
     /// the platform's variadic ABI (macOS arm64 stack-packing,
@@ -947,6 +953,7 @@ impl ResolvedImports {
             local_name: local_name.to_string(),
             real_symbol: b.real_symbol.clone(),
             dylib_index,
+            flat_lookup: false,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
@@ -1042,6 +1049,7 @@ impl ResolvedImports {
                 local_name: b.local_name.clone(),
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
+                flat_lookup: false,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,

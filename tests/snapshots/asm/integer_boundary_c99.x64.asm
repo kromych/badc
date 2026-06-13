@@ -1088,6 +1088,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	jmp	<addr>
                	shlq	$0x1e, %rax
+               	movslq	%eax, %rax
                	cmpq	$0x40000000, %rax       # imm = 0x40000000
                	sete	%al
                	movzbq	%al, %rax
@@ -1202,5 +1203,3 @@ Disassembly of section .text:
                	addq	$0x160, %rsp            # imm = 0x160
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

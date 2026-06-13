@@ -37,7 +37,7 @@ mod image;
 #[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
-mod object;
+pub(crate) mod object;
 #[cfg(feature = "std")]
 mod synth_build;
 
@@ -49,7 +49,7 @@ pub use image::write_executable_elf64;
 #[allow(unused_imports)]
 pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
-    emit_x86_64_plt, link_native_objects,
+    emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

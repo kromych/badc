@@ -94,7 +94,10 @@ def main() -> int:
     badc = resolve_badc()
     qjs = QJS_DIR / f"qjs{EXE_SUFFIX}"
 
-    cmd = [str(badc)]
+    # `--export-all` puts the engine's API in the executable's dynamic
+    # symbol table so a dlopen'd native module resolves its references to
+    # the host (JS_NewObject, JS_ToIndex, ...) from the global scope.
+    cmd = [str(badc), "--export-all"]
     for d in DEFINES:
         cmd += ["-D", d]
     cmd += ["-I", str(QJS_DIR)]
@@ -124,7 +127,43 @@ def main() -> int:
             )
         passed += 1
 
-    print(f"smoke OK: qjs built; {passed} pure-JS quickjs tests green")
+    # Native extension modules: build each as a badc shared object and run
+    # its test through the qjs CLI, which dlopens the module and resolves
+    # the module's host references against the executable's exported API.
+    examples_dir = QJS_DIR / "examples"
+    modules = (
+        (tests_dir / "bjson.c", tests_dir / "bjson.so", tests_dir / "test_bjson.js", tests_dir),
+        (
+            examples_dir / "point.c",
+            examples_dir / "point.so",
+            examples_dir / "test_point.js",
+            examples_dir,
+        ),
+    )
+    module_passed = 0
+    for src, so, test, cwd in modules:
+        build = [str(badc), "--export-all", "--shared"]
+        for d in DEFINES:
+            build += ["-D", d]
+        build += ["-D", "JS_SHARED_LIBRARY", "-I", str(QJS_DIR), str(src), "-o", str(so)]
+        rb = subprocess.run(build, capture_output=True, text=True)
+        if rb.returncode != 0 or not so.is_file():
+            fail(f"module {src.name} build failed (exit {rb.returncode})\n{rb.stderr[-2000:]}")
+        rt = subprocess.run(
+            [str(qjs), "--std", str(test)],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=120,
+        )
+        if rt.returncode != 0:
+            fail(f"{test.name} exit {rt.returncode}\n{(rt.stdout + rt.stderr)[-1500:]}")
+        module_passed += 1
+
+    print(
+        f"smoke OK: qjs built; {passed} pure-JS + {module_passed} native-module "
+        "quickjs tests green"
+    )
     return 0
 
 

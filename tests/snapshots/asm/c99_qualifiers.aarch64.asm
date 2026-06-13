@@ -11,13 +11,9 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	sxtw	x0, w0
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	add	x0, x0, x1
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	ret
 
 <read_one>:
@@ -48,13 +44,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x2, x2, x17
+               	mov	w2, w2
                	add	x1, x1, x2
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x1, x1, x17
+               	mov	w1, w1
                	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -74,9 +66,7 @@ Disassembly of section .text:
                	ldrb	w0, [x0]
                	mov	x17, #0x62              // =98
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
@@ -105,9 +95,7 @@ Disassembly of section .text:
                	ldr	w0, [x0]
                	mov	x17, #0x1               // =1
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	mov	x0, #0x7                // =7

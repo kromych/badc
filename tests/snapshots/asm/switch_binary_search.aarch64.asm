@@ -83,9 +83,7 @@ Disassembly of section .text:
                	b	<addr>
 
 <classify_unsigned>:
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0x7fff, lsl #16
                	cmp	x0, x17

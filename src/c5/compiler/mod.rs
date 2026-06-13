@@ -187,6 +187,13 @@ pub struct CompileOptions {
     /// requirement -- the linker picks the entry once it
     /// merges every TU).
     pub no_entry_point: bool,
+    /// When true, every non-static function defined in this unit is
+    /// exported in addition to any named by `#pragma export`. Set for
+    /// `--shared` builds so a runtime `dlopen` consumer can `dlsym` the
+    /// module's entry points without source-level export pragmas,
+    /// matching the default visibility of a system toolchain's shared
+    /// library.
+    pub export_all_functions: bool,
 }
 
 impl CompileOptions {
@@ -224,6 +231,12 @@ impl CompileOptions {
     /// [`Self::warn_dead_store`].
     pub fn with_warn_dead_store(mut self, on: bool) -> Self {
         self.warn_dead_store = on;
+        self
+    }
+    /// Export every non-static function. See
+    /// [`Self::export_all_functions`].
+    pub fn with_export_all_functions(mut self, on: bool) -> Self {
+        self.export_all_functions = on;
         self
     }
     /// Drop the "must define main" requirement. Returns a
@@ -859,6 +872,11 @@ pub struct Compiler {
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
 
+    /// Mirror of [`CompileOptions::export_all_functions`]. When set,
+    /// `resolve_exports` adds every non-static defined function to the
+    /// export list so a `--shared` consumer can `dlsym` it.
+    export_all_functions: bool,
+
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
     /// `(file, line)` state (i.e. crossing a GNU line marker on
@@ -1192,6 +1210,7 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
+            export_all_functions: opts.export_all_functions,
             source_files: Vec::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
@@ -1305,6 +1324,32 @@ impl Compiler {
                 name,
                 ent_pc: self.symbols[idx].val as usize,
             });
+        }
+        // For a `--shared` build, export every non-static function
+        // defined in this unit, matching the default visibility a
+        // system toolchain gives a shared library: a runtime `dlopen`
+        // consumer resolves an entry point (e.g. quickjs's
+        // `js_init_module`) by name without a source-level pragma.
+        // Functions named by `#pragma export` above are skipped here to
+        // avoid duplicate export entries.
+        if self.export_all_functions {
+            use crate::c5::symbol::Linkage;
+            for idx in 0..self.symbols.len() {
+                let sym = &self.symbols[idx];
+                if sym.class != Token::Fun as i64
+                    || sym.linkage != Linkage::External
+                    || !sym.defined_here
+                {
+                    continue;
+                }
+                if exports.iter().any(|e| e.name == sym.name) {
+                    continue;
+                }
+                exports.push(crate::c5::program::ExportedFunction {
+                    name: sym.name.clone(),
+                    ent_pc: sym.val as usize,
+                });
+            }
         }
         Ok(exports)
     }

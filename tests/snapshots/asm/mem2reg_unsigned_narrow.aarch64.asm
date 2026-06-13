@@ -41,9 +41,7 @@ Disassembly of section .text:
                	and	x0, x0, x17
                	mov	x17, #0x2c              // =44
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	add	x0, x5, #0x1
@@ -52,9 +50,7 @@ Disassembly of section .text:
                	and	x0, x1, x17
                	mov	x17, #0x2345            // =9029
                	eor	x0, x0, x17
-               	mov	x17, #0xffff            // =65535
-               	movk	x17, #0xffff, lsl #16
-               	and	x0, x0, x17
+               	mov	w0, w0
                	cmp	x0, #0x0
                	b.eq	<addr>
                	sxtw	x0, w5

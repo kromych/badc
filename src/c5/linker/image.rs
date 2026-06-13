@@ -1032,6 +1032,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),
+            flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
@@ -1063,11 +1064,9 @@ mod tests {
         let bytes = write_executable_elf64(&merged, "main").expect("write");
         assert_eq!(&bytes[..4], &ELF_MAGIC);
         assert_eq!(bytes[4], EI_CLASS_64);
-        // e_type at offset 16, e_machine at offset 18.
-        let e_type = u16::from_le_bytes(bytes[16..18].try_into().unwrap());
-        let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
-        assert_eq!(e_type, ET_EXEC);
-        assert_eq!(e_machine, EM_X86_64);
+        let ehdr = crate::c5::linker::object::read_elf_header(&bytes).expect("read header");
+        assert_eq!(ehdr.e_type, ET_EXEC);
+        assert_eq!(ehdr.e_machine, EM_X86_64);
     }
 
     #[test]
@@ -1077,7 +1076,9 @@ mod tests {
         let bytes = write_executable_elf64(&merged, "main").expect("dynamic write");
         // Verify the header reports five program headers (PT_PHDR,
         // PT_INTERP, two PT_LOADs, PT_DYNAMIC).
-        let e_phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap());
+        let e_phnum = crate::c5::linker::object::read_elf_header(&bytes)
+            .expect("read header")
+            .e_phnum;
         assert_eq!(e_phnum, 5, "dynamic image must carry five program headers");
         // The interp string lands right after the PHDR table.
         let interp_off = 64 + 5 * 56;

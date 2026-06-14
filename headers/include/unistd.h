@@ -184,10 +184,13 @@ extern char **environ;
 
 int open(char *path, int flags, ...);
 int read(int fd, char *buf, int n);
-int pread(int fd, char *buf, int n, int offset);
+// POSIX: pread/pwrite take an off_t offset and size_t count; an `int`
+// offset truncates positions past 2GB. Matches the pread64/pwrite64
+// signatures below.
+long pread(int fd, char *buf, unsigned long n, long offset);
 int close(int fd);
 int write(int fd, char *buf, int n);
-int pwrite(int fd, char *buf, int n, int offset);
+long pwrite(int fd, char *buf, unsigned long n, long offset);
 #ifdef __linux__
 // glibc large-file variants (`_LARGEFILE64_SOURCE`). The offset and
 // result are 64-bit; programs configured with `USE_PREAD64` (e.g.

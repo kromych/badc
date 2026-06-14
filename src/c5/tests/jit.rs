@@ -1320,6 +1320,8 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // Block-scope function declaration resolves to the file-scope
     // definition (C99 6.7p1 / 6.2.2p5).
     ("block_scope_function_declaration.c", 0),
+    // A struct tag in a function body has block scope (C99 6.2.1).
+    ("block_scope_struct_tag.c", 0),
     // Compound assignment (`+=`, `-=`) on unsigned int / long /
     // char: must NOT scale the RHS by element size (the
     // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).

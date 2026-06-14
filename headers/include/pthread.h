@@ -25,6 +25,7 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::pthread_create,           "_pthread_create")
 #pragma binding(libc::pthread_join,             "_pthread_join")
+#pragma binding(libc::pthread_detach,           "_pthread_detach")
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_mutex_init,       "_pthread_mutex_init")
@@ -64,6 +65,7 @@
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::pthread_create,           "pthread_create")
 #pragma binding(libc::pthread_join,             "pthread_join")
+#pragma binding(libc::pthread_detach,           "pthread_detach")
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
@@ -157,6 +159,7 @@ typedef long long pthread_once_t;
 
 int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);
+int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 int pthread_mutex_init(char *mutex, char *attr);

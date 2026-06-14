@@ -949,6 +949,14 @@ impl Compiler {
                     // frame, or parses a statement.
                     let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> =
                         alloc::vec::Vec::new();
+                    // C99 6.2.1: a tag declared in a function body has
+                    // block scope. Push a tag scope so a struct / union /
+                    // enum defined at the body top level is local to this
+                    // function -- two functions defining the same tag do
+                    // not collide, and a body-scope tag shadows a
+                    // file-scope one. Nested blocks push their own scopes
+                    // through parse_block_stmt.
+                    self.tag_scopes.push(alloc::vec::Vec::new());
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
@@ -986,6 +994,7 @@ impl Compiler {
                             top_level_ids.push(item_id);
                         }
                     }
+                    self.tag_scopes.pop();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend

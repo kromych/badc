@@ -89,7 +89,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x2, w2
                	bl	<addr>
-               	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -102,7 +101,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	sxtw	x2, w2
                	bl	<addr>
-               	sxtw	x0, w0
                	ldr	x19, [sp]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

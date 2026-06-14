@@ -56,6 +56,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("setjmp.h", include_str!("../../headers/include/setjmp.h")),
     ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
+    ("sched.h", include_str!("../../headers/include/sched.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
@@ -103,6 +104,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/types.h",
         include_str!("../../headers/include/sys/types.h"),
     ),
+    ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
     (
         "sys/stat.h",
         include_str!("../../headers/include/sys/stat.h"),

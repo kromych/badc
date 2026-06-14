@@ -83,15 +83,16 @@ impl Compiler {
             let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
             self.next()?; // consume `(`
-            let params = self.parse_function_params()?;
-            // A prototype's parameter names have no linkage and no
-            // scope beyond the declaration (C99 6.7.6.3), so restore
-            // each shadowed binding -- otherwise a later local or
-            // another prototype reusing the name trips the duplicate
-            // definition check.
-            for &p in &params.indices {
-                Self::restore_shadowed_symbol(&mut self.symbols[p]);
-            }
+            // A prototype's parameter names have no linkage and no scope
+            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
+            // mode so the names are not shadowed: shadowing one that
+            // already names an enclosing local would corrupt that local's
+            // single saved binding and leak it past the function.
+            let saved_proto = self.pending.parsing_fn_ptr_proto;
+            self.pending.parsing_fn_ptr_proto = true;
+            let params = self.parse_function_params();
+            self.pending.parsing_fn_ptr_proto = saved_proto;
+            let params = params?;
             // Introduce a function symbol only for an as-yet-undeclared
             // name. A name already bound -- a libc binding (`Sys`), a
             // function declared elsewhere (`Fun`), or a variable

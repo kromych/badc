@@ -75,6 +75,9 @@
 #pragma binding(libc::strcspn,  "strcspn")
 #pragma binding(libc::strpbrk,  "strpbrk")
 #pragma binding(libc::strtok,   "strtok")
+// glibc extension: returns a pointer to the first occurrence of `c`,
+// or the terminating NUL if `c` is not found. No macOS / msvcrt export.
+#pragma binding(libc::strchrnul, "strchrnul")
 #endif
 
 #ifdef _WIN32
@@ -158,6 +161,10 @@ int strspn(char *s, char *accept);
 int strcspn(char *s, char *reject);
 char *strpbrk(char *s, char *accept);
 char *strtok(char *s, char *delim);
+#ifdef __linux__
+// glibc extension, declared only where it is bound.
+char *strchrnul(const char *s, int c);
+#endif
 #ifdef _WIN32
 // Case-insensitive compares -- msvcrt-only, no POSIX equivalent
 // in the c5 surface. Names match the underscored entries

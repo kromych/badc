@@ -52,7 +52,27 @@ int main(void) {
         }
     }
 
+    // A prototype parameter name may match an enclosing local; the
+    // local must survive (no spurious "duplicate" in a later block).
+    {
+        int cnt = 5;
+        int sum3(int cnt, int b, int c);
+        if (sum3(1, 2, 3) != 6 || cnt != 5) {
+            return 5;
+        }
+    }
+    {
+        int cnt = 7;
+        if (cnt != 7) {
+            return 6;
+        }
+    }
+
     return 0;
+}
+
+int sum3(int a, int b, int c) {
+    return a + b + c;
 }
 
 int add(int a, int b) {

@@ -1,55 +1,50 @@
-//! Rudimentary preprocessor that runs before the lexer.
+//! Preprocessor that runs before the lexer.
 //!
-//! The c5 dialect's lexer used to silently skip lines starting with
-//! `#`, leaving every `#define` / `#ifdef` in the source as a
-//! no-op. Once per-target headers started declaring constants and
-//! libc bindings, that placeholder shape stopped serving and was
-//! replaced with the implementation below.
+//! Line-based: each input line becomes a macro-substituted line of
+//! output, or a blank line for a directive or an inactive conditional
+//! branch. Line counts are preserved one-for-one -- including the
+//! blank fillers emitted for each consumed `\` continuation -- so
+//! lexer and parser error messages keep accurate line numbers.
 //!
-//! What's supported:
+//! Directives:
 //!
-//! * `#define NAME REPLACEMENT` -- single-token replacement; macro
-//!   bodies can themselves be macros (cycle-safe).
-//! * `#ifdef NAME` / `#ifndef NAME` / `#endif`.
-//! * `#if EXPR` / `#else` / `#endif`, with `EXPR` being either
-//!   `LHS == RHS`, `LHS != RHS`, or a bare `NAME` (truthy iff
-//!   defined to a non-zero, non-empty value).
-//! * `#pragma dylib(name, "path")` -- introduces a logical dylib
-//!   the codegen can attach bindings to. `name` is the c5-side
-//!   handle (e.g. `libc`); `path` is the actual loader-search-name
-//!   or filesystem path (`libc.so.6`, `/usr/lib/libSystem.B.dylib`,
-//!   `msvcrt.dll`).
-//! * `#pragma binding(dylib_name::local_name, "real_symbol")` --
-//!   declares that the c5-side identifier `local_name`, when called
-//!   from source, should land on `real_symbol` exported by the
-//!   dylib called `dylib_name`. The earlier positional "current
-//!   dylib" form (`#pragma comment(dylib, ...)` with following
-//!   bindings inheriting it implicitly) was replaced with this
-//!   explicit cross-reference so reordering directives can't
-//!   silently rebind a function to the wrong dylib.
+//! * `#define NAME BODY` / `#define NAME(params) BODY` -- object- and
+//!   function-like macros; a body may span lines with a trailing `\`.
+//!   Expansion is recursive and cycle-safe. `#undef NAME` removes a
+//!   definition. The CLI's `-D NAME` predefines with body `1` and
+//!   `-D NAME=` with an empty body (see [`Preprocessor::define`]).
+//! * `#ifdef` / `#ifndef` / `#if` / `#elif` / `#else` / `#endif`,
+//!   nestable. The `#if` / `#elif` operand is a C integer constant
+//!   expression evaluated at 64 bits: `defined(NAME)` / `defined
+//!   NAME`, the ternary `?:`, `||`, `&&`, `| ^ &`, `== !=`,
+//!   `< > <= >=`, `<< >>`, `+ - * / %`, unary `! ~ - +`, integer and
+//!   character constants, and parentheses. An identifier that is not
+//!   a macro evaluates to 0 (C99 6.10.1).
+//! * `#include <name.h>` / `#include "name.h"` -- resolved through the
+//!   filesystem search paths first (a quoted form also searches the
+//!   including file's directory), then the embedded-header registry
+//!   (see [`super::headers`]). Cyclic `#include` is rejected; a repeat
+//!   include is dropped once the header has used `#pragma once`.
+//! * `#error MESSAGE` aborts compilation; `#warning MESSAGE` reports a
+//!   diagnostic and continues; `#line` (and the GNU `# NN "file"`
+//!   marker) adjusts the reported line number and file name.
 //!
-//! What's not:
+//! Pragmas:
 //!
-//! * Multi-line `#define` continuations.
-//! * Boolean operators (`&&`, `||`, `!`) inside `#if`.
-//!
-//! Also supported:
-//!
-//! * `#include <name.h>` / `#include "name.h"` -- pulls a header out
-//!   of the embedded-header registry (see [`super::headers`]). Both
-//!   forms hit the same registry today; a future filesystem search
-//!   path could split them. Cyclic `#include` is rejected; repeat
-//!   inclusion is silently no-op iff the included file declared
-//!   `#pragma once`.
-//! * `#pragma once` -- once seen inside a header, further `#include`
-//!   of the same header is dropped on the floor. The usual idiom
-//!   for guarding against double-inclusion of standard headers.
-//!
-//! The pass is line-based: every line of the input either becomes
-//! a (macro-substituted) line of the output or a blank line if it
-//! was a directive / inactive branch. Line counts are preserved
-//! one-for-one so error messages from the lexer keep meaningful
-//! line numbers.
+//! * `#pragma once` -- drop further `#include` of the same header.
+//! * `#pragma dylib(name, "path")` -- introduce a logical dylib the
+//!   codegen attaches bindings to. `name` is the c5-side handle (e.g.
+//!   `libc`); `path` is the loader search name or filesystem path
+//!   (`libc.so.6`, `/usr/lib/libSystem.B.dylib`, `msvcrt.dll`).
+//! * `#pragma binding(dylib_name::local_name, "real_symbol")` -- bind
+//!   the c5-side identifier `local_name` to `real_symbol` exported by
+//!   `dylib_name`, so a call to `local_name` lands on that import. The
+//!   explicit cross-reference replaced an earlier positional "current
+//!   dylib" form so reordering directives cannot rebind a function to
+//!   the wrong dylib.
+//! * `#pragma pack(push|pop|N)` -- struct field alignment.
+//! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
+//!   compiler intrinsic.
 
 use alloc::collections::BTreeSet;
 use alloc::format;

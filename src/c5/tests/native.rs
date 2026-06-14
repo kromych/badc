@@ -662,6 +662,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Brace-wrapped string literal initializing a char-array struct
     // member (C99 6.7.9p14): copy the bytes, not the pointer.
     ("struct_member_brace_wrapped_string.c", 0),
+    // `&`/`^`/`|` result type is the common type (C99 6.5.10-12) so a
+    // cast of `unsigned | int` to signed sign-extends on widening.
+    ("bitop_common_type_sign_extend.c", 0),
     // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.

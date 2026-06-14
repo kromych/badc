@@ -2485,24 +2485,30 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Or);
+                // Set the result type before building the AST binop node
+                // so its `ty` is the C99 6.5.12 common type, not the
+                // rhs's pre-conversion tag. The walker reads this node
+                // `ty` as the cast source type, so an order-dependent tag
+                // breaks `(int)(unsigned | int)` sign extension. Mirrors
+                // the additive path.
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
                 // C99 6.5.11: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Xor);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
                 // C99 6.5.10: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::And);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
                 // variant and the `invert` flag handed to

@@ -1739,6 +1739,7 @@ pub(super) fn lower(
     };
 
     Ok(Build {
+        copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
         entry_offset,

@@ -190,6 +190,47 @@ fn defined_functions_get_sized_symtab_entries() {
     }
 }
 
+/// `#pragma binding(data libc::environ, "__environ")` (in `<unistd.h>`,
+/// `__linux__`) records a data-import copy relocation in the object's
+/// `.note.badc`, mapping the local `environ` to the host's `__environ`.
+/// The linker turns it into an `R_*_COPY` against runtime.c's environ
+/// slot (verified end to end by the native demos); here the object-level
+/// contract is locked: the host symbol name reaches the relocatable
+/// object, and a program with no environ binding carries none.
+#[test]
+fn environ_data_binding_records_copy_relocation() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let emit_obj = |src: &str| -> alloc::vec::Vec<u8> {
+        // The binding is `__linux__`-gated, so compile for a Linux
+        // target; the host may be macOS, where environ takes a different
+        // form.
+        let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit")
+    };
+    let has_host_symbol = |bytes: &[u8]| {
+        let needle = b"__environ";
+        bytes.windows(needle.len()).any(|w| w == needle)
+    };
+
+    let with_env = emit_obj("#include <unistd.h>\nint main(void){ return environ != 0; }");
+    assert!(
+        has_host_symbol(&with_env),
+        "a program referencing environ must record the __environ copy relocation"
+    );
+
+    let without_env = emit_obj("int main(void){ return 0; }");
+    assert!(
+        !has_host_symbol(&without_env),
+        "a program with no environ binding must not record __environ"
+    );
+}
+
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for
 /// every `STT_FUNC` entry. Minimal fixed-offset parse for the symbol-
 /// size regression above.

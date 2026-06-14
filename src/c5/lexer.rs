@@ -1846,6 +1846,17 @@ pub(crate) fn init_symbols(
     for spec in dylibs {
         for binding in &spec.bindings {
             let name = binding.local_name.as_str();
+            if binding.is_data {
+                // A data binding (e.g. environ) names a data object
+                // referenced through its `extern` declaration, not a
+                // callable symbol. Seeding it as `Token::Sys` would
+                // shadow the data symbol with a call entry; the COPY
+                // relocation binds it instead. Consume a binding index
+                // so the flat binding table stays aligned with
+                // `spec.bindings`.
+                binding_idx += 1;
+                continue;
+            }
             if find_symbol(symbols, index, name).is_none() {
                 let hash = hash_name(name.as_bytes());
                 symbols.push(Symbol {

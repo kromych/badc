@@ -896,6 +896,13 @@ pub(crate) struct ResolvedDylib {
 pub(crate) struct ResolvedImports {
     pub imports: Vec<ResolvedImport>,
     pub dylibs: Vec<ResolvedDylib>,
+    /// Data symbols bound to a host data object via `#pragma
+    /// binding(data <lib>::<local>, "<host>")`. Each entry is
+    /// `(local_name, host_symbol)`: the image-side symbol the source
+    /// references and the dynamic symbol it resolves to. The ELF
+    /// writer turns each into a COPY relocation; unlike `imports`,
+    /// these are not call sites and carry no GOT/PLT slot.
+    pub data_bindings: Vec<(String, String)>,
 }
 
 impl ResolvedImports {
@@ -1100,7 +1107,30 @@ impl ResolvedImports {
             }
         }
 
-        Ok(ResolvedImports { imports, dylibs })
+        // Data symbols bound via `#pragma binding(data ...)`. A data
+        // import is referenced as an object, never called, so it never
+        // appears as an `Inst::CallExt`; it is collected here instead.
+        // Every such binding in scope is carried through; synth_build
+        // emits a COPY relocation only when the final image defines the
+        // local symbol (the runtime supplies `environ` for every hosted
+        // image, so the binding binds it to the host's data object).
+        let mut data_bindings: Vec<(String, String)> = Vec::new();
+        for spec in &program.dylibs {
+            for b in &spec.bindings {
+                if b.is_data {
+                    let entry = (b.local_name.clone(), b.real_symbol.clone());
+                    if !data_bindings.contains(&entry) {
+                        data_bindings.push(entry);
+                    }
+                }
+            }
+        }
+
+        Ok(ResolvedImports {
+            imports,
+            dylibs,
+            data_bindings,
+        })
     }
 }
 
@@ -1128,6 +1158,20 @@ fn lookup_binding(
     None
 }
 
+/// One resolved data-import copy relocation. `host_symbol` is the
+/// dynamic data symbol to bind (e.g. `__environ`); the local data
+/// object the image already defines sits at `local_offset` within its
+/// `.data` (or `.bss` when `is_bss`) section, `size` bytes wide. The
+/// ELF writer exports `host_symbol` at that runtime address and emits
+/// an `R_*_COPY` so the loader binds the host's object into the image.
+#[derive(Debug, Clone)]
+pub(crate) struct CopyRelocReq {
+    pub host_symbol: String,
+    pub local_offset: u64,
+    pub is_bss: bool,
+    pub size: u64,
+}
+
 /// Where each piece of the program-being-built ends up in the final
 /// image. The codegen and image-writer halves both populate this --
 /// the codegen knows the code bytes, the pinned data bytes, and which
@@ -1138,6 +1182,11 @@ fn lookup_binding(
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
+    /// Data-import copy relocations resolved against the merged symbol
+    /// table (multi-TU link path). Each names a host data symbol to
+    /// export at a local data/bss slot the image defines, bound with an
+    /// `R_*_COPY` relocation. Empty on the single-TU and non-ELF paths.
+    pub copy_relocs: Vec<CopyRelocReq>,
     /// Initialised data segment: string literals + zero-initialised
     /// globals. Copied into `__DATA,__data` by the writer; offsets
     /// into this buffer match the SSA emit's view of the data

@@ -116,6 +116,11 @@ pub struct MergedNative {
     /// `adrp_offset` rebased into the merged `.text` and
     /// `descriptor_index` into [`Self::macho_tlv_descriptors`].
     pub macho_tlv_fixups: Vec<(usize, usize)>,
+    /// Data-import copy relocations from `#pragma binding(data ...)`,
+    /// each `(local_name, host_symbol)`, deduplicated across units. The
+    /// final-image writer binds each local data symbol it defines to the
+    /// host's data object with an `R_*_COPY` relocation.
+    pub copy_relocs: Vec<(String, String)>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -828,6 +833,19 @@ pub fn link_native_objects_with_options(
         }
     }
 
+    // Data-import copy relocations, deduplicated across units. The
+    // binding is declared in a header, so the same `(local, host)` pair
+    // recurs in every unit that included it.
+    let mut copy_relocs: Vec<(String, String)> = Vec::new();
+    let mut seen_copy: BTreeSet<(String, String)> = BTreeSet::new();
+    for obj in objs {
+        for pair in &obj.copy_relocs {
+            if seen_copy.insert(pair.clone()) {
+                copy_relocs.push(pair.clone());
+            }
+        }
+    }
+
     // Win64 `_tls_index` fixup sites, rebased from each unit's local
     // `.text` offset to the merged `.text` offset. The PE writer
     // patches each with the address of the `_tls_index` slot it lays
@@ -970,6 +988,7 @@ pub fn link_native_objects_with_options(
         tls_index_fixups,
         macho_tlv_descriptors,
         macho_tlv_fixups,
+        copy_relocs,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1875,6 +1894,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1940,6 +1960,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1980,6 +2001,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

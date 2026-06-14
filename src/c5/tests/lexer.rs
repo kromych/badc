@@ -231,6 +231,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
             param_types: Vec::new(),
             local_name: "malloc".into(),
             real_symbol: "malloc".into(),
+            is_data: false,
         }],
     }];
     let mut symbols = Vec::new();

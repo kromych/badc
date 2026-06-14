@@ -2519,6 +2519,7 @@ mod tests {
     fn tiny_build() -> Build {
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
+            copy_relocs: Default::default(),
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
@@ -2536,6 +2537,7 @@ mod tests {
             user_extern_data_refs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
+                data_bindings: Default::default(),
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
                     local_name: "write".into(),

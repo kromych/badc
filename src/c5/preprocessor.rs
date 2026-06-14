@@ -142,6 +142,12 @@ pub struct Binding {
     /// the `ResolvedImport` view it builds during import resolution.
     #[allow(dead_code)]
     pub real_symbol: String,
+    /// `true` when the binding names a data object rather than a
+    /// callable function -- the `#pragma binding(data <lib>::<name>,
+    /// "...")` form. A data import resolves to a COPY relocation that
+    /// binds the host's data symbol into the image, not a PLT/GOT call
+    /// slot.
+    pub is_data: bool,
 }
 
 /// One function-like macro entry: parameter list + body. Object-like
@@ -2344,6 +2350,13 @@ impl Preprocessor {
             )));
         };
         let qualified = qualified.trim();
+        // `#pragma binding(data <lib>::<name>, "sym")` marks a data
+        // object; the leading `data ` keyword distinguishes it from the
+        // function form.
+        let (is_data, qualified) = match qualified.strip_prefix("data ") {
+            Some(rest) => (true, rest.trim()),
+            None => (false, qualified),
+        };
         let real_symbol = real_symbol.trim().trim_matches('"');
         let Some((dylib_name, local_name)) = qualified.split_once("::") else {
             return Err(C5Error::Compile(super::error::fmt_compile_err(
@@ -2382,6 +2395,7 @@ impl Preprocessor {
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
+            is_data,
         });
         Ok(())
     }

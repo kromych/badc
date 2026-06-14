@@ -37,7 +37,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, DataFixup, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
+    Build, CopyRelocReq, DataFixup, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
     ResolvedImports, Target, write_native_image,
 };
 use crate::c5::error::C5Error;
@@ -181,7 +181,31 @@ fn synth_program_and_build(
         }
     }
 
+    // Resolve each data-import copy relocation against the merged
+    // symbol table. The local data object named in the binding must be
+    // defined in the image (e.g. runtime.c's `environ`); carry its
+    // section + offset so the writer can place the host symbol and the
+    // R_*_COPY at the object's runtime address. A binding whose local
+    // symbol the image does not define is dropped silently.
+    let mut copy_relocs: Vec<CopyRelocReq> = Vec::new();
+    for (local, host) in &merged.copy_relocs {
+        let Some(sym) = merged.defined.get(local) else {
+            continue;
+        };
+        let is_bss = matches!(sym.section, NativeSymSection::Bss);
+        if !is_bss && !matches!(sym.section, NativeSymSection::Data) {
+            continue;
+        }
+        copy_relocs.push(CopyRelocReq {
+            host_symbol: host.clone(),
+            local_offset: sym.value,
+            is_bss,
+            size: sym.size.max(1),
+        });
+    }
+
     let build = Build {
+        copy_relocs,
         text: merged.text.clone(),
         data: merged.data.clone(),
         entry_offset,
@@ -364,7 +388,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> ResolvedImports {
             param_types: Vec::new(),
         })
         .collect();
-    ResolvedImports { imports, dylibs }
+    // Data bindings are surfaced separately, from the merged
+    // `.note.badc` copy-reloc records (see `synth_data_copy_relocs`).
+    ResolvedImports {
+        imports,
+        dylibs,
+        data_bindings: Vec::new(),
+    }
 }
 
 fn default_dylib(target: Target) -> ResolvedDylib {
@@ -725,6 +755,7 @@ mod tests {
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
+            copy_relocs: alloc::vec![],
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

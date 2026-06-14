@@ -1037,6 +1037,7 @@ mod tests {
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
+            copy_relocs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],

@@ -380,6 +380,11 @@ pub struct NativeObject {
     /// `(adrp_offset, descriptor_index)`: a `.text` byte offset and
     /// the index into `macho_tlv_descriptors` it resolves to.
     pub macho_tlv_fixups: Vec<(usize, usize)>,
+    /// Data-import copy relocations (`NT_BADC_COPY_RELOC`), each
+    /// `(local_name, host_symbol)` from `#pragma binding(data ...)`.
+    /// The final-image writer binds the local data symbol to the
+    /// host's data object with an `R_*_COPY` relocation.
+    pub copy_relocs: Vec<(String, String)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -779,6 +784,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut tls_index_fixups: Vec<usize> = Vec::new();
     let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
     let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
+    let mut copy_relocs: Vec<(String, String)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -863,6 +869,22 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             tc += 16;
                         }
                     }
+                    7 => {
+                        let mut c = cur;
+                        while c < desc_end {
+                            let Some(p1) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                                break;
+                            };
+                            let local = String::from_utf8_lossy(&body[c..c + p1]).into_owned();
+                            c += p1 + 1;
+                            let Some(p2) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                                break;
+                            };
+                            let host = String::from_utf8_lossy(&body[c..c + p2]).into_owned();
+                            c += p2 + 1;
+                            copy_relocs.push((local, host));
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -923,6 +945,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         tls_index_fixups,
         macho_tlv_descriptors,
         macho_tlv_fixups,
+        copy_relocs,
         debug_info,
         debug_abbrev,
         debug_line,

@@ -154,16 +154,13 @@
 #pragma binding(libc::getopt,    "getopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
-// POSIX `environ` is exposed by glibc as a data symbol pointing
-// at the per-process environment vector. The single definition
-// lives in `lib/runtime.c` and ships with every native ELF
-// image; here we declare the extern so user code can read or
-// write it. Programs that need the real glibc environ value
-// -- e.g., to pass it through to a child process -- populate
-// it themselves from the `envp` argument of `main`.
-// TODO: replace this slot with a real data import once
-// `#pragma binding`'s data form lands so glibc's own `environ`
-// is bound directly.
+// POSIX `environ` is exposed by glibc as the data symbol `__environ`
+// (with `environ` as its alias). The `extern` slot lives in
+// `lib/runtime.c`; the data binding makes the linker emit a COPY
+// relocation so that slot and glibc's `__environ` share one cell.
+// Without it, glibc's getenv / setenv / tzset read a different cell
+// than a direct `environ = ...` assignment writes.
+#pragma binding(data libc::environ, "__environ")
 extern char **environ;
 #endif
 

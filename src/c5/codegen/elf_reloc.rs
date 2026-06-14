@@ -88,6 +88,11 @@ const NT_BADC_MACHO_TLV_DESC: u32 = 5;
 // descriptor-address materialisation and the index into the
 // NT_BADC_MACHO_TLV_DESC list it resolves to.
 const NT_BADC_MACHO_TLV_FIXUP: u32 = 6;
+// Data-import copy relocations from `#pragma binding(data <lib>::<local>,
+// "<host>")`. desc is a sequence of (NUL local_name, NUL host_symbol)
+// string pairs. The final-image writer binds each local data symbol to
+// the host's data object with an `R_*_COPY` relocation.
+const NT_BADC_COPY_RELOC: u32 = 7;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -221,6 +226,46 @@ fn e_machine_for(machine: Machine) -> u16 {
         Machine::X86_64 => EM_X86_64,
         Machine::Aarch64 => EM_AARCH64,
     }
+}
+
+/// Byte size of a defined data global, for the symbol table's
+/// `st_size`. Pointers and scalars resolve by width (ELF targets are
+/// LP64, so `long` is 8); an array multiplies by its element count. A
+/// struct / union global returns 0 -- its storage size needs the type
+/// layout machinery the object writer doesn't carry, and a zero
+/// `st_size` matches the prior behavior. A correct size matters for a
+/// COPY-relocated data import (`environ`), whose `st_size` the loader
+/// compares against the host symbol's.
+fn data_global_byte_size(sym: &crate::c5::symbol::Symbol) -> u64 {
+    use crate::c5::compiler::types::is_pointer_ty;
+    use crate::c5::token::Ty;
+    const UNSIGNED_BIT: i64 = 1 << 30;
+    let ty = sym.type_;
+    let elem: u64 = if is_pointer_ty(ty) {
+        8
+    } else {
+        let stripped = ty & !UNSIGNED_BIT;
+        if stripped == Ty::Char as i64 || stripped == Ty::Bool as i64 {
+            1
+        } else if stripped == Ty::Short as i64 {
+            2
+        } else if stripped == Ty::Int as i64 || stripped == Ty::Float as i64 {
+            4
+        } else if stripped == Ty::Long as i64
+            || stripped == Ty::LongLong as i64
+            || stripped == Ty::Double as i64
+        {
+            8
+        } else {
+            return 0;
+        }
+    };
+    let count = if sym.array_size > 0 {
+        sym.array_size as u64
+    } else {
+        1
+    };
+    elem * count
 }
 
 /// Emit a relocatable ELF64 object holding the contents of
@@ -464,10 +509,9 @@ pub(super) fn write_relocatable(
     // surfaces as a named STT_OBJECT symbol. The cross-TU
     // linker needs the name to resolve `extern T x;`
     // references in sibling units. `Symbol::val` is the byte
-    // offset within `.data`; size is left at zero (the parser
-    // doesn't track per-symbol storage size yet; tools that
-    // need it consult DWARF).
-    let mut defined_data_globals: Vec<(&str, i64)> = Vec::new();
+    // offset within `.data`; the size comes from the symbol's type
+    // (struct / union globals stay unsized).
+    let mut defined_data_globals: Vec<(&str, i64, u64)> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -477,7 +521,7 @@ pub(super) fn write_relocatable(
                 && sym.linkage == Linkage::External
                 && !sym.name.is_empty()
             {
-                defined_data_globals.push((sym.name.as_str(), sym.val));
+                defined_data_globals.push((sym.name.as_str(), sym.val, data_global_byte_size(sym)));
             }
         }
     }
@@ -528,7 +572,7 @@ pub(super) fn write_relocatable(
         all_names.push(*name);
     }
     let defined_data_globals_start = all_names.len();
-    for (name, _) in &defined_data_globals {
+    for (name, _, _) in &defined_data_globals {
         all_names.push(*name);
     }
     let user_extern_data_names_start = all_names.len();
@@ -645,12 +689,13 @@ pub(super) fn write_relocatable(
     // Defined data globals: STB_GLOBAL + STT_OBJECT, shndx
     // points at `.data`. C99 6.2.2: external-linkage objects
     // surface by name so sibling TUs can resolve `extern T x;`.
-    for (i, (_, val)) in defined_data_globals.iter().enumerate() {
+    for (i, (_, val, size)) in defined_data_globals.iter().enumerate() {
         symbols.push(Elf64Sym {
             st_name: name_offs[defined_data_globals_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
             st_shndx: SHIDX_DATA,
             st_value: *val as u64,
+            st_size: *size,
             ..Default::default()
         });
     }
@@ -1387,6 +1432,25 @@ fn build_badc_note(
         out.extend_from_slice(&desc);
         pad_to_4(&mut out);
     }
+
+    // Record 7: data-import copy relocations -- (local_name, host_symbol)
+    // NUL-terminated string pairs from `#pragma binding(data ...)`.
+    if !imports.data_bindings.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (local, host) in &imports.data_bindings {
+            desc.extend_from_slice(local.as_bytes());
+            desc.push(0);
+            desc.extend_from_slice(host.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_COPY_RELOC.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
     out
 }
 
@@ -1543,6 +1607,7 @@ mod tests {
     fn empty_build_for(_machine: Machine) -> Build {
         use super::super::{Abi, OutputKind, ResolvedImports};
         Build {
+            copy_relocs: Default::default(),
             text: Vec::new(),
             data: Vec::new(),
             entry_offset: 0,

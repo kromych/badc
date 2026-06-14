@@ -1262,6 +1262,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("block_scope_extern_forward_ref.c", 0),
     ("uint64_to_float.c", 0),
     ("double_to_uint64.c", 0),
+    ("sysconf_pagesize.c", 0),
     ("fts_and_fd_set_headers.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),

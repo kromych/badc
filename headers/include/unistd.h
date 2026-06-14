@@ -297,16 +297,23 @@ struct rusage {
 };
 
 #ifndef _WIN32
-// sysconf(3) selectors. Names match POSIX; the underlying value
-// is platform-specific but the bound libc reads it directly.
-// msvcrt has no `sysconf` entry, so the selector macros stay out
-// of the Windows path -- source that gates on `defined
-// _SC_PAGESIZE` falls back to its non-sysconf branch there.
+// sysconf(3) selectors. Names match POSIX; the numeric value is the
+// one the bound libc reads -- different on Darwin and Linux -- so the
+// selectors are target-specific. msvcrt has no `sysconf` entry, so the
+// selector macros stay out of the Windows path; source that gates on
+// `defined _SC_PAGESIZE` falls back to its non-sysconf branch there.
+#ifdef __APPLE__
+#define _SC_ARG_MAX       1
+#define _SC_OPEN_MAX      5
 #define _SC_PAGESIZE      29
-#define _SC_PAGE_SIZE     _SC_PAGESIZE
-#define _SC_NPROCESSORS_ONLN 84
-#define _SC_OPEN_MAX      4
+#define _SC_NPROCESSORS_ONLN 58
+#else
 #define _SC_ARG_MAX       0
+#define _SC_OPEN_MAX      4
+#define _SC_PAGESIZE      30
+#define _SC_NPROCESSORS_ONLN 84
+#endif
+#define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN
 #endif
 

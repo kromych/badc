@@ -12,7 +12,7 @@ Disassembly of section .text:
                	brk	#<addr>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x150
+               	sub	sp, sp, #0x110
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	str	x22, [sp, #0x10]
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x150
+               	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w24
@@ -72,11 +72,11 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x150
+               	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w24
-               	sub	x1, x29, #0xf8
+               	sub	x1, x29, #0xb8
                	mov	x9, x22
                	str	x1, [sp, #-0x10]!
                	str	x0, [sp, #-0x10]!
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x150
+               	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w24
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x150
+               	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sxtw	x0, w24
@@ -128,7 +128,7 @@ Disassembly of section .text:
                	ldr	x23, [sp, #0x18]
                	ldr	x24, [sp, #0x20]
                	ldr	x19, [sp, #0x30]
-               	add	sp, sp, #0x150
+               	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret
 

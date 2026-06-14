@@ -60,9 +60,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0xf0, %rsp
+               	subq	$0xb0, %rsp
                	leaq	<rip>, %rdi
-               	leaq	-0xd0(%rbp), %rsi
+               	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -75,11 +75,11 @@ Disassembly of section .text:
                	callq	<addr>
                	movslq	%eax, %rax
                	movl	$0x1, %eax
-               	addq	$0xf0, %rsp
+               	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	movl	$0x2a, %eax
-               	addq	$0xf0, %rsp
+               	addq	$0xb0, %rsp
                	popq	%rbp
                	retq
                	addb	%al, 0x41(%rdx)

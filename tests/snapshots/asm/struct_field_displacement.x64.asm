@@ -23,7 +23,7 @@ Disassembly of section .text:
                	retq
 
 <get_d>:
-               	movzbq	0x12(%rdi), %rax
+               	movsbq	0x12(%rdi), %rax
                	retq
 
 <set_b>:
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	retq
 
 <rmw_d>:
-               	movzbq	0x12(%rdi), %rax
+               	movsbq	0x12(%rdi), %rax
                	incq	%rax
                	movb	%al, 0x12(%rdi)
                	xorq	%rax, %rax
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	-0x18(%rbp), %rax
-               	movzbq	0x12(%rax), %rax
+               	movsbq	0x12(%rax), %rax
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x4, %eax

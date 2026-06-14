@@ -186,10 +186,19 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                // Mirror parse_decl_base_type: `signed char` is a
-                // real 1-byte signed field; plain / unsigned char
-                // is unsigned (zero-extending load).
-                if saw_signed {
+                // Mirror char_tag: `signed char` is signed,
+                // `unsigned char` unsigned, plain `char` follows the
+                // target's implementation-defined signedness
+                // (C99 6.2.5p15). UNSIGNED_BIT drives the load
+                // extension.
+                let signed = if saw_signed {
+                    true
+                } else if saw_unsigned {
+                    false
+                } else {
+                    self.target.plain_char_signed()
+                };
+                if signed {
                     Ty::Char as i64
                 } else {
                     Ty::Char as i64 | UNSIGNED_BIT

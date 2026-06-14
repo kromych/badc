@@ -85,10 +85,8 @@ Disassembly of section .text:
                	testq	%r14, %r14
                	jne	<addr>
                	movq	0x30(%r12), %rax
-               	movzbq	(%rax), %rax
-               	xorq	$0x2e, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rax
+               	cmpq	$0x2e, %rax
                	setne	%r14b
                	movzbq	%r14b, %r14
                	testq	%r14, %r14
@@ -134,3 +132,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	addb	%al, (%rax)
+               	addb	%al, 0x41(%rdx)

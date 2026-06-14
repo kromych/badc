@@ -1301,6 +1301,10 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // size_of_type / pointee scaling helpers strip the unsigned bit
     // before classifying, so indexing scales by 1 not 8.
     ("unsigned_char_array.c", 0),
+    // Plain `char` follows the target's implementation-defined
+    // signedness (C99 6.2.5p15) and the widening load agrees with the
+    // `__CHAR_UNSIGNED__` predefine.
+    ("plain_char_signedness.c", 0),
     // Compound assignment (`+=`, `-=`) on unsigned int / long /
     // char: must NOT scale the RHS by element size (the
     // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).

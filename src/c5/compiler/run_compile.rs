@@ -115,7 +115,7 @@ impl Compiler {
                 bt = m.int_base();
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                bt = m.char_tag();
+                bt = m.char_tag(self.target.plain_char_signed());
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // Bare `void` shares the `unsigned char` encoding

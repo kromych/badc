@@ -44,19 +44,15 @@ Disassembly of section .text:
                	addq	$0x40, %rsp
                	popq	%rbp
                	retq
-               	movzbq	(%rcx), %rax
-               	xorq	$0x78, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	(%rcx), %rax
+               	cmpq	$0x78, %rax
                	setne	%al
                	movzbq	%al, %rax
                	movl	$0x1, %r8d
                	testq	%rax, %rax
                	jne	<addr>
-               	movzbq	0x1(%rcx), %rax
-               	xorq	$0x79, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	0x1(%rcx), %rax
+               	cmpq	$0x79, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -64,7 +60,7 @@ Disassembly of section .text:
                	movzbq	%r8b, %r8
                	testq	%r8, %r8
                	jne	<addr>
-               	movzbq	0x2(%rcx), %rax
+               	movsbq	0x2(%rcx), %rax
                	testq	%rax, %rax
                	setne	%r8b
                	movzbq	%r8b, %r8
@@ -101,3 +97,4 @@ Disassembly of section .text:
                	retq
                	jmp	<addr>
                	jmp	<addr>
+               	addb	%al, (%rax)

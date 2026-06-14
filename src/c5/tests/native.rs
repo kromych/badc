@@ -656,6 +656,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("unsigned_compare.c", 0),
     // Static const unsigned char array indexed with 1-byte stride.
     ("unsigned_char_array.c", 0),
+    // Plain `char` follows the target's implementation-defined
+    // signedness and the widening load agrees with it (C99 6.2.5p15).
+    ("plain_char_signedness.c", 0),
     // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.

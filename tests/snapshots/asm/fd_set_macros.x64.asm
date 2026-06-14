@@ -84,7 +84,7 @@ Disassembly of section .text:
                	leaq	-0x80(%rbp), %rax
                	movslq	%ecx, %rdx
                	addq	%rdx, %rax
-               	movzbq	(%rax), %rax
+               	movsbq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
                	jmp	<addr>

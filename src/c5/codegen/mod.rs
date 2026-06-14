@@ -132,6 +132,19 @@ impl Target {
         matches!(self, Target::WindowsX64 | Target::WindowsAarch64)
     }
 
+    /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
+    /// signedness of unqualified `char` implementation-defined; to
+    /// interoperate with the host toolchain and match the platform
+    /// ABI, c5 follows the host C compiler: signed on x86_64 (all
+    /// OSes), on Apple AArch64, and on Windows AArch64 (MSVC);
+    /// unsigned only on AArch64 ELF (the AAPCS64 default that the
+    /// Linux GCC/Clang toolchain keeps). The choice drives the
+    /// extension of an 8-bit `char` lvalue widened to a larger
+    /// integer.
+    pub fn plain_char_signed(self) -> bool {
+        !matches!(self, Target::LinuxAarch64)
+    }
+
     /// Default target -- used when callers (mostly tests) construct a
     /// [`Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running

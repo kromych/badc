@@ -449,6 +449,13 @@ impl Preprocessor {
                 macros.insert("__amd64__".to_string(), "1".to_string());
             }
         }
+        // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
+        // `char` is unsigned (C99 6.2.5p15 leaves it
+        // implementation-defined). Headers branch on it to choose
+        // sign-extension strategy, so mirror the target's choice.
+        if !target.plain_char_signed() {
+            macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        }
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());

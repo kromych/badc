@@ -83,7 +83,7 @@ fn ent_pc=1 n_params=5 variadic=false locals=0
     v16  LoadLocal { off=5, kind=I32 }                    -> x0
     v17  LoadLocal { off=3, kind=I64 }                    -> x0
     v18  Imm(0)                                           -> x0
-    v19  Load { addr=v3, disp=0, kind=U8 }                -> x2
+    v19  Load { addr=v3, disp=0, kind=I8 }                -> x2
     v20  Binop { op=add, lhs=v7, rhs=v19 }                -> x1
     v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x2
     v22  BinopI { op=shr, lhs=v21, rhs_imm=32 }           -> x2

@@ -30,20 +30,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v14  LoadLocal { off=-1, kind=I64 }                   -> x1
     v15  Extend { value=v7, kind=I32 }                    -> x1
     v16  Binop { op=add, lhs=v1, rhs=v15 }                -> x6
-    v17  Load { addr=v16, disp=0, kind=U8 }               -> x6
+    v17  Load { addr=v16, disp=0, kind=I8 }               -> x6
     v18  ImmData(23)                                      -> x7
     v19  Binop { op=add, lhs=v18, rhs=v15 }               -> x1
     v20  Load { addr=v19, disp=0, kind=I8 }               -> x1
-    v21  Binop { op=xor, lhs=v17, rhs=v20 }               -> x1
-    v22  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x1
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v23, target=b8, fall=b7 }   (exit_acc=v23)
+    v21  Binop { op=ne, lhs=v17, rhs=v20 }                -> x1
+    terminator Bz { cond=v21, target=b8, fall=b7 }   (exit_acc=v21)
   block 6  start_pc=0
-    v24  Imm(0)                                           -> x0
-    terminator Return(v24)   (exit_acc=v24)
+    v22  Imm(0)                                           -> x0
+    terminator Return(v22)   (exit_acc=v22)
   block 7  start_pc=0
-    v25  Imm(2)                                           -> x0
-    terminator Return(v25)   (exit_acc=v25)
+    v23  Imm(2)                                           -> x0
+    terminator Return(v23)   (exit_acc=v23)
   block 8  start_pc=0
     terminator Jmp(b4)
 ; --- SSA dump (ok=true) ent_pc=0 ---

@@ -66,7 +66,7 @@ Disassembly of section .text:
                	leaq	-0x38(%rbp), %rdx
                	testq	%rax, %rax
                	je	<addr>
-               	movzbq	(%rax), %rsi
+               	movsbq	(%rax), %rsi
                	jmp	<addr>
                	xorq	%rsi, %rsi
                	movq	%rsi, %rax

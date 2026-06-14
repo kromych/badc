@@ -151,12 +151,21 @@ fn redeclaration_with_different_signature_warns() {
     // builds don't silently end up with mismatched signatures
     // across the boundary. The shape is one line per redecl plus
     // two indented `previous:` / `now:` lines.
+    // Plain `char`'s signedness is host-dependent (C99 6.2.5p15; see
+    // `Target::plain_char_signed`), and `Compiler::new` compiles for
+    // the host target. The return-type-mismatch case prints `char` on
+    // signed-char hosts and `unsigned char` on aarch64-Linux.
+    let char_now = if super::super::codegen::Target::default_target().plain_char_signed() {
+        "now:      char (int)"
+    } else {
+        "now:      unsigned char (int)"
+    };
     for (src, prev_needle, now_needle) in &[
         // Different return type.
         (
             "int f(int x) { return x; } char f(int x); int main() { return 0; }",
             "previous: int (int)",
-            "now:      unsigned char (int)",
+            char_now,
         ),
         // Different parameter list.
         (

@@ -27,7 +27,7 @@ fn ent_pc=0 n_params=2 variadic=true locals=8
   block 1  start_pc=0
     v19  LoadLocal { off=-4, kind=I64 }                   -> x6
     v20  Imm(0)                                           -> x6
-    v21  Load { addr=v7, disp=0, kind=U8 }                -> x6
+    v21  Load { addr=v7, disp=0, kind=I8 }                -> x6
     v22  Imm(0)                                           -> x0
     terminator Jmp(b3)   (exit_acc=v21)
   block 2  start_pc=0

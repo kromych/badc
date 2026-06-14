@@ -107,7 +107,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=29
     v24  LocalAddr(-16)                                   -> x0
     v25  Extend { value=v21, kind=I32 }                   -> x2
     v26  Binop { op=add, lhs=v24, rhs=v25 }               -> x0
-    v27  Load { addr=v26, disp=0, kind=U8 }               -> x0
+    v27  Load { addr=v26, disp=0, kind=I8 }               -> x0
     v28  BinopI { op=ne, lhs=v27, rhs_imm=0 }             -> x0
     terminator Bz { cond=v28, target=b11, fall=b10 }   (exit_acc=v28)
   block 9  start_pc=0

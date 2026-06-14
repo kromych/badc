@@ -152,33 +152,29 @@ fn ent_pc=8 n_params=0 variadic=false locals=9
     v43  ImmData(56)                                      -> x0
     v44  Imm(0)                                           -> x0
     v45  Load { addr=v1, disp=0, kind=I64 }               -> x0
-    v46  Load { addr=v45, disp=0, kind=U8 }               -> x0
-    v47  BinopI { op=xor, lhs=v46, rhs_imm=100 }          -> x0
-    v48  BinopI { op=and, lhs=v47, rhs_imm=4294967295 }   -> x0
-    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v49, target=b10, fall=b9 }   (exit_acc=v49)
+    v46  Load { addr=v45, disp=0, kind=I8 }               -> x0
+    v47  BinopI { op=ne, lhs=v46, rhs_imm=100 }           -> x0
+    terminator Bz { cond=v47, target=b10, fall=b9 }   (exit_acc=v47)
   block 9  start_pc=0
-    v50  Imm(5)                                           -> x0
-    terminator Return(v50)   (exit_acc=v50)
+    v48  Imm(5)                                           -> x0
+    terminator Return(v48)   (exit_acc=v48)
   block 10  start_pc=0
-    v51  ImmData(56)                                      -> x0
-    v52  Imm(24)                                          -> x0
-    v53  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
-    v54  Load { addr=v1, disp=24, kind=I64 }              -> x0
-    v55  Imm(0)                                           -> x1
-    v56  Load { addr=v54, disp=0, kind=U8 }               -> x0
-    v57  BinopI { op=xor, lhs=v56, rhs_imm=110 }          -> x0
-    v58  BinopI { op=and, lhs=v57, rhs_imm=4294967295 }   -> x0
-    v59  BinopI { op=ne, lhs=v58, rhs_imm=0 }             -> x0
-    terminator Bz { cond=v59, target=b12, fall=b11 }   (exit_acc=v59)
+    v49  ImmData(56)                                      -> x0
+    v50  Imm(24)                                          -> x0
+    v51  BinopI { op=add, lhs=v1, rhs_imm=24 }            -> x0
+    v52  Load { addr=v1, disp=24, kind=I64 }              -> x0
+    v53  Imm(0)                                           -> x1
+    v54  Load { addr=v52, disp=0, kind=I8 }               -> x0
+    v55  BinopI { op=ne, lhs=v54, rhs_imm=110 }           -> x0
+    terminator Bz { cond=v55, target=b12, fall=b11 }   (exit_acc=v55)
   block 11  start_pc=0
-    v60  Imm(6)                                           -> x0
-    terminator Return(v60)   (exit_acc=v60)
+    v56  Imm(6)                                           -> x0
+    terminator Return(v56)   (exit_acc=v56)
   block 12  start_pc=0
-    v61  ImmData(128)                                     -> x7
-    v62  CallExt { binding_idx=0, args=[v61], fp_arg_mask=0x0 } -> x0
-    v63  Imm(0)                                           -> x0
-    terminator Return(v63)   (exit_acc=v63)
+    v57  ImmData(128)                                     -> x7
+    v58  CallExt { binding_idx=0, args=[v57], fp_arg_mask=0x0 } -> x0
+    v59  Imm(0)                                           -> x0
+    terminator Return(v59)   (exit_acc=v59)
 ; --- SSA dump (ok=true) ent_pc=9 ---
 ; name=__c5_sys_atoi
 fn ent_pc=9 n_params=1 variadic=false locals=0

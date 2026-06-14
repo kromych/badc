@@ -60,7 +60,7 @@ Disassembly of section .text:
 <sink_op>:
                	movslq	%ecx, %rcx
                	xorq	%rax, %rax
-               	movzbq	(%rsi), %rdx
+               	movsbq	(%rsi), %rdx
                	addq	%rdx, %rcx
                	movl	%ecx, (%r8)
                	retq

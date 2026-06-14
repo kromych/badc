@@ -1846,12 +1846,14 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     Ok(build)
 }
 
-/// Append the [`crate::BUILD_INFO`] marker to the tail of
+/// Append the [`crate::OUTPUT_MARKER`] to the tail of
 /// `Build::text`. The bytes never get executed -- the entry
 /// point is at `build.entry_offset` and every function ends
 /// with a return -- so this is purely a `strings(1)`-friendly
-/// fingerprint that says which badc revision emitted the
-/// binary.
+/// fingerprint that says which badc version emitted the binary.
+/// The marker is the release version only, with no git state, so
+/// the same source/flags/target produce identical output bytes
+/// regardless of the build environment.
 ///
 /// The marker is NUL-terminated and prefixed by a 4-byte
 /// alignment pad so the start of the string sits on a 4-byte
@@ -1866,7 +1868,9 @@ fn append_build_info(build: &mut Build) {
     while !build.text.len().is_multiple_of(4) {
         build.text.push(0);
     }
-    build.text.extend_from_slice(crate::BUILD_INFO.as_bytes());
+    build
+        .text
+        .extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
     build.text.push(0);
 }
 

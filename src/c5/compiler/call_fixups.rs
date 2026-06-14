@@ -64,6 +64,42 @@ impl Compiler {
             // `target_ent_pc`, not the data bytes.
             reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
         }
+        // A function-pointer initializer may name an identifier that was
+        // never declared: the parser's forward-reference heuristic binds
+        // it as a `Token::Fun` on first use, assuming a definition later
+        // in the unit. One that is still undefined here, with no extern
+        // declaration, is a missing header or a typo -- the same class of
+        // mistake the call path already rejects, but reachable through a
+        // dispatch-table entry. Warn once per name with a header hint
+        // (C99 6.5.1 requires a declaration before use).
+        let mut undeclared: Vec<usize> = Vec::new();
+        for &sym_idx in &self.code_reloc_sym_idx {
+            let s = &self.symbols[sym_idx];
+            if s.class == Token::Fun as i64
+                && !s.defined_here
+                && !s.is_extern_decl
+                && s.val == 0
+                && !s.name.is_empty()
+            {
+                undeclared.push(sym_idx);
+            }
+        }
+        undeclared.sort_unstable();
+        undeclared.dedup();
+        for sym_idx in undeclared {
+            let name = self.symbols[sym_idx].name.clone();
+            let line = self.symbols[sym_idx].decl_line;
+            let suggestion = match super::super::headers::header_declaring(&name) {
+                Some(h) => alloc::format!(" -- try `#include <{h}>`"),
+                None => alloc::string::String::new(),
+            };
+            self.warn_at(
+                line,
+                alloc::format!(
+                    "`{name}` is used as a function in an initializer but is never declared or defined{suggestion}"
+                ),
+            );
+        }
         Ok(())
     }
 

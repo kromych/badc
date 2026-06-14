@@ -210,6 +210,34 @@ fn matching_redeclaration_is_silent() {
 }
 
 #[test]
+fn undeclared_function_in_initializer_warns() {
+    // A static function-pointer initializer naming an identifier that is
+    // never declared or defined in the unit (a missing header or a typo)
+    // is diagnosed. The call path already rejects the same mistake; this
+    // covers the dispatch-table-entry path that the forward-reference
+    // heuristic otherwise binds silently.
+    let src = "typedef void (*fp)(void); fp t[] = { undeclared_xyz }; int main(void) { return 0; }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert!(
+        prog.warnings
+            .iter()
+            .any(|w| w.contains("undeclared_xyz") && w.contains("never declared")),
+        "expected an undeclared-function warning, got {:?}",
+        prog.warnings,
+    );
+    // A function defined later in the same unit is a valid forward
+    // reference and stays silent.
+    let ok = "typedef int (*fp)(void); fp t[] = { fwd }; \
+              int fwd(void) { return 0; } int main(void) { return 0; }";
+    let prog2 = crate::c5::Compiler::new(ok.to_string()).compile().unwrap();
+    assert!(
+        prog2.warnings.is_empty(),
+        "valid forward reference should be silent, got {:?}",
+        prog2.warnings,
+    );
+}
+
+#[test]
 fn tentative_definition_merge() {
     // `int x;` + `int x = 5;` -- the prior declaration is tentative
     // (no initializer); the second one supplies the initializer.

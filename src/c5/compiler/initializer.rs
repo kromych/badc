@@ -892,6 +892,11 @@ impl Compiler {
                 self.symbols[idx].class = Token::Fun as i64;
                 self.symbols[idx].type_ = Ty::Int as i64;
                 self.symbols[idx].was_referenced = true;
+                // Record the reference site so `resolve_code_relocs`
+                // can diagnose the name if it is never declared or
+                // defined in the unit (a missing header or a typo --
+                // C99 6.5.1 requires a declaration before use).
+                self.symbols[idx].decl_line = self.lex.line;
                 self.next()?;
                 return Ok((0, InitElemReloc::Code(idx)));
             }

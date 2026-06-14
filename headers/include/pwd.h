@@ -42,6 +42,8 @@ struct passwd {
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::getpwuid, "_getpwuid")
 #pragma binding(libc::getpwnam, "_getpwnam")
+#pragma binding(libc::getpwuid_r, "_getpwuid_r")
+#pragma binding(libc::getpwnam_r, "_getpwnam_r")
 #pragma binding(libc::getpwent, "_getpwent")
 #pragma binding(libc::endpwent, "_endpwent")
 #endif
@@ -50,12 +52,21 @@ struct passwd {
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::getpwuid, "getpwuid")
 #pragma binding(libc::getpwnam, "getpwnam")
+#pragma binding(libc::getpwuid_r, "getpwuid_r")
+#pragma binding(libc::getpwnam_r, "getpwnam_r")
 #pragma binding(libc::getpwent, "getpwent")
 #pragma binding(libc::endpwent, "endpwent")
 #endif
 
 struct passwd *getpwuid(int uid);
 struct passwd *getpwnam(char *name);
+// POSIX reentrant lookups: fill the caller's `struct passwd` + scratch
+// buffer, set `*result` to it (or NULL when not found), and return 0 on
+// success or an errno on failure.
+int getpwuid_r(int uid, struct passwd *pwd, char *buf, unsigned long buflen,
+               struct passwd **result);
+int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
+               struct passwd **result);
 struct passwd *getpwent();
 int endpwent();
 

@@ -106,6 +106,26 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
     (
+        "sys/attr.h",
+        include_str!("../../headers/include/sys/attr.h"),
+    ),
+    (
+        "libkern/OSByteOrder.h",
+        include_str!("../../headers/include/libkern/OSByteOrder.h"),
+    ),
+    (
+        "sys/paths.h",
+        include_str!("../../headers/include/sys/paths.h"),
+    ),
+    (
+        "copyfile.h",
+        include_str!("../../headers/include/copyfile.h"),
+    ),
+    (
+        "mach/mach_time.h",
+        include_str!("../../headers/include/mach/mach_time.h"),
+    ),
+    (
         "sys/stat.h",
         include_str!("../../headers/include/sys/stat.h"),
     ),

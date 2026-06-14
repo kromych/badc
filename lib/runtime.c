@@ -63,9 +63,7 @@ void __c5_exit(int rc) {
 // entry's offset from the image base in the second; the kernel
 // process-startup layout puts argc at sp[0] and argv at sp+1. main's
 // result goes through __c5_exit so libc's atexit chain + stdio flush
-// run before the kernel reaps the process. (Mach-O needs no such
-// entry: LC_MAIN hands argc/argv to the entry symbol via the register
-// ABI and dyld runs the startup + exit.)
+// run before the kernel reaps the process.
 extern int __BADC_ENTRY__(int argc, char **argv);
 
 void __c5_entry(void *sp, long image_off) {
@@ -78,6 +76,23 @@ void __c5_entry(void *sp, long image_off) {
     // through `environ` (POSIX 8.3); without this the global stays NULL
     // and an `environ[i]` read faults.
     environ = argv + argc + 1;
+    __c5_exit(__BADC_ENTRY__(argc, argv));
+}
+#endif
+
+#ifdef __APPLE__
+// macOS process entry. The Mach-O image carries LC_MAIN pointing here,
+// so dyld runs the load-time initializers and then calls this with the
+// platform entry ABI: argc, argv, envp, apple in the first four
+// argument registers. Unlike a clang-linked image, a CRT-free image
+// links no crt1.o, so the `environ` global crt1.o normally publishes
+// stays NULL; libSystem's getenv reads its own copy, but a program
+// that walks the POSIX `environ` array reads this one. Publish it from
+// the environment vector dyld passes (POSIX 8.3) before entering main.
+extern int __BADC_ENTRY__(int argc, char **argv);
+
+void __c5_entry(int argc, char **argv, char **envp) {
+    environ = envp;
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #endif

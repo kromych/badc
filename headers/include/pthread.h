@@ -25,6 +25,7 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::pthread_create,           "_pthread_create")
 #pragma binding(libc::pthread_join,             "_pthread_join")
+#pragma binding(libc::pthread_exit,             "_pthread_exit")
 #pragma binding(libc::pthread_detach,           "_pthread_detach")
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
@@ -46,6 +47,8 @@
 #pragma binding(libc::pthread_attr_destroy,     "_pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
+#pragma binding(libc::pthread_attr_setscope,    "_pthread_attr_setscope")
+#pragma binding(libc::pthread_atfork,           "_pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
@@ -59,12 +62,15 @@
 // macOS detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 2
 #define PTHREAD_CREATE_JOINABLE 1
+#define PTHREAD_SCOPE_SYSTEM  1
+#define PTHREAD_SCOPE_PROCESS 2
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::pthread_create,           "pthread_create")
 #pragma binding(libc::pthread_join,             "pthread_join")
+#pragma binding(libc::pthread_exit,             "pthread_exit")
 #pragma binding(libc::pthread_detach,           "pthread_detach")
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
@@ -86,6 +92,8 @@
 #pragma binding(libc::pthread_attr_destroy,     "pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
+#pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
+#pragma binding(libc::pthread_atfork,           "pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
@@ -99,6 +107,8 @@
 // glibc detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 1
 #define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_SCOPE_SYSTEM  0
+#define PTHREAD_SCOPE_PROCESS 1
 #endif
 
 #ifdef _WIN32
@@ -159,6 +169,7 @@ typedef long long pthread_once_t;
 
 int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);
+void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
@@ -180,6 +191,8 @@ int pthread_attr_init(char *attr);
 int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
+int pthread_attr_setscope(char *attr, int scope);
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
 int pthread_key_create(pthread_key_t *key, int *destructor);
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, char *val);

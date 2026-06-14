@@ -47,6 +47,20 @@ struct timeval {
     long long tv_sec;
     long long tv_usec;
 };
+#elif defined(__APPLE__)
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+
+// Darwin's `tv_usec` is `__darwin_suseconds_t` (`__int32_t`), not a
+// 64-bit field as on Linux. gettimeofday / select write only the
+// 4-byte value; declaring it `long` would read 4 bytes of adjacent
+// storage as the high half and yield a garbage microsecond count.
+struct timeval {
+    long tv_sec;
+    int tv_usec;
+};
 #else
 struct timespec {
     long tv_sec;

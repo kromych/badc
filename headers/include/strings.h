@@ -12,12 +12,14 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::strcasecmp,  "_strcasecmp")
 #pragma binding(libc::strncasecmp, "_strncasecmp")
+#pragma binding(libc::bzero,       "_bzero")
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::strcasecmp,  "strcasecmp")
 #pragma binding(libc::strncasecmp, "strncasecmp")
+#pragma binding(libc::bzero,       "bzero")
 #endif
 
 #ifdef _WIN32
@@ -31,3 +33,7 @@
 
 int strcasecmp(char *a, char *b);
 int strncasecmp(char *a, char *b, int n);
+#if defined(__APPLE__) || defined(__linux__)
+// Legacy zero-fill (POSIX, marked obsolescent in favor of memset).
+void bzero(void *s, unsigned long n);
+#endif

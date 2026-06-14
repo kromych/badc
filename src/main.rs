@@ -1026,7 +1026,19 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        let entry_name = entry_override.as_deref().unwrap_or("main");
+        // macOS hosted images enter at the runtime's `__c5_entry`, which
+        // dyld calls via LC_MAIN with the platform entry ABI (argc, argv,
+        // envp). The shim publishes `environ` from envp before calling
+        // main, since a CRT-free image links no crt1.o to do it. Linux
+        // enters at `main` directly (its `environ` resolves through the
+        // glibc COPY relocation), and Windows keeps its own startup path.
+        let macos_hosted_entry =
+            emits_start_stub && target == Target::MacOSAarch64 && entry_override.is_none();
+        let entry_name = if macos_hosted_entry {
+            "__c5_entry"
+        } else {
+            entry_override.as_deref().unwrap_or("main")
+        };
         let native_output_kind = if mode == Mode::SharedLibrary {
             OutputKind::SharedLibrary
         } else {

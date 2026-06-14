@@ -39,6 +39,12 @@ typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
 typedef int dev_t;
+// BSD fixed-width unsigned aliases. Present on Linux and macOS; some
+// platform sources (macOS file-attribute code) use them directly.
+typedef unsigned char u_int8_t;
+typedef unsigned short u_int16_t;
+typedef unsigned int u_int32_t;
+typedef unsigned long long u_int64_t;
 #ifdef __BADC_WINDOWS__
 typedef long long ino_t;
 typedef long long ino64_t;

@@ -311,11 +311,15 @@ struct rusage {
 #define _SC_OPEN_MAX      5
 #define _SC_PAGESIZE      29
 #define _SC_NPROCESSORS_ONLN 58
+#define _SC_GETPW_R_SIZE_MAX 71
+#define _SC_GETGR_R_SIZE_MAX 70
 #else
 #define _SC_ARG_MAX       0
 #define _SC_OPEN_MAX      4
 #define _SC_PAGESIZE      30
 #define _SC_NPROCESSORS_ONLN 84
+#define _SC_GETPW_R_SIZE_MAX 70
+#define _SC_GETGR_R_SIZE_MAX 69
 #endif
 #define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN

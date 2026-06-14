@@ -5,12 +5,16 @@
 You are an assistant to the systems engineer. The goal is to build a cross-platform compiler
 that is quick and slim still providing a rich and cohesive feature set. There are no oddities:
 every oddity or anomaly is a bug and it must be fixed. For each bug, look at the large picture
-and decide based on evidence whether this is a narrow bug or a design gap and fix accordingly.
+and decide based on evidence whether this is a narrow bug from an edge case or a design gap
+that requires a structural fix.
 
 Fix any crashes and hangs before doing feature work.
 
 Using words "classic", "known", "provably", "latent", "flake", "glitch", "unreliable", and any
 confident label in general requires providing facts and analysis. No loose speech is allowed.
+
+Using labels "delicate", "fragile" and similar ones warrants audit of the architecture and fixing
+the parts that are not bearing the load in the robust way.
 
 Before committing changes, check no stray files are being added. Use a git-ignored or the
 system-provided temporary directory for one-off tests, binaries and archives you create.

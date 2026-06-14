@@ -95,9 +95,11 @@
 #pragma binding(libc::open,      "open")
 #pragma binding(libc::read,      "read")
 #pragma binding(libc::pread,     "pread")
+#pragma binding(libc::pread64,   "pread64")
 #pragma binding(libc::close,     "close")
 #pragma binding(libc::write,     "write")
 #pragma binding(libc::pwrite,    "pwrite")
+#pragma binding(libc::pwrite64,  "pwrite64")
 #pragma binding(libc::access,    "access")
 #pragma binding(libc::lseek,     "lseek")
 #pragma binding(libc::fsync,     "fsync")
@@ -186,6 +188,13 @@ int pread(int fd, char *buf, int n, int offset);
 int close(int fd);
 int write(int fd, char *buf, int n);
 int pwrite(int fd, char *buf, int n, int offset);
+#ifdef __linux__
+// glibc large-file variants (`_LARGEFILE64_SOURCE`). The offset and
+// result are 64-bit; programs configured with `USE_PREAD64` (e.g.
+// sqlite) reach for these names directly.
+long pread64(int fd, void *buf, unsigned long n, long offset);
+long pwrite64(int fd, const void *buf, unsigned long n, long offset);
+#endif
 int access(char *path, int mode);
 int lseek(int fd, int offset, int whence);
 int fsync(int fd);

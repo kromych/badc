@@ -223,6 +223,16 @@ mod tests {
     }
 
     #[test]
+    fn header_declaring_finds_pread64() {
+        // glibc large-file variants. sqlite's os_unix layer references
+        // them by name under USE_PREAD64; without the prototype they are
+        // implicitly declared and the address-of trampoline forwards no
+        // arguments.
+        assert_eq!(header_declaring("pread64"), Some("unistd.h"));
+        assert_eq!(header_declaring("pwrite64"), Some("unistd.h"));
+    }
+
+    #[test]
     fn header_declaring_returns_none_for_unknown() {
         assert_eq!(header_declaring("definitely_not_in_any_header"), None);
     }

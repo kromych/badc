@@ -70,6 +70,53 @@ fn address_taken_static_survives_dce() {
 }
 
 #[test]
+fn block_scope_externs_emit_distinct_undef_symbols() {
+    // C99 6.2.2p4: a block-scope `extern` declaration has external
+    // linkage and refers to the file-scope object of the same name in
+    // another unit. Taking the address of several such declarations must
+    // produce a distinct named relocation per object. The bug was that
+    // the block-scope path set `class=Glo` + `is_extern_decl` but not
+    // `linkage=External`, so `live_glo_addr` fell back to the tentative
+    // `val` (0) and every `&name` collapsed onto the same `.data` base.
+    // Each distinct extern must surface as its own undefined symbol.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "void use3(char *a, char *b, char *c);\n\
+         int main(void) {\n\
+         extern int g1;\n\
+         extern int g2;\n\
+         extern int g3;\n\
+         use3((char *)&g1, (char *)&g2, (char *)&g3);\n\
+         return 0;\n\
+         }\n"
+        .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    use crate::c5::linker::object::NativeSymSection;
+    for name in ["g1", "g2", "g3"] {
+        let found = obj
+            .symbols
+            .iter()
+            .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef));
+        assert!(
+            found,
+            "block-scope extern `{name}` must emit its own undefined data symbol"
+        );
+    }
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

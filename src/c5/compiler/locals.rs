@@ -179,6 +179,14 @@ impl Compiler {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
                     self.symbols[loc_idx].is_extern_decl = true;
+                    // External linkage is what routes `&name` through
+                    // `live_glo_addr`'s `GloAddr::Extern` arm to a
+                    // name-keyed `extern_imm_data_refs` relocation. Without
+                    // it the address producer falls back to the tentative
+                    // `val` (0 for an object defined in another unit), so
+                    // every block-scope extern collapses to the same
+                    // `.data` base address.
+                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
                 }
                 if self.lex.tk == ',' {
                     self.next()?;

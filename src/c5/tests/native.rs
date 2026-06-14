@@ -486,6 +486,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("addr_of_libm_import.c", 0),
     ("addr_of_libc_strcmp.c", 0),
     ("libc_pread64_pwrite64.c", 0),
+    ("struct_stat_abi_size.c", 0),
     ("fts_and_fd_set_headers.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),

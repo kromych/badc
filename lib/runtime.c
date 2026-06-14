@@ -73,6 +73,11 @@ void __c5_entry(void *sp, long image_off) {
     long *frame = (long *)sp;
     int argc = (int)frame[0];
     char **argv = (char **)(frame + 1);
+    // The kernel lays the environment vector right after argv's NULL
+    // terminator, so envp is `&argv[argc + 1]`. crt startup publishes it
+    // through `environ` (POSIX 8.3); without this the global stays NULL
+    // and an `environ[i]` read faults.
+    environ = argv + argc + 1;
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #endif

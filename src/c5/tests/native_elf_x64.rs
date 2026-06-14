@@ -205,6 +205,56 @@ fn malloc_memset_memcmp_roundtrip() {
     assert_eq!(build_and_run(src, "malloc"), 1);
 }
 
+/// The full-runtime startup publishes the process environment vector
+/// through `environ` (POSIX 8.3). `__c5_entry` reads envp off the initial
+/// stack (`&argv[argc + 1]`) and assigns it; without that the global is
+/// NULL and `environ[i]` faults. The self-contained `emit_native` stub
+/// used by the fixture parity table does not link the runtime, so this is
+/// linked through `link_executable_with_runtime` and run.
+#[test]
+fn environ_populated_through_runtime() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    // Compile for the exact link target with the driver's default
+    // options (mirroring the CLI), no header prelude: the program's
+    // `extern char **environ` resolves to the runtime's single
+    // definition as a plain undefined reference.
+    let program = Compiler::with_options(
+        "extern char **environ; \
+         int main(void) { \
+             if (environ == 0) { return 1; } \
+             int n = 0; \
+             for (char **e = environ; *e != 0; e++) { n++; } \
+             return n > 0 ? 0 : 2; \
+         }"
+        .to_string(),
+        Target::LinuxX64,
+        // `no_entry_point` matches the CLI's `-c` path: the program is a
+        // relocatable unit, so `extern char **environ` stays an undefined
+        // reference resolved at link against the runtime's definition,
+        // rather than a tentative definition that would collide.
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile environ program");
+    let bytes =
+        super::link_executable_with_runtime(&program, Target::LinuxX64, NativeOptions::default())
+            .expect("link LinuxX64 with runtime");
+    let path = unique_temp_path("badc-environ", "env");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec environ binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "environ must be non-null and non-empty under the full runtime",
+    );
+}
+
 // ---- Fixture parity. Same table as the aarch64 module so a drift
 //      in either backend shows up as an arch-specific failure. ----
 

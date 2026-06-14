@@ -291,14 +291,18 @@ impl Compiler {
         &mut self,
         block_symbols: &mut Vec<(usize, i64, i64, i64)>,
     ) -> Result<(), C5Error> {
-        // Storage-class prefixes. `extern` is a no-op (c5 has no
-        // separate translation units); `static` at function scope
-        // promotes the declarator to a Glo symbol with persistent
-        // data-segment storage.
+        // Storage-class prefixes. `static` at function scope promotes
+        // the declarator to a Glo symbol with persistent data-segment
+        // storage; `extern` (C99 6.2.2p4) gives it external linkage
+        // referring to a definition in this or another unit, with no
+        // local storage.
         let mut is_static = false;
+        let mut is_extern = false;
         while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
             if self.lex.tk == Token::Static {
                 is_static = true;
+            } else {
+                is_extern = true;
             }
             self.next()?;
         }
@@ -408,14 +412,40 @@ impl Compiler {
             }
             self.ty = ty;
 
-            block_symbols.push((
-                loc_idx,
-                self.symbols[loc_idx].class,
-                self.symbols[loc_idx].type_,
-                self.symbols[loc_idx].val,
-            ));
+            // A block-scope `extern` of a fresh name becomes a Glo
+            // external reference that must persist past the block: the
+            // walker's `live_glo_addr` reads the symbol's class at walk
+            // time, and a `block_symbols` restore back to the unbound
+            // `Id` class would erase the `Glo` before `&name` resolves.
+            // Skipping the restore mirrors the body-top extern path,
+            // which never shadows. An extern that names an existing Glo
+            // or function binding restores normally (nothing converted).
+            let convert_extern = is_extern
+                && self.symbols[loc_idx].class != Token::Glo as i64
+                && self.symbols[loc_idx].class != Token::Fun as i64;
+            if !convert_extern {
+                block_symbols.push((
+                    loc_idx,
+                    self.symbols[loc_idx].class,
+                    self.symbols[loc_idx].type_,
+                    self.symbols[loc_idx].val,
+                ));
+            }
 
-            if is_static {
+            if is_extern {
+                // A block-scope `extern` object refers to a file-scope
+                // definition (here or in another unit) and gets no local
+                // storage. External linkage is what routes `&name`
+                // through `live_glo_addr`'s `GloAddr::Extern` arm to a
+                // name-keyed relocation; without it every block-scope
+                // extern collapses onto the same `.data` base.
+                if convert_extern {
+                    self.symbols[loc_idx].class = Token::Glo as i64;
+                    self.symbols[loc_idx].type_ = ty;
+                    self.symbols[loc_idx].is_extern_decl = true;
+                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
+                }
+            } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_static_local(loc_idx, ty, array_size)?;

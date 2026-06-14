@@ -117,6 +117,51 @@ fn block_scope_externs_emit_distinct_undef_symbols() {
 }
 
 #[test]
+fn nested_block_externs_emit_distinct_undef_symbols() {
+    // Same as the body-top case, but the `extern` declarations sit in a
+    // nested `{ }`. That path consumed `extern` as a no-op and allocated
+    // a local for the declarator; it must instead register an external
+    // reference so the address resolves to the defining unit's object.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "void use3(char *a, char *b, char *c);\n\
+         int main(void) {\n\
+         {\n\
+         extern int n1;\n\
+         extern int n2;\n\
+         extern int n3;\n\
+         use3((char *)&n1, (char *)&n2, (char *)&n3);\n\
+         }\n\
+         return 0;\n\
+         }\n"
+        .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    for name in ["n1", "n2", "n3"] {
+        let found = obj
+            .symbols
+            .iter()
+            .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef));
+        assert!(
+            found,
+            "nested-block extern `{name}` must emit its own undefined data symbol"
+        );
+    }
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

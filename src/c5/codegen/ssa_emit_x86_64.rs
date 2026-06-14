@@ -4260,6 +4260,47 @@ fn emit_fp_cast(
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
+        FpCastKind::UFpToInt => {
+            // Double to unsigned 64-bit. SSE2 `cvttsd2si` is signed: a
+            // value in [2^63, 2^64) saturates to the integer
+            // indefinite. Compare with 2^63: below it the signed
+            // truncate is exact; at or above, subtract 2^63, truncate
+            // the in-range remainder, and set bit 63.
+            let src_xmm = match materialize_fp(code, src_place, SCRATCH_XMM14, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UFpToInt: value not fp reg / spill / int reg");
+                    return false;
+                }
+            };
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("FpCast UFpToInt: dst not int reg / spill");
+                return false;
+            };
+            // Modifiable copy so the `subsd` below cannot clobber a
+            // live source xmm.
+            let dn = SCRATCH_XMM14;
+            emit_movapd_xmm_xmm(code, dn, src_xmm);
+            let two63 = SCRATCH_XMM15;
+            emit_mov_r_imm64(code, SCRATCH_R13, 0x43E0000000000000u64 as i64);
+            emit_movq_xmm_r(code, two63, SCRATCH_R13);
+            emit_ucomisd(code, dn, two63);
+            emit_jcc_rel8(code, Cc::Ae, 0);
+            let jae_fixup = code.len() - 1;
+            emit_cvttsd2si(code, rd, dn);
+            emit_jmp_rel8(code, 0);
+            let jmp_fixup = code.len() - 1;
+            let big = code.len();
+            code[jae_fixup] = (big - jae_fixup - 1) as i8 as u8;
+            emit_subsd(code, dn, two63);
+            emit_cvttsd2si(code, rd, dn);
+            emit_mov_r_imm64(code, SCRATCH_R13, 0x8000000000000000u64 as i64);
+            emit_or_rr(code, rd, SCRATCH_R13);
+            let done = code.len();
+            code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
         // C99 6.3.1.5: widen single to double (`cvtss2sd`) or narrow
         // double to single (`cvtsd2ss`). The single value lives in the
         // low dword of the xmm; `cvtss2sd` reads it, `cvtsd2ss` writes

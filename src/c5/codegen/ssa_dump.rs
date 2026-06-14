@@ -324,6 +324,7 @@ fn fmt_binop(op: BinOp) -> &'static str {
 fn fmt_fp_cast(k: FpCastKind) -> &'static str {
     match k {
         FpCastKind::FpToInt => "FpToInt",
+        FpCastKind::UFpToInt => "UFpToInt",
         FpCastKind::IntToFp => "IntToFp",
         FpCastKind::UIntToFp => "UIntToFp",
         FpCastKind::F32ToF64 => "F32ToF64",

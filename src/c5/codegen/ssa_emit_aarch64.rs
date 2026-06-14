@@ -52,7 +52,7 @@ use super::aarch64::{
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
-    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
     enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
     enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
@@ -2184,7 +2184,7 @@ fn emit_inst(
                     }
                     true
                 }
-                FpCastKind::FpToInt => {
+                FpCastKind::FpToInt | FpCastKind::UFpToInt => {
                     let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
                         Some(r) => r,
                         None => return false,
@@ -2194,7 +2194,12 @@ fn emit_inst(
                         Place::Spill(_) => scratch.primary,
                         _ => return false,
                     };
-                    emit(code, enc_fcvtzs_x_d(rd, dn));
+                    let enc = if matches!(kind, FpCastKind::UFpToInt) {
+                        enc_fcvtzu_x_d(rd, dn)
+                    } else {
+                        enc_fcvtzs_x_d(rd, dn)
+                    };
+                    emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
                         emit_sp_str_x_auto(code, rd, sp_off);

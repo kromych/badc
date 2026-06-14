@@ -949,6 +949,7 @@ fn run_inst<H: Host>(
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = match kind {
                 FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
+                FpCastKind::UFpToInt => f64::from_bits(raw as u64) as u64 as i64,
                 FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
                 FpCastKind::UIntToFp => (raw as u64 as f64).to_bits() as i64,
                 // A register carrying a single-precision value already

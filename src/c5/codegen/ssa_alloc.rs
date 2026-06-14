@@ -1147,7 +1147,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Fma { .. } => ResultKind::Fp,
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
-            FpCastKind::FpToInt => ResultKind::Int,
+            FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
             FpCastKind::IntToFp
             | FpCastKind::UIntToFp
             | FpCastKind::F32ToF64

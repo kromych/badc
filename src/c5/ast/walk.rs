@@ -2559,11 +2559,23 @@ impl<'a> Walker<'a> {
                     }
                     return Ok(f);
                 } else if !target_is_fp && source_is_fp {
-                    // FP -> integer. `FpToInt` truncates an f64; a `float`
-                    // source widens to f64 first so the same converter
-                    // handles both precisions (6.3.1.4).
+                    // FP -> integer (C99 6.3.1.4) truncates an f64; a
+                    // `float` source widens to f64 first so the same
+                    // converter handles both precisions. An unsigned
+                    // 64-bit target can hold a value in [2^63, 2^64),
+                    // which the signed truncate would saturate, so it
+                    // takes the unsigned converter. Narrower unsigned
+                    // targets fit the signed range.
                     let d = b.fp_widen_to_f64(v);
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, d));
+                    let stripped_to = *to_ty & !UNSIGNED_BIT;
+                    let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
+                        && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
+                    let kind = if target_unsigned_64 {
+                        super::super::ir::FpCastKind::UFpToInt
+                    } else {
+                        super::super::ir::FpCastKind::FpToInt
+                    };
+                    return Ok(b.fp_cast(kind, d));
                 }
                 // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
                 // `(float)d` narrows. The conversion is a no-op only when

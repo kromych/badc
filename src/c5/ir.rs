@@ -410,8 +410,15 @@ pub(crate) enum BinOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FpCastKind {
-    /// Truncating f64 to i64.
+    /// Truncating f64 to signed i64.
     FpToInt,
+    /// Truncating f64 to unsigned u64. A separate kind because a
+    /// double in [2^63, 2^64) exceeds the signed range, where the
+    /// signed truncate instruction saturates to the integer
+    /// indefinite (C99 6.3.1.4). x86_64 SSE2 `cvttsd2si` is signed
+    /// only, so the lowering subtracts 2^63 when the value is at or
+    /// above it, truncates, and sets bit 63; aarch64 uses `FCVTZU`.
+    UFpToInt,
     /// Signed i64 to f64.
     IntToFp,
     /// Unsigned u64 to f64. A separate kind because the unsigned

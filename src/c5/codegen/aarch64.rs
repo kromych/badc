@@ -616,6 +616,14 @@ pub(super) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
     0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
 
+/// `FCVTZU <Xd>, <Dn>` -- truncating unsigned FP-to-int. The
+/// `FCVTZS` encoding with the opcode low bit set, so a double in
+/// [2^63, 2^64) converts to the correct u64 rather than saturating.
+pub(super) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> u32 {
+    debug_assert!(dn < 32);
+    0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SCVTF <Dd>, <Xn>` -- signed int-to-FP. Emits the round-to-
 /// nearest-ties-to-even mantissa.
 pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {

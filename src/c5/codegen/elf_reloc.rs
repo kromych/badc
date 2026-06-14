@@ -413,8 +413,19 @@ pub(super) fn write_relocatable(
             prologue_end_entries.push((i, post_native));
             prologue_end_names.push(alloc::format!("{PROLOGUE_END_PREFIX}{name}"));
         }
+        // Synthetic `__c5_sys_*` libc-address trampolines (one per
+        // distinct `&libc_fn` taken in a `.data` function-pointer
+        // table) are per-TU helpers: each is referenced only within
+        // its defining unit through a `.text`-section-relative reloc
+        // (the addend carries the trampoline's byte offset, so no
+        // by-name `.symtab` reference exists). Two units that both
+        // take `&exp` each emit their own `__c5_sys_exp`; binding
+        // them STB_GLOBAL collides at link time. STB_LOCAL keeps the
+        // copies private and the merge pass tolerates the duplicate.
+        let is_sys_trampoline = name.starts_with("__c5_sys_");
         func_strs.push(name);
         match func_linkage_by_pc.get(&ent_pc) {
+            _ if is_sys_trampoline => local_func_idxs.push(i),
             Some(crate::c5::symbol::Linkage::Internal) => local_func_idxs.push(i),
             _ => global_func_idxs.push(i),
         }

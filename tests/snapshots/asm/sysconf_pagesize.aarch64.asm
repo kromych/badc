@@ -16,7 +16,6 @@ Disassembly of section .text:
                	str	x19, [sp]
                	mov	x0, #0x1e               // =30
                	bl	<addr>
-               	sxtw	x0, w0
                	cmp	x0, #0x0
                	b.gt	<addr>
                	mov	x0, #0x1                // =1

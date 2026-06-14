@@ -145,23 +145,30 @@ typedef long clock_t;
 // either #ifdef _WIN32 themselves or use the kernel32 surface.
 #endif
 
-int time(int *out);
-int clock();
+// C99 7.23.2: time / clock / mktime return time_t / clock_t, which are
+// 64-bit. A return wider than the declared type is narrowed to it, so an
+// `int` declaration truncates: clock() overflows int after ~35 min of CPU
+// time (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
+// difftime takes two time_t by value; `int` parameters truncate them
+// before the subtraction. The time_t pointer parameters likewise carry a
+// 64-bit object, not an int.
+time_t time(time_t *out);
+clock_t clock();
 int clock_gettime(int clk_id, struct timespec *ts);
 int gettimeofday(struct timeval *tv, char *tz);
-double difftime(int t1, int t0);
+double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and
 // any normalisation of out-of-range fields). Returns the seconds
 // count or (time_t)-1 on failure.
-int mktime(struct tm *tm);
-struct tm *localtime(int *t);
-struct tm *localtime_r(int *t, struct tm *result);
-struct tm *gmtime(int *t);
-struct tm *gmtime_r(int *t, struct tm *result);
+time_t mktime(struct tm *tm);
+struct tm *localtime(time_t *t);
+struct tm *localtime_r(time_t *t, struct tm *result);
+struct tm *gmtime(time_t *t);
+struct tm *gmtime_r(time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
-char *ctime_r(int *t, char *buf);
+char *ctime_r(time_t *t, char *buf);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);
 // POSIX 7.24.1: initialize the timezone conversion state from the TZ
 // environment variable (or the system default). No arguments, no result.

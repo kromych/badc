@@ -196,9 +196,12 @@ long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
 int access(char *path, int mode);
-int lseek(int fd, int offset, int whence);
+// POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
+// off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
+// 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).
+long lseek(int fd, long offset, int whence);
 int fsync(int fd);
-int ftruncate(int fd, int len);
+int ftruncate(int fd, long len);
 int fcntl(int fd, int cmd, ...);
 int stat(char *path, char *buf);
 int lstat(char *path, char *buf);
@@ -241,8 +244,9 @@ int chown(char *path, int uid, int gid);
 int truncate(char *path, int len);
 int link(char *from, char *to);
 int symlink(char *from, char *to);
-int pathconf(char *path, int name);
-int sysconf(int name);
+// POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
+long pathconf(char *path, int name);
+long sysconf(int name);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);

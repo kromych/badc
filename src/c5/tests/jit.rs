@@ -1314,6 +1314,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // `~` result keeps the promoted operand type (C99 6.5.3.3p4):
     // `~(unsigned long)` stays unsigned so a following `>>` is logical.
     ("complement_preserves_type.c", 0),
+    // A decimal constant past the widest signed type takes the
+    // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
+    ("decimal_literal_over_signed_max.c", 0),
     // Compound assignment (`+=`, `-=`) on unsigned int / long /
     // char: must NOT scale the RHS by element size (the
     // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).

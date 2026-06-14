@@ -121,7 +121,12 @@ impl Compiler {
             self.size_of_type(Ty::Long as i64),
             self.size_of_type(Ty::LongLong as i64),
         ];
-        let mag = (ival as i128).unsigned_abs();
+        // An integer constant is non-negative (a leading `-` is a
+        // separate unary operator), so the magnitude is the unsigned
+        // interpretation of the lexer's 64-bit value. Treating it as
+        // signed would read a constant past `LLONG_MAX` (bit 63 set,
+        // e.g. `18446744073709551615`) as a small negative magnitude.
+        let mag = (ival as u64) as u128;
         let fits = |size_bytes: usize, signed: bool| -> bool {
             let bits = (size_bytes as u32) * 8;
             if signed {
@@ -153,7 +158,12 @@ impl Compiler {
                 break;
             }
             if rank >= 2 {
-                is_unsigned = is_unsigned || allow_unsigned_fallback;
+                // C99 6.4.4.1p5 lists only signed types for a decimal
+                // constant, but a value that exceeds the widest signed
+                // type cannot be represented there. gcc and clang type
+                // such a constant as the unsigned type at the same rank;
+                // follow that when the unsigned type fits.
+                is_unsigned = is_unsigned || allow_unsigned_fallback || fits(sizes[rank], false);
                 break;
             }
             rank += 1;

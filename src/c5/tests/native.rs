@@ -665,6 +665,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // `&`/`^`/`|` result type is the common type (C99 6.5.10-12) so a
     // cast of `unsigned | int` to signed sign-extends on widening.
     ("bitop_common_type_sign_extend.c", 0),
+    // `~` result keeps the promoted operand type (C99 6.5.3.3p4):
+    // `~(unsigned long)` stays unsigned so a following `>>` is logical.
+    ("complement_preserves_type.c", 0),
     // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.

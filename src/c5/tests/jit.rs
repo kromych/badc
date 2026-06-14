@@ -1311,6 +1311,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // `&`/`^`/`|` result type is the common type (C99 6.5.10-12) so a
     // cast of `unsigned | int` to signed sign-extends on widening.
     ("bitop_common_type_sign_extend.c", 0),
+    // `~` result keeps the promoted operand type (C99 6.5.3.3p4):
+    // `~(unsigned long)` stays unsigned so a following `>>` is logical.
+    ("complement_preserves_type.c", 0),
     // Compound assignment (`+=`, `-=`) on unsigned int / long /
     // char: must NOT scale the RHS by element size (the
     // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).

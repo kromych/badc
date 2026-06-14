@@ -1742,20 +1742,20 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
-            // C99 6.5.3.3: `~` applies integer promotions; the result
-            // has the promoted operand's type. `unsigned char` /
-            // `unsigned short` promote to signed `int`, so no mask.
-            // `unsigned int` (size 4 unsigned that doesn't promote
-            // down) stays unsigned int -- mask the high half back to
-            // 32 bits so the register doesn't carry the
-            // 0xFFFFFFFF.... high pattern from `XOR -1`.
-            let operand_ty = self.ty;
-            if is_unsigned_ty(operand_ty) && self.size_of_type(operand_ty) == 4 {
+            // C99 6.5.3.3p4: `~` applies the integer promotions and the
+            // result has the promoted operand type. `unsigned char` /
+            // `unsigned short` promote to signed `int`. A `long` /
+            // `long long` (signed or unsigned) keeps its width and
+            // signedness -- forcing `Ty::Int` here would both narrow it
+            // and drop the unsigned bit, so a following `>>` would pick
+            // an arithmetic shift on `~(unsigned long)x`. A 4-byte
+            // unsigned result needs the high half masked back to 32
+            // bits because `XOR -1` sets the full 64-bit register.
+            let promoted = integer_promote(self.ty);
+            if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                self.ty = operand_ty;
-            } else {
-                self.ty = Ty::Int as i64;
             }
+            self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
             // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
             // type is preserved (subject to integer promotion for

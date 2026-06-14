@@ -178,7 +178,15 @@ impl Compiler {
                 }
                 continue;
             }
-            if self.symbols[param_idx].class == Token::Loc as i64 {
+            // A name repeated within this parameter list is an error;
+            // each earlier parameter is already bound `Loc` and its
+            // index recorded in `args`. A name that merely shadows an
+            // outer local -- a prototype declared inside a function
+            // body, where the enclosing parameter or local carries the
+            // same name (C99 6.7.6.3 puts the prototype's parameters in
+            // their own scope) -- is not a duplicate; `shadow_symbol`
+            // saves the outer binding and the caller restores it.
+            if self.symbols[param_idx].class == Token::Loc as i64 && args.contains(&param_idx) {
                 return Err(self.compile_err("duplicate parameter definition"));
             }
 

@@ -61,48 +61,55 @@ impl Compiler {
         } else {
             self.parse_decl_base_type()?
         };
-        // Function-prototype declaration at function-body scope
-        // (C99 6.7.1 paragraph 3 allows `extern` declarations at
-        // any scope): `extern T (*) name (args);` where `(*)` is
-        // any run of `*` qualifying the return type. c5 has no
-        // separate translation units, so the declaration is a
-        // no-op; the import resolver finds the symbol via its own
-        // table. Skip to the closing `;` and return.
+        // Function declaration at function-body scope (C99 6.7p1):
+        // `T name(args);` or `T *name(args);` where the leading run
+        // of `*` qualifies the return type. C99 6.2.2p5: with no
+        // storage-class specifier or `extern` the name has external
+        // linkage, so register it as a function (the same shape as a
+        // file-scope prototype) and a call to it resolves; the
+        // definition is found at link time.
         //
         // Snapshot before the speculative `*` walk so a plain
         // pointer-variable declaration with multiple declarators
         // (`int *p, *q;`) doesn't get its leading `*` swallowed
         // and rebound to a wider base type.
         let proto_snap = self.lex.snapshot();
+        let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
+            ret_ptr_levels += 1;
             self.next()?;
         }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
+            let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
             self.next()?; // consume `(`
-            let mut depth: i64 = 1;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        self.next()?;
-                        break;
-                    }
-                }
-                self.next()?;
+            let params = self.parse_function_params()?;
+            // A prototype's parameter names have no linkage and no
+            // scope beyond the declaration (C99 6.7.6.3), so restore
+            // each shadowed binding -- otherwise a later local or
+            // another prototype reusing the name trips the duplicate
+            // definition check.
+            for &p in &params.indices {
+                Self::restore_shadowed_symbol(&mut self.symbols[p]);
             }
+            let sym = &mut self.symbols[id_idx];
+            sym.class = Token::Fun as i64;
+            sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            sym.params = params.types;
+            sym.is_variadic = params.is_variadic;
+            sym.is_extern_decl = true;
+            sym.linkage = if is_static {
+                crate::c5::symbol::Linkage::Internal
+            } else {
+                crate::c5::symbol::Linkage::External
+            };
+            // A trailing comma list of further prototypes is rare;
+            // skip any remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
-            // `lbt` was used to drive parse_decl_base_type only;
-            // for a declaration that turns out to be a function
-            // prototype, the symbol table mutation lives in the
-            // codegen-side import resolver, so the local-decl
-            // bookkeeping (shadow_symbol, allocate_*) is skipped.
-            let _ = lbt;
+            let _ = is_extern;
             return Ok(());
         }
         // Not a function prototype after all -- rewind so the

@@ -671,6 +671,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // A decimal constant past the widest signed type takes the
     // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
     ("decimal_literal_over_signed_max.c", 0),
+    // Block-scope function declaration resolves to the file-scope
+    // definition (C99 6.7p1 / 6.2.2p5).
+    ("block_scope_function_declaration.c", 0),
     // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.

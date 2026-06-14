@@ -303,45 +303,59 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
-        // Function-prototype declaration at block scope:
-        // `extern int foo(int);` -- the name is an identifier, the
-        // next token is `(`, and what follows is a parameter list
-        // ending with `);`. c5 has no separate translation units,
-        // so the whole declaration is a no-op; the linker /
-        // codegen-side import resolution finds the symbol via its
-        // own table. Skip to the matching `;` and return.
+        // Function declaration at block scope (C99 6.7p1):
+        // `T name(args);` or `T *name(args);` where the leading run of
+        // `*` qualifies the return type. C99 6.2.2p5: with no
+        // storage-class specifier or `extern` the name has external
+        // linkage, so register it as a function (the same shape as a
+        // file-scope prototype) and a call to it resolves; the
+        // definition is found at link time.
+        //
+        // Snapshot before the speculative `*` walk so a plain
+        // pointer-variable declaration with multiple declarators
+        // (`int *p, *q;`) keeps its leading `*` for the declarator
+        // loop below.
+        let proto_snap = self.lex.snapshot();
+        let mut ret_ptr_levels: i64 = 0;
+        while self.lex.tk == Token::MulOp {
+            ret_ptr_levels += 1;
+            self.next()?;
+        }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
-            // Counted-paren skip from the name. Walk past the
-            // identifier, then the `(`, then balance braces until
-            // the matching `)`. Function-pointer declarators
-            // (`int (*fn)(int)`) don't reach this branch -- they
-            // start with `(` rather than an identifier.
+            let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
             self.next()?; // consume `(`
-            let mut depth: i64 = 1;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        self.next()?;
-                        break;
-                    }
-                }
-                self.next()?;
+            let params = self.parse_function_params()?;
+            // A prototype's parameter names have no linkage and no
+            // scope beyond the declaration (C99 6.7.6.3); restore each
+            // shadowed binding so a later local reusing the name does
+            // not trip the duplicate definition check.
+            for &p in &params.indices {
+                Self::restore_shadowed_symbol(&mut self.symbols[p]);
             }
-            // Trailing `;` plus an optional comma-separated list
-            // of further function prototypes are skipped: the
-            // standard form is one declaration per `;`, but the
-            // C grammar would in principle allow `int foo(int),
-            // bar(int);`. Skip until the terminator.
+            let sym = &mut self.symbols[id_idx];
+            sym.class = Token::Fun as i64;
+            sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            sym.params = params.types;
+            sym.is_variadic = params.is_variadic;
+            sym.is_extern_decl = true;
+            sym.linkage = if is_static {
+                crate::c5::symbol::Linkage::Internal
+            } else {
+                crate::c5::symbol::Linkage::External
+            };
+            // A trailing comma list of further prototypes
+            // (`int foo(int), bar(int);`) is rare; skip any
+            // remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
             return Ok(());
         }
+        // Not a function declaration -- rewind so the declarator loop
+        // sees the leading `*`s and consumes them per declarator.
+        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays

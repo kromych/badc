@@ -629,6 +629,22 @@ impl<'a> Walker<'a> {
             {
                 return GloAddr::Resolved(s.val);
             }
+            // Forward reference: a block-scope `extern int g;` parsed
+            // before the same-TU `int g = ...;` definition (C99 6.2.2p4)
+            // snapshots a stale 0 offset into the `Expr::Ident`, so the
+            // access lands at the wrong `.data` address. When the live
+            // symbol is now a defined global carrying a real offset,
+            // use it. The `fallback_val == 0` guard keeps shadowed
+            // same-named globals -- which snapshot their own distinct
+            // nonzero offsets -- on the snapshot path.
+            if s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_extern_decl
+                && fallback_val == 0
+                && s.val != 0
+            {
+                return GloAddr::Resolved(s.val);
+            }
         }
         GloAddr::Resolved(fallback_val)
     }

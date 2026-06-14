@@ -47,17 +47,18 @@ use super::Target;
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
-    emit_addss, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr, emit_cvtsd2ss,
-    emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss, emit_imul_r_mem,
-    emit_imul_rr, emit_lea_r_mem, emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr,
-    emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm, emit_movsd_xmm_mem,
-    emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16, emit_movsxd_r_mem,
-    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_or_r_mem, emit_or_rr,
-    emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
-    emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd,
-    emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss,
-    emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem,
-    emit_xor_rr, emit_xorpd,
+    emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
+    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
+    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem, emit_mov_mem_r,
+    emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
+    emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
+    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd,
+    emit_mulss, emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl,
+    emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr,
+    emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss,
+    emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd,
+    emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem, emit_xor_rr,
+    emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -4196,6 +4197,50 @@ fn emit_fp_cast(
                 }
             };
             emit_cvtsi2sd(code, dd, rn);
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            true
+        }
+        FpCastKind::UIntToFp => {
+            // Unsigned 64-bit to double. SSE2 has no unsigned convert
+            // before AVX512: when bit 63 is clear the signed convert is
+            // exact; otherwise halve the value -- OR-ing the discarded
+            // low bit back in as the sticky bit so the narrowing rounds
+            // correctly -- convert, and double.
+            let src = match materialize_int(code, src_place, SCRATCH_R10, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UIntToFp: value not int reg / spill");
+                    return false;
+                }
+            };
+            let dd = match fp_or_spill_dst(dst) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UIntToFp: dst not fp reg / spill");
+                    return false;
+                }
+            };
+            // Modifiable scratch copies so a live source register is not
+            // clobbered by the shift/and below.
+            let rn = SCRATCH_R10;
+            let t = SCRATCH_R13;
+            emit_mov_rr(code, rn, src);
+            emit_test_rr(code, rn, rn);
+            emit_jcc_rel8(code, Cc::S, 0);
+            let js_fixup = code.len() - 1;
+            emit_cvtsi2sd(code, dd, rn);
+            emit_jmp_rel8(code, 0);
+            let jmp_fixup = code.len() - 1;
+            let big = code.len();
+            code[js_fixup] = (big - js_fixup - 1) as i8 as u8;
+            emit_mov_rr(code, t, rn);
+            emit_shr_r_imm8(code, t, 1);
+            emit_and_r_imm32(code, rn, 1);
+            emit_or_rr(code, t, rn);
+            emit_cvtsi2sd(code, dd, t);
+            emit_addsd(code, dd, dd);
+            let done = code.len();
+            code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
             fp_spill_dst_to_slot(code, dst, dd, frame);
             true
         }

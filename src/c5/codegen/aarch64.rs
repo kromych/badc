@@ -623,6 +623,14 @@ pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
     0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
 
+/// `UCVTF <Dd>, <Xn>` -- unsigned int-to-FP. The `SCVTF` encoding
+/// with the opcode low bit set, so a u64 with bit 63 set converts
+/// to a positive double rather than a negative one.
+pub(super) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
+    debug_assert!(dd < 32);
+    0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+}
+
 /// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
 /// register. Linux glibc populates `TPIDR_EL0` at thread setup
 /// with the address of `struct pthread`, and the TLS image (our

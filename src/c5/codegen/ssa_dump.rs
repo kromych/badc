@@ -325,6 +325,7 @@ fn fmt_fp_cast(k: FpCastKind) -> &'static str {
     match k {
         FpCastKind::FpToInt => "FpToInt",
         FpCastKind::IntToFp => "IntToFp",
+        FpCastKind::UIntToFp => "UIntToFp",
         FpCastKind::F32ToF64 => "F32ToF64",
         FpCastKind::F64ToF32 => "F64ToF32",
     }

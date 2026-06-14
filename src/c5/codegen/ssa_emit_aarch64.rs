@@ -58,7 +58,7 @@ use super::aarch64::{
     enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
     enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
     enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
+    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -2159,7 +2159,7 @@ fn emit_inst(
                 .copied()
                 .unwrap_or(Place::None);
             match kind {
-                FpCastKind::IntToFp => {
+                FpCastKind::IntToFp | FpCastKind::UIntToFp => {
                     let rn = match materialize_int(code, src_place, scratch.primary, frame) {
                         Some(r) => r,
                         None => return false,
@@ -2172,7 +2172,12 @@ fn emit_inst(
                         Place::Spill(_) => SCRATCH_FP0,
                         _ => return false,
                     };
-                    emit(code, enc_scvtf_d_x(dd, rn));
+                    let enc = if matches!(kind, FpCastKind::UIntToFp) {
+                        enc_ucvtf_d_x(dd, rn)
+                    } else {
+                        enc_scvtf_d_x(dd, rn)
+                    };
+                    emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
                         emit_sp_str_d_auto(code, dd, sp_off);

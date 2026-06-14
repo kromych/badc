@@ -1148,7 +1148,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
             FpCastKind::FpToInt => ResultKind::Int,
-            FpCastKind::IntToFp | FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => ResultKind::Fp,
+            FpCastKind::IntToFp
+            | FpCastKind::UIntToFp
+            | FpCastKind::F32ToF64
+            | FpCastKind::F64ToF32 => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),

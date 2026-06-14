@@ -412,8 +412,14 @@ pub(crate) enum BinOp {
 pub(crate) enum FpCastKind {
     /// Truncating f64 to i64.
     FpToInt,
-    /// i64 to f64.
+    /// Signed i64 to f64.
     IntToFp,
+    /// Unsigned u64 to f64. A separate kind because the unsigned
+    /// value can exceed the signed 64-bit range, where the signed
+    /// convert would produce a negative result (C99 6.3.1.4). x86_64
+    /// SSE2 has no unsigned convert before AVX512, so the lowering
+    /// tests the high bit and halves/doubles; aarch64 uses `UCVTF`.
+    UIntToFp,
     /// Widen f32 to f64 (C99 6.3.1.5). The single-precision source
     /// value is converted to double; the result is f64. Emitted at a
     /// `float` operand mixed with a `double` operand, an explicit

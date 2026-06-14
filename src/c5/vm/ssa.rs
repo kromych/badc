@@ -950,6 +950,7 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = match kind {
                 FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
                 FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
+                FpCastKind::UIntToFp => (raw as u64 as f64).to_bits() as i64,
                 // A register carrying a single-precision value already
                 // holds the f64 bit pattern of that f32 (the F32 load
                 // widens on read). Widening to double is therefore a

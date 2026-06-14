@@ -2538,9 +2538,22 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(BinOp::Ne, v, 0));
                 }
                 if target_is_fp && !source_is_fp {
-                    // Integer -> FP. `IntToFp` produces an f64; a `float`
-                    // target then narrows to single precision (6.3.1.4).
-                    let f = b.fp_cast(super::super::ir::FpCastKind::IntToFp, v);
+                    // Integer -> FP (C99 6.3.1.4) produces an f64; a
+                    // `float` target then narrows to single precision.
+                    // An unsigned 64-bit source (`unsigned long` /
+                    // `unsigned long long`) can exceed the signed range,
+                    // where the signed convert yields a negative result,
+                    // so it takes the unsigned converter. Narrower
+                    // unsigned types fit the signed range zero-extended.
+                    let stripped = src_ty & !UNSIGNED_BIT;
+                    let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
+                        && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+                    let kind = if unsigned_64 {
+                        super::super::ir::FpCastKind::UIntToFp
+                    } else {
+                        super::super::ir::FpCastKind::IntToFp
+                    };
+                    let f = b.fp_cast(kind, v);
                     if is_float_ty(*to_ty) {
                         return Ok(b.fp_narrow_to_f32(f));
                     }

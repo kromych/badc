@@ -1191,6 +1191,12 @@ pub(super) enum Cc {
     E = 0x4,
     /// Not equal.
     Ne = 0x5,
+    /// Sign (SF=1) -- the result's high bit is set; used to test a
+    /// 64-bit value's bit 63.
+    S = 0x8,
+    /// Not sign (SF=0) -- the complement of `S`, completing the
+    /// `flip` pairing.
+    Ns = 0x9,
     /// Less than (signed).
     L = 0xC,
     /// Greater than (signed).
@@ -1238,6 +1244,8 @@ impl Cc {
             Cc::Be => Cc::A,
             Cc::P => Cc::Np,
             Cc::Np => Cc::P,
+            Cc::S => Cc::Ns,
+            Cc::Ns => Cc::S,
         }
     }
 }

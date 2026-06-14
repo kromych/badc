@@ -659,6 +659,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Plain `char` follows the target's implementation-defined
     // signedness and the widening load agrees with it (C99 6.2.5p15).
     ("plain_char_signedness.c", 0),
+    // Brace-wrapped string literal initializing a char-array struct
+    // member (C99 6.7.9p14): copy the bytes, not the pointer.
+    ("struct_member_brace_wrapped_string.c", 0),
     // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
     ("unsigned_compound_assign.c", 0),
     // Exhaustive integer ops across widths + signedness.

@@ -333,17 +333,32 @@ impl Compiler {
             for &p in &params.indices {
                 Self::restore_shadowed_symbol(&mut self.symbols[p]);
             }
-            let sym = &mut self.symbols[id_idx];
-            sym.class = Token::Fun as i64;
-            sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
-            sym.params = params.types;
-            sym.is_variadic = params.is_variadic;
-            sym.is_extern_decl = true;
-            sym.linkage = if is_static {
-                crate::c5::symbol::Linkage::Internal
-            } else {
-                crate::c5::symbol::Linkage::External
-            };
+            // Introduce a function symbol only for an as-yet-undeclared
+            // name. A name already bound -- a libc binding (`Sys`), a
+            // function declared elsewhere (`Fun`), or a variable
+            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
+            // overriding a `Sys` binding with an external user reference
+            // would make the call unresolvable at link time.
+            // Already a resolved entity (libc binding, function, or
+            // variable)?
+            let c = self.symbols[id_idx].class;
+            let known = c == Token::Sys as i64
+                || c == Token::Fun as i64
+                || c == Token::Glo as i64
+                || c == Token::Loc as i64;
+            if !known {
+                let sym = &mut self.symbols[id_idx];
+                sym.class = Token::Fun as i64;
+                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+                sym.params = params.types;
+                sym.is_variadic = params.is_variadic;
+                sym.is_extern_decl = true;
+                sym.linkage = if is_static {
+                    crate::c5::symbol::Linkage::Internal
+                } else {
+                    crate::c5::symbol::Linkage::External
+                };
+            }
             // A trailing comma list of further prototypes
             // (`int foo(int), bar(int);`) is rare; skip any
             // remainder to the terminator.

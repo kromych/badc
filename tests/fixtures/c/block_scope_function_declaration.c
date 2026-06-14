@@ -3,7 +3,10 @@
 // linkage, so the declaration refers to the file-scope definition and
 // a call to it resolves. Both a plain return type and a pointer return
 // type are covered, at the top of a function body and inside a nested
-// block.
+// block. A block-scope declaration must not override an existing libc
+// binding (`strlen` below stays resolvable).
+
+#include <string.h>
 
 int add(int a, int b);
 const char *label(void);
@@ -36,6 +39,16 @@ int main(void) {
         extern const char *label(void);
         if (add(1, 2) != 3 || !streq(label(), "ok")) {
             return 3;
+        }
+    }
+
+    // A block-scope declaration of a libc function must keep its
+    // binding -- the call still resolves through libc, not as an
+    // undefined user reference.
+    {
+        extern unsigned long strlen(const char *s);
+        if (strlen("abcd") != 4) {
+            return 4;
         }
     }
 

@@ -550,11 +550,13 @@ impl Preprocessor {
 
     /// Predefine an object-like macro from the build driver --
     /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
-    /// The empty body resolves to `1`, matching cpp's convention.
-    /// Late definitions in source still win, so a `-D X=0`
+    /// `-D NAME` (no `=`) reaches here with body `"1"` per cpp's
+    /// convention; `-D NAME=` (with `=`, empty value) reaches here
+    /// with an empty body and must stay empty, matching the `#define
+    /// NAME` directive -- e.g. `-DSQLITE_PRIVATE=` expands to nothing,
+    /// not `1`. Late definitions in source still win, so a `-D X=0`
     /// followed by `#define X 1` in source ends up with `X = 1`.
     pub fn define(&mut self, name: &str, body: &str) {
-        let body = if body.is_empty() { "1" } else { body };
         self.macros.insert(name.to_string(), body.to_string());
     }
 
@@ -3909,6 +3911,25 @@ mod tests {
     fn define_substitutes_in_subsequent_lines() {
         let out = process("#define FOO 42\nint x = FOO;\n");
         assert!(out.contains("int x = 42;"));
+    }
+
+    #[test]
+    fn cli_empty_define_expands_to_nothing() {
+        // `-D NAME` (no `=`) is `1`; `-D NAME=` (with `=`, empty) stays
+        // empty and expands to nothing -- the cpp convention, e.g.
+        // `-DSQLITE_PRIVATE=` so `SQLITE_PRIVATE void f();` is `void f();`.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.define("EMPTY", "");
+        pp.define("ONE", "1");
+        let out = pp
+            .process("EMPTY void f(void);\nint x = ONE;\n")
+            .expect("preprocessor failed");
+        assert!(out.contains("void f(void);"), "got: {out:?}");
+        assert!(
+            !out.contains("1 void f"),
+            "empty define leaked a 1: {out:?}"
+        );
+        assert!(out.contains("int x = 1;"));
     }
 
     #[test]

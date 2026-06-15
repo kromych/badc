@@ -1070,10 +1070,10 @@ impl Compiler {
                         0
                     };
 
-                    // C99 6.9.1p12: a value-returning function must not
-                    // reach its closing brace without a `return value;`.
+                    // C99 6.9.1p12: warn when a value-returning function
+                    // may reach its closing brace without a `return value;`.
                     // Run before `ast_finish_function` moves the body AST.
-                    self.check_non_void_fall_off()?;
+                    self.check_non_void_fall_off();
                     self.ast_finish_function(
                         ent_pc,
                         n_params,

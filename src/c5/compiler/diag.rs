@@ -18,31 +18,41 @@ use super::types::{
 
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
-    /// function without executing a `return value;` is a defect (a
-    /// caller that uses the result reads an indeterminate value).
-    /// Reject it, exempting `main` (5.1.2.2.3 supplies a default 0).
+    /// function without executing a `return value;` leaves the value
+    /// indeterminate -- undefined behavior if the caller uses it, but
+    /// not a constraint violation. gcc and clang diagnose it with a
+    /// warning, not an error, and the codegen synthesizes a `return 0`
+    /// for the fall-through, so this is a warning too. `main` is exempt
+    /// (5.1.2.2.3 supplies a default 0).
     ///
     /// The analysis reports a fall-through only when control certainly
-    /// reaches the end. Constructs it does not model precisely --
-    /// `switch`, `goto`, labels -- are treated as not falling through,
-    /// so the diagnostic never fires on a function that uses them. This
-    /// matches the practical guarantee a C programmer expects: a plain
-    /// missing `return` is caught; a hand-rolled jump table is left
-    /// alone.
-    pub(super) fn check_non_void_fall_off(&self) -> Result<(), C5Error> {
+    /// reaches the end, and only with the noreturn information available
+    /// to it: a function whose last statement is a call into a
+    /// `_Noreturn` callee does not fall through, but one ending in a
+    /// callee whose noreturn attribute is hidden behind a macro that
+    /// expands to nothing (no `__GNUC__` / `__clang__`) cannot be seen
+    /// as noreturn, so a hard error would reject valid code. Constructs
+    /// it does not model precisely -- `switch`, `goto`, labels -- are
+    /// treated as not falling through, so the diagnostic never fires on
+    /// a function that uses them.
+    pub(super) fn check_non_void_fall_off(&mut self) {
         if self.current_func_returns_void || self.current_function_name == "main" {
-            return Ok(());
+            return;
         }
         let Some(body) = self.ast.body else {
-            return Ok(());
+            return;
         };
         if self.stmt_may_fall_through(body) {
-            return Err(self.compile_err(alloc::format!(
-                "control reaches end of non-void function `{}` without returning a value",
-                self.current_function_name
-            )));
+            let line = self.lex.line;
+            let name = self.current_function_name.clone();
+            self.warn_at(
+                line,
+                alloc::format!(
+                    "control reaches end of non-void function `{name}` \
+                     without returning a value"
+                ),
+            );
         }
-        Ok(())
     }
 
     /// True when control may reach the statement immediately after

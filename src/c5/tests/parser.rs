@@ -54,12 +54,23 @@ fn bare_return_in_void_function_is_allowed() {
 }
 
 #[test]
-fn fall_off_end_of_non_void_function_is_rejected() {
+fn fall_off_end_of_non_void_function_warns() {
     // C99 6.9.1p12: control reaching the closing brace of a
-    // value-returning function with no `return value;` is a defect.
-    expect_compile_error(
-        "int f(int x) { if (x) return x; } int main(void) { return f(1); }",
-        "control reaches end of non-void function",
+    // value-returning function with no `return value;` leaves the value
+    // indeterminate. This is undefined behavior if the result is used,
+    // not a constraint violation, so it is a warning (matching gcc /
+    // clang) and the codegen synthesizes a `return 0`.
+    let prog = crate::c5::Compiler::new(
+        "int f(int x) { if (x) return x; } int main(void) { return f(1); }".to_string(),
+    )
+    .compile()
+    .expect("a fall-off-end non-void function compiles with a warning");
+    assert!(
+        prog.warnings
+            .iter()
+            .any(|w| w.contains("control reaches end of non-void function")),
+        "expected a fall-off-end warning, got {:?}",
+        prog.warnings,
     );
 }
 

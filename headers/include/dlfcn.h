@@ -6,13 +6,28 @@
 #define NULL 0
 #endif
 
-// `RTLD_LAZY` is only meaningful on POSIX; on Windows it's a no-op
-// flag for the convenience of cross-platform fixtures that pass it
-// through to `dlopen` regardless of target.
+// dlopen() mode flags. RTLD_LAZY / RTLD_NOW agree across hosts, but the
+// scope and extra-mode bits diverge -- the value reaches the host's
+// dlopen, so each target uses its own numbering. On Windows these are
+// no-ops for cross-platform fixtures that pass them through.
 #define RTLD_LAZY    1
 #define RTLD_NOW     2
+#ifdef __APPLE__
+#define RTLD_LOCAL    4
+#define RTLD_GLOBAL   8
+#define RTLD_NOLOAD   0x10
+#define RTLD_NODELETE 0x80
+#define RTLD_FIRST    0x100
+#elif defined(__linux__)
+#define RTLD_LOCAL    0
+#define RTLD_GLOBAL   0x100
+#define RTLD_NOLOAD   0x04
+#define RTLD_DEEPBIND 0x08
+#define RTLD_NODELETE 0x1000
+#else
 #define RTLD_LOCAL   0
 #define RTLD_GLOBAL  256
+#endif
 
 // `RTLD_DEFAULT` / `RTLD_NEXT` are pseudo-handles whose numeric
 // values differ across platforms:

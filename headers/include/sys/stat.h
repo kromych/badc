@@ -242,13 +242,41 @@ struct stat {
 // f_bsize varies, so we expose typedefs that cover the union of
 // known layouts.
 // `struct statfs` is the libc filesystem-info shape that
-// `statfs(2)` / `fstatfs(2)` write into. Field layouts vary
-// across libc flavors but in practice all add up to ~4 KiB
-// (path components dominate). Our buffer reserves 4096
-// bytes via a trailing `__pad[]` so every known platform
-// fits without further header surgery -- the overflow class
-// would otherwise stomp the saved frame pointer of the
-// caller (see fixtures/c/libc_struct_buf_size.c).
+// `statfs(2)` / `fstatfs(2)` write into. The kernel fills it, so the
+// member layout must match the host's: programs read f_bsize, f_flags,
+// f_fsid, f_fstypename and the like by name. A trailing pad keeps the
+// caller's frame safe if the platform struct is larger than the named
+// fields (see fixtures/c/libc_struct_buf_size.c).
+
+// Filesystem id: a pair of ints on both macOS and Linux.
+typedef struct { int val[2]; } fsid_t;
+
+#ifdef __APPLE__
+// Darwin layout (sys/mount.h): f_bsize is a 32-bit unit at offset 0 and
+// the block/inode counts are 64-bit, so the all-`long` shape used
+// elsewhere would misplace every field past f_iosize.
+struct statfs {
+    unsigned int       f_bsize;      /* 0   */
+    int                f_iosize;     /* 4   */
+    unsigned long long f_blocks;     /* 8   */
+    unsigned long long f_bfree;      /* 16  */
+    unsigned long long f_bavail;     /* 24  */
+    unsigned long long f_files;      /* 32  */
+    unsigned long long f_ffree;      /* 40  */
+    fsid_t             f_fsid;       /* 48  */
+    unsigned int       f_owner;      /* 56  */
+    unsigned int       f_type;       /* 60  */
+    unsigned int       f_flags;      /* 64  */
+    unsigned int       f_fssubtype;  /* 68  */
+    char               f_fstypename[16];   /* 72   */
+    char               f_mntonname[1024];  /* 88   */
+    char               f_mntfromname[1024];/* 1112 */
+    unsigned int       f_flags_ext;        /* 2136 */
+    unsigned int       f_reserved[7];      /* 2140; total 2168 */
+};
+#else
+// Generic superset for the remaining targets: oversized so any field a
+// source names exists, with a trailing pad covering the real struct.
 struct statfs {
     long f_bsize;
     long f_iosize;
@@ -269,6 +297,7 @@ struct statfs {
     long f_flags_ext;
     char __pad[2048];
 };
+#endif
 
 struct statvfs {
     int f_bsize;

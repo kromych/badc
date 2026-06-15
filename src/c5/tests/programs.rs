@@ -342,6 +342,14 @@ fn static_init_paren_relocation() {
 }
 
 #[test]
+fn const_conditional_address_init() {
+    // C99 6.6: a constant-condition conditional whose arms are address
+    // constants selects one arm; its relocation must reach the static
+    // initializer (the `_Py_LATIN1_CHR` clinic-table idiom).
+    assert_eq!(run_fixture("const_conditional_address_init.c"), 0);
+}
+
+#[test]
 fn do_while_zero_returns() {
     // A `do { ...; return; } while (0)` body never reaches the exit test,
     // so the function does not fall off its end (C99 6.8.5).

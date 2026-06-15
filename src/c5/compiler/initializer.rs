@@ -526,6 +526,11 @@ impl Compiler {
         // pointee size; without a cast the symbol's element size is
         // used. `None` until a cast or the base symbol resolves it.
         let mut cast_stride: Option<i64> = None;
+        // Count of leading grouping `(` that must be balanced by trailing
+        // `)`. Only that many `)` are consumed at the end, so a `)` that
+        // belongs to an enclosing construct (a conditional arm's closing
+        // paren) is left for the caller rather than greedily eaten.
+        let mut group_depth: i64 = 0;
         // Skip the `&` and any leading grouping parentheses. A `(` that
         // opens a cast (`(T*)&g`) is skipped whole -- the cast only
         // retypes the address, which is the same constant value. A
@@ -573,6 +578,12 @@ impl Compiler {
                             self.next()?;
                         }
                     }
+                } else {
+                    // A grouping `(` (not a cast). Record it so exactly
+                    // the matching `)` is consumed below -- a `)` that
+                    // closes an enclosing construct (e.g. a conditional
+                    // arm) is left for the caller.
+                    group_depth += 1;
                 }
             } else {
                 break;
@@ -641,13 +652,73 @@ impl Compiler {
                 let n = self.parse_constant_int()?;
                 let stride = cast_stride.unwrap_or(elem_stride);
                 off += if subtract { -n } else { n } * stride;
-            } else if self.lex.tk == ')' {
+            } else if self.lex.tk == ')' && group_depth > 0 {
+                group_depth -= 1;
                 self.next()?;
             } else {
                 break;
             }
         }
         Ok(Some((off, sym_idx)))
+    }
+
+    /// Try to parse `cond ? A : B )` as a constant-init value, with the
+    /// opening `(` already consumed. The condition is a constant integer;
+    /// each arm is a constant-init value (an address constant or an
+    /// integer). Returns the selected arm and consumes the closing `)`,
+    /// or restores the lexer and returns `None` when the parens do not
+    /// hold a conditional (so the caller's other paren handling runs).
+    fn try_const_cond_init_value(&mut self) -> Result<Option<(i64, InitElemReloc)>, C5Error> {
+        let snap = self.lex.snapshot();
+        let data_snap = self.data.len();
+        let restore = |s: &mut Self| {
+            s.lex.restore(snap);
+            s.data.truncate(data_snap);
+        };
+        // The condition runs up to `?` (a logical-OR expression). A
+        // non-integer leaf (e.g. a bare `(T*)&g` with no conditional)
+        // makes the evaluator error; treat that as "not a conditional".
+        let cond = match self.parse_const_expr_or() {
+            Ok(c) => c,
+            Err(_) => {
+                restore(self);
+                return Ok(None);
+            }
+        };
+        if self.lex.tk != Token::Cond {
+            restore(self);
+            return Ok(None);
+        }
+        self.next()?; // consume `?`
+        // Both arms are parsed so their tokens are consumed; only the
+        // arm the condition selects contributes its value and reloc. A
+        // parse failure in either arm means this was not the address-
+        // conditional shape -- restore and let the caller continue.
+        let then_arm = match self.parse_constant_init_value() {
+            Ok(v) => v,
+            Err(_) => {
+                restore(self);
+                return Ok(None);
+            }
+        };
+        if self.lex.tk != ':' {
+            restore(self);
+            return Ok(None);
+        }
+        self.next()?; // consume `:`
+        let else_arm = match self.parse_constant_init_value() {
+            Ok(v) => v,
+            Err(_) => {
+                restore(self);
+                return Ok(None);
+            }
+        };
+        if self.lex.tk != ')' {
+            restore(self);
+            return Ok(None);
+        }
+        self.next()?; // consume the closing `)`
+        Ok(Some(if cond != 0 { then_arm } else { else_arm }))
     }
 
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
@@ -657,8 +728,14 @@ impl Compiler {
         // symbol with no member or index chain.
         if self.lex.tk == Token::AndOp || self.lex.tk == Token::Id || self.lex.tk == '(' {
             let snap = self.lex.snapshot();
+            // A `:` or `)` terminator appears when this value is a
+            // conditional arm (`cond ? &a : &b`) or a parenthesised leaf;
+            // `,` / `}` terminate a brace-list element.
             if let Some((off, sym_idx)) = self.parse_const_address()?
-                && (self.lex.tk == ',' || self.lex.tk == '}')
+                && (self.lex.tk == ','
+                    || self.lex.tk == '}'
+                    || self.lex.tk == ':'
+                    || self.lex.tk == ')')
             {
                 return Ok((off, InitElemReloc::Data(Some(sym_idx))));
             }
@@ -841,6 +918,16 @@ impl Compiler {
                 }
                 self.next()?;
                 return self.parse_constant_init_value();
+            }
+            // `(cond ? A : B)` -- a constant conditional whose arms may be
+            // address constants (C99 6.6: a conditional expression with a
+            // constant condition is itself a constant expression). The
+            // integer evaluator below can fold the value but not carry an
+            // address-valued arm's relocation, so select the arm here and
+            // keep its reloc. Falls through when the parens hold a plain
+            // arithmetic expression.
+            if let Some(res) = self.try_const_cond_init_value()? {
+                return Ok(res);
             }
             // A parenthesised relocation-bearing leaf -- `(func)`,
             // `(&global)`, possibly multiply parenthesised, as produced

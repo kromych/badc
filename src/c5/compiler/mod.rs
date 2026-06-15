@@ -426,6 +426,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// a callback type nested in another prototype -- must not trip the
     /// duplicate-parameter check).
     pub parsing_fn_ptr_proto: bool,
+    /// Set by `parse_function_params` immediately before the per-parameter
+    /// `parse_declarator` call and taken (cleared) at the top of that call,
+    /// so it applies only to the parameter's own declarator and not to any
+    /// nested one. In parameter position a function-typed declarator
+    /// `RET (name)(args)` decays to a pointer to function (C99 6.7.5.3p8),
+    /// the same as `RET (*name)(args)`.
+    pub param_decl_context: bool,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -547,6 +554,7 @@ impl Default for Pending {
             fn_ptr_param_types: None,
             indirect_callee_params: None,
             parsing_fn_ptr_proto: false,
+            param_decl_context: false,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field

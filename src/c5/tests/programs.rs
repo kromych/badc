@@ -312,6 +312,13 @@ fn compound_literal_tagged_address() {
 }
 
 #[test]
+fn function_typed_parameter() {
+    // A function-typed parameter `RET name(args)` / `RET (name)(args)`
+    // decays to a pointer to function (C99 6.7.5.3p8).
+    assert_eq!(run_fixture("function_typed_parameter.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

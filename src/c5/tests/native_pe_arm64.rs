@@ -530,6 +530,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_macro_named_rest.c", 0),
     ("stdatomic_c11.c", 0),
     ("compound_literal_tagged_address.c", 0),
+    ("function_typed_parameter.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),

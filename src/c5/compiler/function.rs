@@ -145,6 +145,7 @@ impl Compiler {
             // function-pointer shape `int(*)(args)` shows up in
             // callback-registering prototypes); we record the
             // type but don't bind any symbol.
+            self.pending.param_decl_context = true;
             let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;

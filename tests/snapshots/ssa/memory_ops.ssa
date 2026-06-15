@@ -12,19 +12,19 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v6   LoadLocal { off=-1, kind=I64 }                   -> x0
     v7   Imm(65)                                          -> x15
     v8   Imm(9)                                           -> [spill 0]
-    v9   CallExt { binding_idx=31, args=[v2, v7, v8], fp_arg_mask=0x0 } -> x0
+    v9   CallExt { binding_idx=34, args=[v2, v7, v8], fp_arg_mask=0x0 } -> x0
     v10  LoadLocal { off=-1, kind=I64 }                   -> x0
     v11  BinopI { op=add, lhs=v2, rhs_imm=9 }             -> x0
     v12  Imm(0)                                           -> [spill 1]
     v13  Store { addr=v2, disp=9, value=v12, kind=I8 }    -> -
     v14  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v15  CallExt { binding_idx=31, args=[v4, v7, v8], fp_arg_mask=0x0 } -> x0
+    v15  CallExt { binding_idx=34, args=[v4, v7, v8], fp_arg_mask=0x0 } -> x0
     v16  LoadLocal { off=-2, kind=I64 }                   -> x0
     v17  BinopI { op=add, lhs=v4, rhs_imm=9 }             -> x0
     v18  Store { addr=v4, disp=9, value=v12, kind=I8 }    -> -
     v19  LoadLocal { off=-1, kind=I64 }                   -> x0
     v20  LoadLocal { off=-2, kind=I64 }                   -> x0
-    v21  CallExt { binding_idx=32, args=[v2, v4, v1], fp_arg_mask=0x0 } -> x0
+    v21  CallExt { binding_idx=35, args=[v2, v4, v1], fp_arg_mask=0x0 } -> x0
     v22  BinopI { op=ne, lhs=v21, rhs_imm=0 }             -> x0
     terminator Bz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)
   block 1  start_pc=0
@@ -39,7 +39,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v29  LoadLocal { off=-1, kind=I64 }                   -> x0
     v30  LoadLocal { off=-2, kind=I64 }                   -> x0
     v31  Imm(10)                                          -> x2
-    v32  CallExt { binding_idx=32, args=[v2, v4, v31], fp_arg_mask=0x0 } -> x0
+    v32  CallExt { binding_idx=35, args=[v2, v4, v31], fp_arg_mask=0x0 } -> x0
     v33  BinopI { op=eq, lhs=v32, rhs_imm=0 }             -> x0
     terminator Bz { cond=v33, target=b4, fall=b3 }   (exit_acc=v33)
   block 3  start_pc=0

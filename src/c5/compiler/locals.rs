@@ -1007,6 +1007,19 @@ impl Compiler {
         self.pending_local_runtime_elements.clear();
         self.pending.init_inner_dims = alloc::vec::Vec::new();
 
+        // A compound literal yields its value through `ast_acc` (the
+        // `Expr::CompoundLiteral` built below) and its element AST
+        // through `pending_local_runtime_elements`; it must not net
+        // change the parser-side vstack. The runtime field fill uses
+        // transient `ast_psh`/`ast_assign` pairs whose dual-emit
+        // bookkeeping can leave residual entries. When the literal is
+        // parsed as a sub-expression (e.g. the right operand of a
+        // binary operator), those residual entries would otherwise sit
+        // on top of the caller's pushed left operand, so the wrapping
+        // operator would pop the wrong vstack slot. Restore the depth
+        // before returning.
+        let vstack_depth = self.ast_vstack.len();
+
         let value_ty;
         let final_array_size;
         let slot;
@@ -1144,6 +1157,7 @@ impl Compiler {
             super::super::ast::LocalInit::None
         };
 
+        self.ast_vstack.truncate(vstack_depth);
         self.ast_emit_compound_literal(slot, t, final_array_size, init);
         self.ty = value_ty;
         Ok(())

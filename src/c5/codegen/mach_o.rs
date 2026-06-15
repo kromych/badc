@@ -207,6 +207,11 @@ const NO_SECT: u8 = 0;
 /// all segments in declaration order; `__text` is the first
 /// section we emit (`__TEXT`'s sole section), hence index 1.
 const SECT_INDEX_TEXT: u8 = 1;
+/// 1-based index of `__DATA,__data`. `__DATA` always declares
+/// `__got` first (section 2, even when empty) followed by `__data`
+/// (section 3); the `__thread_*` sections, when present, come after.
+/// Used as `n_sect` for an exported data symbol.
+const SECT_INDEX_DATA: u8 = 3;
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
@@ -1910,8 +1915,27 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     } else {
         Vec::new()
     };
+    // Executable dynamic exports: every defined global symbol, so a
+    // dlopen'd module binds the program's symbols. `#pragma export`
+    // populates `build.exports` for shared libraries instead, so the
+    // two sets do not overlap; skip any name already exported above.
+    let pragma_export_names: alloc::collections::BTreeSet<&str> =
+        build.exports.iter().map(|e| e.name.as_str()).collect();
+    let dyn_exports_emit: Vec<&crate::c5::codegen::DynamicExport> = build
+        .dynamic_exports
+        .iter()
+        .filter(|d| !pragma_export_names.contains(d.name.as_str()))
+        .collect();
+    let dyn_export_disk_names: Vec<String> = dyn_exports_emit
+        .iter()
+        .map(|d| format!("_{}", d.name))
+        .collect();
+
     let n_locals = symbol_names.len();
     for s in export_disk_names.iter() {
+        symbol_names.push(s.as_str());
+    }
+    for s in dyn_export_disk_names.iter() {
         symbol_names.push(s.as_str());
     }
     let n_exports = symbol_names.len() - n_locals;
@@ -1962,6 +1986,25 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         let n_value = code_vmaddr_base + native_off as u64;
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
+    }
+
+    // [Defined dynamic exports] (N_EXT | N_SECT) -- the program's
+    // global symbols, so a dlopen'd module binds against them. A text
+    // symbol's value is the code base plus its byte offset within
+    // `build.text`; a data symbol's value is the `__data` section
+    // vmaddr plus its byte offset within `build.data`.
+    let dyn_export_str_base = n_locals + export_disk_names.len();
+    for (i, d) in dyn_exports_emit.iter().enumerate() {
+        let n_strx = str_indices[dyn_export_str_base + i];
+        let (n_value, n_sect) = match d.section {
+            crate::c5::codegen::DynamicExportSection::Text => {
+                (code_vmaddr_base + d.offset, SECT_INDEX_TEXT)
+            }
+            crate::c5::codegen::DynamicExportSection::Data => {
+                (data_section_vmaddr + d.offset, SECT_INDEX_DATA)
+            }
+        };
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect));
     }
     // [Undefined imports] (N_EXT | N_UNDF). Indices in
     // `str_indices` are shifted past the locals + exports.
@@ -2573,6 +2616,7 @@ mod tests {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
+            dynamic_exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
             shared_lib_name: None,
             dllmain_pc: None,
@@ -2715,6 +2759,71 @@ mod tests {
             p += cmdsize;
         }
         panic!("LC_DYLD_INFO_ONLY not found in load commands");
+    }
+
+    #[test]
+    fn dynamic_exports_emitted_as_external_defined() {
+        // A text and a data global carried as dynamic exports must
+        // appear in the symbol table as N_EXT | N_SECT entries with
+        // the right section index, so a dlopen'd module can bind them.
+        let mut build = tiny_build();
+        build.dynamic_exports = vec![
+            super::super::DynamicExport {
+                name: "myfunc".into(),
+                section: super::super::DynamicExportSection::Text,
+                offset: 0,
+            },
+            super::super::DynamicExport {
+                name: "myglobal".into(),
+                section: super::super::DynamicExportSection::Data,
+                offset: 8,
+            },
+        ];
+        let bytes = write(&tiny_program(), &build).unwrap();
+
+        let sizeofcmds = read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let lc_end = 32 + sizeofcmds;
+        let mut found: Vec<(String, u8, u8)> = Vec::new();
+        while p < lc_end {
+            let cmd = read_u32(&bytes, p);
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if cmd == LC_SYMTAB {
+                let symoff = read_u32(&bytes, p + 8) as usize;
+                let nsyms = read_u32(&bytes, p + 12) as usize;
+                let stroff = read_u32(&bytes, p + 16) as usize;
+                for k in 0..nsyms {
+                    let e = symoff + k * NLIST_64_SIZE;
+                    let n_strx = read_u32(&bytes, e) as usize;
+                    let n_type = bytes[e + 4];
+                    let n_sect = bytes[e + 5];
+                    let start = stroff + n_strx;
+                    let len = bytes[start..].iter().position(|&b| b == 0).unwrap();
+                    let name = String::from_utf8_lossy(&bytes[start..start + len]).into_owned();
+                    if name == "_myfunc" || name == "_myglobal" {
+                        found.push((name, n_type, n_sect));
+                    }
+                }
+                break;
+            }
+            p += cmdsize;
+        }
+
+        let func = found
+            .iter()
+            .find(|(n, _, _)| n == "_myfunc")
+            .expect("_myfunc export");
+        assert_eq!(func.1 & N_EXT, N_EXT, "text export must be external");
+        assert_eq!(func.1 & N_SECT, N_SECT, "text export must be N_SECT");
+        assert_eq!(func.2, SECT_INDEX_TEXT, "text export n_sect");
+
+        let data = found
+            .iter()
+            .find(|(n, _, _)| n == "_myglobal")
+            .expect("_myglobal export");
+        assert_eq!(data.1 & N_EXT, N_EXT, "data export must be external");
+        assert_eq!(data.1 & N_SECT, N_SECT, "data export must be N_SECT");
+        assert_eq!(data.2, SECT_INDEX_DATA, "data export n_sect");
     }
 
     #[test]

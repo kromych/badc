@@ -1731,6 +1731,7 @@ mod tests {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
+            dynamic_exports: Vec::new(),
             output_kind: OutputKind::Relocatable,
             shared_lib_name: None,
             dllmain_pc: None,

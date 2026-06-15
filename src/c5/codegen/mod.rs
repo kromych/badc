@@ -1178,6 +1178,29 @@ pub(crate) struct CopyRelocReq {
 /// libc symbols the code wants to call; the writer arranges them into
 /// segments and patches the codegen's GOT / data / function-pointer
 /// placeholders with the actual vmaddrs.
+/// A defined global symbol exported from an executable image so a
+/// dynamically loaded module can bind against it. `offset` is the
+/// byte offset within the symbol's section; the writer adds the
+/// section's runtime base to form the symbol value.
+#[derive(Debug, Clone)]
+pub(crate) struct DynamicExport {
+    pub name: String,
+    pub section: DynamicExportSection,
+    pub offset: u64,
+}
+
+/// The image section a [`DynamicExport`] lives in. Selects the
+/// Mach-O section index and runtime base the writer applies.
+/// Uninitialized (`.bss`) globals are not exported: badc lays its
+/// program globals into the file-backed data section, so a `.bss`
+/// section symbol (a coalesced tentative definition) has no mapped
+/// data-segment address to publish.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DynamicExportSection {
+    Text,
+    Data,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
@@ -1336,6 +1359,15 @@ pub(crate) struct Build {
     /// per-format writer turns each entry into a real export
     /// record.
     pub exports: Vec<crate::c5::program::ExportedFunction>,
+    /// Defined global symbols carried as dynamic exports of an
+    /// executable image. macOS links an executable so its
+    /// default-visibility globals are exported, which lets a
+    /// dynamically loaded module (`dlopen`) bind against the
+    /// executable's symbols (a Python C extension `.so` resolving
+    /// `PyBool_Type` and the C-API). Populated only for executable
+    /// Mach-O output; empty for shared libraries (which use
+    /// `exports`) and on other targets, whose writers ignore it.
+    pub dynamic_exports: Vec<DynamicExport>,
     /// Whether this build should produce an executable or a
     /// shared library (dylib / .so / DLL). Set from
     /// [`NativeOptions::output_kind`]. The writer dispatches

@@ -1769,6 +1769,7 @@ pub(super) fn lower(
         extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
         exports: Vec::new(),
+        dynamic_exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
         shared_lib_name: None,
         dllmain_pc: None,

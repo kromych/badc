@@ -37,8 +37,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    Build, CopyRelocReq, DataFixup, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
-    ResolvedImports, Target, write_native_image,
+    Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, FuncFixup, GotFixup,
+    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target, write_native_image,
 };
 use crate::c5::error::C5Error;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
@@ -205,8 +205,42 @@ fn synth_program_and_build(
         });
     }
 
+    // macOS links an executable so its default-visibility global
+    // symbols are exported, which lets a dynamically loaded module
+    // resolve them (a Python C extension binding `PyBool_Type` and the
+    // rest of the C-API against the interpreter executable). Carry
+    // every defined global as a dynamic export; the Mach-O writer emits
+    // them as external-defined symbols. Only executable Mach-O output
+    // needs this -- shared libraries use `exports`, and the ELF / PE
+    // writers ignore the field.
+    let dynamic_exports: Vec<DynamicExport> =
+        if target == Target::MacOSAarch64 && output_kind == OutputKind::Executable {
+            merged
+                .defined
+                .iter()
+                .filter_map(|(name, sym)| {
+                    if name.is_empty() {
+                        return None;
+                    }
+                    let section = match sym.section {
+                        NativeSymSection::Text => DynamicExportSection::Text,
+                        NativeSymSection::Data => DynamicExportSection::Data,
+                        _ => return None,
+                    };
+                    Some(DynamicExport {
+                        name: name.clone(),
+                        section,
+                        offset: sym.value,
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
     let build = Build {
         copy_relocs,
+        dynamic_exports,
         text: merged.text.clone(),
         data: merged.data.clone(),
         entry_offset,

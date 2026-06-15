@@ -574,13 +574,7 @@ fn main() {
 
     // `--jit` / `--interp` run one translation unit in-process. There
     // is no link step: the first `.c` is the unit and must define
-    // `main` and resolve every symbol it references on its own. Any
-    // further command-line inputs are the hosted program's argv, not
-    // additional units -- so `badc --jit c4.c hello.c` runs c4 with
-    // argv `["c4.c", "hello.c"]`, the self-hosting form c4 expects.
-    // Object / archive inputs cannot be linked here and are rejected.
-    // The unit compiles straight to a `Program`, with no DWARF, which
-    // neither the JIT loader nor the SSA interpreter consumes.
+    // `main` and resolve every symbol it references on its own.
     if mode == Mode::Jit || mode == Mode::Interp {
         if !objects.is_empty() || !archives.is_empty() {
             eprint_diagnostic(format!(

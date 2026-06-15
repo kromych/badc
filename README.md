@@ -101,8 +101,8 @@ and `C5Error` type.
 The venerable 4-function `c4.c` compiler ships as a test fixture and self-hosts:
 
 ```sh
-badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
-./c4 hello.c                       # which then runs hello.c
+badc tests/fixtures/c/c4.c -o c4  # compile c4 to a native binary
+./c4 hello.c                      # which then runs hello.c
 ```
 
 And you can really crank the fun up with something like
@@ -244,7 +244,7 @@ which case the shebang line picks the mode (`#!/usr/bin/env badc
 
 ## Native compilation
 
-Five targets, cross-compile from any host to any of them:
+Five targets are supported, and you cross-compile from any host to any of them:
 
 | `--target=`     | format        |
 |-----------------|---------------|
@@ -253,22 +253,6 @@ Five targets, cross-compile from any host to any of them:
 | `linux-x64`     | ELF           |
 | `windows-x64`   | PE32+         |
 | `windows-arm64` | PE32+         |
-
-```sh
-# Running on the macOS host:
-
-badc tests/fixtures/c/c4.c -o c4-native
-./c4-native hello.c
-
-badc --target=linux-aarch64 tests/fixtures/c/c4.c -o c4-arm
-docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
-
-badc --target=windows-x64 tests/fixtures/c/c4.c -o c4.exe
-wine c4.exe hello.c
-```
-
-The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
-or under WINE on Linux (x86_64, ARM64).
 
 ### Multiple translation units
 

@@ -489,7 +489,7 @@ pub(crate) fn is_pointer_ty(ty: i64) -> bool {
 
 /// Element size in bytes of a pointee for the given pointer type
 /// (without struct-table awareness).
-///   * `char*` -> 1 byte (the original c4 case)
+///   * `char*` -> 1 byte
 ///   * one-level `int*` -> 4 bytes (`int` is 32-bit)
 ///   * one-level `long*` -> 8 bytes
 ///   * deeper pointers (`int**`, `long**`, etc.) -> 8 bytes

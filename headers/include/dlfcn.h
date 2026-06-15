@@ -1,12 +1,4 @@
 // dlfcn.h -- runtime dynamic linking.
-//
-// On Windows the portable c4 names alias the kernel32 surface
-// directly: `dlopen` -> `LoadLibraryA`, `dlsym` -> `GetProcAddress`,
-// `dlclose` -> `FreeLibrary`, `dlerror` -> `GetLastError`. The
-// signatures aren't quite the same -- LoadLibraryA only takes one
-// arg, GetLastError returns a numeric code rather than a string --
-// but the c4 calls accept the loose match because pointers and
-// integers share the same machine word.
 
 #pragma once
 

@@ -277,14 +277,6 @@ pub(crate) struct Lexer {
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
 ///
-/// The original c4-style code did a linear scan over every symbol on
-/// every identifier the lexer hit; with a few thousand globals that
-/// turned the frontend into an O(N^2) hot spot (~88% of compile time
-/// on the stress fixture). This replaces the scan with a small chained
-/// hash table that lives alongside `symbols` instead of replacing it,
-/// so the rest of the compiler keeps using `&self.symbols[idx]` the
-/// way it always has.
-///
 /// Layout:
 ///    * `buckets[hash & mask]` -- head of the chain, `u32::MAX` when empty.
 ///    * `next[i]` -- previous symbol that landed in the same bucket (or `u32::MAX` to terminate).
@@ -964,8 +956,7 @@ impl Lexer {
                 //     / dylib / export pragmas the preprocessor
                 //     batches). Parse the args and fold into
                 //     `pack_stack`.
-                //   * Any other `#` line -- preserve the historical
-                //     c4 line-comment fallback (shebangs,
+                //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
                 let line_start = self.pos;

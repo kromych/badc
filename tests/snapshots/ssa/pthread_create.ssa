@@ -1,6 +1,6 @@
-pthread_create.c:27: warning: integer assigned to pointer in return (declared=int*, returned=int)
-pthread_create.c:26: warning: unused parameter `arg`
-pthread_create.c:46: warning: pointer assigned to integer in return (declared=int, returned=int*)
+pthread_create.c:7: warning: integer assigned to pointer in return (declared=int*, returned=int)
+pthread_create.c:6: warning: unused parameter `arg`
+pthread_create.c:26: warning: pointer assigned to integer in return (declared=int, returned=int*)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=thread_main
 fn ent_pc=0 n_params=1 variadic=false locals=0

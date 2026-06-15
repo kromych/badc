@@ -369,8 +369,7 @@ pub(super) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
-/// signed counterpart to `LSRV`; we use it for the c4 `>>` operator
-/// since c4 ints are signed.
+/// signed counterpart to `LSRV`
 pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -801,8 +800,7 @@ impl Cond {
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
-/// Sets `Xd` to 1 if `cond` holds, 0 otherwise. The c4 comparison
-/// ops compile to `cmp + cset`.
+/// Sets `Xd` to 1 if `cond` holds, 0 otherwise.
 pub(super) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
     0x9A80_0400
         | ((Reg::SP.0 as u32) << 16) // Rm = XZR
@@ -1040,8 +1038,7 @@ pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
-/// 64-bit register are also cleared). c4 promotes char to int on
-/// load; this matches.
+/// 64-bit register are also cleared).
 pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
     0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1057,8 +1054,7 @@ pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
-/// of `Wt` and ignores the rest, which is what c4's `Sc` opcode
-/// expects.
+/// of `Wt` and ignores the rest.
 pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm < 4096, "strb imm: {imm} > 4095");
     0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1358,9 +1354,6 @@ pub(super) struct Fixup {
 ///   for popped operands and large-immediate scratch.
 /// * Each function's prologue is the standard AAPCS64 sequence;
 ///   epilogue moves `x19` into `x0` (the return register).
-/// * `main`'s prologue additionally pushes `x0` and `x1` (argc/argv,
-///   passed by libdyld) so the c4-style `Lea 2` / `Lea 3` lookups
-///   land on them.
 ///
 /// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
 /// a __got slot the writer fills in at link time.

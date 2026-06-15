@@ -737,9 +737,7 @@ pub struct Compiler {
 
     /// Type-mismatch warnings collected during compilation. Stored as
     /// formatted lines so the final consumer (CLI / test) can dump them
-    /// without knowing their structure. Warnings never fail the compile --
-    /// c4 was permissive by design and many idioms (NULL=0, void*~char*)
-    /// would otherwise drown the output.
+    /// without knowing their structure.
     warnings: Vec<String>,
 
     /// gcc `-H`-shape include trace produced by the preprocessor when

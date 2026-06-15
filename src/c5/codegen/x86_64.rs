@@ -91,8 +91,7 @@ impl Reg {
 
 /// REX prefix byte (`0100WRXB`).
 ///
-/// * `w`: 1 = 64-bit operand size. Required for almost every
-///   instruction we use because c4's word size is 64 bits.
+/// * `w`: 1 = 64-bit operand size.
 /// * `r`: extends `ModR/M.reg` by 1 bit (so registers R8..R15 fit in
 ///   the 3-bit reg field).
 /// * `x`: extends `SIB.index` by 1 bit.

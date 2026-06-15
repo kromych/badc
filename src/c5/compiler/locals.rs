@@ -7,7 +7,7 @@
 //!   * `parse_function_body_local_decl` -- parse one declaration
 //!     line at the top of a function body. Drives the per-
 //!     declarator allocator dispatch (static-promote vs. stack-
-//!     local) and the c4-style binding-shadow on the symbol.
+//!     local).
 //!   * `allocate_static_local` -- promote a `static T name;` to a
 //!     `Glo`-class symbol with persistent data-segment storage and
 //!     parse any initializer following file-scope rules.

@@ -139,7 +139,7 @@ pub struct Program {
     /// from the `#pragma comment(dylib, ...)` and
     /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.
     /// The native codegen uses this to:
-    /// * pick the per-target real-symbol name for each c4 op
+    /// * pick the per-target real-symbol name for each interp op
     ///   (`printf` -> `_printf` on macOS, `_printf` on Windows
     ///   msvcrt, `printf` on Linux),
     /// * conditionally include only those dylibs whose bindings the

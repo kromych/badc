@@ -126,8 +126,6 @@
 #pragma binding(msvcrt::_strupr,   "_strupr")
 #endif
 
-// Portable prototypes -- `char` is one byte, `int` is the c4 machine
-// word (8 bytes), so size_t and pointers all collapse to `int`.
 char *memset(char *dst, int byte, int n);
 int memcmp(char *a, char *b, int n);
 char *memcpy(char *dst, char *src, int n);

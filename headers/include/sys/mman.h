@@ -1,10 +1,4 @@
 // sys/mman.h -- memory protection flags.
-//
-// Just the `PROT_*` bits, which line up across POSIX (used by
-// `mprotect`) and Win32 (used as the flags arg to `VirtualProtect`
-// once you mask through to PAGE_*). c4 never had `mprotect` as a
-// first-class op, so anyone exercising memory protection reaches
-// for `dlsym` and these flags.
 
 #pragma once
 

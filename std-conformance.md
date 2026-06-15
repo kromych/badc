@@ -79,10 +79,8 @@ trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list function declarators
 reachability analysis (which also errors on a non-`void`, non-`main`
 function that can fall off its end without returning a value).
 `__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined;
-`__STDC_VERSION__` is deliberately omitted because the dialect is a
-c4-shaped subset rather than a full implementation of any one C standard
-year (predefining `199901L` would invite code to enable the unsupported
-C99 features above).
+`__STDC_VERSION__` is deliberately omitted because predefining `199901L`
+might invite code to enable the unsupported C99 features above.
 
 The C11 `_Generic` selection and the GCC named-rest variadic macro
 (`#define foo(args...)`) are likewise not implemented.

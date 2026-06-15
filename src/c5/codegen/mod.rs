@@ -2072,9 +2072,7 @@ pub(crate) struct Abi {
     /// patchers) carry one struct around rather than two.
     #[allow(dead_code)]
     pub arch: Arch,
-    /// Integer arg-passing registers, in declaration order. The
-    /// lowering walks c4-stack arg slots into these in order;
-    /// any args past the slice spill to the native stack at
+    /// Any args past the slice spill to the native stack at
     /// `[rsp + shadow_space + (i - regs.len()) * 8]`.
     ///
     /// AAPCS64 (Linux/macOS/Windows on aarch64): x0..x7.
@@ -2111,10 +2109,7 @@ pub(crate) struct Abi {
     /// middle of an int sequence doesn't burn an int reg slot.
     pub position_indexed_args: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
-    /// regs used at every variadic call site; c4 has no
-    /// floats so the count is always 0, which means a single
-    /// `xor eax, eax` before each variadic call. Win64 has no
-    /// such requirement.
+    /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
     /// Windows commits thread stack on demand behind a guard page, so a
     /// prologue allocating more than one page must touch each page in

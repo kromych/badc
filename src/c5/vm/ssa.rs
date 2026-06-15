@@ -218,11 +218,7 @@ impl Memory {
         base
     }
 
-    /// Bump-pointer `malloc`. Grows `bytes` on demand so c4-shaped
-    /// fixtures that ask for multi-MB text/data/stack/sym pools
-    /// don't run out before they finish self-compiling. The stack
-    /// region below `heap_top` stays in place, so existing pointers
-    /// keep their addresses across grows.
+    /// Bump-pointer `malloc`. Grows `bytes` on demand.
     fn heap_alloc(&mut self, n: usize) -> usize {
         let aligned = (n + 15) & !15;
         let base = self.heap_top;

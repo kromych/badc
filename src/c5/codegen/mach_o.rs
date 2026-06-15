@@ -827,7 +827,7 @@ fn segment_data(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3, // log2 -- 8 bytes is enough for any c4 access
+            align: 3, // log2 -- 8 bytes
             reloff: 0,
             nreloc: 0,
             flags: 0, // S_REGULAR

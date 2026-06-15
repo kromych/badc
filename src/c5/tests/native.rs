@@ -445,6 +445,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("static_init_braced_scalar.c", 0),
     ("static_init_paren_relocation.c", 0),
     ("do_while_zero_returns.c", 0),
+    ("self_referential_macro.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),

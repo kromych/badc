@@ -1251,14 +1251,16 @@ impl Preprocessor {
     /// during pre-expansion, so it must not re-fire during the
     /// body rescan.
     ///
-    /// Only object-like macros are blue-painted from this scan.
-    /// A function-like macro name appearing in arg text without a
-    /// trailing `(` cannot have fired during pre-expansion (fn-
-    /// like macros only expand when followed by `(` per C99
-    /// 6.10.3p10), so its presence carries no information and
-    /// blue-painting it would suppress the canonical `APPLY(OP,
-    /// ...)` rescan shape where `OP` only becomes a call after
-    /// substitution.
+    /// An object-like macro name always counts: if it survived
+    /// pre-expansion it fired. A function-like macro name counts only
+    /// when immediately followed by `(`: such a call could have fired
+    /// (fn-like macros expand only when followed by `(`, C99 6.10.3p10),
+    /// so its survival means it was blue-painted during pre-expansion --
+    /// the self-referential `#define Py_DECREF(op) Py_DECREF(...)` idiom
+    /// -- and it must stay blue-painted in the body rescan. A bare
+    /// function-like name with no `(` carries no information; blue-
+    /// painting it would suppress the canonical `APPLY(OP, ...)` shape
+    /// where `OP` only becomes a call after substitution.
     fn collect_macro_idents_into(&self, text: &str, out: &mut alloc::vec::Vec<String>) {
         let bytes = text.as_bytes();
         let mut i = 0;
@@ -1278,7 +1280,15 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &text[start..i];
-                if self.macros.contains_key(ident) && !out.iter().any(|s| s == ident) {
+                let counts = self.macros.contains_key(ident)
+                    || (self.fn_macros.contains_key(ident) && {
+                        let mut k = i;
+                        while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            k += 1;
+                        }
+                        k < bytes.len() && bytes[k] == b'('
+                    });
+                if counts && !out.iter().any(|s| s == ident) {
                     out.push(ident.to_string());
                 }
             } else if c == b'"' || c == b'\'' {
@@ -4133,6 +4143,26 @@ mod tests {
         let out = process("char *t = __BADC_TARGET__;\nchar *v = __BADC_VERSION__;\n");
         assert!(out.contains("\"macos-aarch64\""));
         assert!(out.contains("\"0.1.0\""));
+    }
+
+    #[test]
+    fn self_referential_function_macro_in_nested_arg() {
+        // C99 6.10.3.4: a self-referential function-like macro
+        // (`#define M(x) M(inner(x))`) expands once and the recurring `M`
+        // is not re-expanded, while `inner` in an argument still expands.
+        // The blue-paint carries the painted `M(` through a nested call.
+        let out = process(
+            "#define _Py_CAST(t, e) ((t)(e))\n\
+             #define _PyObject_CAST(op) _Py_CAST(void*, (op))\n\
+             #define GET(m) GET(_PyObject_CAST(m))\n\
+             #define DECREF(o) DECREF(_PyObject_CAST(o))\n\
+             void f(void *self) { DECREF(GET(self)); }\n",
+        );
+        assert!(
+            out.contains("DECREF(((void*)((GET(((void*)((self))))))))"),
+            "self-referential macros expanded wrong: {out}"
+        );
+        assert!(!out.contains("_PyObject_CAST"), "leftover macro: {out}");
     }
 
     #[test]

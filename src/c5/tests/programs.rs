@@ -340,6 +340,14 @@ fn do_while_zero_returns() {
 }
 
 #[test]
+fn self_referential_macro() {
+    // A self-referential function-like macro expands once and the
+    // recurring name becomes the function, while an argument macro still
+    // expands (C99 6.10.3.4) -- the Py_TYPE / Py_SIZE idiom.
+    assert_eq!(run_fixture("self_referential_macro.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

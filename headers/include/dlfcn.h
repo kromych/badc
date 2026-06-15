@@ -45,6 +45,7 @@
 #pragma binding(libc::dlsym,   "_dlsym")
 #pragma binding(libc::dlclose, "_dlclose")
 #pragma binding(libc::dlerror, "_dlerror")
+#pragma binding(libc::dladdr,  "_dladdr")
 #endif
 
 #ifdef __linux__
@@ -53,6 +54,7 @@
 #pragma binding(libdl::dlsym,   "dlsym")
 #pragma binding(libdl::dlclose, "dlclose")
 #pragma binding(libdl::dlerror, "dlerror")
+#pragma binding(libdl::dladdr,  "dladdr")
 #endif
 
 #ifdef _WIN32
@@ -67,3 +69,14 @@ char *dlopen(char *path, int flags);
 char *dlsym(char *handle, char *name);
 int dlclose(char *handle);
 char *dlerror();
+
+#ifndef __BADC_WINDOWS__
+// Symbol / module lookup for an address (POSIX `dladdr`).
+typedef struct {
+    const char *dli_fname;
+    void *dli_fbase;
+    const char *dli_sname;
+    void *dli_saddr;
+} Dl_info;
+int dladdr(const void *addr, Dl_info *info);
+#endif

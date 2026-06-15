@@ -22,8 +22,9 @@
 // selects its threading backend on `_POSIX_THREADS`. Windows is not a
 // POSIX host and leaves them undefined.
 #ifndef __BADC_WINDOWS__
-#define _POSIX_THREADS      200809L
-#define _POSIX_SEMAPHORES   200809L
+#define _POSIX_THREADS              200809L
+#define _POSIX_SEMAPHORES           200809L
+#define _POSIX_THREAD_ATTR_STACKSIZE 200809L
 #endif
 
 #define STDIN_FILENO  0
@@ -81,6 +82,7 @@
 #pragma binding(libc::symlink,   "_symlink")
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
+#pragma binding(libc::getentropy, "_getentropy")
 #pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
 #pragma binding(libc::nanosleep, "_nanosleep")
@@ -161,6 +163,7 @@ extern char **environ;
 #pragma binding(libc::symlink,   "symlink")
 #pragma binding(libc::pathconf,  "pathconf")
 #pragma binding(libc::sysconf,   "sysconf")
+#pragma binding(libc::getentropy, "getentropy")
 #pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
 #pragma binding(libc::nanosleep, "nanosleep")
@@ -214,6 +217,9 @@ long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
 int access(char *path, int mode);
+// Fill a buffer with random bytes (BSD / glibc 2.25+). `size_t` is in
+// <stddef.h>, pulled in transitively.
+int getentropy(void *buf, unsigned long buflen);
 // POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
 // off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
 // 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).

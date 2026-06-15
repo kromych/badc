@@ -14,6 +14,11 @@
 typedef int wint_t;
 #define WEOF ((wint_t)-1)
 
+// Conversion state for the restartable multibyte functions (C99
+// 7.24.1). The contents are opaque; the host libc reads only the bytes
+// it wrote, so an oversized zeroed buffer is safe across libcs.
+typedef struct { unsigned char __opaque[128]; } mbstate_t;
+
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::wcslen, "wcslen")
@@ -27,6 +32,7 @@ typedef int wint_t;
 #pragma binding(msvcrt::wcstol, "wcstol")
 #pragma binding(msvcrt::wcstoul, "wcstoul")
 #pragma binding(msvcrt::wcstod, "wcstod")
+#pragma binding(msvcrt::wcstok, "wcstok")
 #endif
 
 // Wide-string handling (C99 7.24.4). `size_t` comes from <stddef.h>.
@@ -43,3 +49,8 @@ wchar_t *wcscat(wchar_t *dest, const wchar_t *src);
 long wcstol(const wchar_t *nptr, wchar_t **endptr, int base);
 unsigned long wcstoul(const wchar_t *nptr, wchar_t **endptr, int base);
 double wcstod(const wchar_t *nptr, wchar_t **endptr);
+wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
+
+// Restartable multibyte / wide conversion (C99 7.24.6.3).
+unsigned long mbrtowc(wchar_t *pwc, const char *s, unsigned long n, mbstate_t *ps);
+unsigned long wcrtomb(char *s, wchar_t wc, mbstate_t *ps);

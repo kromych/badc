@@ -52,6 +52,9 @@
 #pragma binding(libc::system,  "_system")
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
+#pragma binding(libc::putenv,  "_putenv")
+#pragma binding(libc::mbstowcs, "_mbstowcs")
+#pragma binding(libc::wcstombs, "_wcstombs")
 #pragma binding(libc::qsort,   "_qsort")
 #pragma binding(libc::bsearch, "_bsearch")
 #pragma binding(libc::rand,    "_rand")
@@ -87,6 +90,9 @@
 #pragma binding(libc::system,  "system")
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
+#pragma binding(libc::putenv,  "putenv")
+#pragma binding(libc::mbstowcs, "mbstowcs")
+#pragma binding(libc::wcstombs, "wcstombs")
 #pragma binding(libc::qsort,   "qsort")
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
@@ -240,6 +246,11 @@ _Noreturn int exit(int status);
 int system(char *cmd);
 char *getenv(char *name);
 int setenv(char *name, char *value, int overwrite);
+int putenv(char *string);
+// Multibyte / wide-character string conversion (C99 7.20.8). `wchar_t`
+// and `size_t` come from <stddef.h>.
+unsigned long mbstowcs(wchar_t *dest, const char *src, unsigned long n);
+unsigned long wcstombs(char *dest, const wchar_t *src, unsigned long n);
 int qsort(char *base, int n, int size, int *cmp);
 char *bsearch(char *key, char *base, int n, int size, int *cmp);
 int rand();

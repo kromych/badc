@@ -57,7 +57,11 @@ TEST_SLICE = [
 
 
 def run(cmd, **kw):
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    # `errors="replace"` keeps the test suite's occasional non-UTF-8
+    # output (raised tracebacks, byte strings) from aborting the harness.
+    return subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", **kw
+    )
 
 
 def badc_path() -> str:
@@ -184,7 +188,10 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
 
 
 def smoke_run(py: Path, log) -> None:
-    env = dict(os.environ, PYTHONHOME=str(SRC))
+    # The standard library lives under the source tree's `Lib/`; the
+    # interpreter needs it on the path to import `encodings` (required
+    # for stdio). The reference build needs the same.
+    env = dict(os.environ, PYTHONHOME=str(SRC), PYTHONPATH=str(SRC / "Lib"))
     r = run([str(py), "-c", "print(2 + 2)"], env=env, timeout=120)
     if r.returncode != 0 or r.stdout.strip() != "4":
         sys.stderr.write(r.stdout + r.stderr)

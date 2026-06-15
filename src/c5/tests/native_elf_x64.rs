@@ -573,6 +573,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
     ("mmap_anonymous.c", 0),
+    ("struct_tm_tm_zone_offset.c", 0),
     // See native_elf.rs for the prelude / TLS layout interaction
     // that disables thread_local_initializer on Linux ELF.
     // ("thread_local_initializer.c", 0),

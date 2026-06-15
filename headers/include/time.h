@@ -73,11 +73,11 @@ struct timeval {
 };
 #endif
 
-// `struct tm` exposed as an opaque mirror of the libc shape so
-// programs that walk the broken-down components (`tm_year`,
-// `tm_mon`, ...) typecheck. Layout matches the common Unix /
-// glibc / musl encoding; callers that hand pointers to libc
-// don't need it to be byte-exact, just large enough.
+// `struct tm`. The host's localtime / gmtime fill this and the program
+// reads the fields back, so the BSD extension members must sit at the
+// host's offsets. On macOS and glibc `tm_gmtoff` is a `long` (8 bytes,
+// 8-aligned), which places `tm_zone` at offset 48; an `int tm_gmtoff`
+// would put `tm_zone` at offset 40 and read a garbage pointer.
 struct tm {
     int tm_sec;
     int tm_min;
@@ -88,7 +88,7 @@ struct tm {
     int tm_wday;
     int tm_yday;
     int tm_isdst;
-    int tm_gmtoff;
+    long tm_gmtoff;
     char *tm_zone;
 };
 

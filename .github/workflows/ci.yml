@@ -948,3 +948,37 @@ jobs:
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Build the Tcl 8.6.14 interpreter with badc and run the upstream
+  # test suite (tests/all.tcl). Isolated from the `test` job because the
+  # 169-unit build plus the full suite exceeds that job's 10-minute
+  # budget. POSIX only; Windows is excluded (the build runs configure +
+  # make). The macOS-specific codegen and header fixes the suite
+  # exercises are also pinned by cargo fixtures, so a failure here flags
+  # a suite-level regression rather than the only coverage.
+  tcl:
+    name: tcl suite (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    # TODO: 30 is temporary headroom to measure the real CI duration;
+    # tighten once the wall-clock per runner is known.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: tcl-${{ matrix.os }}
+      - name: build badc
+        run: cargo build --release --locked --features full --bin badc
+      - name: tcl smoke (build tclsh + run tests/all.tcl)
+        run: python demos/tcl/smoke.py

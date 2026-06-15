@@ -289,6 +289,13 @@ fn pragma_operator() {
 }
 
 #[test]
+fn variadic_macro_named_rest() {
+    // The GCC named-rest variadic macro `#define foo(rest...)`: the named
+    // tail behaves like `__VA_ARGS__`, including `#rest` and `, ##rest`.
+    assert_eq!(run_fixture("variadic_macro_named_rest.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

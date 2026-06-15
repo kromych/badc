@@ -500,13 +500,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 }
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
-/// POSIX-only semantics. setenv (3-arg vs _putenv_s 2-arg), file
-/// I/O against POSIX-flavoured paths, and dlopen-against-libc-soname
-/// are intentionally skipped here -- the Windows analogues exist
-/// but the c4 fixtures expect POSIX shapes the WINE path doesn't
-/// reproduce. mprotect works through an in-text helper that
-/// translates POSIX prot bits to PAGE_* and the BOOL return to
-/// 0/-1, so `mprotect_allows_read.c` is in.
+/// POSIX-only semantics.
 const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("control_flow.c", 1),
@@ -658,6 +652,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),
+    ("variadic_macro_named_rest.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),

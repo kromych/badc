@@ -162,6 +162,11 @@ struct FnMacro {
     /// `true` for `#define foo(a, ...)` -- any extra arguments are
     /// joined with `, ` and substituted for `__VA_ARGS__` in the body.
     is_variadic: bool,
+    /// The variadic-tail name for the GCC named-rest form
+    /// `#define foo(a, rest...)`: `Some("rest")`. The body reaches the
+    /// trailing arguments through this name in addition to
+    /// `__VA_ARGS__`. `None` for the standard `...` form.
+    va_name: Option<String>,
 }
 
 /// Output of a successful preprocessor run: the substituted source
@@ -402,6 +407,7 @@ impl Preprocessor {
                     params: alloc::vec!["x".to_string()],
                     body: String::new(),
                     is_variadic: false,
+                    va_name: None,
                 },
             );
         }
@@ -415,6 +421,7 @@ impl Preprocessor {
                 params: alloc::vec!["x".to_string(), "c".to_string()],
                 body: "(x)".to_string(),
                 is_variadic: false,
+                va_name: None,
             },
         );
         macros.insert(
@@ -423,9 +430,8 @@ impl Preprocessor {
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
         // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
-        // is omitted -- the dialect is a c4-shaped subset, not an
-        // implementation of any specific C standard year. `__DATE__`
-        // and `__TIME__` are seeded at badc build time; C99 says they
+        // is omitted, not an implementation of any specific C standard year.
+        // `__DATE__` and `__TIME__` are seeded at badc build time; C99 says they
         // reflect "the date and time of translation", and the closest
         // analogue for an embedded library is the build time of badc
         // itself. `__STDC_HOSTED__` reflects that every supported
@@ -711,14 +717,24 @@ impl Preprocessor {
                     }
                     Directive::DefineFn(name, mut params, body) => {
                         if active {
-                            // C99 variadic macro: a trailing `...` in the
-                            // parameter list opts in to `__VA_ARGS__`.
-                            // GCC's named-rest extension (`#define
-                            // foo(args...)`) is not supported -- the
-                            // parameter must be the literal `...`.
-                            let is_variadic = params.last().is_some_and(|p| *p == "...");
-                            if is_variadic {
-                                params.pop();
+                            // A trailing `...` (C99 6.10.3) or the GCC
+                            // named-rest form `name...` makes the macro
+                            // variadic; the named form additionally binds
+                            // the trailing arguments to `name`.
+                            let mut is_variadic = false;
+                            let mut va_name = None;
+                            if let Some(last) = params.last().copied() {
+                                if last == "..." {
+                                    is_variadic = true;
+                                    params.pop();
+                                } else if let Some(prefix) = last.strip_suffix("...") {
+                                    let prefix = prefix.trim();
+                                    if is_ident(prefix) {
+                                        is_variadic = true;
+                                        va_name = Some(prefix.to_string());
+                                        params.pop();
+                                    }
+                                }
                             }
                             self.fn_macros.insert(
                                 name.to_string(),
@@ -726,6 +742,7 @@ impl Preprocessor {
                                     params: params.iter().map(|s| s.to_string()).collect(),
                                     body: body.to_string(),
                                     is_variadic,
+                                    va_name,
                                 },
                             );
                             self.macros.remove(name);
@@ -3917,6 +3934,13 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
+/// True when a body identifier names the variadic tail: the standard
+/// `__VA_ARGS__`, or the GCC named-rest parameter (`#define foo(rest...)`
+/// reaches the tail through `rest`).
+fn is_va_token(def: &FnMacro, word: &str) -> bool {
+    word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
+}
+
 fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {
     // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
     // the macro isn't variadic or no trailing args were supplied. The
@@ -3943,12 +3967,38 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
     while i < bytes.len() {
         let c = bytes[i];
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
-            // Token-paste: drop the `##` and any whitespace bracketing
-            // it. The C standard says `a ## b` joins the *tokens*
-            // before / after the operator; for c5's textual
-            // preprocessor that means trim trailing whitespace from
-            // what we've already emitted, then skip the operator and
-            // any leading whitespace before the next token.
+            // GNU `, ## <variadic>` comma idiom: when a comma precedes
+            // `##` and the right operand is the variadic tail, this is
+            // not an ordinary token paste. An empty tail deletes the
+            // comma (`f(fmt, ##__VA_ARGS__)` with no extra args ->
+            // `f(fmt)`); a non-empty tail keeps the comma and the tail.
+            let mut k = i + 2;
+            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                k += 1;
+            }
+            let word_start = k;
+            while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_') {
+                k += 1;
+            }
+            let right_is_va = def.is_variadic && is_va_token(def, &def.body[word_start..k]);
+            if right_is_va && out.trim_end().ends_with(',') {
+                if raw_va_args_str.is_empty() {
+                    while out.ends_with(' ') || out.ends_with('\t') {
+                        out.pop();
+                    }
+                    out.pop();
+                    i = k;
+                } else {
+                    i = word_start;
+                }
+                continue;
+            }
+            // Ordinary token-paste: drop the `##` and any whitespace
+            // bracketing it. `a ## b` joins the *tokens* before / after
+            // the operator; for c5's textual preprocessor that means
+            // trim trailing whitespace from what we've already emitted,
+            // then skip the operator and any leading whitespace before
+            // the next token.
             while out.ends_with(' ') || out.ends_with('\t') {
                 out.pop();
             }
@@ -3976,7 +4026,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
                     j += 1;
                 }
                 let name = &def.body[start..j];
-                let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
+                let arg_text: Option<&str> = if def.is_variadic && is_va_token(def, name) {
                     Some(raw_va_args_str.as_str())
                 } else if let Some(idx) = def.params.iter().position(|p| p == name) {
                     raw_args.get(idx).map(|s| s.as_str())
@@ -4023,7 +4073,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             } else {
                 &va_args_str
             };
-            if word == "__VA_ARGS__" && def.is_variadic {
+            if def.is_variadic && is_va_token(def, word) {
                 out.push_str(va);
             } else {
                 match def.params.iter().position(|p| p == word) {
@@ -4163,6 +4213,34 @@ mod tests {
         // The operator name inside a string literal is ordinary text.
         let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
         assert!(out.contains("\"_Pragma(\\\"once\\\")\""), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_binds_tail() {
+        // `#define foo(rest...)` reaches the trailing args through `rest`.
+        let out = process("#define F(args...) g(args)\nF(1, 2, 3);\n");
+        assert!(out.contains("g(1, 2, 3);"), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_fixed_plus_tail() {
+        let out = process("#define F(a, rest...) g(a, rest)\nF(1, 2, 3);\n");
+        assert!(out.contains("g(1, 2, 3);"), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_paste_elides_comma() {
+        // `, ##rest` drops the comma when the tail is empty, matching the
+        // `, ##__VA_ARGS__` GNU behaviour.
+        let out = process("#define F(a, rest...) g(a, ##rest)\nF(1);\nF(1, 2);\n");
+        assert!(out.contains("g(1);"), "empty tail not elided: {out:?}");
+        assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_stringize() {
+        let out = process("#define S(rest...) #rest\nconst char *s = S(a, b);\n");
+        assert!(out.contains("\"a, b\""), "got: {out:?}");
     }
 
     #[test]

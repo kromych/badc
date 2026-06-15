@@ -299,6 +299,64 @@ fn pointer_to_extern_data_resolves_cross_tu() {
 }
 
 #[test]
+fn extern_data_address_in_struct_initializer_resolves_cross_tu() {
+    // `&g` for a cross-unit `extern` target inside a brace-list / struct
+    // initializer must emit a named relocation against the undefined
+    // symbol, the same as the scalar `T *p = &g;` path. Before the fix
+    // it resolved against this unit's `.data` section + the extern's
+    // permissive local fallback offset, pointing into the wrong unit.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let prog_a = Compiler::with_options(
+        "struct Obj { long refcnt; struct Obj *type; };\n\
+         extern struct Obj TheType;\n\
+         struct Obj inst = { 1, &TheType };\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile a");
+    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let obj_a = parse_native_elf(&bytes_a).expect("parse a");
+
+    assert!(
+        obj_a
+            .symbols
+            .iter()
+            .any(|s| s.name == "TheType" && matches!(s.section, NativeSymSection::Undef)),
+        "`TheType` must be an undefined data symbol, not a local fallback"
+    );
+    assert!(
+        obj_a
+            .data_relocs
+            .iter()
+            .any(|r| obj_a.symbols[r.sym_idx].name == "TheType"),
+        "the struct-initializer `&TheType` must emit a named reloc against `TheType`"
+    );
+
+    let prog_b = Compiler::with_options(
+        "struct Obj { long refcnt; struct Obj *type; };\n\
+         struct Obj TheType = { 9, 0 };\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile b");
+    let bytes_b = emit_native_with_options(&prog_b, Target::LinuxX64, opts).expect("emit b");
+    let obj_b = parse_native_elf(&bytes_b).expect("parse b");
+    link_native_objects(&[obj_a, obj_b]).expect("link resolves the struct-init extern reference");
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

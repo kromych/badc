@@ -86,6 +86,32 @@ impl Compiler {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => {
+                // A target defined in another unit (`extern T x;` with no
+                // definition here) resolves by name at link time, not
+                // against this unit's `.data`. The scalar `T *p = &x;`
+                // path routes through `extern_data_relocs`; a `&x` inside
+                // a brace-list / struct initializer reaches here and must
+                // do the same, otherwise the reloc lands on the extern's
+                // permissive local fallback slot instead of the defining
+                // unit's object.
+                if let Some(sym_idx) = src_sym {
+                    let t = &self.symbols[sym_idx];
+                    let is_extern_data = t.is_extern_decl
+                        && t.linkage == crate::c5::symbol::Linkage::External
+                        && !t.has_initializer;
+                    if is_extern_data {
+                        let name = t.name.clone();
+                        let addend = value - self.symbols[sym_idx].val;
+                        self.symbols[sym_idx].was_referenced = true;
+                        self.extern_data_relocs
+                            .push(crate::c5::program::ExternDataReloc {
+                                data_offset: here as u64,
+                                symbol_name: name,
+                                addend,
+                            });
+                        return;
+                    }
+                }
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: here as u64,
                     target_offset: value as u64,

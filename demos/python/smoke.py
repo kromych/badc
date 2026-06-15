@@ -158,7 +158,8 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
             continue
         src, flags = compiles[obj]
         dst = out / (obj.replace("/", "_"))
-        cmd = [badc, "-c", "-UHAVE_GCC_UINT128_T", *flags, str(SRC / src), "-o", str(dst)]
+        dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
+        cmd = [badc, "-c", "-UHAVE_GCC_UINT128_T", *dbg, *flags, str(SRC / src), "-o", str(dst)]
         r = run(cmd, cwd=SRC, timeout=240)
         if r.returncode != 0:
             msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]
@@ -174,7 +175,8 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
 
     py = out / "python"
     log(f"link -> {py}")
-    r = run([badc, *objs, "-o", str(py)], timeout=900)
+    dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
+    r = run([badc, *dbg, *objs, "-o", str(py)], timeout=900)
     if r.returncode != 0:
         sys.stderr.write((r.stderr or r.stdout)[-3000:])
         sys.exit("smoke: link failed")

@@ -1587,6 +1587,7 @@ pub(super) fn emit_function(
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -1601,6 +1602,15 @@ pub(super) fn emit_function(
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
     let user_extern_data_refs_snapshot = user_extern_data_refs.len();
+    // A cross-unit `extern _Thread_local` access (`extern_tls_names` maps
+    // the access value-id to the referenced symbol) resolves by symbol
+    // at link time through the Mach-O TLV descriptor table, which only
+    // the macOS arm64 path emits. The x86_64 TLS sequences bake a fixed
+    // offset, so reject the cross-unit case rather than emit a wrong one.
+    if !extern_tls_names.is_empty() {
+        bail_msg("cross-unit `extern _Thread_local` access is not yet supported on x86_64");
+        return false;
+    }
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let abi = target.abi();
     let frame = Frame::for_function(func, alloc, abi);

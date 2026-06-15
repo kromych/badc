@@ -162,6 +162,79 @@ fn nested_block_externs_emit_distinct_undef_symbols() {
 }
 
 #[test]
+fn cross_tu_thread_local_resolves_by_symbol() {
+    // A `_Thread_local` defined in one unit and accessed in another via
+    // `extern _Thread_local` resolves by symbol against the merged TLS
+    // block. The accessor must not reserve its own TLS storage (a phantom
+    // per-unit copy), and its Mach-O TLV descriptor must be keyed by the
+    // variable name so the linker fills the per-thread offset from the
+    // defining unit. macOS arm64 uses the TLV descriptor model.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let unit = |src: &str| {
+        let prog = Compiler::with_options(
+            src.to_string(),
+            Target::MacOSAarch64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let bytes = emit_native_with_options(&prog, Target::MacOSAarch64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+
+    // Definer: `other` sits at TLS offset 4 (after `counter` at 0).
+    let def = unit(
+        "#include <stdlib.h>\n\
+         _Thread_local int counter = 7;\n\
+         _Thread_local int other = 3;\n\
+         int read_other(void) { return other; }\n",
+    );
+    let off_other = def
+        .tls_symbols
+        .iter()
+        .find(|(n, _, _)| n == "other")
+        .map(|(_, off, _)| *off)
+        .expect("definer exports `other` as a TLS symbol");
+    assert_eq!(
+        off_other, 8,
+        "`other` follows the 8-byte-aligned `counter` slot"
+    );
+
+    // Accessor: references `other` but defines no TLS storage.
+    let acc = unit(
+        "#include <stdlib.h>\n\
+         extern _Thread_local int other;\n\
+         int get_other(void) { return other; }\n",
+    );
+    assert!(
+        acc.tls_data.is_empty() && acc.tls_bss_size == 0,
+        "an extern _Thread_local reference must not reserve storage"
+    );
+    assert!(
+        acc.macho_tlv_descriptor_syms
+            .iter()
+            .any(|(_, name)| name == "other"),
+        "the cross-unit access must be a symbol-keyed TLV descriptor"
+    );
+
+    // The link resolves the accessor's descriptor to `other`'s merged
+    // offset (4): the definer is the only TLS contributor, base 0.
+    let merged = link_native_objects(&[def, acc]).expect("link resolves cross-unit TLS");
+    assert!(
+        merged.macho_tlv_descriptors.contains(&8),
+        "the accessor's `other` descriptor must resolve to offset 8, got {:?}",
+        merged.macho_tlv_descriptors,
+    );
+}
+
+#[test]
 fn pointer_to_extern_data_resolves_cross_tu() {
     // `int *p = &g;` / `int *p = arr;` where the target is defined in
     // another unit must emit a `.rela.data` reloc against the named

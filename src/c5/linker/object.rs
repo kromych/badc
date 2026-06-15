@@ -380,6 +380,16 @@ pub struct NativeObject {
     /// `(adrp_offset, descriptor_index)`: a `.text` byte offset and
     /// the index into `macho_tlv_descriptors` it resolves to.
     pub macho_tlv_fixups: Vec<(usize, usize)>,
+    /// Defined `_Thread_local` symbols (`NT_BADC_TLS_SYM`), each
+    /// `(name, offset, size)`: the variable's byte offset inside this
+    /// unit's TLS block. The linker builds the merged TLS symbol table
+    /// from these to resolve cross-unit extern accesses.
+    pub tls_symbols: Vec<(String, u64, u64)>,
+    /// Symbol-keyed TLV descriptors (`NT_BADC_MACHO_TLV_DESC_SYM`), each
+    /// `(descriptor_index, name)`: the `macho_tlv_descriptors` entry
+    /// whose offset the linker fills from the referenced extern
+    /// `_Thread_local` variable's offset in the merged TLS block.
+    pub macho_tlv_descriptor_syms: Vec<(usize, String)>,
     /// Data-import copy relocations (`NT_BADC_COPY_RELOC`), each
     /// `(local_name, host_symbol)` from `#pragma binding(data ...)`.
     /// The final-image writer binds the local data symbol to the
@@ -785,6 +795,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
     let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
     let mut copy_relocs: Vec<(String, String)> = Vec::new();
+    let mut tls_symbols: Vec<(String, u64, u64)> = Vec::new();
+    let mut macho_tlv_descriptor_syms: Vec<(usize, String)> = Vec::new();
     if let Some(i) = dylibs_section_idx {
         let body = section_slice(bytes, &shdrs[i])?;
         let mut cur = 0usize;
@@ -885,6 +897,34 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
                             copy_relocs.push((local, host));
                         }
                     }
+                    8 => {
+                        let mut c = cur;
+                        while c + 16 <= desc_end {
+                            let off = u64::from_le_bytes(body[c..c + 8].try_into().unwrap());
+                            let size = u64::from_le_bytes(body[c + 8..c + 16].try_into().unwrap());
+                            c += 16;
+                            let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                                break;
+                            };
+                            let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
+                            c += p + 1;
+                            tls_symbols.push((nm, off, size));
+                        }
+                    }
+                    9 => {
+                        let mut c = cur;
+                        while c + 8 <= desc_end {
+                            let idx =
+                                u64::from_le_bytes(body[c..c + 8].try_into().unwrap()) as usize;
+                            c += 8;
+                            let Some(p) = body[c..desc_end].iter().position(|&b| b == 0) else {
+                                break;
+                            };
+                            let nm = String::from_utf8_lossy(&body[c..c + p]).into_owned();
+                            c += p + 1;
+                            macho_tlv_descriptor_syms.push((idx, nm));
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -944,6 +984,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         exports,
         tls_index_fixups,
         macho_tlv_descriptors,
+        tls_symbols,
+        macho_tlv_descriptor_syms,
         macho_tlv_fixups,
         copy_relocs,
         debug_info,

@@ -244,7 +244,12 @@ fn synth_program_and_build(
         macho_tlv_descriptors: merged
             .macho_tlv_descriptors
             .iter()
-            .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor { offset_in_block })
+            .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor {
+                offset_in_block,
+                // The merged descriptors are already resolved to final
+                // offsets; no symbol resolution remains.
+                symbol: None,
+            })
             .collect(),
         data_relocs,
         extern_data_relocs: Vec::new(),

@@ -649,6 +649,25 @@ impl<'a> Walker<'a> {
         GloAddr::Resolved(fallback_val)
     }
 
+    /// Address class for a `_Thread_local` access. A pure extern
+    /// reference (`extern _Thread_local T x;` with no definition here)
+    /// resolves by symbol against the merged TLS block at link time;
+    /// a unit-local definition uses its byte offset within this unit's
+    /// TLS block. Mirrors `live_glo_addr` for the TLS template.
+    fn live_tls_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
+        let idx = sym as usize;
+        if idx < self.symbols.len() {
+            let s = &self.symbols[idx];
+            if s.is_extern_decl && !s.defined_here {
+                return GloAddr::Extern;
+            }
+            if s.defined_here {
+                return GloAddr::Resolved(s.val);
+            }
+        }
+        GloAddr::Resolved(fallback_val)
+    }
+
     /// Byte size of the struct type encoded by `ty`. Looks up
     /// the struct id (via the same band scheme the parser uses)
     /// in the propagated `structs` slice. Returns 0 when the
@@ -3268,10 +3287,9 @@ impl<'a> Walker<'a> {
             Ok(b.local_addr(*val))
         } else if *class == Token::Glo as i64 {
             if *is_thread_local {
-                if *val == 0 {
-                    Ok(b.tls_addr_extern(*sym))
-                } else {
-                    Ok(b.tls_addr(*val))
+                match self.live_tls_addr(*sym, *val) {
+                    GloAddr::Extern => Ok(b.tls_addr_extern(*sym)),
+                    GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
             } else {
                 match self.live_glo_addr(*sym, *val) {
@@ -3372,10 +3390,10 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => b.imm_data(off),
                 });
             } else if class == Token::Glo as i64 && is_thread_local {
-                if val == 0 {
-                    return Ok(b.tls_addr_extern(_sym));
-                }
-                return Ok(b.tls_addr(val));
+                return Ok(match self.live_tls_addr(_sym, val) {
+                    GloAddr::Extern => b.tls_addr_extern(_sym),
+                    GloAddr::Resolved(off) => b.tls_addr(off),
+                });
             }
         }
         if class == Token::Loc as i64 {
@@ -3389,10 +3407,9 @@ impl<'a> Walker<'a> {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr_v, kind))
         } else if class == Token::Glo as i64 && is_thread_local {
-            let addr = if val == 0 {
-                b.tls_addr_extern(_sym)
-            } else {
-                b.tls_addr(val)
+            let addr = match self.live_tls_addr(_sym, val) {
+                GloAddr::Extern => b.tls_addr_extern(_sym),
+                GloAddr::Resolved(off) => b.tls_addr(off),
             };
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr, kind))

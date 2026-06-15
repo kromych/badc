@@ -1411,11 +1411,18 @@ pub(crate) struct Build {
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
 /// descriptor is emitted per entry; the codegen's
 /// [`MachoTlvFixup`]s reference these by index.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct MachoTlvDescriptor {
-    /// Byte offset within `Build::tls_data` where this variable
-    /// starts. Mirrors `Inst::TlsAddr`'s operand.
+    /// Byte offset within this unit's TLS block where the variable
+    /// starts. Mirrors `Inst::TlsAddr`'s operand. The linker rebases
+    /// it by the unit's base in the merged TLS block; for a `symbol`
+    /// descriptor it is overwritten with the resolved offset.
     pub offset_in_block: u64,
+    /// Set for a cross-unit `extern _Thread_local` access: the
+    /// referenced variable's name. The linker resolves it to the
+    /// variable's offset in the merged TLS block. `None` for a
+    /// unit-local definition (the `offset_in_block` path).
+    pub symbol: Option<alloc::string::String>,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.

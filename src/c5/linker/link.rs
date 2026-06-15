@@ -286,21 +286,26 @@ pub fn link_native_objects_with_options(
         }
     }
 
-    // `_Thread_local` storage. A single TLS-bearing object carries
-    // its layout through verbatim: `Inst::TlsAddr` on the local-exec
-    // model bakes `tpoff = tls_total_size - offset` straight into
-    // `.text`, and the relinked PT_TLS block keeps the same size, so
-    // the baked offset stays valid (ELF gABI variant-2 TLS). Two or
-    // more TLS objects would each have baked an offset against their
-    // own block; merging the blocks shifts those offsets, so the
-    // multi-object case needs `R_X86_64_TPOFF32` / `R_AARCH64_TLSLE_*`
-    // relocations to re-derive each offset against the merged block.
-    // That isn't wired yet, so reject more than one TLS contributor.
+    // `_Thread_local` storage. The Mach-O TLV model resolves each access
+    // by a `__thread_vars` descriptor whose per-thread offset the linker
+    // fills, so multiple units' TLS blocks concatenate freely: each unit
+    // contributes [init bytes ++ zero-fill] to one merged block, and a
+    // descriptor's offset is rebased by the unit's base (a unit-local
+    // access) or set from the merged TLS symbol table (a cross-unit
+    // `extern _Thread_local`). The ELF variant-2 / Windows TEB paths bake
+    // `tpoff = tls_total_size - offset` into `.text` with no link-time
+    // symbol resolution, so for those a second TLS contributor would
+    // need per-unit TPOFF relocations that aren't wired; reject it.
+    let uses_tlv = objs.iter().any(|o| {
+        !o.macho_tlv_descriptors.is_empty()
+            || !o.macho_tlv_fixups.is_empty()
+            || !o.macho_tlv_descriptor_syms.is_empty()
+    });
     let tls_objs: Vec<&NativeObject> = objs
         .iter()
         .filter(|o| !o.tls_data.is_empty() || o.tls_bss_size > 0)
         .collect();
-    if tls_objs.len() > 1 {
+    if !uses_tlv && tls_objs.len() > 1 {
         return Err(link_err(
             "link_native_objects: more than one input object carries \
              `_Thread_local` storage -- merging multiple TLS blocks needs \
@@ -309,15 +314,39 @@ pub fn link_native_objects_with_options(
              definitions into a single translation unit.",
         ));
     }
-    let (tls_data, tls_init_size) = match tls_objs.first() {
-        Some(o) => {
-            let init = o.tls_data.len();
-            let mut buf = o.tls_data.clone();
-            buf.resize(init + o.tls_bss_size, 0);
-            (buf, init)
+    // Each unit's base in the merged TLS block (0 for units with no TLS
+    // storage, which contribute nothing).
+    let mut tls_bases: Vec<usize> = alloc::vec![0; objs.len()];
+    let mut tls_data: Vec<u8> = Vec::new();
+    let mut any_tls_init = false;
+    for (i, obj) in objs.iter().enumerate() {
+        tls_bases[i] = tls_data.len();
+        if !obj.tls_data.is_empty() {
+            any_tls_init = true;
         }
-        None => (Vec::new(), 0),
+        tls_data.extend_from_slice(&obj.tls_data);
+        tls_data.resize(tls_data.len() + obj.tls_bss_size, 0);
+    }
+    // The init boundary. The Mach-O TLV merge concatenates several units'
+    // [init ++ zero-fill] blocks, so it has no single split point; the
+    // whole block is emitted as `__thread_data` (uninit bytes are already
+    // zero) when any unit carries an init template, else `__thread_bss`.
+    // The ELF / Windows path has at most one TLS unit (a second is
+    // rejected above), so its init boundary is that unit's init length,
+    // preserving the `.tdata` / `.tbss` split the writer expects.
+    let tls_init_size = if uses_tlv {
+        if any_tls_init { tls_data.len() } else { 0 }
+    } else {
+        tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
     };
+    // Merged TLS symbol table: each defined `_Thread_local` resolves to
+    // its unit base plus its offset within that unit's block.
+    let mut tls_symbol_offsets: BTreeMap<String, u64> = BTreeMap::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for (name, off, _size) in &obj.tls_symbols {
+            tls_symbol_offsets.insert(name.clone(), tls_bases[i] as u64 + off);
+        }
+    }
 
     // Pass 1 -- layout. Compute each unit's `.text` / `.data` /
     // `.bss` base in the merged image. 16-byte alignment for
@@ -890,12 +919,31 @@ pub fn link_native_objects_with_options(
     // Mach-O TLV descriptors + fixups. Descriptors concatenate in unit
     // order; each unit's fixups rebase `adrp_offset` by that unit's
     // `.text` base and shift `descriptor_index` past the descriptors
-    // contributed by earlier units.
+    // contributed by earlier units. Each descriptor's per-thread offset
+    // is resolved here: a unit-local descriptor adds the unit's TLS base
+    // to its block offset; a symbol-keyed descriptor (a cross-unit
+    // `extern _Thread_local` access) takes the variable's offset from the
+    // merged TLS symbol table.
     let mut macho_tlv_descriptors: Vec<u64> = Vec::new();
     let mut macho_tlv_fixups: Vec<(usize, usize)> = Vec::new();
     for (i, obj) in objs.iter().enumerate() {
         let desc_base = macho_tlv_descriptors.len();
-        macho_tlv_descriptors.extend_from_slice(&obj.macho_tlv_descriptors);
+        let sym_for: BTreeMap<usize, &str> = obj
+            .macho_tlv_descriptor_syms
+            .iter()
+            .map(|(idx, name)| (*idx, name.as_str()))
+            .collect();
+        for (di, &off) in obj.macho_tlv_descriptors.iter().enumerate() {
+            let resolved = match sym_for.get(&di) {
+                Some(name) => *tls_symbol_offsets.get(*name).ok_or_else(|| {
+                    link_err(&format!(
+                        "unresolved `extern _Thread_local` reference to `{name}`",
+                    ))
+                })?,
+                None => tls_bases[i] as u64 + off,
+            };
+            macho_tlv_descriptors.push(resolved);
+        }
         for &(adrp, idx) in &obj.macho_tlv_fixups {
             macho_tlv_fixups.push((text_bases[i] + adrp, desc_base + idx));
         }
@@ -1936,6 +1984,8 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2002,6 +2052,8 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
@@ -2043,6 +2095,8 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            tls_symbols: alloc::vec::Vec::new(),
+            macho_tlv_descriptor_syms: alloc::vec::Vec::new(),
             copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),

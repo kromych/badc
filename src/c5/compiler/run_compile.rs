@@ -1478,7 +1478,20 @@ impl Compiler {
                         // duplicate-definition check above.
                         let reuse_prior_storage = was_tentative_glo
                             || (self.symbols[id_idx].defined_here && self.lex.tk != Token::Assign);
-                        let var_offset = if reuse_prior_storage {
+                        // `extern _Thread_local T x;` (no initializer) is a
+                        // pure reference, not a definition: it must not
+                        // reserve TLS storage. The defining unit owns the
+                        // slot; the access resolves by symbol against the
+                        // merged TLS block at link time. A local slot here
+                        // would add a phantom per-unit copy (one TLS block
+                        // per object), breaking the shared-state semantics
+                        // and the multi-object link.
+                        let extern_tls_ref = thread_local && was_extern_only_decl;
+                        let var_offset = if extern_tls_ref {
+                            self.symbols[id_idx].is_extern_decl = true;
+                            self.symbols[id_idx].defined_here = false;
+                            0
+                        } else if reuse_prior_storage {
                             self.symbols[id_idx].val
                         } else if thread_local {
                             let off = self.tls_data.len() as i64;
@@ -1498,7 +1511,9 @@ impl Compiler {
                             }
                             off
                         };
-                        self.symbols[id_idx].defined_here = true;
+                        if !extern_tls_ref {
+                            self.symbols[id_idx].defined_here = true;
+                        }
 
                         // Optional initializer. For non-arrays, the
                         // restricted constant-expression path

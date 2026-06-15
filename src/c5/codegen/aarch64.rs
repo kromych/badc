@@ -1533,6 +1533,13 @@ pub(super) fn lower(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
             .collect();
+        // Same pre-resolution for `tls_addr_extern` value-ids so the
+        // Mach-O TLV descriptor is keyed by the cross-unit symbol name.
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_tls_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
         let ok = super::ssa_emit_aarch64::emit_function(
             func_ssa,
             alloc_for,
@@ -1543,6 +1550,7 @@ pub(super) fn lower(
             &mut data_fixups,
             &mut user_extern_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pending_func_fixups,
             imports,
             &variadic_targets,

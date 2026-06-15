@@ -664,6 +664,7 @@ pub(super) fn emit_function(
     data_fixups: &mut Vec<DataFixup>,
     user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -880,6 +881,7 @@ pub(super) fn emit_function(
                 tls_index_fixups,
                 macho_tlv_fixups,
                 macho_tlv_descriptors,
+                extern_tls_names,
                 &mut current_alloca_top,
                 &emit_param_plan,
             ) {
@@ -1725,6 +1727,7 @@ fn emit_inst(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     current_alloca_top: &mut u32,
     param_plan: &[super::ArgPlacement],
 ) -> bool {
@@ -2256,6 +2259,7 @@ fn emit_inst(
             tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,
+            extern_tls_names.get(&v).map(|s| s.as_str()),
         ),
         Inst::Phi { .. } => {
             // The value is materialised by the predecessor-exit
@@ -2286,8 +2290,21 @@ fn emit_tls_addr(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    // Set for a cross-unit `extern _Thread_local` access: the variable's
+    // name. The descriptor is keyed by symbol (the linker resolves the
+    // offset) rather than by the placeholder `offset`.
+    tls_extern_sym: Option<&str>,
 ) -> bool {
     use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    // A cross-unit `extern _Thread_local` access resolves by symbol
+    // through the Mach-O TLV descriptor table. The Linux variant-1 and
+    // Windows TEB paths bake a fixed offset and have no link-time symbol
+    // resolution, so reject the cross-unit case there rather than emit a
+    // wrong offset.
+    if tls_extern_sym.is_some() && !matches!(target, Target::MacOSAarch64) {
+        bail_msg("cross-unit `extern _Thread_local` access is not yet supported on this target");
+        return false;
+    }
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -2326,17 +2343,37 @@ fn emit_tls_addr(
             true
         }
         Target::MacOSAarch64 => {
-            let descriptor_index = match macho_tlv_descriptors
-                .iter()
-                .position(|d| d.offset_in_block == offset as u64)
-            {
-                Some(i) => i,
-                None => {
-                    macho_tlv_descriptors.push(super::MachoTlvDescriptor {
-                        offset_in_block: offset as u64,
-                    });
-                    macho_tlv_descriptors.len() - 1
-                }
+            // A unit-local access dedups by offset (one descriptor per
+            // variable). A cross-unit extern access dedups by symbol --
+            // its `offset_in_block` is a placeholder the linker fills, so
+            // distinct externs must not collapse onto one offset-0 slot.
+            let descriptor_index = match tls_extern_sym {
+                Some(name) => match macho_tlv_descriptors
+                    .iter()
+                    .position(|d| d.symbol.as_deref() == Some(name))
+                {
+                    Some(i) => i,
+                    None => {
+                        macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                            offset_in_block: 0,
+                            symbol: Some(name.into()),
+                        });
+                        macho_tlv_descriptors.len() - 1
+                    }
+                },
+                None => match macho_tlv_descriptors
+                    .iter()
+                    .position(|d| d.symbol.is_none() && d.offset_in_block == offset as u64)
+                {
+                    Some(i) => i,
+                    None => {
+                        macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                            offset_in_block: offset as u64,
+                            symbol: None,
+                        });
+                        macho_tlv_descriptors.len() - 1
+                    }
+                },
             };
             let adrp_off = code.len();
             macho_tlv_fixups.push(super::MachoTlvFixup {
@@ -6189,6 +6226,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6205,6 +6244,7 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
@@ -6346,6 +6386,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6362,6 +6404,7 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
@@ -6402,6 +6445,8 @@ mod tests {
         let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
         let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
             alloc::collections::BTreeMap::new();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut pc_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -6418,6 +6463,7 @@ mod tests {
             &mut data_fx,
             &mut user_data_refs,
             &extern_data_names,
+            &extern_tls_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,

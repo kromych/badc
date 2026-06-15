@@ -93,6 +93,18 @@ const NT_BADC_MACHO_TLV_FIXUP: u32 = 6;
 // string pairs. The final-image writer binds each local data symbol to
 // the host's data object with an `R_*_COPY` relocation.
 const NT_BADC_COPY_RELOC: u32 = 7;
+// Defined `_Thread_local` symbols. desc is a sequence of (u64 tls_offset,
+// u64 size, NUL name) entries -- one per thread-local variable this unit
+// defines, with the byte offset inside the unit's TLS block. The linker
+// builds the merged TLS symbol table from these to resolve cross-unit
+// extern accesses.
+const NT_BADC_TLS_SYM: u32 = 8;
+// Mach-O TLV descriptors keyed by a cross-unit symbol. desc is a sequence
+// of (u64 descriptor_index, NUL name) entries: the index into the
+// NT_BADC_MACHO_TLV_DESC list and the referenced `extern _Thread_local`
+// variable. The linker overwrites that descriptor's offset with the
+// variable's offset in the merged TLS block.
+const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
@@ -512,6 +524,11 @@ pub(super) fn write_relocatable(
     // offset within `.data`; the size comes from the symbol's type
     // (struct / union globals stay unsized).
     let mut defined_data_globals: Vec<(&str, i64, u64)> = Vec::new();
+    // Defined `_Thread_local` symbols: name, offset within this unit's
+    // TLS block, byte size. Exported through NT_BADC_TLS_SYM (not the
+    // `.data` symbol table -- their value is a TLS-block offset, not a
+    // `.data` offset, and merging them as `.data` symbols would collide).
+    let mut defined_tls_globals: Vec<(&str, i64, u64)> = Vec::new();
     {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
@@ -521,7 +538,19 @@ pub(super) fn write_relocatable(
                 && sym.linkage == Linkage::External
                 && !sym.name.is_empty()
             {
-                defined_data_globals.push((sym.name.as_str(), sym.val, data_global_byte_size(sym)));
+                if sym.is_thread_local {
+                    defined_tls_globals.push((
+                        sym.name.as_str(),
+                        sym.val,
+                        data_global_byte_size(sym),
+                    ));
+                } else {
+                    defined_data_globals.push((
+                        sym.name.as_str(),
+                        sym.val,
+                        data_global_byte_size(sym),
+                    ));
+                }
             }
         }
     }
@@ -1164,6 +1193,7 @@ pub(super) fn write_relocatable(
         &build.tls_index_fixups,
         &build.macho_tlv_descriptors,
         &build.macho_tlv_fixups,
+        &defined_tls_globals,
     );
     let note_off = round_up(out.len() as u64, 4);
     out.resize(note_off as usize, 0);
@@ -1353,6 +1383,7 @@ fn build_badc_note(
     tls_index_fixups: &[super::TlsIndexFixup],
     macho_tlv_descriptors: &[super::MachoTlvDescriptor],
     macho_tlv_fixups: &[super::MachoTlvFixup],
+    tls_symbols: &[(&str, i64, u64)],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let name = b"badc\0";
@@ -1452,6 +1483,48 @@ fn build_badc_note(
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
         out.extend_from_slice(&NT_BADC_MACHO_TLV_FIXUP.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 8: defined `_Thread_local` symbols -- (tls_offset, size,
+    // NUL name) per variable this unit defines.
+    if !tls_symbols.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (sym_name, off, size) in tls_symbols {
+            desc.extend_from_slice(&(*off as u64).to_le_bytes());
+            desc.extend_from_slice(&size.to_le_bytes());
+            desc.extend_from_slice(sym_name.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_TLS_SYM.to_le_bytes());
+        out.extend_from_slice(name);
+        pad_to_4(&mut out);
+        out.extend_from_slice(&desc);
+        pad_to_4(&mut out);
+    }
+
+    // Record 9: Mach-O TLV descriptors keyed by a cross-unit symbol --
+    // (descriptor_index, NUL name) per extern `_Thread_local` access.
+    let tlv_desc_syms: Vec<(usize, &str)> = macho_tlv_descriptors
+        .iter()
+        .enumerate()
+        .filter_map(|(i, d)| d.symbol.as_deref().map(|s| (i, s)))
+        .collect();
+    if !tlv_desc_syms.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for (idx, sym_name) in &tlv_desc_syms {
+            desc.extend_from_slice(&(*idx as u64).to_le_bytes());
+            desc.extend_from_slice(sym_name.as_bytes());
+            desc.push(0);
+        }
+        out.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        out.extend_from_slice(&NT_BADC_MACHO_TLV_DESC_SYM.to_le_bytes());
         out.extend_from_slice(name);
         pad_to_4(&mut out);
         out.extend_from_slice(&desc);

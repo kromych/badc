@@ -1714,7 +1714,13 @@ impl Preprocessor {
                         }
                     }
                     if !name.is_empty() {
-                        let v = self.macros.contains_key(name) || self.fn_macros.contains_key(name);
+                        // `__has_include` / `__has_include_next` are
+                        // always-available operators, so the guard
+                        // `defined(__has_include)` is true.
+                        let v = name == "__has_include"
+                            || name == "__has_include_next"
+                            || self.macros.contains_key(name)
+                            || self.fn_macros.contains_key(name);
                         out.push_str(if v { "1" } else { "0" });
                         i = j;
                         continue;
@@ -3847,6 +3853,16 @@ impl<'a> IfExprParser<'a> {
                 "preprocessor: unterminated string in `#if` expression".to_string(),
             ));
         }
+        // C11 6.4.4.4: a character constant may carry an `L`, `u`, or
+        // `U` encoding prefix (`L'/'`). In a `#if` controlling
+        // expression its value is the character code, so the prefix is
+        // consumed and the literal read as below.
+        if let Some(&p) = self.src.as_bytes().get(self.pos)
+            && matches!(p, b'L' | b'u' | b'U')
+            && self.src.as_bytes().get(self.pos + 1) == Some(&b'\'')
+        {
+            self.pos += 1;
+        }
         if self.eat_byte(b'\'') {
             // Character literal -- a single byte, optionally escaped.
             // Multi-char (`'AB'`) is implementation-defined; we use
@@ -4012,6 +4028,47 @@ impl<'a> IfExprParser<'a> {
                 }
             }
             return Ok(IfValue::Int(self.pp.macros.contains_key(&id) as i64));
+        }
+        // C23 6.10.1 / universal compiler practice: `__has_include(<h>)`
+        // and `__has_include("h")` evaluate to 1 when the header is
+        // found on the include search path, 0 otherwise.
+        // `__has_include_next` follows the same grammar; c5 resolves it
+        // against the same paths.
+        if name == "__has_include" || name == "__has_include_next" {
+            self.skip_ws();
+            if !self.eat_byte(b'(') {
+                return Err(C5Error::Compile(
+                    "preprocessor: `(` expected after `__has_include`".to_string(),
+                ));
+            }
+            self.skip_ws();
+            let close = if self.eat_byte(b'<') {
+                b'>'
+            } else if self.eat_byte(b'"') {
+                b'"'
+            } else {
+                return Err(C5Error::Compile(
+                    "preprocessor: `<header>` or \"header\" expected in `__has_include`"
+                        .to_string(),
+                ));
+            };
+            let h_start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b == close {
+                    break;
+                }
+                self.pos += 1;
+            }
+            let header = self.src[h_start..self.pos].to_string();
+            self.eat_byte(close);
+            self.skip_ws();
+            if !self.eat_byte(b')') {
+                return Err(C5Error::Compile(
+                    "preprocessor: missing `)` in `__has_include`".to_string(),
+                ));
+            }
+            let found = self.pp.find_include(&header, None).is_some();
+            return Ok(IfValue::Int(found as i64));
         }
         // Identifier -- look up in the macro table. Function-like
         // macros are skipped (they need an argument list which the
@@ -4749,6 +4806,27 @@ mod tests {
         let src = "#if defined(__BADC_VERSION__)\nint a;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int a;"));
+    }
+
+    #[test]
+    fn wide_char_constant_in_if() {
+        // C11 6.4.4.4: a character constant in a `#if` controlling
+        // expression may carry an `L` / `u` / `U` encoding prefix.
+        let src = "#define SEP L'/'\n#if SEP == '/'\nint yes;\n#else\nint no;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int yes;"), "{out:?}");
+        assert!(!out.contains("int no;"), "{out:?}");
+    }
+
+    #[test]
+    fn has_include_operator_in_if() {
+        // C23 6.10.1: `__has_include(<header>)` is 1 when the header
+        // resolves, 0 otherwise; `defined(__has_include)` is the guard.
+        let src = "#if defined(__has_include) && __has_include(<stdint.h>)\nint found;\n#endif\n\
+                   #if __has_include(<no_such_header_zz.h>)\nint bogus;\n#endif\n";
+        let out = process(src);
+        assert!(out.contains("int found;"), "{out:?}");
+        assert!(!out.contains("int bogus;"), "{out:?}");
     }
 
     #[test]

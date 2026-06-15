@@ -1687,6 +1687,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("float", Token::Float),
     ("double", Token::Double),
     ("_Thread_local", Token::ThreadLocal),
+    // GCC / clang spelling of the C11 thread-local storage class,
+    // equivalent to `_Thread_local` for storage-duration purposes.
+    ("__thread", Token::ThreadLocal),
     ("extern", Token::Extern),
     ("static", Token::Static),
     ("void", Token::Void),

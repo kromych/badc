@@ -607,6 +607,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // bytes and zero-fills the rest; the test reads/writes the
     // resulting per-thread region.
     ("thread_local_basic.c", 0),
+    ("thread_local_gnu.c", 0),
     // thread_local_initializer.c works in isolation but fails when
     // the test prelude pulls in <stdio.h>'s static lazy-resolver
     // state. The TLS template offset assignment interacts with

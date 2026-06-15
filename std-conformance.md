@@ -24,10 +24,12 @@ LP64 on macOS / Linux, LLP64 on Windows -- both match the host platform
 ABI. `wchar_t` is 4-byte `int` on macOS / Linux and 2-byte UTF-16 on
 Windows, matching each host.
 
-**Bare `char` is unsigned** on every target (1-byte zero-extending load).
-gcc and clang differ on this per host architecture; portable code that
-walks bytes by sign already spells `signed char` explicitly. `signed char`
-is a distinct type and integer-promotes to signed `int`.
+Plain `char` signedness is implementation-defined (C99 6.2.5p15).
+c5 follows the host C ABI: signed on x86_64 (all OSes), Apple
+AArch64, and Windows AArch64; unsigned on AArch64 ELF. The chosen
+signedness agrees with the `__CHAR_UNSIGNED__` predefine and
+drives the extension when an 8-bit `char` l-value widens to a
+larger integer.
 
 **`long double` is 8-byte IEEE binary64** (the same representation as
 `double`) regardless of host. C99 6.2.5p10 permits any FP type at least as
@@ -82,9 +84,6 @@ function that can fall off its end without returning a value).
 `__STDC_VERSION__` is deliberately omitted because predefining `199901L`
 might invite code to enable the unsupported C99 features above.
 
-The C11 `_Generic` selection and the GCC named-rest variadic macro
-(`#define foo(args...)`) are likewise not implemented.
-
 ## Extensions implemented
 
 ### C11 / C23
@@ -138,6 +137,7 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
   and the `pause` / `yield` spin-loop hint. Operand constraints and
   arbitrary instruction text are rejected -- c5 emits machine code directly
   and has no assembler for an arbitrary template.
+- GCC named-rest variadic macro (`#define foo(args...)`)
 
 ### MSVC-compatible
 

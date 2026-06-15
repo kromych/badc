@@ -44,19 +44,6 @@ Severity (for compiling existing C): 1 = blocks almost everything,
 2 = blocks much real code, 3 = blocks specific idioms, 4 = workaround
 exists, 5 = rare in modern source.
 
-### `struct`-by-value through a `#pragma binding` import, severity 4
-
-A struct passed or returned by value follows the host ABI for c5-to-c5
-calls and for regular `extern` declarations (System V AMD64 rax/rdx + the
-integer arg registers, AAPCS64 x0/x1, the AAPCS64 x8 indirect class for
-aggregates larger than 16 bytes), including the inline libc wrappers in the
-bundled headers (`div()` returns its `div_t` in registers). The remaining
-gap is a struct passed or returned by value across a `#pragma binding`
-import (a `Token::Sys` symbol): the call is rejected at compile time (the
-diagnostic names the argument or call) because the address-as-value
-internal convention reaches those symbols before the host-ABI packing. Pass
-`&s` or a pointer-returning variant.
-
 ### `volatile` and `const` accepted but not enforced, severity 4
 
 `volatile` is parsed at every position and discarded. c5 does not guarantee
@@ -162,7 +149,11 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
 ### c5-specific
 
 - `#pragma dylib` / `#pragma binding` / `#pragma export` -- per-target
-  loader symbol resolution and shared-library export.
+  loader symbol resolution and shared-library export. A struct passed by
+  value to a bound import rides the host ABI like any other call; a bound
+  import that *returns* a struct by value is rejected at compile time (the
+  host-ABI struct-return packing does not yet reach these symbols) -- pass
+  an out-buffer or use a pointer-returning variant.
 - `#pragma entrypoint(<name>)` -- override the default `main` entry point
   (e.g. `WinMain`).
 - `#pragma subsystem(console | windows | native | driver)` -- the Windows PE optional-header
@@ -182,8 +173,7 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
 
 ## Roadmap
 
-1. `struct`-by-value across a `#pragma binding` import (host-ABI packing
-   reaching `Token::Sys` symbols).
-2. Brace-wrapped string initializer for `char` arrays.
-3. Abstract function-pointer declarator in `sizeof`.
-4. `volatile`-honored loads / stores.
+1. Host-ABI struct-return packing for a `#pragma binding` import that
+   returns a struct by value (the by-value argument direction already
+   rides the host ABI).
+2. `volatile`-honored loads / stores.

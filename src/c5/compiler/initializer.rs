@@ -1171,6 +1171,72 @@ impl Compiler {
         Ok(false)
     }
 
+    /// Write a flexible array member's static initializer (a GCC/clang
+    /// extension over C99 6.7.2.1p18) at `field_base`, growing
+    /// `self.data` to hold the trailing elements. The member's element
+    /// type is `elem_ty`. The cursor is positioned at the member's
+    /// initializer (a brace list, or a string literal for a char member)
+    /// and is left at the following `,` / `}`.
+    fn fill_flexible_array_member(
+        &mut self,
+        field_base: usize,
+        elem_ty: i64,
+    ) -> Result<(), C5Error> {
+        let elem_size = self.size_of_type(elem_ty);
+        let grow_to = |data: &mut alloc::vec::Vec<u8>, end: usize| {
+            if data.len() < end {
+                data.resize(end, 0);
+            }
+        };
+        if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
+            let start_addr = self.lex.ival as usize;
+            self.next()?;
+            while self.lex.tk == '"' {
+                self.next()?;
+            }
+            self.data.push(0); // ensure NUL terminator in the literal's bytes
+            let mut idx = 0usize;
+            while start_addr + idx < self.data.len() {
+                let b = self.data[start_addr + idx];
+                grow_to(&mut self.data, field_base + idx + 1);
+                self.data[field_base + idx] = b;
+                idx += 1;
+                if b == 0 {
+                    break;
+                }
+            }
+            return Ok(());
+        }
+        if self.lex.tk != '{' {
+            return Err(self
+                .compile_err("flexible array member initializer must be a brace list or string"));
+        }
+        self.next()?;
+        let elem_is_struct = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        let mut idx = 0usize;
+        while self.lex.tk != '}' {
+            let here = field_base + idx * elem_size;
+            grow_to(&mut self.data, here + elem_size);
+            if elem_is_struct {
+                let sid = struct_id_of(elem_ty);
+                if self.lex.tk == '{' {
+                    self.collect_struct_initializer(sid, here as i64)?;
+                } else {
+                    self.fill_struct_fields(sid, here as i64, false)?;
+                }
+            } else {
+                let (value, reloc) = self.parse_constant_init_value()?;
+                self.write_init_value(here, elem_size, value, reloc, elem_ty);
+            }
+            idx += 1;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(())
+    }
+
     /// Fill the fields of a struct from the current brace-list position.
     /// With `braced` true the caller has already consumed the opening
     /// `{` and consumes the matching `}` after this returns; the loop
@@ -1251,6 +1317,24 @@ impl Compiler {
             // (C99 6.5.2.5) names the member's own type; drop the cast so
             // the brace paths below treat it as a nested `{ ... }`.
             self.skip_opt_compound_literal_cast()?;
+            // Flexible array member (`T v[]`, array_size == -1) with a
+            // static initializer. C99 6.7.2.1p18 forbids initializing a
+            // FAM, but GCC and clang accept it for a top-level object,
+            // laying the object out as if the member were a fixed array
+            // sized to the initializer. Such an object cannot be nested
+            // (6.7.2.1: a FAM-bearing struct is not a member or array
+            // element), so its storage is the last region in `self.data`;
+            // the trailing element bytes extend the tail beyond the fixed
+            // struct size reserved by the caller, so grow `self.data` as
+            // each element is written.
+            if field.array_size < 0 {
+                self.fill_flexible_array_member(field_base, field.ty)?;
+                pos = field_idx + 1;
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+                continue;
+            }
             // Three field shapes get nested `{ ... }` initializers:
             //   * array field (`T xs[N]`)
             //   * value-typed nested struct

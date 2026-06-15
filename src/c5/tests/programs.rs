@@ -266,6 +266,15 @@ fn flexible_array_member() {
 }
 
 #[test]
+fn flex_array_member_static_init() {
+    // A file-scope object initializing a flexible array member with
+    // trailing elements (C99 6.7.2.1p18 GCC/clang extension) must place
+    // the element bytes past the fixed struct size without corrupting
+    // the next file-scope object.
+    assert_eq!(run_fixture("flex_array_member_static_init.c"), 0);
+}
+
+#[test]
 fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.

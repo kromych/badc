@@ -532,6 +532,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// `Self::last_emit_is_zero` to suppress the NULL-idiom
     /// warning on `pointer = 0`.
     pub last_imm_was_zero: bool,
+
+    /// Number of grouping parentheses stripped from around a compound
+    /// literal by `skip_opt_compound_literal_cast` (`((T){...})`,
+    /// C99 6.5.1/6.5.2.5). The aggregate-initializer dispatch consumes
+    /// this many closing `)` after the literal's brace list. 0 when the
+    /// literal carried no surrounding parentheses.
+    pub compound_lit_close_parens: i64,
 }
 
 impl Default for Pending {
@@ -567,6 +574,7 @@ impl Default for Pending {
             bf_compound_assign: None,
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
+            compound_lit_close_parens: 0,
         }
     }
 }

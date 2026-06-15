@@ -1768,6 +1768,13 @@ fn macro_multiline_comment_body_resolve() {
 }
 
 #[test]
+fn compound_literal_paren_init_resolve() {
+    // A parenthesized compound literal `((T){...})` must be accepted as
+    // an aggregate-initializer element (C99 6.5.1/6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_paren_init.c"), 0);
+}
+
+#[test]
 fn error_directive_aborts_compilation() {
     // `#error` produces a compile-time diagnostic with the message
     // text. Compilation must fail and the message must surface in the

@@ -1139,12 +1139,27 @@ impl Compiler {
     /// cast was skipped. The lexer is restored when the `(` opens an
     /// ordinary parenthesised expression or a scalar cast instead.
     pub(super) fn skip_opt_compound_literal_cast(&mut self) -> Result<bool, C5Error> {
+        self.pending.compound_lit_close_parens = 0;
         if self.lex.tk != '(' {
             return Ok(false);
         }
         let snap = self.lex.snapshot();
-        self.next()?; // consume `(`
-        if !self.lex_is_type_start() {
+        // C99 6.5.1/6.5.2.5: a compound literal is a primary expression and
+        // may be wrapped in grouping parentheses (`((T){...})`), a common
+        // macro-body shape. Consume any leading grouping parens (a `(` not
+        // immediately starting a type) before the cast; the matching close
+        // parens are consumed by the aggregate-initializer dispatch after
+        // the literal's brace list, via `compound_lit_close_parens`.
+        let mut grouping: i64 = 0;
+        loop {
+            self.next()?; // consume `(`
+            if self.lex_is_type_start() {
+                break;
+            }
+            if self.lex.tk == '(' {
+                grouping += 1;
+                continue;
+            }
             self.lex.restore(snap);
             return Ok(false);
         }
@@ -1165,6 +1180,7 @@ impl Compiler {
             self.next()?;
         }
         if self.lex.tk == '{' {
+            self.pending.compound_lit_close_parens = grouping;
             return Ok(true);
         }
         self.lex.restore(snap);
@@ -1315,8 +1331,12 @@ impl Compiler {
             let field_base = (var_offset as usize) + field.offset;
             // A member value written as a compound literal `(Type){ ... }`
             // (C99 6.5.2.5) names the member's own type; drop the cast so
-            // the brace paths below treat it as a nested `{ ... }`.
+            // the brace paths below treat it as a nested `{ ... }`. Capture
+            // the grouping-paren count locally before the dispatch below
+            // recurses into another `fill_struct_fields` (which would take
+            // the shared pending value for its own member).
             self.skip_opt_compound_literal_cast()?;
+            let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
             // Flexible array member (`T v[]`, array_size == -1) with a
             // static initializer. C99 6.7.2.1p18 forbids initializing a
             // FAM, but GCC and clang accept it for a top-level object,
@@ -1575,6 +1595,14 @@ impl Compiler {
                         ));
                     }
                     self.next()?; // consume `}`
+                }
+            }
+            // Consume the grouping `)` that wrapped a parenthesized
+            // compound literal element (`((T){...})`), counted while the
+            // cast was stripped above.
+            for _ in 0..close_parens {
+                if self.lex.tk == ')' {
+                    self.next()?;
                 }
             }
             // A positional initializer fills the first member of an

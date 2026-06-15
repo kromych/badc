@@ -31,6 +31,7 @@
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
 #pragma binding(libc::pthread_setname_np,       "_pthread_setname_np")
+#pragma binding(libc::pthread_kill,             "_pthread_kill")
 #pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
@@ -81,6 +82,7 @@
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
 #pragma binding(libc::pthread_setname_np,       "pthread_setname_np")
+#pragma binding(libc::pthread_kill,             "pthread_kill")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -194,6 +196,8 @@ void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
+// Deliver a signal to a specific thread (POSIX).
+int pthread_kill(pthread_t thread, int sig);
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).
 int pthread_setname_np(const char *name);

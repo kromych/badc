@@ -129,14 +129,37 @@ struct flock {
 };
 #endif
 
+// Flags for the *at file-operation family (POSIX). The values reach the
+// host libc, so each target uses its own numbering.
+#ifdef __APPLE__
+#define AT_FDCWD            (-2)
+#define AT_EACCESS          0x0010
+#define AT_SYMLINK_NOFOLLOW 0x0020
+#define AT_SYMLINK_FOLLOW   0x0040
+#define AT_REMOVEDIR        0x0080
+#elif defined(__linux__)
+#define AT_FDCWD            (-100)
+#define AT_SYMLINK_NOFOLLOW 0x0100
+#define AT_REMOVEDIR        0x0200
+#define AT_EACCESS          0x0200
+#define AT_SYMLINK_FOLLOW   0x0400
+#define AT_EMPTY_PATH       0x1000
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::fcntl, "_fcntl")
+#pragma binding(libc::openat, "_openat")
 int fcntl(int fd, int cmd, ...);
+// Open relative to `dirfd` (or AT_FDCWD). The optional `mode` applies
+// when O_CREAT is set (POSIX).
+int openat(int dirfd, const char *path, int flags, ...);
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::fcntl, "fcntl")
+#pragma binding(libc::openat, "openat")
 int fcntl(int fd, int cmd, int arg);
+int openat(int dirfd, const char *path, int flags, ...);
 #endif

@@ -11,7 +11,12 @@
 #include <signal.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <sys/times.h>
 #include <sys/wait.h>
+#include <sys/param.h>
+#include <fcntl.h>
+#include <sched.h>
+#include <spawn.h>
 #endif
 
 int main(void) {
@@ -49,6 +54,21 @@ int main(void) {
     it.it_value.tv_sec = 0;
     it.it_interval.tv_sec = 0;
     if (sizeof it != 2 * sizeof(struct timeval)) return 11;
+
+    // The newly added constants and aggregate types resolve and parse.
+    int at = AT_FDCWD + AT_SYMLINK_NOFOLLOW + AT_REMOVEDIR;
+    int policy = SCHED_OTHER + SCHED_FIFO + SCHED_RR;
+    int spawn = POSIX_SPAWN_SETSIGDEF + POSIX_SPAWN_SETSIGMASK;
+    if (at == 0 && policy == 0 && spawn == 0) return 12;
+    if (MAXPATHLEN < 256 || MAXLOGNAME < 1) return 13;
+
+    struct sched_param sp;
+    posix_spawnattr_t attr;
+    posix_spawn_file_actions_t fa;
+    struct tms tmsbuf;
+    sp.sched_priority = 0;
+    if (&attr == 0 || &fa == 0 || &tmsbuf == 0 || sp.sched_priority != 0)
+        return 14;
 #endif
 
     return 0;

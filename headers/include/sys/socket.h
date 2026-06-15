@@ -115,6 +115,21 @@ struct sockaddr_storage {
 #pragma binding(libc::recv,       "_recv")
 #pragma binding(libc::send,       "_send")
 #pragma binding(libc::shutdown,   "_shutdown")
+#pragma binding(libc::sendfile,   "_sendfile")
+
+// Optional header / trailer iovecs for Darwin's sendfile(). `struct
+// iovec` is from <sys/uio.h>; only a pointer to it is needed here.
+struct iovec;
+struct sf_hdtr {
+    struct iovec *headers;
+    int hdr_cnt;
+    struct iovec *trailers;
+    int trl_cnt;
+};
+// Darwin sendfile: send `*len` bytes of `fd` from `offset` to socket `s`,
+// updating `*len` with the count actually sent.
+int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
+             int flags);
 
 #define SOL_SOCKET    0xffff
 #define SO_REUSEADDR  0x0004

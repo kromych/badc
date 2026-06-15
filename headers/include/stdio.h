@@ -55,6 +55,11 @@
 #ifndef L_tmpnam
 #define L_tmpnam     20
 #endif
+// Buffer size for ctermid() (POSIX). macOS uses 1024; glibc uses 9, but
+// the larger value is safe everywhere since ctermid writes a short path.
+#ifndef L_ctermid
+#define L_ctermid    1024
+#endif
 #ifndef PATH_MAX
 #define PATH_MAX     4096
 #endif

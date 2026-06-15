@@ -42,18 +42,15 @@ struct rlimit {
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::getrlimit, "_getrlimit")
 #pragma binding(libc::setrlimit, "_setrlimit")
-#pragma binding(libc::getrusage, "_getrusage")
 #endif
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::getrlimit, "getrlimit")
 #pragma binding(libc::setrlimit, "setrlimit")
-#pragma binding(libc::getrusage, "getrusage")
 #endif
 
 int getrlimit(int resource, struct rlimit *rlp);
 int setrlimit(int resource, const struct rlimit *rlp);
-// `who` is RUSAGE_SELF or RUSAGE_CHILDREN; the result struct's layout is
-// host-specific, so callers that read individual fields must match it.
-int getrusage(int who, void *r_usage);
+// getrusage itself is declared in <unistd.h>; the RUSAGE_* selectors
+// above are the resource.h half of its interface.
 #endif

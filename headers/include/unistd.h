@@ -51,8 +51,12 @@
 #pragma binding(libc::rmdir,     "_rmdir")
 #pragma binding(libc::getcwd,    "_getcwd")
 #pragma binding(libc::chdir,     "_chdir")
+#pragma binding(libc::chroot,    "_chroot")
 #pragma binding(libc::getuid,    "_getuid")
 #pragma binding(libc::geteuid,   "_geteuid")
+#pragma binding(libc::getgid,    "_getgid")
+#pragma binding(libc::getegid,   "_getegid")
+#pragma binding(libc::getppid,   "_getppid")
 #pragma binding(libc::getpid,    "_getpid")
 #pragma binding(libc::sleep,     "_sleep")
 #pragma binding(libc::alarm,     "_alarm")
@@ -76,12 +80,61 @@
 #pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
 #pragma binding(libc::utimes,    "_utimes")
+#pragma binding(libc::futimes,   "_futimes")
+#pragma binding(libc::lutimes,   "_lutimes")
 #pragma binding(libc::umask,     "_umask")
 #pragma binding(libc::chmod,     "_chmod")
 #pragma binding(libc::chown,     "_chown")
 #pragma binding(libc::truncate,  "_truncate")
 #pragma binding(libc::link,      "_link")
 #pragma binding(libc::symlink,   "_symlink")
+#pragma binding(libc::fstatat,   "_fstatat")
+#pragma binding(libc::mkdirat,   "_mkdirat")
+#pragma binding(libc::mknodat,   "_mknodat")
+#pragma binding(libc::mkfifoat,  "_mkfifoat")
+#pragma binding(libc::fchmodat,  "_fchmodat")
+#pragma binding(libc::fchownat,  "_fchownat")
+#pragma binding(libc::unlinkat,  "_unlinkat")
+#pragma binding(libc::linkat,    "_linkat")
+#pragma binding(libc::symlinkat, "_symlinkat")
+#pragma binding(libc::readlinkat,"_readlinkat")
+#pragma binding(libc::faccessat, "_faccessat")
+#pragma binding(libc::renameat,  "_renameat")
+#pragma binding(libc::utimensat, "_utimensat")
+#pragma binding(libc::futimens,  "_futimens")
+#pragma binding(libc::ttyname,   "_ttyname")
+#pragma binding(libc::ttyname_r, "_ttyname_r")
+#pragma binding(libc::ctermid,   "_ctermid")
+#pragma binding(libc::ctermid_r, "_ctermid_r")
+#pragma binding(libc::getlogin,  "_getlogin")
+#pragma binding(libc::getlogin_r,"_getlogin_r")
+#pragma binding(libc::getgroups, "_getgroups")
+#pragma binding(libc::setgroups, "_setgroups")
+#pragma binding(libc::initgroups,"_initgroups")
+#pragma binding(libc::getgrouplist,"_getgrouplist")
+#pragma binding(libc::seteuid,   "_seteuid")
+#pragma binding(libc::setegid,   "_setegid")
+#pragma binding(libc::setreuid,  "_setreuid")
+#pragma binding(libc::setregid,  "_setregid")
+#pragma binding(libc::lchown,    "_lchown")
+#pragma binding(libc::lchmod,    "_lchmod")
+#pragma binding(libc::chflags,   "_chflags")
+#pragma binding(libc::lchflags,  "_lchflags")
+#pragma binding(libc::getpgid,   "_getpgid")
+#pragma binding(libc::getpgrp,   "_getpgrp")
+#pragma binding(libc::setpgid,   "_setpgid")
+#pragma binding(libc::setpgrp,   "_setpgrp")
+#pragma binding(libc::setsid,    "_setsid")
+#pragma binding(libc::getsid,    "_getsid")
+#pragma binding(libc::tcgetpgrp, "_tcgetpgrp")
+#pragma binding(libc::tcsetpgrp, "_tcsetpgrp")
+#pragma binding(libc::getpriority,"_getpriority")
+#pragma binding(libc::setpriority,"_setpriority")
+#pragma binding(libc::nice,      "_nice")
+#pragma binding(libc::fpathconf, "_fpathconf")
+#pragma binding(libc::lockf,     "_lockf")
+#pragma binding(libc::execv,     "_execv")
+#pragma binding(libc::fexecve,   "_fexecve")
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
 #pragma binding(libc::getpagesize, "_getpagesize")
@@ -135,8 +188,12 @@ extern char **environ;
 #pragma binding(libc::rmdir,     "rmdir")
 #pragma binding(libc::getcwd,    "getcwd")
 #pragma binding(libc::chdir,     "chdir")
+#pragma binding(libc::chroot,    "chroot")
 #pragma binding(libc::getuid,    "getuid")
 #pragma binding(libc::geteuid,   "geteuid")
+#pragma binding(libc::getgid,    "getgid")
+#pragma binding(libc::getegid,   "getegid")
+#pragma binding(libc::getppid,   "getppid")
 #pragma binding(libc::getpid,    "getpid")
 #pragma binding(libc::sleep,     "sleep")
 #pragma binding(libc::alarm,     "alarm")
@@ -160,12 +217,60 @@ extern char **environ;
 #pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
 #pragma binding(libc::utimes,    "utimes")
+#pragma binding(libc::futimes,   "futimes")
+#pragma binding(libc::lutimes,   "lutimes")
 #pragma binding(libc::umask,     "umask")
 #pragma binding(libc::chmod,     "chmod")
 #pragma binding(libc::chown,     "chown")
 #pragma binding(libc::truncate,  "truncate")
 #pragma binding(libc::link,      "link")
 #pragma binding(libc::symlink,   "symlink")
+#pragma binding(libc::fstatat,   "fstatat")
+#pragma binding(libc::mkdirat,   "mkdirat")
+#pragma binding(libc::mknodat,   "mknodat")
+#pragma binding(libc::mkfifoat,  "mkfifoat")
+#pragma binding(libc::fchmodat,  "fchmodat")
+#pragma binding(libc::fchownat,  "fchownat")
+#pragma binding(libc::unlinkat,  "unlinkat")
+#pragma binding(libc::linkat,    "linkat")
+#pragma binding(libc::symlinkat, "symlinkat")
+#pragma binding(libc::readlinkat,"readlinkat")
+#pragma binding(libc::faccessat, "faccessat")
+#pragma binding(libc::renameat,  "renameat")
+#pragma binding(libc::utimensat, "utimensat")
+#pragma binding(libc::futimens,  "futimens")
+#pragma binding(libc::ttyname,   "ttyname")
+#pragma binding(libc::ttyname_r, "ttyname_r")
+#pragma binding(libc::ctermid,   "ctermid")
+#pragma binding(libc::ctermid_r, "ctermid_r")
+#pragma binding(libc::getlogin,  "getlogin")
+#pragma binding(libc::getlogin_r,"getlogin_r")
+#pragma binding(libc::getgroups, "getgroups")
+#pragma binding(libc::setgroups, "setgroups")
+#pragma binding(libc::initgroups,"initgroups")
+#pragma binding(libc::getgrouplist,"getgrouplist")
+#pragma binding(libc::seteuid,   "seteuid")
+#pragma binding(libc::setegid,   "setegid")
+#pragma binding(libc::setreuid,  "setreuid")
+#pragma binding(libc::setregid,  "setregid")
+#pragma binding(libc::lchown,    "lchown")
+#pragma binding(libc::lchmod,    "lchmod")
+#pragma binding(libc::getpgid,   "getpgid")
+#pragma binding(libc::getpgrp,   "getpgrp")
+#pragma binding(libc::setpgid,   "setpgid")
+#pragma binding(libc::setpgrp,   "setpgrp")
+#pragma binding(libc::setsid,    "setsid")
+#pragma binding(libc::getsid,    "getsid")
+#pragma binding(libc::tcgetpgrp, "tcgetpgrp")
+#pragma binding(libc::tcsetpgrp, "tcsetpgrp")
+#pragma binding(libc::getpriority,"getpriority")
+#pragma binding(libc::setpriority,"setpriority")
+#pragma binding(libc::nice,      "nice")
+#pragma binding(libc::fpathconf, "fpathconf")
+#pragma binding(libc::lockf,     "lockf")
+#pragma binding(libc::execv,     "execv")
+#pragma binding(libc::fexecve,   "fexecve")
+#pragma binding(libc::fdatasync, "fdatasync")
 #pragma binding(libc::pathconf,  "pathconf")
 #pragma binding(libc::sysconf,   "sysconf")
 #pragma binding(libc::getpagesize, "getpagesize")
@@ -240,8 +345,12 @@ int unlink(char *path);
 int rmdir(char *path);
 char *getcwd(char *buf, int n);
 int chdir(char *path);
+int chroot(char *path);
 int getuid();
 int geteuid();
+int getgid();
+int getegid();
+int getppid();
 int getpid();
 int sleep(int seconds);
 // Schedule a SIGALRM after `seconds`; returns the prior alarm's
@@ -273,12 +382,77 @@ _Noreturn int _exit(int status);
 int fchmod(int fd, int mode);
 int fchown(int fd, int uid, int gid);
 int utimes(char *path, char *times);
+int futimes(int fd, char *times);
+int lutimes(char *path, char *times);
 int umask(int mode);
 int chmod(char *path, int mode);
 int chown(char *path, int uid, int gid);
 int truncate(char *path, int len);
 int link(char *from, char *to);
 int symlink(char *from, char *to);
+// The *at family (POSIX): operate relative to a directory descriptor
+// `dirfd` (or AT_FDCWD from <fcntl.h>). The stat / timespec buffers are
+// opaque to c5, matching the plain stat() convention above.
+int fstatat(int dirfd, char *path, char *buf, int flag);
+int mkdirat(int dirfd, char *path, int mode);
+int mknodat(int dirfd, char *path, int mode, int dev);
+int mkfifoat(int dirfd, char *path, int mode);
+int fchmodat(int dirfd, char *path, int mode, int flag);
+int fchownat(int dirfd, char *path, int uid, int gid, int flag);
+int unlinkat(int dirfd, char *path, int flag);
+int linkat(int olddirfd, char *oldpath, int newdirfd, char *newpath, int flag);
+int symlinkat(char *target, int newdirfd, char *linkpath);
+int readlinkat(int dirfd, char *path, char *buf, int bufsiz);
+int faccessat(int dirfd, char *path, int mode, int flag);
+int renameat(int olddirfd, char *oldpath, int newdirfd, char *newpath);
+int utimensat(int dirfd, char *path, char *times, int flag);
+int futimens(int fd, char *times);
+// Terminal and login identity (POSIX).
+char *ttyname(int fd);
+int ttyname_r(int fd, char *buf, unsigned long len);
+char *ctermid(char *s);
+char *ctermid_r(char *s);
+char *getlogin(void);
+int getlogin_r(char *buf, unsigned long len);
+// Supplementary group lists (the gid lists are opaque to c5).
+int getgroups(int size, int *list);
+int setgroups(unsigned long size, int *list);
+int initgroups(char *user, int group);
+int getgrouplist(char *user, int group, int *groups, int *ngroups);
+// Real/effective credential changes (POSIX).
+int seteuid(int uid);
+int setegid(int gid);
+int setreuid(int ruid, int euid);
+int setregid(int rgid, int egid);
+int lchown(char *path, int owner, int group);
+int lchmod(char *path, int mode);
+#ifdef __APPLE__
+// BSD per-file flags (macOS).
+int chflags(char *path, unsigned long flags);
+int lchflags(char *path, unsigned long flags);
+#endif
+// Process groups, sessions, and controlling-terminal foreground (POSIX).
+int getpgid(int pid);
+int getpgrp(void);
+int setpgid(int pid, int pgid);
+int setpgrp(void);
+int setsid(void);
+int getsid(int pid);
+int tcgetpgrp(int fd);
+int tcsetpgrp(int fd, int pgrp);
+// Scheduling priority (POSIX getpriority/setpriority, BSD nice).
+int getpriority(int which, int who);
+int setpriority(int which, int who, int prio);
+int nice(int inc);
+// Per-descriptor limits, advisory locks, and exec without a PATH search.
+long fpathconf(int fd, int name);
+int lockf(int fd, int cmd, long len);
+int execv(char *path, char **argv);
+int fexecve(int fd, char **argv, char **envp);
+#ifdef __linux__
+// glibc-only: flush a file's data without its metadata.
+int fdatasync(int fd);
+#endif
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
 long pathconf(char *path, int name);
 long sysconf(int name);
@@ -350,6 +524,7 @@ struct rusage {
 #define _SC_NPROCESSORS_ONLN 58
 #define _SC_GETPW_R_SIZE_MAX 71
 #define _SC_GETGR_R_SIZE_MAX 70
+#define _SC_TTY_NAME_MAX  101
 #else
 #define _SC_ARG_MAX       0
 #define _SC_OPEN_MAX      4
@@ -357,6 +532,7 @@ struct rusage {
 #define _SC_NPROCESSORS_ONLN 84
 #define _SC_GETPW_R_SIZE_MAX 70
 #define _SC_GETGR_R_SIZE_MAX 69
+#define _SC_TTY_NAME_MAX  72
 #endif
 #define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN

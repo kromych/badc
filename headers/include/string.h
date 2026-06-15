@@ -41,6 +41,7 @@
 #pragma binding(libc::strcat,   "_strcat")
 #pragma binding(libc::strncat,  "_strncat")
 #pragma binding(libc::strerror, "_strerror")
+#pragma binding(libc::strsignal, "_strsignal")
 #pragma binding(libc::strdup,   "_strdup")
 #pragma binding(libc::strndup,  "_strndup")
 #pragma binding(libc::strspn,   "_strspn")
@@ -69,6 +70,7 @@
 #pragma binding(libc::strcat,   "strcat")
 #pragma binding(libc::strncat,  "strncat")
 #pragma binding(libc::strerror, "strerror")
+#pragma binding(libc::strsignal, "strsignal")
 #pragma binding(libc::strdup,   "strdup")
 #pragma binding(libc::strndup,  "strndup")
 #pragma binding(libc::strspn,   "strspn")
@@ -154,6 +156,8 @@ char *strdup(char *s);
 // `<string.h>`. Bound on macOS / Linux; msvcrt has no
 // equivalent so the prototype is gated out on Windows.
 char *strndup(char *s, int n);
+// POSIX descriptive name for a signal number. macOS / Linux only.
+char *strsignal(int sig);
 #endif
 int strspn(char *s, char *accept);
 int strcspn(char *s, char *reject);

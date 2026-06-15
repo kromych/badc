@@ -48,32 +48,9 @@ typedef enum { P_ALL, P_PID, P_PGID } idtype_t;
 #define WNOWAIT    0x01000000
 #endif
 
-// siginfo_t carries the child's exit details waitid writes. The kernel
-// fills it, so the leading fields must sit at the host's offsets; the
-// trailing padding covers the platform's full size (macOS 104 B, Linux
-// glibc 128 B). On 64-bit Linux a pad word aligns the id fields to 16.
-#ifdef __APPLE__
-typedef struct {
-    int          si_signo;
-    int          si_errno;
-    int          si_code;
-    int          si_pid;
-    unsigned int si_uid;
-    int          si_status;
-    unsigned char __pad[104 - 24];
-} siginfo_t;
-#else
-typedef struct {
-    int          si_signo;
-    int          si_errno;
-    int          si_code;
-    int          __pad0;
-    int          si_pid;
-    unsigned int si_uid;
-    int          si_status;
-    unsigned char __pad[128 - 28];
-} siginfo_t;
-#endif
+// `siginfo_t` (which waitid fills) is declared in <signal.h>, its POSIX
+// home.
+#include <signal.h>
 #endif
 
 #ifdef __APPLE__
@@ -81,6 +58,8 @@ typedef struct {
 #pragma binding(libc::wait,    "_wait")
 #pragma binding(libc::waitpid, "_waitpid")
 #pragma binding(libc::waitid,  "_waitid")
+#pragma binding(libc::wait3,   "_wait3")
+#pragma binding(libc::wait4,   "_wait4")
 #endif
 
 #ifdef __linux__
@@ -88,6 +67,8 @@ typedef struct {
 #pragma binding(libc::wait,    "wait")
 #pragma binding(libc::waitpid, "waitpid")
 #pragma binding(libc::waitid,  "waitid")
+#pragma binding(libc::wait3,   "wait3")
+#pragma binding(libc::wait4,   "wait4")
 #endif
 
 #ifdef _WIN32
@@ -100,4 +81,7 @@ int wait(int *status);
 int waitpid(int pid, int *status, int options);
 #if defined(__APPLE__) || defined(__linux__)
 int waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options);
+// BSD wait variants returning resource usage (opaque `rusage` buffer).
+int wait3(int *status, int options, char *rusage);
+int wait4(int pid, int *status, int options, char *rusage);
 #endif

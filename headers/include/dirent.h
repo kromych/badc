@@ -64,6 +64,7 @@ struct dirent {
 #pragma binding(libc::readdir,  "_readdir")
 #pragma binding(libc::closedir, "_closedir")
 #pragma binding(libc::rewinddir,"_rewinddir")
+#pragma binding(libc::fdopendir,"_fdopendir")
 #endif
 
 #ifdef __linux__
@@ -72,9 +73,12 @@ struct dirent {
 #pragma binding(libc::readdir,  "readdir")
 #pragma binding(libc::closedir, "closedir")
 #pragma binding(libc::rewinddir,"rewinddir")
+#pragma binding(libc::fdopendir,"fdopendir")
 #endif
 
 DIR *opendir(char *path);
+// POSIX: open a directory stream on an already-open descriptor.
+DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *dir);
 int closedir(DIR *dir);
 int rewinddir(DIR *dir);

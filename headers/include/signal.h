@@ -87,6 +87,7 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::signal,      "_signal")
 #pragma binding(libc::raise,       "_raise")
 #pragma binding(libc::kill,        "_kill")
+#pragma binding(libc::killpg,      "_killpg")
 #pragma binding(libc::sigaction,   "_sigaction")
 #pragma binding(libc::sigemptyset, "_sigemptyset")
 #pragma binding(libc::sigfillset,  "_sigfillset")
@@ -95,6 +96,10 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigismember, "_sigismember")
 #pragma binding(libc::sigprocmask, "_sigprocmask")
 #pragma binding(libc::pthread_sigmask, "_pthread_sigmask")
+#pragma binding(libc::sigpending,  "_sigpending")
+#pragma binding(libc::sigsuspend,  "_sigsuspend")
+#pragma binding(libc::sigwait,     "_sigwait")
+#pragma binding(libc::siginterrupt,"_siginterrupt")
 #pragma binding(libc::sigaltstack, "_sigaltstack")
 #endif
 
@@ -103,6 +108,7 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::signal,      "signal")
 #pragma binding(libc::raise,       "raise")
 #pragma binding(libc::kill,        "kill")
+#pragma binding(libc::killpg,      "killpg")
 #pragma binding(libc::sigaction,   "sigaction")
 #pragma binding(libc::sigemptyset, "sigemptyset")
 #pragma binding(libc::sigfillset,  "sigfillset")
@@ -111,6 +117,14 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigismember, "sigismember")
 #pragma binding(libc::sigprocmask, "sigprocmask")
 #pragma binding(libc::pthread_sigmask, "pthread_sigmask")
+#pragma binding(libc::sigpending,  "sigpending")
+#pragma binding(libc::sigsuspend,  "sigsuspend")
+#pragma binding(libc::sigwait,     "sigwait")
+#pragma binding(libc::siginterrupt,"siginterrupt")
+// sigwaitinfo / sigtimedwait are glibc-only; Darwin lacks them, so
+// CPython's configure leaves HAVE_* unset there and never calls them.
+#pragma binding(libc::sigwaitinfo, "sigwaitinfo")
+#pragma binding(libc::sigtimedwait,"sigtimedwait")
 #pragma binding(libc::sigaltstack, "sigaltstack")
 #endif
 
@@ -123,6 +137,7 @@ typedef void (*sighandler_t)(int);
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
 int kill(int pid, int sig);
+int killpg(int pgrp, int sig);
 
 #if defined(__APPLE__) || defined(__linux__)
 // POSIX `sigset_t` is an opaque bag of bits; size differs per
@@ -164,6 +179,46 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 #define SIG_BLOCK   0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
+#endif
+
+// siginfo_t carries a signal's details (POSIX 7.14; also filled by
+// waitid). The kernel writes it, so the leading fields sit at the host's
+// offsets and the trailing padding covers the platform's full size
+// (macOS 104 B, Linux glibc 128 B). On 64-bit Linux a pad word aligns
+// the id fields to offset 16.
+#ifdef __APPLE__
+typedef struct {
+    int          si_signo;
+    int          si_errno;
+    int          si_code;
+    int          si_pid;
+    unsigned int si_uid;
+    int          si_status;
+    unsigned char __pad[104 - 24];
+} siginfo_t;
+#else
+typedef struct {
+    int          si_signo;
+    int          si_errno;
+    int          si_code;
+    int          __pad0;
+    int          si_pid;
+    unsigned int si_uid;
+    int          si_status;
+    unsigned char __pad[128 - 28];
+} siginfo_t;
+#endif
+
+// Pending-signal query, blocking waits, and the BSD interrupt toggle
+// (POSIX). sigwaitinfo / sigtimedwait are glibc-only (see bindings).
+int sigpending(sigset_t *set);
+int sigsuspend(const sigset_t *mask);
+int sigwait(const sigset_t *set, int *sig);
+int siginterrupt(int sig, int flag);
+#ifdef __linux__
+int sigwaitinfo(const sigset_t *set, siginfo_t *info);
+int sigtimedwait(const sigset_t *set, siginfo_t *info,
+                 const struct timespec *timeout);
 #endif
 
 // `sa_flags` bits. The numeric values are target-specific: macOS and

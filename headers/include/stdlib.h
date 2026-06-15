@@ -68,6 +68,12 @@
 #pragma binding(libc::mktemp,  "_mktemp")
 #pragma binding(libc::random,  "_random")
 #pragma binding(libc::srandom, "_srandom")
+#pragma binding(libc::grantpt,   "_grantpt")
+#pragma binding(libc::unlockpt,  "_unlockpt")
+#pragma binding(libc::posix_openpt,"_posix_openpt")
+#pragma binding(libc::ptsname,   "_ptsname")
+#pragma binding(libc::ptsname_r, "_ptsname_r")
+#pragma binding(libc::getloadavg,"_getloadavg")
 #endif
 
 #ifdef __linux__
@@ -115,6 +121,12 @@
 #pragma binding(libc::mktemp,  "mktemp")
 #pragma binding(libc::random,  "random")
 #pragma binding(libc::srandom, "srandom")
+#pragma binding(libc::grantpt,   "grantpt")
+#pragma binding(libc::unlockpt,  "unlockpt")
+#pragma binding(libc::posix_openpt,"posix_openpt")
+#pragma binding(libc::ptsname,   "ptsname")
+#pragma binding(libc::ptsname_r, "ptsname_r")
+#pragma binding(libc::getloadavg,"getloadavg")
 #endif
 
 #ifdef _WIN32
@@ -303,6 +315,15 @@ char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
 int srandom(int seed);
+// Pseudo-terminal master/slave setup (POSIX). ptsname returns the slave
+// device path for the given master descriptor.
+int posix_openpt(int flags);
+int grantpt(int fd);
+int unlockpt(int fd);
+char *ptsname(int fd);
+int ptsname_r(int fd, char *buf, unsigned long buflen);
+// System load averages over 1/5/15 minutes (BSD).
+int getloadavg(double *loadavg, int nelem);
 
 /* GCC / clang `__clear_cache(begin, end)` is the runtime hint
 ** that makes instructions newly written into [begin, end)

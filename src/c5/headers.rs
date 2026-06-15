@@ -57,6 +57,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("sched.h", include_str!("../../headers/include/sched.h")),
+    ("spawn.h", include_str!("../../headers/include/spawn.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
@@ -126,12 +127,20 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/sys/paths.h"),
     ),
     (
+        "sys/param.h",
+        include_str!("../../headers/include/sys/param.h"),
+    ),
+    (
         "copyfile.h",
         include_str!("../../headers/include/copyfile.h"),
     ),
     (
         "mach/mach_time.h",
         include_str!("../../headers/include/mach/mach_time.h"),
+    ),
+    (
+        "mach/mach.h",
+        include_str!("../../headers/include/mach/mach.h"),
     ),
     (
         "mach-o/dyld.h",
@@ -144,6 +153,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
         "sys/mman.h",
         include_str!("../../headers/include/sys/mman.h"),
+    ),
+    (
+        "sys/mount.h",
+        include_str!("../../headers/include/sys/mount.h"),
+    ),
+    (
+        "sys/statvfs.h",
+        include_str!("../../headers/include/sys/statvfs.h"),
     ),
     (
         "sys/socket.h",
@@ -170,6 +187,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/time.h",
         include_str!("../../headers/include/sys/time.h"),
     ),
+    (
+        "sys/times.h",
+        include_str!("../../headers/include/sys/times.h"),
+    ),
     ("termios.h", include_str!("../../headers/include/termios.h")),
     ("poll.h", include_str!("../../headers/include/poll.h")),
     (
@@ -178,6 +199,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ),
     ("strings.h", include_str!("../../headers/include/strings.h")),
     ("libgen.h", include_str!("../../headers/include/libgen.h")),
+    ("util.h", include_str!("../../headers/include/util.h")),
     ("glob.h", include_str!("../../headers/include/glob.h")),
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),

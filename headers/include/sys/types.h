@@ -39,6 +39,13 @@ typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
 typedef int dev_t;
+#ifdef __APPLE__
+// Darwin device-number split: major in the high 8 bits, minor in the
+// low 24 (sys/types.h). Linux uses a wider split via <sys/sysmacros.h>.
+#define major(x)      ((int)(((unsigned int)(x) >> 24) & 0xff))
+#define minor(x)      ((int)((x) & 0xffffff))
+#define makedev(x, y) ((dev_t)(((x) << 24) | ((y) & 0xffffff)))
+#endif
 // BSD fixed-width unsigned aliases. Present on Linux and macOS; some
 // platform sources (macOS file-attribute code) use them directly.
 typedef unsigned char u_int8_t;

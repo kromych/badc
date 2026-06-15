@@ -93,7 +93,12 @@
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
 #pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
-#pragma binding(libc::pthread_atfork,           "pthread_atfork")
+// glibc's pthread_atfork lives in libc_nonshared.a (a static stub),
+// not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
+// alias but aarch64 does not, so a dynamic import resolves on one and
+// not the other. Bind the underlying dynamic symbol the stub forwards
+// to; the inline below supplies pthread_atfork in terms of it.
+#pragma binding(libc::__register_atfork,        "__register_atfork")
 #pragma binding(libc::pthread_key_create,       "pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
@@ -201,7 +206,19 @@ int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
+#ifdef __linux__
+// pthread_atfork is not a libc.so.6 dynamic symbol on every glibc port;
+// forward to __register_atfork, which is, passing a null DSO handle (the
+// process-global registration libc_nonshared.a's stub uses).
+extern int __register_atfork(void (*prepare)(void), void (*parent)(void),
+                             void (*child)(void), void *dso_handle);
+static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
+                                 void (*child)(void)) {
+    return __register_atfork(prepare, parent, child, 0);
+}
+#else
 int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
+#endif
 int pthread_key_create(pthread_key_t *key, int *destructor);
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, char *val);

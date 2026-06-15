@@ -99,6 +99,12 @@ struct hostent {
 #pragma binding(libc::getservbyname,"getservbyname")
 #pragma binding(libc::gethostbyname,"gethostbyname")
 #pragma binding(libc::gethostbyaddr,"gethostbyaddr")
+// glibc's reentrant resolver variants (GNU extensions). configure
+// selects these over the non-reentrant forms when present, so a
+// program built against glibc references them by name. macOS resolves
+// the MT-safe non-_r forms instead and never names these.
+#pragma binding(libc::gethostbyname_r,"gethostbyname_r")
+#pragma binding(libc::gethostbyaddr_r,"gethostbyaddr_r")
 #endif
 
 #ifdef _WIN32
@@ -119,3 +125,15 @@ const char *gai_strerror(int errcode);
 struct servent *getservbyname(const char *name, const char *proto);
 struct hostent *gethostbyname(const char *name);
 struct hostent *gethostbyaddr(const void *addr, unsigned int len, int type);
+#ifdef __linux__
+// glibc 6-argument / 8-argument reentrant resolver forms: fill the
+// caller's `struct hostent` + scratch buffer, set `*result` and return
+// 0 on success or an error code, writing the resolver error to
+// `*h_errnop`.
+int gethostbyname_r(const char *name, struct hostent *ret, char *buf,
+                    unsigned long buflen, struct hostent **result,
+                    int *h_errnop);
+int gethostbyaddr_r(const void *addr, unsigned int len, int type,
+                    struct hostent *ret, char *buf, unsigned long buflen,
+                    struct hostent **result, int *h_errnop);
+#endif

@@ -89,7 +89,15 @@ def host_build(log) -> Path:
         log("host build present, reusing")
         return trace
 
-    args = ["./configure", "--without-mimalloc", "--with-ensurepip=no"]
+    # `--without-remote-debug` drops the PEP 768 remote-debugging code,
+    # whose macOS path pulls in the Mach-O / mach_vm introspection
+    # surface; the configured-out stub satisfies the interpreter's calls.
+    args = [
+        "./configure",
+        "--without-mimalloc",
+        "--with-ensurepip=no",
+        "--without-remote-debug",
+    ]
     if sys.platform == "darwin":
         args.append("--disable-test-modules")
     log(f"configure ({' '.join(args[1:])})")

@@ -711,7 +711,7 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
-                let _ = self.parse_decl_base_type()?;
+                let mut cast_ty = self.parse_decl_base_type()?;
                 // The cast type is discarded here rather than bound through a
                 // declarator, so clear the function-type side channels it may
                 // have set. A cast to a function-type-typedef pointer
@@ -723,7 +723,18 @@ impl Compiler {
                 self.pending.typedef_fn_proto = None;
                 self.pending.fn_ptr_param_types = None;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+                    if self.lex.tk == Token::MulOp {
+                        cast_ty += Ty::Ptr as i64;
+                    }
                     self.next()?;
+                }
+                // C99 6.5.2.5 array-typed compound literal:
+                // `(T[]){...}` / `(T[N]){...}`. The array name decays to a
+                // pointer to its first element, so the literal contributes
+                // an anonymous static array and the element stores its
+                // address. Distinguished from a plain cast by the `[`.
+                if self.lex.tk == Token::Brak {
+                    return self.parse_array_compound_literal(cast_ty);
                 }
                 // Optional function-pointer abstract declarator
                 // `(*)(args)` after the base type. Same treatment
@@ -1029,6 +1040,108 @@ impl Compiler {
         // Fall back to integer literal (with optional unary `-`).
         let v = self.parse_constant_int()?;
         Ok((v, InitElemReloc::None))
+    }
+
+    /// C99 6.5.2.5 array-typed compound literal in a static initializer:
+    /// `(T[]){ ... }` / `(T[N]){ ... }`. The array name decays to a
+    /// pointer to its first element, so the literal contributes an
+    /// anonymous static array and the enclosing element stores its
+    /// address. On entry the current token is the leading `[` of the
+    /// array declarator; `elem_ty` is the element type.
+    fn parse_array_compound_literal(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<(i64, InitElemReloc), C5Error> {
+        self.next()?; // consume `[`
+        let declared_size: i64 = if self.lex.tk == ']' {
+            -1
+        } else {
+            self.parse_constant_int()?
+        };
+        if self.lex.tk != ']' {
+            return Err(self.compile_err("`]` expected in array compound-literal type"));
+        }
+        self.next()?; // consume `]`
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected to close compound-literal type"));
+        }
+        self.next()?; // consume `)`
+        if self.lex.tk != '{' {
+            return Err(self.compile_err("`{` expected to start compound-literal initializer"));
+        }
+        let elem_size = self.size_of_type(elem_ty);
+        let elem_is_struct = is_struct_ty(elem_ty) && struct_ptr_depth(elem_ty) == 0;
+        // The element count must be known before the storage is reserved:
+        // a struct element with a string-literal or `&global` field
+        // appends to the data segment as it is filled, so per-element
+        // offsets are computed as `off + i * elem_size`, not from the
+        // live `self.data` length.
+        let (scanned, _) = self.scan_array_init()?;
+        let count = scanned.max(declared_size).max(0) as usize;
+        self.align_data_to_8();
+        let off = self.data.len() as i64;
+        for _ in 0..(count * elem_size) {
+            self.data.push(0);
+        }
+        if elem_is_struct {
+            let sid = struct_id_of(elem_ty);
+            self.next()?; // consume the outer `{`
+            let mut idx: usize = 0;
+            while self.lex.tk != '}' {
+                if idx >= count {
+                    return Err(
+                        self.compile_err("too many initializers for array compound literal")
+                    );
+                }
+                let here = off as usize + idx * elem_size;
+                if self.lex.tk == '{' {
+                    self.collect_struct_initializer(sid, here as i64)?;
+                } else {
+                    self.fill_struct_fields(sid, here as i64, false)?;
+                }
+                idx += 1;
+                if self.lex.tk == ',' {
+                    self.next()?;
+                }
+            }
+            self.next()?; // consume the outer `}`
+        } else {
+            self.pending.init_target_array_size = count as i64;
+            let elements = self.collect_array_initializer(elem_ty)?;
+            self.write_array_init_into_data(off, elem_ty, &elements);
+        }
+        // Pad the anonymous array's storage up to an 8-byte boundary.
+        while (self.data.len() as i64 - off) % 8 != 0 {
+            self.data.push(0);
+        }
+        let sym_idx = self.intern_compound_literal_symbol(off, elem_ty);
+        Ok((off, InitElemReloc::Data(Some(sym_idx))))
+    }
+
+    /// Create a synthetic internal `__compound.N` symbol anchored at
+    /// data offset `off`, used as the relocation target for an
+    /// anonymous compound literal stored in the data segment. Returns
+    /// its symbol index.
+    fn intern_compound_literal_symbol(&mut self, off: i64, ty: i64) -> usize {
+        let counter = self.next_compound_literal_id;
+        self.next_compound_literal_id += 1;
+        let sym_name = alloc::format!("__compound.{counter}");
+        let new_idx = self.symbols.len();
+        let hash = crate::c5::lexer::hash_name(sym_name.as_bytes());
+        let sym = crate::c5::symbol::Symbol {
+            name: sym_name,
+            token: Token::Id as i64,
+            class: Token::Glo as i64,
+            type_: ty,
+            val: off,
+            linkage: crate::c5::symbol::Linkage::Internal,
+            defined_here: true,
+            has_initializer: true,
+            ..Default::default()
+        };
+        self.symbols.push(sym);
+        self.symbol_index.record(hash);
+        new_idx
     }
 
     /// Walk a C99 6.7.8p7 designator-chain tail (the part after the

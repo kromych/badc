@@ -468,6 +468,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
+    ("array_compound_literal_static_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),

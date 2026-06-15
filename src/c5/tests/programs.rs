@@ -296,6 +296,14 @@ fn variadic_macro_named_rest() {
 }
 
 #[test]
+fn stdatomic_c11() {
+    // C11 <stdatomic.h> over c5's atomic builtins, the `_Atomic(type-name)`
+    // specifier in every base-type position, and the C99 least/fast stdint
+    // types.
+    assert_eq!(run_fixture("stdatomic_c11.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

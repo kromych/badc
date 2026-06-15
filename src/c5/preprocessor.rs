@@ -429,15 +429,19 @@ impl Preprocessor {
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
-        // is omitted, not an implementation of any specific C standard year.
-        // `__DATE__` and `__TIME__` are seeded at badc build time; C99 says they
-        // reflect "the date and time of translation", and the closest
-        // analogue for an embedded library is the build time of badc
-        // itself. `__STDC_HOSTED__` reflects that every supported
-        // target binds the host libc, so the dialect is hosted.
+        // Standard predefines (C99 sec 6.10.8). `__DATE__` and `__TIME__`
+        // are seeded at badc build time; C99 says they reflect "the date
+        // and time of translation", and the closest analogue for an
+        // embedded library is the build time of badc itself.
+        // `__STDC_HOSTED__` reflects that every supported target binds the
+        // host libc, so the dialect is hosted. `__STDC_VERSION__` reports
+        // C11 (201112L): the implemented surface is C99 plus the C11
+        // features real code gates on this macro (`_Static_assert`,
+        // `_Noreturn`, `_Atomic`, `_Thread_local`, anonymous members, and
+        // `<stdatomic.h>`).
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
+        macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),

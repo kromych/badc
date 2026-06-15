@@ -192,6 +192,32 @@ impl Compiler {
     ///   * `struct Tag`, `union Tag`, `struct Tag { ... }`,
     ///     `struct { ... }` (anonymous)
     ///   * a typedef name bound earlier in the translation unit
+    /// C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`. When the
+    /// current token is `_Atomic` immediately followed by `(`, consume the
+    /// whole specifier and return the inner type-name's type. c5 does not
+    /// model atomicity, so this is the unqualified inner type plus any
+    /// abstract pointer declarator inside the parentheses. Returns `None`
+    /// without consuming when the current token is not this specifier form
+    /// (e.g. the `_Atomic` qualifier). Shared by every base-type parser
+    /// (decl base, file-scope declaration, struct field).
+    pub(super) fn try_parse_atomic_type_specifier(&mut self) -> Result<Option<i64>, C5Error> {
+        if self.lex.tk != Token::Atomic || !self.lex.peek_after_whitespace(b'(') {
+            return Ok(None);
+        }
+        self.next()?; // _Atomic
+        self.next()?; // (
+        let mut inner = self.parse_decl_base_type()?;
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+            inner += Ty::Ptr as i64;
+        }
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
+        }
+        self.next()?; // )
+        Ok(Some(inner))
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -224,18 +250,7 @@ impl Compiler {
             // one. c5 does not model atomicity, so the declared type is
             // the unqualified inner type-name (base plus any abstract
             // pointer declarator inside the parentheses).
-            if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
-                self.next()?; // _Atomic
-                self.next()?; // (
-                let mut inner = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp {
-                    self.next()?;
-                    inner += Ty::Ptr as i64;
-                }
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err("`)` expected after `_Atomic(type-name)`"));
-                }
-                self.next()?; // )
+            if let Some(inner) = self.try_parse_atomic_type_specifier()? {
                 return Ok(inner);
             }
             if self.lex.tk == Token::Inline {

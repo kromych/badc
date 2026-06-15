@@ -78,6 +78,7 @@ impl Compiler {
             let mut is_typedef = false;
             let mut static_seen = false;
             let mut extern_seen = false;
+            let mut atomic_base: Option<i64> = None;
             let mut m = decl_base::IntModifiers::default();
             // `_Noreturn` scopes to this declaration; clear the carrier
             // so it cannot leak onto the next one.
@@ -98,6 +99,11 @@ impl Compiler {
                 } else if self.lex.tk == Token::Extern {
                     extern_seen = true;
                     self.next()?;
+                } else if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                    // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`:
+                    // the inner type-name names the base type (distinct from
+                    // the `_Atomic` qualifier consumed as a no-op below).
+                    atomic_base = self.try_parse_atomic_type_specifier()?;
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
@@ -110,7 +116,9 @@ impl Compiler {
                     break;
                 }
             }
-            if self.lex.tk == Token::Int {
+            if let Some(inner) = atomic_base {
+                bt = inner;
+            } else if self.lex.tk == Token::Int {
                 self.next()?;
                 bt = m.int_base();
             } else if self.lex.tk == Token::Char {

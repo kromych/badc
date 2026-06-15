@@ -141,7 +141,15 @@ impl Compiler {
             // (`;` next), the promotion path runs; otherwise the
             // synthesised tag stays a regular nested-struct type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
+            let mut atomic_field_base: Option<i64> = None;
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
+                    // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`
+                    // as a field base type (distinct from the `_Atomic`
+                    // qualifier consumed as a no-op below).
+                    atomic_field_base = self.try_parse_atomic_type_specifier()?;
+                    continue;
+                }
                 if self.lex.tk == Token::IntMod {
                     // `_Bool` is the only keyword mapped to `IntMod`.
                     saw_bool = true;
@@ -168,7 +176,9 @@ impl Compiler {
             // unsigned, so a value with the field's high bit set
             // zero-extends rather than sign-extends.
             let mut field_base_is_enum = false;
-            let field_base = if self.lex.tk == Token::Int {
+            let field_base = if let Some(inner) = atomic_field_base {
+                inner
+            } else if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {
                     Ty::LongLong as i64

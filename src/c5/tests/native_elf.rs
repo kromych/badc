@@ -615,6 +615,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
     ("posix_module_headers.c", 0),
+    ("mmap_anonymous.c", 0),
     // thread_local_initializer.c works in isolation but fails when
     // the test prelude pulls in <stdio.h>'s static lazy-resolver
     // state. The TLS template offset assignment interacts with

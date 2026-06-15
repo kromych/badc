@@ -10,7 +10,16 @@
 #define MAP_SHARED    0x01
 #define MAP_PRIVATE   0x02
 #define MAP_FIXED     0x10
+// The anonymous-mapping flag diverges: macOS uses 0x1000, Linux 0x20.
+// The value reaches the host's mmap, so a wrong one drops MAP_ANON and
+// the call fails with the fd interpreted as a real file.
+#ifdef __APPLE__
+#define MAP_ANON      0x1000
+#define MAP_ANONYMOUS 0x1000
+#else
+#define MAP_ANON      0x20
 #define MAP_ANONYMOUS 0x20
+#endif
 #define MAP_FAILED    ((void*)-1)
 
 #define MS_ASYNC      1

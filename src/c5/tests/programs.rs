@@ -348,6 +348,13 @@ fn self_referential_macro() {
 }
 
 #[test]
+fn logical_not_float() {
+    // `!x` on a floating-point operand is the FP comparison `x == 0`
+    // (C99 6.5.3.3p5), not an integer comparison of the bit pattern.
+    assert_eq!(run_fixture("logical_not_float.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

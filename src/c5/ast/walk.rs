@@ -1352,6 +1352,44 @@ impl<'a> Walker<'a> {
             } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local, *array_size),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
+                // A comparison whose operand is a floating-point value must
+                // use the FP comparison. The parser tags the op from the
+                // operand types; when that tracking is clouded by the
+                // surrounding expression it can emit the integer variant
+                // against an operand that lowers to an FP register, which
+                // the integer paths cannot compare. Re-derive the op from
+                // the operand types so the FP path below handles it.
+                let op_remapped = {
+                    // An operand's value is floating-point when its node
+                    // carries a floating type tag -- except a comparison,
+                    // whose result is `int` even though its node may carry
+                    // the operand type. Treat a comparison operand as int.
+                    let operand_is_fp = |id: ExprId| -> bool {
+                        let e = self.ast.expr(id);
+                        if let Expr::Binary { op, .. } = e
+                            && is_comparison_op(*op)
+                        {
+                            return false;
+                        }
+                        expr_ty(e).is_some_and(is_floating_scalar)
+                    };
+                    let lhs_fp = operand_is_fp(*lhs);
+                    let rhs_fp = operand_is_fp(*rhs);
+                    if lhs_fp || rhs_fp {
+                        match *op {
+                            BinOp::Eq => BinOp::Feq,
+                            BinOp::Ne => BinOp::Fne,
+                            BinOp::Lt => BinOp::Flt,
+                            BinOp::Gt => BinOp::Fgt,
+                            BinOp::Le => BinOp::Fle,
+                            BinOp::Ge => BinOp::Fge,
+                            other => other,
+                        }
+                    } else {
+                        *op
+                    }
+                };
+                let op = &op_remapped;
                 let mask = unsigned_narrow_mask(*ty);
                 let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
                 // Constant-rhs short-circuit: when the AST rhs is
@@ -3544,6 +3582,31 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     } else {
         StoreKind::I64
     }
+}
+
+/// True for a relational or equality operator (integer or
+/// floating-point). The result is `int` (C99 6.5.8 / 6.5.9) regardless
+/// of operand type.
+fn is_comparison_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Gt
+            | BinOp::Le
+            | BinOp::Ge
+            | BinOp::Ult
+            | BinOp::Ugt
+            | BinOp::Ule
+            | BinOp::Uge
+            | BinOp::Feq
+            | BinOp::Fne
+            | BinOp::Flt
+            | BinOp::Fgt
+            | BinOp::Fle
+            | BinOp::Fge
+    )
 }
 
 /// Test for a pointer-shaped type tag. Mirrors

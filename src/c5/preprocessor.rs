@@ -457,6 +457,17 @@ impl Preprocessor {
         if !target.plain_char_signed() {
             macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
         }
+        // LP64 data model: 64-bit `long` and 64-bit pointer. GCC and
+        // Clang predefine `__LP64__` and `_LP64` on every LP64 target,
+        // and code that selects a 64-bit-wide integer type branches on
+        // them. Windows is LLP64 (32-bit `long`), so it is excluded.
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => {
+                macros.insert("__LP64__".to_string(), "1".to_string());
+                macros.insert("_LP64".to_string(), "1".to_string());
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {}
+        }
         match target {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
@@ -3914,6 +3925,23 @@ mod tests {
         let out = process("char *t = __BADC_TARGET__;\nchar *v = __BADC_VERSION__;\n");
         assert!(out.contains("\"macos-aarch64\""));
         assert!(out.contains("\"0.1.0\""));
+    }
+
+    #[test]
+    fn lp64_predefined_for_lp64_targets_only() {
+        let src = "#ifdef __LP64__\nint lp64;\n#endif\n#ifdef _LP64\nint _lp64;\n#endif\n";
+        for t in [Target::MacOSAarch64, Target::LinuxAarch64, Target::LinuxX64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(src).expect("preprocessor failed");
+            assert!(out.contains("int lp64;"), "{t:?} should define __LP64__");
+            assert!(out.contains("int _lp64;"), "{t:?} should define _LP64");
+        }
+        // Windows is LLP64 (32-bit long), so neither macro is defined.
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(src).expect("preprocessor failed");
+            assert!(!out.contains("int lp64;"), "{t:?} must not define __LP64__");
+        }
     }
 
     #[test]

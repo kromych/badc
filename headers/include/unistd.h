@@ -16,6 +16,16 @@
 ** width-sensitive ones live in `<sys/types.h>` already. */
 #include <sys/types.h>
 
+// POSIX threads / semaphores option macros (POSIX.1 2.1.3). The
+// supported non-Windows targets bind a host libc that implements
+// pthreads and POSIX semaphores, so advertise both; code commonly
+// selects its threading backend on `_POSIX_THREADS`. Windows is not a
+// POSIX host and leaves them undefined.
+#ifndef __BADC_WINDOWS__
+#define _POSIX_THREADS      200809L
+#define _POSIX_SEMAPHORES   200809L
+#endif
+
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2

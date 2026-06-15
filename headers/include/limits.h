@@ -55,4 +55,8 @@
 #define HOST_NAME_MAX 255
 #define LOGIN_NAME_MAX 256
 
+// `ssize_t` is 64-bit on every supported target (see <sys/types.h>), so
+// its maximum is the signed 64-bit limit.
+#define SSIZE_MAX   9223372036854775807
+
 #endif

@@ -90,6 +90,7 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigaction,   "_sigaction")
 #pragma binding(libc::sigemptyset, "_sigemptyset")
 #pragma binding(libc::sigfillset,  "_sigfillset")
+#pragma binding(libc::sigaltstack, "_sigaltstack")
 #endif
 
 #ifdef __linux__
@@ -100,6 +101,7 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigaction,   "sigaction")
 #pragma binding(libc::sigemptyset, "sigemptyset")
 #pragma binding(libc::sigfillset,  "sigfillset")
+#pragma binding(libc::sigaltstack, "sigaltstack")
 #endif
 
 #ifdef _WIN32
@@ -135,4 +137,29 @@ struct sigaction {
 int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
+
+// Alternate signal stack (POSIX `sigaltstack`). The structure is
+// marshalled to the host libc, so the member order must match it
+// exactly: macOS orders `ss_size` before `ss_flags`, Linux the reverse.
+#include <stddef.h>
+#ifdef __APPLE__
+typedef struct sigaltstack {
+    void  *ss_sp;
+    size_t ss_size;
+    int    ss_flags;
+} stack_t;
+#define SIGSTKSZ    131072
+#define MINSIGSTKSZ 32768
+#else
+typedef struct {
+    void  *ss_sp;
+    int    ss_flags;
+    size_t ss_size;
+} stack_t;
+#define SIGSTKSZ    8192
+#define MINSIGSTKSZ 2048
+#endif
+#define SS_ONSTACK 1
+#define SS_DISABLE 2
+int sigaltstack(const stack_t *ss, stack_t *oss);
 #endif

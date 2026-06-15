@@ -2686,18 +2686,92 @@ fn strip_c_comments(source: &str) -> String {
     out
 }
 
+/// Report whether `s` (a partially assembled logical line with its
+/// newlines already removed) ends inside an unterminated `/* */` block
+/// comment. String and character literals and `//` line comments are
+/// tracked so a `/*` appearing inside one of them does not count as a
+/// comment opener.
+fn ends_in_open_block_comment(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    let mut in_str = false;
+    let mut in_char = false;
+    let mut in_block = false;
+    while i < b.len() {
+        let c = b[i];
+        if in_block {
+            if c == b'*' && b.get(i + 1) == Some(&b'/') {
+                in_block = false;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if in_str {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        if in_char {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'\'' {
+                in_char = false;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            in_block = true;
+            i += 2;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            // A line comment runs to the end of the assembled line, so
+            // nothing after it can leave a block comment open.
+            return false;
+        }
+        if c == b'"' {
+            in_str = true;
+        } else if c == b'\'' {
+            in_char = true;
+        }
+        i += 1;
+    }
+    in_block
+}
+
 /// Phase-2 line-continuation collapse: every line ending in `\\`
 /// joins with the next, preserving total line count by emitting
 /// blank padding lines. The c99 spec runs this before all other
 /// preprocessing passes.
+///
+/// A physical line whose logical line ends inside an open `/* */`
+/// block comment also joins with the next line even without a trailing
+/// `\\`: a newline inside a block comment is comment white space, not a
+/// directive terminator (C99 5.1.1.2), so a multi-line comment embedded
+/// in a `\\`-continued macro definition must not split the definition.
 fn unfold_line_continuations(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut iter = source.lines().peekable();
     while let Some(line) = iter.next() {
         let mut joined = line.to_string();
         let mut padding = 0;
-        while joined.ends_with('\\') {
-            joined.pop();
+        loop {
+            if joined.ends_with('\\') {
+                joined.pop();
+            } else if !ends_in_open_block_comment(&joined) {
+                break;
+            }
             padding += 1;
             match iter.next() {
                 Some(next) => joined.push_str(next),
@@ -4201,6 +4275,32 @@ mod tests {
     fn define_substitutes_in_subsequent_lines() {
         let out = process("#define FOO 42\nint x = FOO;\n");
         assert!(out.contains("int x = 42;"));
+    }
+
+    #[test]
+    fn macro_body_block_comment_spanning_lines() {
+        // A `\`-continued macro whose body holds a block comment that
+        // spans a physical-line break, where the comment-opening line
+        // carries no trailing `\`. The newline inside the comment must
+        // not terminate the definition (C99 5.1.1.2). Before the fix the
+        // body truncated at the comment and `b = 1;` leaked to file scope.
+        let src = "#define M(x) \\\n    do { \\\n        /* one\n           two */ \\\n        x = 1; \\\n    } while (0)\nint after;\nM(after);\n";
+        let out = process(src);
+        // The whole body is one macro, so `do {` and `while (0)` land on
+        // the expansion line together and `after` is the only file-scope
+        // object before the expansion.
+        assert!(out.contains("do {"), "macro body lost: {out:?}");
+        assert!(out.contains("while (0)"), "macro tail leaked: {out:?}");
+        assert!(out.contains("int after;"), "{out:?}");
+    }
+
+    #[test]
+    fn block_comment_open_detector() {
+        assert!(ends_in_open_block_comment("foo /* bar"));
+        assert!(!ends_in_open_block_comment("foo /* bar */ baz"));
+        assert!(!ends_in_open_block_comment("foo // /* not open"));
+        assert!(!ends_in_open_block_comment("s = \"/*\""));
+        assert!(ends_in_open_block_comment("c = '/' ; /* open"));
     }
 
     #[test]

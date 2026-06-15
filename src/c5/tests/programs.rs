@@ -1761,6 +1761,13 @@ fn predefined_macros_resolve() {
 }
 
 #[test]
+fn macro_multiline_comment_body_resolve() {
+    // A `\`-continued macro whose body holds a block comment spanning a
+    // physical-line break must not be truncated at the comment.
+    assert_eq!(run_fixture("macro_multiline_comment_body.c"), 0);
+}
+
+#[test]
 fn error_directive_aborts_compilation() {
     // `#error` produces a compile-time diagnostic with the message
     // text. Compilation must fail and the message must surface in the

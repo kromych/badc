@@ -756,6 +756,25 @@ impl Compiler {
                 self.next()?;
                 return self.parse_constant_init_value();
             }
+            // A parenthesised relocation-bearing leaf -- `(func)`,
+            // `(&global)`, possibly multiply parenthesised, as produced
+            // by the `(PyCFunction)(((void(*)(void))((fn))))` method-table
+            // idiom. Recurse on the inner value and consume the matching
+            // `)` when it carries a relocation; a parenthesised arithmetic
+            // constant rewinds and falls through to the folders below,
+            // which must start outside the parens to absorb trailing
+            // operators.
+            {
+                let inner_snap = self.lex.snapshot();
+                let (v, reloc) = self.parse_constant_init_value()?;
+                if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+                    && self.lex.tk == ')'
+                {
+                    self.next()?; // consume the matching `)`
+                    return Ok((v, reloc));
+                }
+                self.lex.restore(inner_snap);
+            }
             // Sub-expression in parens. Peek for any FloatNum
             // token inside (up to the matching `)`); if present,
             // fold the whole sub-expression in f64 precision so
@@ -1452,9 +1471,27 @@ impl Compiler {
                     self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
                 }
             } else {
+                // C99 6.7.9p11: a scalar member's initializer may be
+                // enclosed in braces (`{ .field = { expr } }`); strip a
+                // single wrapper, matching the runtime scalar path.
+                let braced_scalar = self.lex.tk == '{';
+                if braced_scalar {
+                    self.next()?;
+                }
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let field_size = self.size_of_type(field.ty);
                 self.write_init_value(field_base, field_size, value, reloc, field.ty);
+                if braced_scalar {
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    }
+                    if self.lex.tk != '}' {
+                        return Err(self.compile_err(
+                            "scalar initializer wrapped in `{ ... }` must hold a single value",
+                        ));
+                    }
+                    self.next()?; // consume `}`
+                }
             }
             // A positional initializer fills the first member of an
             // anonymous union (C99 6.7.8); the remaining members share

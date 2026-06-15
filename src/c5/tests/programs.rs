@@ -319,6 +319,27 @@ fn function_typed_parameter() {
 }
 
 #[test]
+fn static_init_braced_scalar() {
+    // A scalar member's initializer may be brace-enclosed (C99 6.7.9p11),
+    // including nested aggregates (the PyVarObject_HEAD_INIT shape).
+    assert_eq!(run_fixture("static_init_braced_scalar.c"), 0);
+}
+
+#[test]
+fn static_init_paren_relocation() {
+    // A relocation-bearing initializer leaf (function / `&global`) may be
+    // wrapped in redundant parentheses and casts (the method-table idiom).
+    assert_eq!(run_fixture("static_init_paren_relocation.c"), 0);
+}
+
+#[test]
+fn do_while_zero_returns() {
+    // A `do { ...; return; } while (0)` body never reaches the exit test,
+    // so the function does not fall off its end (C99 6.8.5).
+    assert_eq!(run_fixture("do_while_zero_returns.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

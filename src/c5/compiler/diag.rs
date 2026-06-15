@@ -80,11 +80,20 @@ impl Compiler {
                     None => true,
                 }
             }
-            // A loop falls through unless it is infinite (a constant
-            // non-zero condition, or none for `for(;;)`) with no `break`
-            // that targets it.
-            Stmt::While { cond, body } | Stmt::DoWhile { body, cond } => {
+            // A `while` checks its condition first, so it falls through
+            // whenever the condition is not a non-zero constant, or a
+            // `break` targets it.
+            Stmt::While { cond, body } => {
                 !self.expr_is_nonzero_const(*cond) || self.stmt_has_loop_break(*body)
+            }
+            // A `do`/`while` runs its body before the condition, so it
+            // reaches the exit test only if the body falls through to it.
+            // A body that always returns never reaches `while (cond)`, so
+            // the loop falls through only via a targeting `break`. This is
+            // the `do { ...; return; } while (0)` macro idiom.
+            Stmt::DoWhile { body, cond } => {
+                (self.stmt_may_fall_through(*body) && !self.expr_is_nonzero_const(*cond))
+                    || self.stmt_has_loop_break(*body)
             }
             Stmt::For { cond, body, .. } => {
                 let infinite = cond.is_none_or(|c| self.expr_is_nonzero_const(c));

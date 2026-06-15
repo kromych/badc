@@ -155,6 +155,11 @@ typedef struct __c5_fpos_t fpos_t;
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "_fdopen")
 #pragma binding(libc::fileno,    "_fileno")
+#pragma binding(libc::flockfile,    "_flockfile")
+#pragma binding(libc::funlockfile,  "_funlockfile")
+#pragma binding(libc::ftrylockfile, "_ftrylockfile")
+#pragma binding(libc::getc_unlocked, "_getc_unlocked")
+#pragma binding(libc::putc_unlocked, "_putc_unlocked")
 #endif
 
 #ifdef __linux__
@@ -220,6 +225,11 @@ typedef struct __c5_fpos_t fpos_t;
 // raw fd from a system call and need stdio-level formatting.
 #pragma binding(libc::fdopen,    "fdopen")
 #pragma binding(libc::fileno,    "fileno")
+#pragma binding(libc::flockfile,    "flockfile")
+#pragma binding(libc::funlockfile,  "funlockfile")
+#pragma binding(libc::ftrylockfile, "ftrylockfile")
+#pragma binding(libc::getc_unlocked, "getc_unlocked")
+#pragma binding(libc::putc_unlocked, "putc_unlocked")
 #endif
 
 #ifdef _WIN32
@@ -425,6 +435,14 @@ int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);
 // POSIX.1: the integer file descriptor underlying a stream.
 int fileno(FILE *stream);
+// POSIX stdio stream locking (not part of msvcrt's stdio surface).
+#ifndef __BADC_WINDOWS__
+void flockfile(FILE *stream);
+void funlockfile(FILE *stream);
+int ftrylockfile(FILE *stream);
+int getc_unlocked(FILE *stream);
+int putc_unlocked(int c, FILE *stream);
+#endif
 int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);

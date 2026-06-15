@@ -6,7 +6,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(16)                                      -> x7
     v2   Imm(0)                                           -> x6
-    v3   CallExt { binding_idx=49, args=[v1, v2], fp_arg_mask=0x0 } -> x3
+    v3   CallExt { binding_idx=50, args=[v1, v2], fp_arg_mask=0x0 } -> x3
     v4   Imm(0)                                           -> x0
     v5   Extend { value=v3, kind=I32 }                    -> x0
     v6   BinopI { op=lt, lhs=v5, rhs_imm=0 }              -> x0
@@ -21,13 +21,13 @@ fn ent_pc=5 n_params=0 variadic=false locals=5
     v11  Extend { value=v3, kind=I32 }                    -> x7
     v12  LoadLocal { off=-2, kind=I64 }                   -> x0
     v13  Imm(9)                                           -> x2
-    v14  CallExt { binding_idx=50, args=[v11, v9, v13], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=51, args=[v11, v9, v13], fp_arg_mask=0x0 } -> x0
     v15  LoadLocal { off=-2, kind=I64 }                   -> x0
     v16  BinopI { op=add, lhs=v9, rhs_imm=9 }             -> x0
     v17  Imm(0)                                           -> x14
     v18  Store { addr=v9, disp=9, value=v17, kind=I8 }    -> -
     v19  Extend { value=v3, kind=I32 }                    -> x7
-    v20  CallExt { binding_idx=53, args=[v19], fp_arg_mask=0x0 } -> x0
+    v20  CallExt { binding_idx=54, args=[v19], fp_arg_mask=0x0 } -> x0
     terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

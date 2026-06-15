@@ -45,6 +45,7 @@ struct passwd {
 #pragma binding(libc::getpwuid_r, "_getpwuid_r")
 #pragma binding(libc::getpwnam_r, "_getpwnam_r")
 #pragma binding(libc::getpwent, "_getpwent")
+#pragma binding(libc::setpwent, "_setpwent")
 #pragma binding(libc::endpwent, "_endpwent")
 #endif
 
@@ -55,6 +56,7 @@ struct passwd {
 #pragma binding(libc::getpwuid_r, "getpwuid_r")
 #pragma binding(libc::getpwnam_r, "getpwnam_r")
 #pragma binding(libc::getpwent, "getpwent")
+#pragma binding(libc::setpwent, "setpwent")
 #pragma binding(libc::endpwent, "endpwent")
 #endif
 
@@ -68,6 +70,7 @@ int getpwuid_r(int uid, struct passwd *pwd, char *buf, unsigned long buflen,
 int getpwnam_r(char *name, struct passwd *pwd, char *buf, unsigned long buflen,
                struct passwd **result);
 struct passwd *getpwent();
+void setpwent();
 int endpwent();
 
 #endif

@@ -134,6 +134,10 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         include_str!("../../headers/include/mach/mach_time.h"),
     ),
     (
+        "mach-o/dyld.h",
+        include_str!("../../headers/include/mach-o/dyld.h"),
+    ),
+    (
         "sys/stat.h",
         include_str!("../../headers/include/sys/stat.h"),
     ),
@@ -153,6 +157,11 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/wait.h",
         include_str!("../../headers/include/sys/wait.h"),
     ),
+    (
+        "sys/resource.h",
+        include_str!("../../headers/include/sys/resource.h"),
+    ),
+    ("wctype.h", include_str!("../../headers/include/wctype.h")),
     (
         "sys/ioctl.h",
         include_str!("../../headers/include/sys/ioctl.h"),

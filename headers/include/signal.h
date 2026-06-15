@@ -90,6 +90,11 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigaction,   "_sigaction")
 #pragma binding(libc::sigemptyset, "_sigemptyset")
 #pragma binding(libc::sigfillset,  "_sigfillset")
+#pragma binding(libc::sigaddset,   "_sigaddset")
+#pragma binding(libc::sigdelset,   "_sigdelset")
+#pragma binding(libc::sigismember, "_sigismember")
+#pragma binding(libc::sigprocmask, "_sigprocmask")
+#pragma binding(libc::pthread_sigmask, "_pthread_sigmask")
 #pragma binding(libc::sigaltstack, "_sigaltstack")
 #endif
 
@@ -101,6 +106,11 @@ typedef void (*sighandler_t)(int);
 #pragma binding(libc::sigaction,   "sigaction")
 #pragma binding(libc::sigemptyset, "sigemptyset")
 #pragma binding(libc::sigfillset,  "sigfillset")
+#pragma binding(libc::sigaddset,   "sigaddset")
+#pragma binding(libc::sigdelset,   "sigdelset")
+#pragma binding(libc::sigismember, "sigismember")
+#pragma binding(libc::sigprocmask, "sigprocmask")
+#pragma binding(libc::pthread_sigmask, "pthread_sigmask")
 #pragma binding(libc::sigaltstack, "sigaltstack")
 #endif
 
@@ -137,6 +147,24 @@ struct sigaction {
 int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
+int sigaddset(sigset_t *set, int signo);
+int sigdelset(sigset_t *set, int signo);
+int sigismember(const sigset_t *set, int signo);
+
+// Examine and change the signal mask (POSIX). `how` takes one of the
+// SIG_BLOCK / SIG_UNBLOCK / SIG_SETMASK values below, whose numbering is
+// target-specific because the value reaches the host libc.
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
+#ifdef __APPLE__
+#define SIG_BLOCK   1
+#define SIG_UNBLOCK 2
+#define SIG_SETMASK 3
+#else
+#define SIG_BLOCK   0
+#define SIG_UNBLOCK 1
+#define SIG_SETMASK 2
+#endif
 
 // `sa_flags` bits. The numeric values are target-specific: macOS and
 // Linux assign different bit positions, and `sa_flags` is passed to the

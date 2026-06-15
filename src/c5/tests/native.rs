@@ -667,6 +667,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_basic.c", 0),
     ("thread_local_gnu.c", 0),
     ("wmem_functions.c", 0),
+    ("posix_module_headers.c", 0),
     ("thread_local_initializer.c", 0),
     // Per-thread isolation -- spawns a pthread, has the child
     // mutate a TLS variable, joins, and verifies the main

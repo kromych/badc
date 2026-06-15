@@ -30,6 +30,7 @@
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
+#pragma binding(libc::pthread_setname_np,       "_pthread_setname_np")
 #pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
@@ -79,6 +80,7 @@
 #pragma binding(libc::pthread_detach,           "pthread_detach")
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
+#pragma binding(libc::pthread_setname_np,       "pthread_setname_np")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
@@ -193,6 +195,8 @@ int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 #ifdef __APPLE__
+// Darwin sets only the calling thread's name (no pthread_t parameter).
+int pthread_setname_np(const char *name);
 int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
 // Darwin per-thread 64-bit id (`uint64_t *` out-parameter).
 int pthread_threadid_np(pthread_t thread, unsigned long long *thread_id);
@@ -225,6 +229,8 @@ int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
 int pthread_attr_setscope(char *attr, int scope);
 #ifdef __linux__
+// glibc names the calling-convention pair (pthread_t, name).
+int pthread_setname_np(pthread_t thread, const char *name);
 // pthread_atfork is not a libc.so.6 dynamic symbol on every glibc port;
 // forward to __register_atfork, which is, passing a null DSO handle (the
 // process-global registration libc_nonshared.a's stub uses).

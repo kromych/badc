@@ -55,6 +55,7 @@
 #pragma binding(libc::geteuid,   "_geteuid")
 #pragma binding(libc::getpid,    "_getpid")
 #pragma binding(libc::sleep,     "_sleep")
+#pragma binding(libc::alarm,     "_alarm")
 #pragma binding(libc::pause,     "_pause")
 #pragma binding(libc::usleep,    "_usleep")
 #pragma binding(libc::isatty,    "_isatty")
@@ -138,6 +139,7 @@ extern char **environ;
 #pragma binding(libc::geteuid,   "geteuid")
 #pragma binding(libc::getpid,    "getpid")
 #pragma binding(libc::sleep,     "sleep")
+#pragma binding(libc::alarm,     "alarm")
 #pragma binding(libc::pause,     "pause")
 #pragma binding(libc::usleep,    "usleep")
 #pragma binding(libc::isatty,    "isatty")
@@ -242,6 +244,9 @@ int getuid();
 int geteuid();
 int getpid();
 int sleep(int seconds);
+// Schedule a SIGALRM after `seconds`; returns the prior alarm's
+// remaining seconds (POSIX). Both counts are unsigned.
+unsigned int alarm(unsigned int seconds);
 int usleep(int microseconds);
 // Suspend until a signal is delivered; always returns -1 with EINTR.
 int pause(void);

@@ -40,6 +40,11 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wmemset,  "_wmemset")
 #pragma binding(libc::mbrtowc,  "_mbrtowc")
 #pragma binding(libc::wcrtomb,  "_wcrtomb")
+#pragma binding(libc::btowc,    "_btowc")
+#pragma binding(libc::wctob,    "_wctob")
+#pragma binding(libc::wcscoll,  "_wcscoll")
+#pragma binding(libc::wcsxfrm,  "_wcsxfrm")
+#pragma binding(libc::wcsftime, "_wcsftime")
 #endif
 
 #ifdef __linux__
@@ -63,6 +68,11 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(libc::wmemset,  "wmemset")
 #pragma binding(libc::mbrtowc,  "mbrtowc")
 #pragma binding(libc::wcrtomb,  "wcrtomb")
+#pragma binding(libc::btowc,    "btowc")
+#pragma binding(libc::wctob,    "wctob")
+#pragma binding(libc::wcscoll,  "wcscoll")
+#pragma binding(libc::wcsxfrm,  "wcsxfrm")
+#pragma binding(libc::wcsftime, "wcsftime")
 #endif
 
 #ifdef _WIN32
@@ -107,3 +117,17 @@ wchar_t *wcstok(wchar_t *s, const wchar_t *delim, wchar_t **ptr);
 // Restartable multibyte / wide conversion (C99 7.24.6.3).
 unsigned long mbrtowc(wchar_t *pwc, const char *s, unsigned long n, mbstate_t *ps);
 unsigned long wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
+
+// Single-byte / wide-character conversion (C99 7.24.6.1).
+wint_t btowc(int c);
+int wctob(wint_t c);
+
+// Locale-dependent wide-string collation (C99 7.24.4.4.2, 7.24.4.5.1).
+int wcscoll(const wchar_t *s1, const wchar_t *s2);
+size_t wcsxfrm(wchar_t *s1, const wchar_t *s2, size_t n);
+
+// Wide-character time formatting (C99 7.24.5.1). `struct tm` comes from
+// <time.h>; a pointer to it needs only the tag here.
+struct tm;
+size_t wcsftime(wchar_t *s, size_t maxsize, const wchar_t *format,
+                const struct tm *timeptr);

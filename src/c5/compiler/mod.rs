@@ -800,6 +800,9 @@ pub struct Compiler {
     /// either an absolute write (ELF / ET_EXEC), a Mach-O
     /// rebase opcode, or a PE `.reloc` entry.
     data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Pointer-to-extern-data static initializers; the target symbol is
+    /// resolved by name at link time. See [`program::ExternDataReloc`].
+    pub(super) extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// Function-pointer relocations for static initializers like
     /// `static const VTable v = { .xClose = my_close };`. Each
     /// entry is the byte offset in `data` of an 8-byte slot plus
@@ -1216,6 +1219,7 @@ impl Compiler {
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             pending_exports,
             current_func_return_ty: 0,
@@ -1580,6 +1584,7 @@ impl Compiler {
             tls_init_size: self.tls_init_size,
             exports,
             data_relocs: self.data_relocs,
+            extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,

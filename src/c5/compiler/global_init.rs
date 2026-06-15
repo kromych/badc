@@ -181,7 +181,7 @@ impl Compiler {
         // runtime VA at image-load time.
         if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
-            && self.symbols[self.lex.curr_id_idx].array_size > 0
+            && self.symbols[self.lex.curr_id_idx].array_size != 0
             && is_pointer_ty(var_ty)
         {
             if is_thread_local {
@@ -191,9 +191,26 @@ impl Compiler {
                 ));
             }
             let target_idx = self.lex.curr_id_idx;
-            let target_offset = self.symbols[target_idx].val;
             self.symbols[target_idx].was_referenced = true;
             self.next()?;
+            // An extern array (`extern T a[]`) decays to a link-time
+            // reference resolved by name; a local array decays to its own
+            // data-segment offset.
+            let t = &self.symbols[target_idx];
+            let is_extern_data = t.is_extern_decl
+                && t.linkage == crate::c5::symbol::Linkage::External
+                && !t.has_initializer;
+            if is_extern_data {
+                let name = self.symbols[target_idx].name.clone();
+                self.extern_data_relocs
+                    .push(crate::c5::program::ExternDataReloc {
+                        data_offset: var_offset as u64,
+                        symbol_name: name,
+                        addend: 0,
+                    });
+                return Ok(());
+            }
+            let target_offset = self.symbols[target_idx].val;
             let bytes = (target_offset as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.data_relocs.push(crate::c5::program::DataReloc {
@@ -380,7 +397,10 @@ impl Compiler {
             // by the element size; for a scalar global the index
             // (if any) is just byte-additive, and there usually
             // isn't one.
-            let elem_size = if self.symbols[target_idx].array_size > 0 {
+            // An array target (complete `T a[N]` or incomplete extern
+            // `T a[]`, `array_size == -1`) scales the index by the element
+            // size; a scalar has no index, so the stride is unused.
+            let elem_size = if self.symbols[target_idx].array_size != 0 {
                 self.size_of_type(self.symbols[target_idx].type_) as i64
             } else {
                 1
@@ -404,6 +424,32 @@ impl Compiler {
                 }
                 self.next()?;
                 target_offset += n * elem_size;
+            }
+            // A target defined in another translation unit (`extern T g;`
+            // with no definition here) is resolved by name at link time;
+            // `target_offset` is the byte offset added to its address
+            // (the symbol's own `val` is 0 for an extern). The slot stays
+            // zero until the link resolves it.
+            {
+                let t = &self.symbols[target_idx];
+                let is_extern_data = t.is_extern_decl
+                    && t.linkage == crate::c5::symbol::Linkage::External
+                    && !t.has_initializer;
+                if is_extern_data {
+                    self.symbols[target_idx].was_referenced = true;
+                    let name = self.symbols[target_idx].name.clone();
+                    self.extern_data_relocs
+                        .push(crate::c5::program::ExternDataReloc {
+                            data_offset: var_offset as u64,
+                            symbol_name: name,
+                            // `target_offset` started at the symbol's own
+                            // `val` (a parse-time tentative slot that is
+                            // cleared at finalize); the addend is the
+                            // index/byte offset alone.
+                            addend: target_offset - self.symbols[target_idx].val,
+                        });
+                    return Ok(());
+                }
             }
             // Write the target's data-segment offset into the
             // slot. The VM reads this directly because its

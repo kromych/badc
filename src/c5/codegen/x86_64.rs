@@ -2148,6 +2148,7 @@ pub(super) fn lower(
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
         data_relocs: Vec::new(),
+        extern_data_relocs: Vec::new(),
         code_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,

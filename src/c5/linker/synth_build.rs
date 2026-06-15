@@ -108,6 +108,7 @@ fn synth_program_and_build(
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
         data_relocs: data_relocs.clone(),
+        extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.clone(),
         exports: exports.clone(),
         dylibs: Vec::new(),
@@ -246,6 +247,7 @@ fn synth_program_and_build(
             .map(|&offset_in_block| crate::c5::codegen::MachoTlvDescriptor { offset_in_block })
             .collect(),
         data_relocs,
+        extern_data_relocs: Vec::new(),
         code_relocs,
         exports: exports.clone(),
         output_kind,

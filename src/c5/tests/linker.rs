@@ -162,6 +162,70 @@ fn nested_block_externs_emit_distinct_undef_symbols() {
 }
 
 #[test]
+fn pointer_to_extern_data_resolves_cross_tu() {
+    // `int *p = &g;` / `int *p = arr;` where the target is defined in
+    // another unit must emit a `.rela.data` reloc against the named
+    // undefined data symbol, not against this unit's `.data` section, so
+    // the link resolves it to the defining unit's storage. Before the
+    // fix the slot held this unit's `.data` base.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let prog_a = Compiler::with_options(
+        "extern int g;\nextern int arr[];\nint *ps = &g;\nint *pa = &arr[1];\nint *pd = arr;\n"
+            .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile a");
+    let bytes_a = emit_native_with_options(&prog_a, Target::LinuxX64, opts).expect("emit a");
+    let obj_a = parse_native_elf(&bytes_a).expect("parse a");
+
+    // `g` and `arr` are undefined data symbols, and every `.rela.data`
+    // entry targets one of them by name rather than the `.data` section.
+    for name in ["g", "arr"] {
+        assert!(
+            obj_a
+                .symbols
+                .iter()
+                .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef)),
+            "`{name}` must be an undefined data symbol"
+        );
+    }
+    assert_eq!(
+        obj_a.data_relocs.len(),
+        3,
+        "three pointer-to-extern-data slots must each emit a reloc"
+    );
+    for r in &obj_a.data_relocs {
+        let target = &obj_a.symbols[r.sym_idx].name;
+        assert!(
+            target == "g" || target == "arr",
+            "extern-data reloc must target the named symbol, got `{target}`"
+        );
+    }
+
+    // The defining unit links cleanly against the references.
+    let prog_b = Compiler::with_options(
+        "int g = 77;\nint arr[3] = {11, 22, 33};\n".to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile b");
+    let bytes_b = emit_native_with_options(&prog_b, Target::LinuxX64, opts).expect("emit b");
+    let obj_b = parse_native_elf(&bytes_b).expect("parse b");
+    link_native_objects(&[obj_a, obj_b]).expect("link resolves the extern-data references");
+}
+
+#[test]
 fn libc_address_trampoline_is_per_tu_local() {
     // Two translation units that each take the address of the same
     // libc function in a `.data` function-pointer table both emit a

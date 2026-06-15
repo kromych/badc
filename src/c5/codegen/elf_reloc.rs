@@ -527,10 +527,18 @@ pub(super) fn write_relocatable(
     }
 
     // Unique cross-TU user-data names referenced by
-    // `user_extern_data_refs`. Same dedup shape as the function
-    // case above.
+    // `user_extern_data_refs` (code references) and
+    // `extern_data_relocs` (pointer-to-extern-data initializers in the
+    // data segment). Both resolve against the same undefined-data
+    // symbols.
     let mut user_extern_data_names: Vec<&str> = Vec::new();
     for r in &build.user_extern_data_refs {
+        let s = r.symbol_name.as_str();
+        if !user_extern_data_names.contains(&s) {
+            user_extern_data_names.push(s);
+        }
+    }
+    for r in &build.extern_data_relocs {
         let s = r.symbol_name.as_str();
         if !user_extern_data_names.contains(&s) {
             user_extern_data_names.push(s);
@@ -1056,6 +1064,23 @@ pub(super) fn write_relocatable(
             r_offset: r.data_offset,
             r_info: (data_sym_idx << 32) | rtype_abs64 as u64,
             r_addend: r.target_offset as i64,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Pointer-to-extern-data initializers: the reloc targets the named
+    // undefined-data symbol so the linker resolves it against the
+    // defining unit's storage. The addend carries the byte offset added
+    // to the symbol (`&extern_arr[N]`).
+    for r in &build.extern_data_relocs {
+        let pos = user_extern_data_names
+            .iter()
+            .position(|n| *n == r.symbol_name.as_str())
+            .expect("user_extern_data_names contains every extern_data_reloc name");
+        let sym_idx = user_extern_data_sym_idx[pos] as u64;
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (sym_idx << 32) | rtype_abs64 as u64,
+            r_addend: r.addend,
         };
         write_struct(&mut rela_data_bytes, &rela);
     }
@@ -1585,6 +1610,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
@@ -1629,6 +1655,7 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: OutputKind::Relocatable,

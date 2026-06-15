@@ -22,6 +22,19 @@ pub struct ExportedFunction {
     pub ent_pc: usize,
 }
 
+/// A pointer-to-extern-data initializer. The slot at `data_offset` in
+/// [`Program::data`] must hold the runtime address of the data symbol
+/// `symbol_name`, which is defined in another translation unit and
+/// resolved by name at link time.
+#[derive(Debug, Clone)]
+pub struct ExternDataReloc {
+    pub data_offset: u64,
+    pub symbol_name: alloc::string::String,
+    /// Byte offset added to the symbol's address -- non-zero for
+    /// `&extern_arr[N]` and `&extern_g + K`.
+    pub addend: i64,
+}
+
 /// A pointer-to-global initializer that needs run-time
 /// relocation. `data_offset` is the byte offset within
 /// [`Program::data`] where the absolute address of the target
@@ -114,6 +127,12 @@ pub struct Program {
     ///   `IMAGE_REL_BASED_DIR64` entry. Initial bytes hold the
     ///   preferred VA; the loader adds the slide delta.
     pub data_relocs: Vec<DataReloc>,
+    /// Pointer-to-extern-data initializers (`int *p = &extern_g;` and the
+    /// equivalent extern-array decay). The target is defined in another
+    /// translation unit, so the slot at `data_offset` must hold that
+    /// symbol's runtime address, resolved by name at link time -- unlike
+    /// [`DataReloc`], whose target is a known offset in this unit's data.
+    pub extern_data_relocs: Vec<ExternDataReloc>,
     /// Function-pointer initializers in the data segment. Each
     /// entry says "byte `data_offset` of the data segment must
     /// hold the runtime code address of the function whose first

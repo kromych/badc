@@ -1319,6 +1319,10 @@ pub(crate) struct Build {
     /// `Build` so the per-format writer doesn't have to plumb
     /// the program through alongside the build.
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Pointer-to-extern-data initializers; mirror of
+    /// [`Program::extern_data_relocs`]. The per-format writer emits a
+    /// named relocation against the data symbol, resolved at link time.
+    pub extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// Function-pointer initializers in the data segment. Mirror
     /// of [`Program::code_relocs`]. Each entry pairs a data-segment
     /// slot with the ent_pc of a function; the per-format
@@ -1949,6 +1953,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.imports = imports;
     build.abi = target.abi();
     build.data_relocs = program.data_relocs.clone();
+    build.extern_data_relocs = program.extern_data_relocs.clone();
     build.code_relocs = program.code_relocs.clone();
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;

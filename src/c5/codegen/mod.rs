@@ -1760,6 +1760,68 @@ pub fn emit_native_with_options(
     emit_native_with_options_named(program, target, options, None)
 }
 
+/// Route a single-TU final image's `#pragma binding(data ...)`
+/// references through the GOT, the same way the multi-TU linker does.
+///
+/// The walker lowers a data-binding reference to an `Inst::ImmData` that
+/// the emitter records as a [`UserExternDataRef`] -- a named undefined
+/// data reference. The relocatable (`.o`) writer turns that into an
+/// undefined symbol the linker later binds through the GOT; a single-TU
+/// final image has no link step, so resolve it here instead: register
+/// the host data symbol as a flat-namespace import and load its address
+/// from the dyld-filled GOT slot, leaving an `adrp + ldr` pair for
+/// [`mach_o`] to patch. Without this the reference stays an unresolved
+/// `.data`-relative address and faults at runtime.
+///
+/// Mach-O only: ELF binds the local copy through an `R_*_COPY`
+/// relocation and the PE writer has no data-import path.
+#[cfg(feature = "native-emit")]
+fn route_single_tu_data_imports(build: &mut Build, target: Target) {
+    if target != Target::MacOSAarch64 || build.output_kind == OutputKind::Relocatable {
+        return;
+    }
+    if build.imports.data_bindings.is_empty() || build.user_extern_data_refs.is_empty() {
+        return;
+    }
+    // (local name -> host symbol) for every data binding in scope.
+    let hosts: alloc::collections::BTreeMap<String, String> = build
+        .imports
+        .data_bindings
+        .iter()
+        .map(|(l, h)| (l.clone(), h.clone()))
+        .collect();
+    let mut import_for: alloc::collections::BTreeMap<String, usize> =
+        alloc::collections::BTreeMap::new();
+    let mut remaining = Vec::with_capacity(build.user_extern_data_refs.len());
+    for r in core::mem::take(&mut build.user_extern_data_refs) {
+        let Some(host) = hosts.get(&r.symbol_name) else {
+            remaining.push(r);
+            continue;
+        };
+        let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
+            let i = build.imports.imports.len();
+            build.imports.imports.push(ResolvedImport {
+                binding_idx: i as i64,
+                local_name: r.symbol_name.clone(),
+                real_symbol: host.clone(),
+                dylib_index: 0,
+                flat_lookup: true,
+                is_variadic: false,
+                fixed_args: 0,
+                return_type_tag: 0,
+                returns_long_double: false,
+                param_types: Vec::new(),
+            });
+            i
+        });
+        build.got_fixups.push(GotFixup {
+            adrp_offset: r.instr_offset,
+            import_index: idx,
+        });
+    }
+    build.user_extern_data_refs = remaining;
+}
+
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
@@ -1774,6 +1836,7 @@ pub fn emit_native_with_options_named(
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let mut build = lower_for(program, target, options)?;
+    route_single_tu_data_imports(&mut build, target);
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }

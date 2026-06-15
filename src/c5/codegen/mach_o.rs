@@ -1895,10 +1895,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // no trampoline offsets (no per-arch lower() ran); in that
     // case we skip the local section.
     let emit_plt_locals = !build.plt_trampoline_offsets.is_empty();
+    // One local symbol per PLT trampoline. Function imports carry a
+    // trampoline; data imports (bound through the GOT) do not, and the
+    // routing appends them after the function imports, so the first
+    // `plt_trampoline_offsets.len()` imports are exactly the trampolined
+    // ones. The remaining imports still get an undefined symtab entry +
+    // bind below.
+    let n_trampolines = build.plt_trampoline_offsets.len();
     let mut symbol_names: Vec<&str> = if emit_plt_locals {
-        build
-            .imports
-            .imports
+        build.imports.imports[..n_trampolines]
             .iter()
             .map(|imp| imp.local_name.as_str())
             .collect()
@@ -1921,16 +1926,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
 
-    // [Locals] one entry per PLT trampoline.
+    // [Locals] one entry per PLT trampoline. Data imports have no
+    // trampoline; they appear only as undefined import symbols below.
     if emit_plt_locals {
-        debug_assert_eq!(
-            build.plt_trampoline_offsets.len(),
-            build.imports.imports.len(),
-            "trampoline-offset count must match import count"
+        debug_assert!(
+            n_trampolines <= build.imports.imports.len(),
+            "more trampolines than imports"
         );
-        for (i, _imp) in build.imports.imports.iter().enumerate() {
+        for (i, &tramp_offset) in build.plt_trampoline_offsets.iter().enumerate() {
             let n_strx = str_indices[i];
-            let n_value = code_vmaddr_base + build.plt_trampoline_offsets[i] as u64;
+            let n_value = code_vmaddr_base + tramp_offset as u64;
             symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
         }
     }

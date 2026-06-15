@@ -1457,6 +1457,34 @@ impl Compiler {
         // `target_ent_pc`.
         self.emit_sys_trampolines();
         self.resolve_code_relocs()?;
+        // macOS resolves a `#pragma binding(data ...)` import (e.g.
+        // environ) through the GOT -- a flat-namespace bind to the host
+        // data symbol -- not through a COPY-relocated local slot, so the
+        // symbol must stay undefined even in a self-contained image. The
+        // no_entry_point clear below does this for relocatable objects;
+        // do the same for a data binding's local here regardless of
+        // no_entry_point so `live_glo_addr` returns `GloAddr::Extern` and
+        // routes the reference through `imm_data_extern` to the GOT
+        // rather than an uninitialized `.data` slot.
+        if self.target == Target::MacOSAarch64 {
+            let data_locals: alloc::collections::BTreeSet<String> = self
+                .dylibs
+                .iter()
+                .flat_map(|d| d.bindings.iter())
+                .filter(|b| b.is_data)
+                .map(|b| b.local_name.clone())
+                .collect();
+            for sym in self.symbols.iter_mut() {
+                if sym.class == Token::Glo as i64
+                    && sym.is_extern_decl
+                    && !sym.has_initializer
+                    && data_locals.contains(&sym.name)
+                {
+                    sym.defined_here = false;
+                    sym.val = 0;
+                }
+            }
+        }
         // Cross-TU function imports. Every extern-declared
         // `Token::Fun` symbol with no body in this TU gets a
         // unique placeholder ent_pc (past `text.len()`), then has

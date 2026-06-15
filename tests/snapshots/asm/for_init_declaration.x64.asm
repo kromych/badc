@@ -75,32 +75,27 @@ Disassembly of section .text:
                	retq
 
 <multi_decl>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
                	xorq	%rdx, %rdx
                	movl	$0xa, %ecx
-               	movslq	-0x10(%rbp), %rax
-               	movslq	%ecx, %rsi
-               	cmpq	%rsi, %rax
+               	movq	%rdx, %rax
+               	movslq	%edx, %rsi
+               	movslq	%ecx, %rdi
+               	cmpq	%rdi, %rsi
                	jge	<addr>
                	jmp	<addr>
-               	movslq	-0x10(%rbp), %rax
-               	incq	%rax
-               	movl	%eax, -0x10(%rbp)
+               	movslq	%edx, %rdx
+               	incq	%rdx
                	movslq	%ecx, %rcx
                	decq	%rcx
                	jmp	<addr>
-               	movslq	%edx, %rax
-               	movslq	-0x10(%rbp), %rdx
-               	movslq	%ecx, %rsi
-               	addq	%rsi, %rdx
-               	movslq	%edx, %rdx
-               	addq	%rax, %rdx
+               	movslq	%eax, %rax
+               	movslq	%edx, %rsi
+               	movslq	%ecx, %rdi
+               	addq	%rdi, %rsi
+               	movslq	%esi, %rsi
+               	addq	%rsi, %rax
                	jmp	<addr>
-               	movslq	%edx, %rax
-               	addq	$0x20, %rsp
-               	popq	%rbp
+               	movslq	%eax, %rax
                	retq
 
 <shadowing>:
@@ -278,5 +273,4 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

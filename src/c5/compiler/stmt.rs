@@ -90,9 +90,19 @@ impl Compiler {
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
             self.parse_block_local_decl(&mut for_init_symbols)?;
-            let added = self.ast.stmts.len().saturating_sub(init_before);
-            if added > 0 {
-                let id = self.ast_wrap_stmts_since(init_before);
+            let init_after = self.ast.stmts.len();
+            // C99 6.7p1: a declaration's init-declarator-list may name
+            // several declarators (`for (int i = 0, l = n; ...)`).
+            // `parse_block_local_decl` pushes one top-level `Stmt::Decl`
+            // per declarator, so every pushed id must reach the walker.
+            // `ast_wrap_stmts_since` keeps only the last arena entry
+            // (correct for a single nested statement, not for sibling
+            // decls), which drops every initializer but the last.
+            if init_after > init_before {
+                let ids: alloc::vec::Vec<super::super::ast::StmtId> = (init_before..init_after)
+                    .map(|i| i as super::super::ast::StmtId)
+                    .collect();
+                let id = self.ast_wrap_block_items(&ids);
                 init_ast = Some(super::super::ast::BlockItem::Stmt(id));
             }
         } else {

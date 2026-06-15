@@ -77,19 +77,16 @@ Disassembly of section .text:
                	ret
 
 <multi_decl>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x20
                	mov	x2, #0x0                // =0
                	mov	x1, #0xa                // =10
-               	ldursw	x0, [x29, #-0x10]
-               	sxtw	x3, w1
-               	cmp	x0, x3
+               	mov	x0, x2
+               	sxtw	x3, w2
+               	sxtw	x4, w1
+               	cmp	x3, x4
                	b.ge	<addr>
                	b	<addr>
-               	ldursw	x0, [x29, #-0x10]
-               	add	x0, x0, #0x1
-               	stur	w0, [x29, #-0x10]
+               	sxtw	x2, w2
+               	add	x2, x2, #0x1
                	sxtw	x1, w1
                	mov	x17, #0xffff            // =65535
                	movk	x17, #0xffff, lsl #16
@@ -97,16 +94,14 @@ Disassembly of section .text:
                	movk	x17, #0xffff, lsl #48
                	add	x1, x1, x17
                	b	<addr>
-               	sxtw	x0, w2
-               	ldursw	x2, [x29, #-0x10]
-               	sxtw	x3, w1
-               	add	x2, x2, x3
-               	sxtw	x2, w2
-               	add	x2, x0, x2
+               	sxtw	x0, w0
+               	sxtw	x3, w2
+               	sxtw	x4, w1
+               	add	x3, x3, x4
+               	sxtw	x3, w3
+               	add	x0, x0, x3
                	b	<addr>
-               	sxtw	x0, w2
-               	add	sp, sp, #0x20
-               	ldp	x29, x30, [sp], #0x10
+               	sxtw	x0, w0
                	ret
 
 <shadowing>:

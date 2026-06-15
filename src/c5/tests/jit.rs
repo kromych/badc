@@ -1214,6 +1214,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("posix_module_headers.c", 0),
     ("mmap_anonymous.c", 0),
     ("struct_tm_tm_zone_offset.c", 0),
+    ("for_init_multiple_declarators.c", 0),
     ("flex_array_member_static_init.c", 0),
     ("array_compound_literal_static_init.c", 0),
     ("const_address_cast_and_arith.c", 0),

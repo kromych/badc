@@ -512,6 +512,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("flexible_array_member.c", 0),
     ("flex_array_member_static_init.c", 0),
     ("array_compound_literal_static_init.c", 0),
+    ("const_address_cast_and_arith.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),
     ("pragma_operator.c", 0),

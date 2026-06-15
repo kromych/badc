@@ -515,16 +515,78 @@ impl Compiler {
     /// offset accumulates the array-index strides and field offsets.
     fn parse_const_address(&mut self) -> Result<Option<(i64, usize)>, C5Error> {
         let snap = self.lex.snapshot();
-        while self.lex.tk == Token::AndOp || self.lex.tk == '(' {
-            self.next()?;
+        // The speculative scan may lex a string literal (whose bytes are
+        // appended to the data segment) before deciding this is not an
+        // address constant; the lexer snapshot does not cover the data
+        // segment, so truncate it back on every bail-out.
+        let data_snap = self.data.len();
+        // Byte stride for a trailing `+ N` / `- N` (C99 6.6 address
+        // constant `&object + integer`). A pointer cast before the `&`
+        // (`(uint8_t*)&g + offsetof(...)`) sets the stride to its
+        // pointee size; without a cast the symbol's element size is
+        // used. `None` until a cast or the base symbol resolves it.
+        let mut cast_stride: Option<i64> = None;
+        // Skip the `&` and any leading grouping parentheses. A `(` that
+        // opens a cast (`(T*)&g`) is skipped whole -- the cast only
+        // retypes the address, which is the same constant value. A
+        // grouping `(` is matched by the trailing `)` consumed below.
+        loop {
+            if self.lex.tk == Token::AndOp {
+                self.next()?;
+            } else if self.lex.tk == '(' {
+                let paren_snap = self.lex.snapshot();
+                self.next()?;
+                if self.lex_is_type_start() {
+                    let base = self.parse_decl_base_type()?;
+                    let _ = core::mem::take(&mut self.pending.typedef_base_array_size);
+                    let mut stars: i64 = 0;
+                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+                        if self.lex.tk == Token::MulOp {
+                            stars += 1;
+                        }
+                        self.next()?;
+                    }
+                    if stars >= 1 && self.lex.tk == ')' {
+                        // Simple pointer cast: record the pointee size so
+                        // a following `+ N` strides by it.
+                        let pointee = base + (stars - 1) * (Ty::Ptr as i64);
+                        cast_stride = Some(self.size_of_type(pointee) as i64);
+                        self.next()?; // consume `)`
+                    } else {
+                        // A more elaborate abstract declarator (function
+                        // pointer, array). Skip the whole group by token
+                        // balance; such casts do not appear before a
+                        // pointer-arithmetic address constant.
+                        self.lex.restore(paren_snap);
+                        self.next()?; // re-consume `(`
+                        let mut depth: i64 = 1;
+                        while depth > 0 && self.lex.tk != 0 {
+                            if self.lex.tk == '(' {
+                                depth += 1;
+                            } else if self.lex.tk == ')' {
+                                depth -= 1;
+                                if depth == 0 {
+                                    self.next()?;
+                                    break;
+                                }
+                            }
+                            self.next()?;
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
         }
         if self.lex.tk != Token::Id {
             self.lex.restore(snap);
+            self.data.truncate(data_snap);
             return Ok(None);
         }
         let sym_idx = self.lex.curr_id_idx;
         if self.symbols[sym_idx].class != Token::Glo as i64 {
             self.lex.restore(snap);
+            self.data.truncate(data_snap);
             return Ok(None);
         }
         let mut off = self.symbols[sym_idx].val;
@@ -539,6 +601,7 @@ impl Compiler {
                 let n = self.parse_constant_int()?;
                 if self.lex.tk != ']' {
                     self.lex.restore(snap);
+                    self.data.truncate(data_snap);
                     return Ok(None);
                 }
                 self.next()?;
@@ -549,6 +612,7 @@ impl Compiler {
                     || !(is_struct_ty(cur_ty) && struct_ptr_depth(cur_ty) == 0)
                 {
                     self.lex.restore(snap);
+                    self.data.truncate(data_snap);
                     return Ok(None);
                 }
                 let fname = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -559,6 +623,7 @@ impl Compiler {
                     .position(|f| f.name == fname)
                 else {
                     self.lex.restore(snap);
+                    self.data.truncate(data_snap);
                     return Ok(None);
                 };
                 let field = self.structs[sid].fields[fpos].clone();
@@ -566,6 +631,16 @@ impl Compiler {
                 cur_ty = field.ty;
                 elem_stride = self.size_of_type(field.ty) as i64;
                 self.next()?;
+            } else if self.lex.tk == Token::AddOp || self.lex.tk == Token::SubOp {
+                // C99 6.6: `&object + integer-constant`. The stride is
+                // the cast's pointee size when present (the common
+                // `(uint8_t*)&g + offset` byte form), else the symbol's
+                // element size.
+                let subtract = self.lex.tk == Token::SubOp;
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                let stride = cast_stride.unwrap_or(elem_stride);
+                off += if subtract { -n } else { n } * stride;
             } else if self.lex.tk == ')' {
                 self.next()?;
             } else {

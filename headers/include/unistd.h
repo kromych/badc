@@ -88,6 +88,14 @@
 // slot. Programs that walk the environment portably reach for
 // it inside a Mach-O #ifdef branch.
 #pragma binding(libc::_NSGetEnviron, "__NSGetEnviron")
+// libSystem owns the live `environ` cell; setenv / unsetenv mutate it
+// and may reallocate the array. Mach-O has no COPY relocation, so bind
+// the data symbol through the GOT: a reference to `environ` loads
+// `_environ`'s address from the dyld-filled slot, keeping every read in
+// sync with libSystem's current array (the analog of the ELF COPY
+// relocation glibc's `__environ` uses).
+#pragma binding(data libc::environ, "_environ")
+extern char **environ;
 #endif
 
 #ifdef __linux__

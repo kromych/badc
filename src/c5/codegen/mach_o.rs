@@ -1247,12 +1247,16 @@ fn apply_got_fixups(
             )));
         }
 
-        let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X16, imm21);
-        let ldr_word = super::aarch64::enc_ldr_imm(
-            super::aarch64::Reg::X16,
-            super::aarch64::Reg::X16,
-            in_page,
-        );
+        // The codegen emitted `adrp Rd, page` + a second instruction
+        // into the same Rd to compute the address. Preserve Rd (bits
+        // [4:0] of the adrp) so the rewritten `adrp Rd; ldr Rd, [Rd,
+        // slot]` lands the GOT pointer in the register the following
+        // dereference reads, rather than a fixed scratch register.
+        let orig_adrp =
+            u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
+        let rd = super::aarch64::Reg((orig_adrp & 0x1F) as u8);
+        let adrp_word = super::aarch64::enc_adrp(rd, imm21);
+        let ldr_word = super::aarch64::enc_ldr_imm(rd, rd, in_page);
         out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
         out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
     }

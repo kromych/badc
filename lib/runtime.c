@@ -30,7 +30,13 @@
 // tentative defs into a SHN_COMMON slot is a separate TODO; until
 // that lands, hosting the definition here side-steps the
 // multiple-definition collision.
+//
+// macOS binds `environ` as a GOT data import to libSystem's `_environ`
+// (see <unistd.h>), so the symbol must stay undefined here for the
+// reference to route through the import slot rather than a local cell.
+#ifndef __APPLE__
 char **environ;
+#endif
 
 // msvcrt's environment-vector alias on Windows. `<stdlib.h>`'s
 // `_WIN32` section declares it `extern char **_environ;` for the same
@@ -76,23 +82,6 @@ void __c5_entry(void *sp, long image_off) {
     // through `environ` (POSIX 8.3); without this the global stays NULL
     // and an `environ[i]` read faults.
     environ = argv + argc + 1;
-    __c5_exit(__BADC_ENTRY__(argc, argv));
-}
-#endif
-
-#ifdef __APPLE__
-// macOS process entry. The Mach-O image carries LC_MAIN pointing here,
-// so dyld runs the load-time initializers and then calls this with the
-// platform entry ABI: argc, argv, envp, apple in the first four
-// argument registers. Unlike a clang-linked image, a CRT-free image
-// links no crt1.o, so the `environ` global crt1.o normally publishes
-// stays NULL; libSystem's getenv reads its own copy, but a program
-// that walks the POSIX `environ` array reads this one. Publish it from
-// the environment vector dyld passes (POSIX 8.3) before entering main.
-extern int __BADC_ENTRY__(int argc, char **argv);
-
-void __c5_entry(int argc, char **argv, char **envp) {
-    environ = envp;
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #endif

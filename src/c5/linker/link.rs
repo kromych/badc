@@ -121,6 +121,13 @@ pub struct MergedNative {
     /// final-image writer binds each local data symbol it defines to the
     /// host's data object with an `R_*_COPY` relocation.
     pub copy_relocs: Vec<(String, String)>,
+    /// Indices into [`Self::imports`] for `#pragma binding(data ...)`
+    /// locals that reached the merge as an UNDEF (the host data symbol
+    /// lives in a dylib; Mach-O routes the reference through the GOT).
+    /// The PLT pass skips these -- a data import takes no call stub, and
+    /// its reference loads the GOT slot directly rather than branching
+    /// through a trampoline.
+    pub data_import_indices: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -469,6 +476,20 @@ pub fn link_native_objects_with_options(
     // (a shared library's references the host supplies at `dlopen`).
     let mut flat_imports: alloc::collections::BTreeSet<String> =
         alloc::collections::BTreeSet::new();
+    // Local names bound to a host data symbol via `#pragma binding(data
+    // ...)`. A unit that references such a name carries no local
+    // definition (the symbol lives in a dylib), so the reference reaches
+    // the merged table as an UNDEF. On Mach-O it routes through the GOT
+    // like a function import; ELF defines the local and uses a COPY
+    // relocation instead, so the name never reaches the UNDEF arm there.
+    let data_binding_locals: alloc::collections::BTreeSet<String> = objs
+        .iter()
+        .flat_map(|o| o.copy_relocs.iter().map(|(local, _host)| local.clone()))
+        .collect();
+    // Import indices for the data-binding locals admitted as GOT imports
+    // (Mach-O). The PLT pass consults this to skip stub creation.
+    let mut data_import_indices: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
     let record_import = |name: &str,
                          imports: &mut Vec<String>,
                          idx_for_name: &mut BTreeMap<String, usize>|
@@ -604,7 +625,13 @@ pub fn link_native_objects_with_options(
                         // flat-namespace bind (Mach-O) / undefined
                         // `.dynsym` entry (ELF) the host resolves
                         // through the `dlopen` global scope.
-                        if sym.binding == 1 && !allow_undefined {
+                        // A `#pragma binding(data ...)` local reaches the
+                        // merged table as an UNDEF where the binding's host
+                        // symbol lives in a dylib. Admit it as a flat import
+                        // so the writer binds the host symbol through the GOT,
+                        // rather than rejecting it as unresolved.
+                        let is_data_binding = data_binding_locals.contains(&sym.name);
+                        if sym.binding == 1 && !allow_undefined && !is_data_binding {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
                                 sym.name,
@@ -617,6 +644,9 @@ pub fn link_native_objects_with_options(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
+                        if is_data_binding {
+                            data_import_indices.insert(idx);
+                        }
                         pending_imports.push(PendingImportReloc {
                             text_offset: patch_offset as u64,
                             import_index: idx,
@@ -989,6 +1019,7 @@ pub fn link_native_objects_with_options(
         macho_tlv_descriptors,
         macho_tlv_fixups,
         copy_relocs,
+        data_import_indices,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1265,9 +1296,17 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
     let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
     let mut trampolines: Vec<PltTrampoline> = Vec::new();
     let pending = core::mem::take(&mut merged.pending_imports);
+    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        // A data import takes no call stub: its reference loads the GOT
+        // slot directly. Re-park the reloc unchanged so `synth_fixups`
+        // projects it to a GotFixup (adrp + ldr) against the slot.
+        if data_imports.contains(&reloc.import_index) {
             parked_back.push(reloc.clone());
             continue;
         }
@@ -1305,6 +1344,9 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
 
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
+            continue;
+        }
+        if data_imports.contains(&reloc.import_index) {
             continue;
         }
         let site = reloc.text_offset as usize;

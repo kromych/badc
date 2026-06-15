@@ -2094,7 +2094,9 @@ impl Preprocessor {
     /// `Symbol::intrinsic` field with the [`Intrinsic`]
     /// discriminant from `op.rs`, and the call-site lowering
     /// emits an `Inst::Intrinsic` instead of a regular call +
-    /// stack-cleanup sequence. The arg list is
+    /// stack-cleanup sequence. The C11 7.17 atomic operations use the
+    /// same registry but lower to load / store / read-modify-write at
+    /// the call site rather than to an `Inst::Intrinsic`. The arg list is
     /// expected to be a quoted string so future intrinsics
     /// whose spellings collide with c5 keywords don't trip
     /// the identifier parser; the body uses `is_ident` to
@@ -2129,6 +2131,20 @@ impl Preprocessor {
         }
         let id = match name {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
+            // C11 7.17 atomic generic operations. Lowered at the call
+            // site to load / store / read-modify-write, not to an
+            // `Inst::Intrinsic`.
+            "atomic_load" => super::op::Intrinsic::AtomicLoad as i64,
+            "atomic_store" => super::op::Intrinsic::AtomicStore as i64,
+            "atomic_exchange" => super::op::Intrinsic::AtomicExchange as i64,
+            "atomic_fetch_add" => super::op::Intrinsic::AtomicFetchAdd as i64,
+            "atomic_fetch_sub" => super::op::Intrinsic::AtomicFetchSub as i64,
+            "atomic_fetch_and" => super::op::Intrinsic::AtomicFetchAnd as i64,
+            "atomic_fetch_or" => super::op::Intrinsic::AtomicFetchOr as i64,
+            "atomic_fetch_xor" => super::op::Intrinsic::AtomicFetchXor as i64,
+            "atomic_compare_exchange_strong" => {
+                super::op::Intrinsic::AtomicCompareExchangeStrong as i64
+            }
             "__c5_aarch64_setjmp" => super::op::Intrinsic::SetjmpAArch64 as i64,
             "__c5_aarch64_longjmp" => super::op::Intrinsic::LongjmpAArch64 as i64,
             "__builtin_va_start" => super::op::Intrinsic::VaStart as i64,
@@ -2159,7 +2175,7 @@ impl Preprocessor {
                          __c5_aarch64_longjmp, __builtin_va_start, \
                          __builtin_va_arg, __builtin_va_end, \
                          __builtin_va_copy, fma, fmaf, sqrt, sqrtf, \
-                         fabs, fabsf"
+                         fabs, fabsf, and the C11 atomic_* operations"
                     ),
                 )));
             }

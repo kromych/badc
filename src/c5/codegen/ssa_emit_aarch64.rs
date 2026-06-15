@@ -3091,6 +3091,21 @@ fn emit_intrinsic(
             bail_msg("intrinsic: bit builtin reached codegen");
             false
         }
+        I::AtomicLoad
+        | I::AtomicStore
+        | I::AtomicExchange
+        | I::AtomicFetchAdd
+        | I::AtomicFetchSub
+        | I::AtomicFetchAnd
+        | I::AtomicFetchOr
+        | I::AtomicFetchXor
+        | I::AtomicCompareExchangeStrong => {
+            // C11 atomic operations are lowered to load / store /
+            // read-modify-write at the call site; they never reach
+            // codegen as an `Inst::Intrinsic`.
+            bail_msg("intrinsic: atomic op reached codegen");
+            false
+        }
     }
 }
 

@@ -1,13 +1,12 @@
-// C11 7.17 atomic generic functions. c5 recognizes these as
-// compiler builtins (the <stdatomic.h> macros forward to them) and
-// lowers each to load / store / read-modify-write on the pointee
-// width of the first argument. A naturally-aligned scalar load and
-// store is already atomic on the supported targets; the
-// read-modify-write and compare-exchange forms are correct for a
-// single thread but not yet inter-thread atomic. Values are
-// asserted by return code so the result is independent of any
-// tier's printf format-spec coverage.
+// C11 7.17 atomic generic functions, declared by <stdatomic.h> and
+// lowered to load / store / read-modify-write on the pointee width of
+// the first argument. A naturally-aligned scalar load and store is
+// already atomic on the supported targets; the read-modify-write and
+// compare-exchange forms are correct for a single thread but not yet
+// inter-thread atomic. Values are asserted by return code so the result
+// is independent of any tier's printf format-spec coverage.
 
+#include <stdatomic.h>
 #include <stdint.h>
 
 int main(void) {

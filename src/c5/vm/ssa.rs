@@ -1637,6 +1637,20 @@ fn run_intrinsic(
         | Intrinsic::Bswap64 => Err(C5Error::Runtime(
             "vm_ssa: bit builtin reached the intrinsic dispatch".to_string(),
         )),
+        // The C11 atomic operations are lowered to load / store /
+        // read-modify-write at the call site; they never reach the VM
+        // as an `Inst::Intrinsic`.
+        Intrinsic::AtomicLoad
+        | Intrinsic::AtomicStore
+        | Intrinsic::AtomicExchange
+        | Intrinsic::AtomicFetchAdd
+        | Intrinsic::AtomicFetchSub
+        | Intrinsic::AtomicFetchAnd
+        | Intrinsic::AtomicFetchOr
+        | Intrinsic::AtomicFetchXor
+        | Intrinsic::AtomicCompareExchangeStrong => Err(C5Error::Runtime(
+            "vm_ssa: atomic op reached the intrinsic dispatch".to_string(),
+        )),
     }
 }
 

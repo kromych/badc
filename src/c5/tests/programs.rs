@@ -1775,6 +1775,24 @@ fn compound_literal_paren_init_resolve() {
 }
 
 #[test]
+fn atomic_ops_require_stdatomic_header() {
+    // The C11 7.17 atomic operations are recognized only when declared
+    // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with
+    // no such declaration is an ordinary unresolved function reference,
+    // so a name like `atomic_load` is not silently intercepted.
+    use crate::c5::Compiler;
+    let src = "int main(void){int x=0; return atomic_load(&x);}\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("atomic_load without <stdatomic.h> must not be recognized");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("atomic_load"),
+        "expected an unresolved-reference diagnostic, got {msg:?}"
+    );
+}
+
+#[test]
 fn error_directive_aborts_compilation() {
     // `#error` produces a compile-time diagnostic with the message
     // text. Compilation must fail and the message must surface in the

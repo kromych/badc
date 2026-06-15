@@ -1,21 +1,31 @@
 // stdatomic.h -- C11 (7.17) atomic operations.
 //
-// c5 recognizes the non-`_explicit` atomic operations as header-less
-// builtins (`atomic_load`, `atomic_store`, `atomic_exchange`,
-// `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
-// `atomic_compare_exchange_strong`). This header adds the rest of the
-// 7.17 surface on top of those: the `memory_order` enumeration, the
-// `_explicit` forms (the order operand is accepted and dropped -- c5
-// does not model memory order), the lock-free and flag types, and the
-// atomic typedefs. A naturally-aligned scalar load or store is already
-// atomic on the supported targets; the read-modify-write forms lower to
-// a non-atomic load-operate-store sequence, so they are correct for a
-// single thread but not against concurrent access.
+// The non-`_explicit` atomic operations (`atomic_load`, `atomic_store`,
+// `atomic_exchange`, `atomic_fetch_add` / `sub` / `and` / `or` / `xor`,
+// `atomic_compare_exchange_strong`) are compiler builtins, declared
+// below via `#pragma intrinsic` and lowered at the call site. This
+// header also provides the rest of the 7.17 surface: the `memory_order`
+// enumeration, the `_explicit` forms (the order operand is accepted and
+// dropped -- c5 does not model memory order), the lock-free and flag
+// types, and the atomic typedefs. A naturally-aligned scalar load or
+// store is already atomic on the supported targets; the read-modify-write
+// forms lower to a non-atomic load-operate-store sequence, so they are
+// correct for a single thread but not against concurrent access.
 
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
+
+#pragma intrinsic("atomic_load")
+#pragma intrinsic("atomic_store")
+#pragma intrinsic("atomic_exchange")
+#pragma intrinsic("atomic_fetch_add")
+#pragma intrinsic("atomic_fetch_sub")
+#pragma intrinsic("atomic_fetch_and")
+#pragma intrinsic("atomic_fetch_or")
+#pragma intrinsic("atomic_fetch_xor")
+#pragma intrinsic("atomic_compare_exchange_strong")
 
 typedef enum memory_order {
     memory_order_relaxed = 0,

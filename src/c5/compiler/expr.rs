@@ -347,24 +347,24 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // C11 7.17 atomic operation. These are compiler
-                // builtins (the <stdatomic.h> macros forward to them),
-                // not library functions, so they are recognized by
-                // name with no declaration -- unless the name is bound
+                // C11 7.17 atomic operations and the other compiler
+                // builtins share the `#pragma intrinsic` registry
+                // (`<stdatomic.h>` declares the atomics). An atomic op is
+                // lowered at the call site to load / store /
+                // read-modify-write, but only when the name is not bound
                 // to a real function, in which case the call is left to
                 // the normal path.
+                let intrinsic_id = self.pp_intrinsics.get(&self.symbols[id_idx].name).copied();
                 let atomic_kind = if self.symbols[id_idx].class != Token::Fun as i64
                     && self.symbols[id_idx].class != Token::Sys as i64
                 {
-                    atomic_kind_from_name(&self.symbols[id_idx].name)
+                    intrinsic_id.and_then(atomic_kind_from_intrinsic)
                 } else {
                     None
                 };
                 if let Some(akind) = atomic_kind {
                     self.parse_atomic_builtin(akind, id_idx)?;
-                } else if let Some(&intrinsic_id) =
-                    self.pp_intrinsics.get(&self.symbols[id_idx].name)
-                {
+                } else if let Some(intrinsic_id) = intrinsic_id {
                     let fn_name = self.symbols[id_idx].name.clone();
                     // `__builtin_trap()` is the only nullary intrinsic;
                     // every other one needs at least one argument.
@@ -3371,22 +3371,24 @@ impl Compiler {
     }
 }
 
-/// Map a C11 7.17 atomic generic-function name to its operation
-/// kind. Only the non-`_explicit` forms are recognized; the
-/// `_explicit` variants carry a memory-order argument c5 does not
-/// model. Returns `None` for any other name.
-fn atomic_kind_from_name(name: &str) -> Option<super::super::ast::AtomicKind> {
+/// Map an atomic-operation [`Intrinsic`](crate::c5::op::Intrinsic)
+/// discriminant to its AST [`AtomicKind`](super::super::ast::AtomicKind).
+/// Returns `None` for any non-atomic intrinsic. The `#pragma intrinsic`
+/// registry stores the atomic operations under these discriminants; the
+/// call site converts them here for `parse_atomic_builtin`.
+fn atomic_kind_from_intrinsic(id: i64) -> Option<super::super::ast::AtomicKind> {
     use super::super::ast::AtomicKind;
-    Some(match name {
-        "atomic_load" => AtomicKind::Load,
-        "atomic_store" => AtomicKind::Store,
-        "atomic_exchange" => AtomicKind::Exchange,
-        "atomic_fetch_add" => AtomicKind::FetchAdd,
-        "atomic_fetch_sub" => AtomicKind::FetchSub,
-        "atomic_fetch_and" => AtomicKind::FetchAnd,
-        "atomic_fetch_or" => AtomicKind::FetchOr,
-        "atomic_fetch_xor" => AtomicKind::FetchXor,
-        "atomic_compare_exchange_strong" => AtomicKind::CompareExchangeStrong,
+    use crate::c5::op::Intrinsic;
+    Some(match Intrinsic::from_i64(id)? {
+        Intrinsic::AtomicLoad => AtomicKind::Load,
+        Intrinsic::AtomicStore => AtomicKind::Store,
+        Intrinsic::AtomicExchange => AtomicKind::Exchange,
+        Intrinsic::AtomicFetchAdd => AtomicKind::FetchAdd,
+        Intrinsic::AtomicFetchSub => AtomicKind::FetchSub,
+        Intrinsic::AtomicFetchAnd => AtomicKind::FetchAnd,
+        Intrinsic::AtomicFetchOr => AtomicKind::FetchOr,
+        Intrinsic::AtomicFetchXor => AtomicKind::FetchXor,
+        Intrinsic::AtomicCompareExchangeStrong => AtomicKind::CompareExchangeStrong,
         _ => return None,
     })
 }

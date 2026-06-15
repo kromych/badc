@@ -83,9 +83,9 @@ type drops the return type's own function-pointer level.
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /
-`_Imaginary` (6.2.5), `_Pragma` (6.10.9), universal character names
-(6.4.3), digraphs and trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list
-function declarators (obsolescent, 6.11.7).
+`_Imaginary` (6.2.5), universal character names (6.4.3), digraphs and
+trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list function declarators
+(obsolescent, 6.11.7).
 `inline` / `__inline` / `__inline__` set a hint the `-O` inliner reads.
 `_Noreturn` is recorded on the function symbol and propagated: a call to a
 `_Noreturn` function does not reach its continuation in the fall-through
@@ -168,6 +168,9 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
 - `#pragma subsystem(console | windows | native | driver)` -- the Windows PE optional-header
   `Subsystem` field; ignored on non-PE targets.
 - `#pragma once`.
+- The C99 6.10.9 `_Pragma(<string-literal>)` operator, processed as the
+  destringized `#pragma` directive (including via the `#x` stringize
+  feeding `_Pragma(#x)`).
 - `--interp` (SSA interpreter with pointer tracking), `--jit` (in-process),
   `--dump-ssa`.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include` resolution trace.

@@ -281,6 +281,14 @@ fn sizeof_abstract_fn_ptr() {
 }
 
 #[test]
+fn pragma_operator() {
+    // The C99 6.10.9 `_Pragma` operator: destringized and handled as the
+    // matching `#pragma`, including the macro-stringize and `pack` forms,
+    // and not recognized inside a string literal.
+    assert_eq!(run_fixture("pragma_operator.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

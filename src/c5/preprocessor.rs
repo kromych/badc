@@ -1089,7 +1089,12 @@ impl Preprocessor {
                 // `__LINE__` reflects the presumed line (`source_line`),
                 // which a `#line` directive can retarget (C99 6.10.4);
                 // absent any `#line`, it equals the physical line.
-                out.push_str(&self.substitute(&buffer, filename, source_line));
+                let substituted = self.substitute(&buffer, filename, source_line);
+                // C99 6.10.9: a `_Pragma` operator in the now
+                // macro-expanded text is destringized and handled as
+                // the matching `#pragma` directive.
+                let processed = self.apply_pragma_operators(&substituted, source_line, filename)?;
+                out.push_str(&processed);
                 out.push('\n');
                 // Preserve source line numbering by emitting a blank
                 // line for each extra source line we joined into the
@@ -1127,6 +1132,94 @@ impl Preprocessor {
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
         self.substitute_with_blocklist(line, filename, line_no, &Blocklist::Nil)
+    }
+
+    /// Process C99 6.10.9 `_Pragma` operators in already-macro-expanded
+    /// text. `_Pragma ( string-literal )` is destringized (the optional
+    /// `L` prefix and the surrounding quotes are removed, `\"` becomes
+    /// `"`, and `\\` becomes `\`) and handled as the matching `#pragma`
+    /// directive; the operator itself contributes no tokens. String and
+    /// character literals in the surrounding text are copied through
+    /// unchanged so a `_Pragma` substring inside one is not mistaken for
+    /// the operator. A malformed operator is left in place for the lexer
+    /// to diagnose.
+    fn apply_pragma_operators(
+        &mut self,
+        text: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
+        if !text.contains("_Pragma") {
+            return Ok(text.to_string());
+        }
+        let bytes = text.as_bytes();
+        let mut out = String::with_capacity(text.len());
+        let mut copied = 0usize;
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if c == b'"' || c == b'\'' {
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    let closed = bytes[i] == c;
+                    i += 1;
+                    if closed {
+                        break;
+                    }
+                }
+                continue;
+            }
+            let is_operator = c == b'_'
+                && bytes[i..].starts_with(b"_Pragma")
+                && (i == 0 || !is_ident_byte(bytes[i - 1]))
+                && !bytes.get(i + 7).copied().is_some_and(is_ident_byte);
+            if let Some((args, next)) = is_operator
+                .then(|| parse_pragma_operator_args(text, i + 7))
+                .flatten()
+            {
+                out.push_str(&text[copied..i]);
+                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                i = next;
+                copied = next;
+                continue;
+            }
+            i += 1;
+        }
+        out.push_str(&text[copied..]);
+        Ok(out)
+    }
+
+    /// Apply a single destringized `_Pragma` operand through the same
+    /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
+    /// arm in `process_named`). `pack(...)` is emitted as an inline
+    /// `#pragma pack` directive on its own line so the lexer folds it
+    /// into the pack stack at this source position.
+    fn dispatch_pragma_operator(
+        &mut self,
+        args: &str,
+        line_no: usize,
+        filename: &str,
+        out: &mut String,
+    ) -> Result<(), C5Error> {
+        match parse_pragma_directive(args) {
+            PragmaDirective::Once => {
+                self.pragma_once_files.insert(filename.to_string());
+            }
+            PragmaDirective::Other => {
+                if pragma_is_pack(args) {
+                    out.push_str("\n#pragma ");
+                    out.push_str(args.trim());
+                    out.push('\n');
+                } else {
+                    self.parse_pragma(args, line_no, filename)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Scan `text` for identifiers that name a macro currently
@@ -2680,6 +2773,67 @@ fn is_ident(s: &str) -> bool {
     bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Parse the `( string-literal )` operand of a `_Pragma` operator,
+/// starting at `start` (just past the `_Pragma` keyword). Returns the
+/// destringized pragma text and the byte index just past the closing
+/// `)`, or `None` when the operand is malformed (C99 6.10.9). The
+/// optional `L` prefix is dropped, the surrounding quotes are removed,
+/// and `\"` / `\\` collapse to `"` / `\`.
+fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut i = start;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'L' {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'"' {
+        return None;
+    }
+    i += 1;
+    let mut content: Vec<u8> = Vec::new();
+    loop {
+        if i >= bytes.len() {
+            return None;
+        }
+        match bytes[i] {
+            b'"' => {
+                i += 1;
+                break;
+            }
+            b'\\' if i + 1 < bytes.len() && (bytes[i + 1] == b'"' || bytes[i + 1] == b'\\') => {
+                content.push(bytes[i + 1]);
+                i += 2;
+            }
+            other => {
+                content.push(other);
+                i += 1;
+            }
+        }
+    }
+    let content = String::from_utf8(content).ok()?;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+    i += 1;
+    Some((content, i))
+}
+
 struct CondFrame {
     /// Whether the enclosing branch was active at the time of
     /// `#if` / `#ifdef`. A nested true branch inside an inactive
@@ -3973,6 +4127,42 @@ mod tests {
     fn macro_to_macro_substitution_chains() {
         let out = process("#define A B\n#define B 5\nint x = A;\n");
         assert!(out.contains("int x = 5;"));
+    }
+
+    #[test]
+    fn pragma_operator_once_marks_file() {
+        // C99 6.10.9: `_Pragma("once")` in the main file is handled like
+        // `#pragma once` and leaves no tokens in the output.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let out = pp
+            .process("_Pragma(\"once\")\nint x = 1;\n")
+            .expect("preprocessor failed");
+        assert!(!out.contains("_Pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
+    fn pragma_operator_via_macro_stringize() {
+        // The operand can be produced by the `#x` stringize feeding the
+        // operator (`_Pragma(#x)`), the common `DO_PRAGMA` idiom.
+        let out = process("#define DO_PRAGMA(x) _Pragma(#x)\nDO_PRAGMA(once)\nint y = 2;\n");
+        assert!(!out.contains("_Pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int y = 2;"));
+    }
+
+    #[test]
+    fn pragma_operator_pack_emits_inline_directive() {
+        // `pack` is position-sensitive, so the operator re-emits an
+        // inline `#pragma pack` for the lexer to fold at this point.
+        let out = process("_Pragma(\"pack(1)\")\nstruct S { char a; };\n");
+        assert!(out.contains("#pragma pack(1)"), "no inline pack: {out:?}");
+    }
+
+    #[test]
+    fn pragma_operator_ignored_inside_string_literal() {
+        // The operator name inside a string literal is ordinary text.
+        let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
+        assert!(out.contains("\"_Pragma(\\\"once\\\")\""), "got: {out:?}");
     }
 
     #[test]

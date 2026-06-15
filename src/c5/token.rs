@@ -112,6 +112,9 @@ pub(crate) enum Token {
     Return,
     /// 'sizeof' keyword
     Sizeof,
+    /// '_Alignof' keyword (C11 6.5.3.4), and its `__alignof__` /
+    /// `__alignof` GCC spellings.
+    Alignof,
     /// 'while' keyword
     While,
     /// Assignment '='
@@ -389,6 +392,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Int as i64 => "`int`",
         x if x == Token::Return as i64 => "`return`",
         x if x == Token::Sizeof as i64 => "`sizeof`",
+        x if x == Token::Alignof as i64 => "`_Alignof`",
         x if x == Token::While as i64 => "`while`",
         x if x == Token::Assign as i64 => "`=`",
         x if x == Token::AssignOp as i64 => "compound-assign (`+=` / `-=` / ...)",

@@ -449,6 +449,12 @@ impl Compiler {
             self.next()?;
             return Ok(ConstVal::Int(self.sizeof_operand_bytes()?));
         }
+        if self.lex.tk == Token::Alignof {
+            // C11 6.5.3.4: `_Alignof ( type-name )` is a constant
+            // expression; return the alignment directly.
+            self.next()?;
+            return Ok(ConstVal::Int(self.alignof_operand_bytes()?));
+        }
         self.parse_const_expr_primary_val()
     }
 

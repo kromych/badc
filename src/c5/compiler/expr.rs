@@ -312,6 +312,15 @@ impl Compiler {
             // binary op, assignment) finds the value on
             // `ast_acc`.
             self.ast_emit_int_lit(total_bytes, self.ty);
+        } else if self.lex.tk == Token::Alignof {
+            // C11 6.5.3.4: `_Alignof ( type-name )`, a compile-time
+            // constant. Emit the alignment as a runtime immediate and
+            // pin the type at `int`, matching the `sizeof` site.
+            self.next()?;
+            let align = self.alignof_operand_bytes()?;
+            self.emit_imm(align);
+            self.ty = Ty::Int as i64;
+            self.ast_emit_int_lit(align, self.ty);
         } else if self.lex.tk == Token::Id
             && !self.current_function_name.is_empty()
             && matches!(

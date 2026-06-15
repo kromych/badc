@@ -1208,6 +1208,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
+    ("sizeof_abstract_fn_ptr.c", 0),
+    ("pragma_operator.c", 0),
+    ("variadic_macro_named_rest.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -1247,7 +1250,26 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
+    ("libc_struct_arg_by_value.c", 0),
+    ("posix_unix_headers.c", 0),
+    ("socket_headers_abi.c", 0),
+    ("posix_utime_errno_headers.c", 0),
+    ("cast_fn_typedef_ptr_in_initializer.c", 0),
+    ("global_init_paren_operand.c", 0),
+    ("function_type_typedef_declaration.c", 0),
+    ("float_increment_decrement.c", 0),
     ("addr_of_libm_import.c", 0),
+    ("addr_of_libc_strcmp.c", 0),
+    ("libc_pread64_pwrite64.c", 0),
+    ("struct_stat_abi_size.c", 0),
+    ("block_scope_extern_forward_ref.c", 0),
+    ("uint64_to_float.c", 0),
+    ("double_to_uint64.c", 0),
+    ("sysconf_pagesize.c", 0),
+    ("strtoul_64bit_return.c", 0),
+    ("libc_time_widths.c", 0),
+    ("errno_socket_constants.c", 0),
+    ("fts_and_fd_set_headers.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),
     ("struct_array_elided_runtime.c", 0),
@@ -1291,6 +1313,27 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // size_of_type / pointee scaling helpers strip the unsigned bit
     // before classifying, so indexing scales by 1 not 8.
     ("unsigned_char_array.c", 0),
+    // Plain `char` follows the target's implementation-defined
+    // signedness (C99 6.2.5p15) and the widening load agrees with the
+    // `__CHAR_UNSIGNED__` predefine.
+    ("plain_char_signedness.c", 0),
+    // Brace-wrapped string literal initializing a char-array struct
+    // member (C99 6.7.9p14): copy the bytes, not the pointer.
+    ("struct_member_brace_wrapped_string.c", 0),
+    // `&`/`^`/`|` result type is the common type (C99 6.5.10-12) so a
+    // cast of `unsigned | int` to signed sign-extends on widening.
+    ("bitop_common_type_sign_extend.c", 0),
+    // `~` result keeps the promoted operand type (C99 6.5.3.3p4):
+    // `~(unsigned long)` stays unsigned so a following `>>` is logical.
+    ("complement_preserves_type.c", 0),
+    // A decimal constant past the widest signed type takes the
+    // unsigned type at that rank (C99 6.4.4.1p5 + gcc/clang practice).
+    ("decimal_literal_over_signed_max.c", 0),
+    // Block-scope function declaration resolves to the file-scope
+    // definition (C99 6.7p1 / 6.2.2p5).
+    ("block_scope_function_declaration.c", 0),
+    // A struct tag in a function body has block scope (C99 6.2.1).
+    ("block_scope_struct_tag.c", 0),
     // Compound assignment (`+=`, `-=`) on unsigned int / long /
     // char: must NOT scale the RHS by element size (the
     // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).

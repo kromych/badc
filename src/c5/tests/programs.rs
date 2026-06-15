@@ -206,6 +206,52 @@ fn integer_negate_shift_overflow() {
 }
 
 #[test]
+fn posix_unix_headers() {
+    // Bundled sys/select.h (fd_set), grp.h, sys/utsname.h.
+    assert_eq!(run_fixture("posix_unix_headers.c"), 0);
+}
+
+#[test]
+fn socket_headers_abi() {
+    // Bundled socket headers expose the address structs with the platform ABI.
+    assert_eq!(run_fixture("socket_headers_abi.c"), 0);
+}
+
+#[test]
+fn posix_utime_errno_headers() {
+    // badc bundles POSIX <utime.h> (struct utimbuf) and the ENOTCONN errno.
+    assert_eq!(run_fixture("posix_utime_errno_headers.c"), 0);
+}
+
+#[test]
+fn cast_fn_typedef_ptr_in_initializer() {
+    // A cast to a function-type-typedef pointer in an initializer must not
+    // leak the function-type marker to the next declaration (C99 6.5.4).
+    assert_eq!(run_fixture("cast_fn_typedef_ptr_in_initializer.c"), 0);
+}
+
+#[test]
+fn global_init_paren_operand() {
+    // C99 6.6: a parenthesised operand + binary operator in a constant
+    // initializer folds with full precedence (`(1) << 5`).
+    assert_eq!(run_fixture("global_init_paren_operand.c"), 0);
+}
+
+#[test]
+fn function_type_typedef_declaration() {
+    // C99 6.9.1: a function declared via a function-type typedef (no pointer)
+    // is a function, so a following definition is a redeclaration.
+    assert_eq!(run_fixture("function_type_typedef_declaration.c"), 0);
+}
+
+#[test]
+fn float_increment_decrement() {
+    // `++` / `--` on a real floating type add / subtract 1 (C99 6.5.3.1 /
+    // 6.5.2.4), prefix yielding the new value and postfix the prior.
+    assert_eq!(run_fixture("float_increment_decrement.c"), 0);
+}
+
+#[test]
 fn array_range_designator() {
     // GCC `[a ... b] = value` fills the inclusive range; covers constant
     // data and a label-address dispatch table.
@@ -224,6 +270,29 @@ fn sizeof_array_type_and_binding() {
     // `sizeof(T [N])` sizes the array type; `sizeof(arr)[i]` binds to
     // the full unary-expression.
     assert_eq!(run_fixture("sizeof_array_type_and_binding.c"), 0);
+}
+
+#[test]
+fn sizeof_abstract_fn_ptr() {
+    // `sizeof` of an abstract function-pointer type-name `int (*)(int)`
+    // is the pointer width, in both the runtime and constant-expression
+    // forms (C99 6.5.3.4 / 6.7.6).
+    assert_eq!(run_fixture("sizeof_abstract_fn_ptr.c"), 0);
+}
+
+#[test]
+fn pragma_operator() {
+    // The C99 6.10.9 `_Pragma` operator: destringized and handled as the
+    // matching `#pragma`, including the macro-stringize and `pack` forms,
+    // and not recognized inside a string literal.
+    assert_eq!(run_fixture("pragma_operator.c"), 0);
+}
+
+#[test]
+fn variadic_macro_named_rest() {
+    // The GCC named-rest variadic macro `#define foo(rest...)`: the named
+    // tail behaves like `__VA_ARGS__`, including `#rest` and `, ##rest`.
+    assert_eq!(run_fixture("variadic_macro_named_rest.c"), 0);
 }
 
 #[test]

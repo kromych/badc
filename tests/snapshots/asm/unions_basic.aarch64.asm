@@ -29,7 +29,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sub	x0, x29, #0x8
                	adrp	x1, <page>
-               	add	x1, x1, #0xd0
+               	add	x1, x1, <lo12>
                	str	x1, [x0]
                	sub	x0, x29, #0x8
                	ldr	x0, [x0]
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	sub	x0, x29, #0x18
                	adrp	x1, <page>
-               	add	x1, x1, #0xd3
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x8]
                	sub	x0, x29, #0x18
                	ldrsw	x0, [x0]

@@ -1,10 +1,4 @@
 // sys/mman.h -- memory protection flags.
-//
-// Just the `PROT_*` bits, which line up across POSIX (used by
-// `mprotect`) and Win32 (used as the flags arg to `VirtualProtect`
-// once you mask through to PAGE_*). c4 never had `mprotect` as a
-// first-class op, so anyone exercising memory protection reaches
-// for `dlsym` and these flags.
 
 #pragma once
 
@@ -41,8 +35,12 @@
 #pragma binding(libc::mprotect, "mprotect")
 #endif
 
-char *mmap(char *addr, int len, int prot, int flags, int fd, int offset);
-int munmap(char *addr, int len);
-char *mremap(char *old, int old_size, int new_size, int flags);
-int msync(char *addr, int len, int flags);
-int mprotect(char *addr, int len, int prot);
+// POSIX: the mapping length is size_t and the file offset is off_t, both
+// 64-bit. An `int` length/offset truncates a mapping at or past 2GB.
+// `long` / `unsigned long` match off_t / size_t on LP64 (this block's
+// POSIX targets).
+char *mmap(char *addr, unsigned long len, int prot, int flags, int fd, long offset);
+int munmap(char *addr, unsigned long len);
+char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flags);
+int msync(char *addr, unsigned long len, int flags);
+int mprotect(char *addr, unsigned long len, int prot);

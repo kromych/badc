@@ -21,7 +21,11 @@
 // and are NOT just sizes -- libc fills bytes at specific
 // offsets, so a c5 program reading `buf.st_size` only gets the
 // right value if our declaration matches the actual on-platform
-// layout byte-for-byte.
+// layout byte-for-byte. Each known target also matches the
+// platform `sizeof(struct stat)` exactly (144 on macOS and Linux
+// x86_64, 128 on Linux aarch64) so `sizeof`, by-value copies and
+// arrays interoperate; the generic fallback keeps a margin since
+// the real size is unknown there.
 //
 // macOS Darwin (after _DARWIN_FEATURE_64_BIT_INODE, the default
 // since 10.5):
@@ -102,7 +106,6 @@ struct stat {
     int             st_lspare;         /* offset 124, 4 bytes */
     long            st_qspare0;        /* offset 128, 8 bytes */
     long            st_qspare1;        /* offset 136, 8 bytes */
-    char            __pad[64];         /* room for any future / Linux-larger layout */
 };
 #elif defined(__linux__) && defined(__x86_64__)
 // Linux glibc x86_64 layout. See bits/struct_stat.h:
@@ -135,8 +138,7 @@ struct stat {
     };
     long __unused0;          /* offset 120 */
     long __unused1;          /* offset 128 */
-    long __unused2;          /* offset 136 */
-    char __pad[64];
+    long __unused2;          /* offset 136, struct ends at 144 */
 };
 #elif defined(__linux__) && defined(__aarch64__)
 // Linux glibc aarch64 layout. mode/nlink/uid/gid all 4 bytes
@@ -168,8 +170,7 @@ struct stat {
         struct { long st_ctime; long st_ctimensec; };
     };
     int  __unused0;          /* offset 120 */
-    int  __unused1;          /* offset 124 */
-    char __pad[64];
+    int  __unused1;          /* offset 124, struct ends at 128 */
 };
 #else
 // Generic / fallback: matches Linux x86_64. 8-byte fields

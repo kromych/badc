@@ -19,6 +19,14 @@
 #define FD_SETSIZE   1024
 #define FD_SET_BYTES 128             // FD_SETSIZE / 8
 
+// `fd_set` as a fixed 128-byte bitmap. Programs that declare an `fd_set`
+// object and pass its address to select / the macros below get the right
+// size; the internal word type is irrelevant since the macros address it as
+// bytes.
+typedef struct {
+    unsigned char fds_bits[FD_SET_BYTES];
+} fd_set;
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::select, "_select")

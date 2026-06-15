@@ -6,7 +6,7 @@ Disassembly of section .text:
 <.text>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
-               	mov	x1, #0x2f0              // =752
+               	mov	x1, #0x330              // =816
                	movk	x1, #0x0, lsl #16
                	b	<addr>
                	brk	#<addr>:
@@ -59,18 +59,18 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x22, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x108
+               	add	x1, x1, <lo12>
                	mov	x0, x22
                	bl	<addr>
                	mov	x23, x0
                	adrp	x1, <page>
-               	add	x1, x1, #0x117
+               	add	x1, x1, <lo12>
                	mov	x0, x22
                	bl	<addr>
                	mov	x22, x0
                	sub	x0, x29, #0x20
                	adrp	x2, <page>
-               	add	x2, x2, #0x308
+               	add	x2, x2, <lo12>
                	mov	x9, x23
                	str	x21, [sp, #-0x10]!
                	str	x2, [sp, #-0x10]!

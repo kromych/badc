@@ -629,6 +629,22 @@ impl<'a> Walker<'a> {
             {
                 return GloAddr::Resolved(s.val);
             }
+            // Forward reference: a block-scope `extern int g;` parsed
+            // before the same-TU `int g = ...;` definition (C99 6.2.2p4)
+            // snapshots a stale 0 offset into the `Expr::Ident`, so the
+            // access lands at the wrong `.data` address. When the live
+            // symbol is now a defined global carrying a real offset,
+            // use it. The `fallback_val == 0` guard keeps shadowed
+            // same-named globals -- which snapshot their own distinct
+            // nonzero offsets -- on the snapshot path.
+            if s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_extern_decl
+                && fallback_val == 0
+                && s.val != 0
+            {
+                return GloAddr::Resolved(s.val);
+            }
         }
         GloAddr::Resolved(fallback_val)
     }
@@ -2125,8 +2141,41 @@ impl<'a> Walker<'a> {
                         // 6.2.5p10) so the result rides d0 / xmm0
                         // without a GPR bridge; a `float` result
                         // additionally carries the f32 tag.
+                        // A by-value struct argument to a libc binding is
+                        // packed into the platform-ABI argument registers
+                        // (SysV / AAPCS64: <= 16 bytes), not passed by the
+                        // c5-internal address convention. Tag each struct arg
+                        // so the emitter classifies and marshals it.
+                        let mut ext_arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
+                        let nparams = self.symbols[*sym as usize].params.len();
+                        for i in 0..arg_vals.len() {
+                            let arg_ty = if i < nparams {
+                                self.symbols[*sym as usize].params[i]
+                            } else {
+                                match expr_ty(self.ast.expr(args[i])) {
+                                    Some(t) => t,
+                                    None => continue,
+                                }
+                            };
+                            if is_struct_ty(arg_ty)
+                                && struct_ptr_depth(arg_ty) == 0
+                                && let Some(desc) = crate::c5::compiler::host_abi_agg_desc(
+                                    self.structs,
+                                    self.target,
+                                    arg_ty,
+                                )
+                            {
+                                if ext_arg_aggs.is_empty() {
+                                    ext_arg_aggs = alloc::vec![None; arg_vals.len()];
+                                }
+                                ext_arg_aggs[i] = Some(b.intern_agg_desc(desc));
+                            }
+                        }
                         let fp_return = is_floating_scalar(*ty);
                         let call = b.call_ext(*val, arg_vals, fp_arg_mask, fp_return);
+                        if !ext_arg_aggs.is_empty() {
+                            b.set_call_arg_aggs(call, ext_arg_aggs);
+                        }
                         if is_float_ty(*ty) {
                             return Ok(b.mark_f32(call));
                         }
@@ -2242,7 +2291,7 @@ impl<'a> Walker<'a> {
                     if is_float_ty(*ty) {
                         return Ok(b.mark_f32(call));
                     }
-                    return Ok(call);
+                    return Ok(extend_scalar_call_result(b, call, *ty, self.target));
                 }
                 // Register-save host variadic ABI (System V AMD64 on Linux
                 // x86_64, AAPCS64 on Linux aarch64): a variadic callee
@@ -2282,7 +2331,7 @@ impl<'a> Walker<'a> {
                     if is_float_ty(*ty) {
                         return Ok(b.mark_f32(call));
                     }
-                    return Ok(call);
+                    return Ok(extend_scalar_call_result(b, call, *ty, self.target));
                 }
                 // A function-pointer callee whose register/stack
                 // placement would interleave keeps the all-integer c5
@@ -2346,7 +2395,7 @@ impl<'a> Walker<'a> {
                 if is_float_ty(*ty) {
                     return Ok(b.mark_f32(call));
                 }
-                Ok(call)
+                Ok(extend_scalar_call_result(b, call, *ty, self.target))
             }
             Expr::Member {
                 obj,
@@ -2489,19 +2538,44 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(BinOp::Ne, v, 0));
                 }
                 if target_is_fp && !source_is_fp {
-                    // Integer -> FP. `IntToFp` produces an f64; a `float`
-                    // target then narrows to single precision (6.3.1.4).
-                    let f = b.fp_cast(super::super::ir::FpCastKind::IntToFp, v);
+                    // Integer -> FP (C99 6.3.1.4) produces an f64; a
+                    // `float` target then narrows to single precision.
+                    // An unsigned 64-bit source (`unsigned long` /
+                    // `unsigned long long`) can exceed the signed range,
+                    // where the signed convert yields a negative result,
+                    // so it takes the unsigned converter. Narrower
+                    // unsigned types fit the signed range zero-extended.
+                    let stripped = src_ty & !UNSIGNED_BIT;
+                    let unsigned_64 = (src_ty & UNSIGNED_BIT) != 0
+                        && (stripped == Ty::Long as i64 || stripped == Ty::LongLong as i64);
+                    let kind = if unsigned_64 {
+                        super::super::ir::FpCastKind::UIntToFp
+                    } else {
+                        super::super::ir::FpCastKind::IntToFp
+                    };
+                    let f = b.fp_cast(kind, v);
                     if is_float_ty(*to_ty) {
                         return Ok(b.fp_narrow_to_f32(f));
                     }
                     return Ok(f);
                 } else if !target_is_fp && source_is_fp {
-                    // FP -> integer. `FpToInt` truncates an f64; a `float`
-                    // source widens to f64 first so the same converter
-                    // handles both precisions (6.3.1.4).
+                    // FP -> integer (C99 6.3.1.4) truncates an f64; a
+                    // `float` source widens to f64 first so the same
+                    // converter handles both precisions. An unsigned
+                    // 64-bit target can hold a value in [2^63, 2^64),
+                    // which the signed truncate would saturate, so it
+                    // takes the unsigned converter. Narrower unsigned
+                    // targets fit the signed range.
                     let d = b.fp_widen_to_f64(v);
-                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, d));
+                    let stripped_to = *to_ty & !UNSIGNED_BIT;
+                    let target_unsigned_64 = (*to_ty & UNSIGNED_BIT) != 0
+                        && (stripped_to == Ty::Long as i64 || stripped_to == Ty::LongLong as i64);
+                    let kind = if target_unsigned_64 {
+                        super::super::ir::FpCastKind::UFpToInt
+                    } else {
+                        super::super::ir::FpCastKind::FpToInt
+                    };
+                    return Ok(b.fp_cast(kind, d));
                 }
                 // FP-to-FP cast (C99 6.3.1.5): `(double)f` widens,
                 // `(float)d` narrows. The conversion is a no-op only when
@@ -2651,7 +2725,7 @@ impl<'a> Walker<'a> {
                 let store_kind = store_kind_for(*ty, self.target);
                 let place = self.rmw_place(b, *lvalue, store_kind)?;
                 let old = place.load(b, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind);
                 // C99 6.5.3.1p3 + 6.5.16.2: the value of `++E` is
                 // the post-update value of E in E's type. Reload
@@ -2659,18 +2733,21 @@ impl<'a> Walker<'a> {
                 // surrounding test like `(++p) == 0` sees the
                 // wrapped u8/u16/u32 value rather than the wider
                 // Add result that overflows past the storage width.
-                Ok(if matches!(kind, LoadKind::I64) {
-                    stepped
-                } else {
-                    place.load(b, kind)
-                })
+                // A floating result is already at storage width.
+                Ok(
+                    if matches!(kind, LoadKind::I64) || is_floating_scalar(*ty) {
+                        stepped
+                    } else {
+                        place.load(b, kind)
+                    },
+                )
             }
             Expr::PostInc { lvalue, by, ty } => {
                 let kind = load_kind_for(*ty, self.target);
                 let store_kind = store_kind_for(*ty, self.target);
                 let place = self.rmw_place(b, *lvalue, store_kind)?;
                 let old = place.load(b, kind);
-                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let stepped = self.increment_value(b, old, *by, *ty);
                 place.store(b, stepped, store_kind);
                 // C99 6.5.2.4p3: the expression's value is the
                 // pre-update value (`old`).
@@ -2867,6 +2944,34 @@ impl<'a> Walker<'a> {
     /// `ValueId` of the lvalue's *address*. The `Assign` rhs and
     /// `Unary{AddrOf}` cases drive into this path; the rvalue
     /// walker re-enters from this address with a matching load.
+    /// Add `by` (+1 / -1) to a loaded scalar for `++` / `--`. Integer
+    /// lvalues take the immediate-form add; a real floating lvalue (C99
+    /// 6.5.3.1 / 6.5.2.4) adds `1.0` of its own precision through the FP
+    /// path, since `BinOp::Add` would operate on the bit pattern.
+    fn increment_value(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        old: super::super::ir::ValueId,
+        by: i64,
+        ty: i64,
+    ) -> super::super::ir::ValueId {
+        if !is_floating_scalar(ty) {
+            return b.binop_imm(BinOp::Add, old, by);
+        }
+        // Run in double and narrow back for a `float`, matching the
+        // compound-assign path (C99 6.3.1.5). A direct single-precision
+        // `fadd` is correct on the native targets but the SSA interpreter
+        // does not lower it, so route both precisions through the f64 add.
+        let one = b.imm((by as f64).to_bits() as i64);
+        if is_float_ty(ty) {
+            let wide = b.fp_widen_to_f64(old);
+            let res = b.binop(BinOp::Fadd, wide, one);
+            b.fp_narrow_to_f32(res)
+        } else {
+            b.binop(BinOp::Fadd, old, one)
+        }
+    }
+
     /// Resolve where a read-modify-write operator targets its lvalue. A
     /// non-thread-local `Token::Loc` Ident of integer-class storage width
     /// keeps its frame slot so mem2reg can promote it; the float-stored
@@ -3157,6 +3262,13 @@ impl<'a> Walker<'a> {
             } else {
                 Ok(b.imm_code(live_val as usize))
             }
+        } else if *class == Token::Sys as i64 {
+            // Address of a dynamically-imported function (`&strcmp`,
+            // `fp = strcmp`). The Ident's `val` is the binding's flat
+            // index across all `#pragma binding(...)` directives, the
+            // same value `Inst::CallExt` carries. The address resolves
+            // to the import's shared PLT stub.
+            Ok(b.imm_ext_code(*val))
         } else {
             Err(WalkError::UnknownSymbolClass {
                 sym: *sym,
@@ -3252,6 +3364,11 @@ impl<'a> Walker<'a> {
             } else {
                 Ok(b.imm_code(val as usize))
             }
+        } else if class == Token::Sys as i64 {
+            // Bare imported-function rvalue (`fp = strcmp`). `val` is
+            // the binding index; the address resolves to the import's
+            // shared PLT stub. See `address_of_ident`.
+            Ok(b.imm_ext_code(val))
         } else if class == Token::Num as i64 {
             // Enum constants and `#define`-via-const-decl idioms
             // both surface as `Token::Num`-class symbols; `val`
@@ -3471,6 +3588,48 @@ fn is_float_ty(ty: i64) -> bool {
 /// nonzero scalar becomes 1).
 fn is_bool_scalar(ty: i64) -> bool {
     (ty & !UNSIGNED_BIT) == Ty::Bool as i64
+}
+
+/// Sign- or zero-extend a scalar call result to the full 64-bit
+/// accumulator per its declared return type. A c5-compiled callee
+/// already returns a 64-bit-correct value, and a direct libc call
+/// (`Inst::CallExt`) is widened in the emitter from the binding's
+/// return type. A call through a function pointer to a host library
+/// routine has neither: the routine leaves only its natural-width
+/// register set (`strcmp` returns a 32-bit result in `eax` with
+/// undefined high bits), so a call through an `int (*)()` pointer
+/// must widen the result before the caller reads it at 64 bits
+/// (C99 6.3.1.1 / 6.5.2.2). Idempotent for an already-extended
+/// value. Floating-point, pointer, `_Bool`, struct, and full-width
+/// integer results are left unchanged.
+fn extend_scalar_call_result(
+    b: &mut super::super::codegen::ssa_build::SsaBuilder,
+    v: super::super::ir::ValueId,
+    ty: i64,
+    target: Target,
+) -> super::super::ir::ValueId {
+    use super::super::ir::BinOp;
+    let stripped = ty & !UNSIGNED_BIT;
+    let rs = type_size_bytes(ty, target);
+    if is_floating_scalar(ty)
+        || is_pointer_ty(ty)
+        || stripped == Ty::Bool as i64
+        || !(rs == 1 || rs == 2 || rs == 4)
+    {
+        return v;
+    }
+    if (ty & UNSIGNED_BIT) != 0 {
+        let mask: i64 = match rs {
+            1 => 0xff,
+            2 => 0xffff,
+            _ => 0xffff_ffff,
+        };
+        b.binop_imm(BinOp::And, v, mask)
+    } else {
+        let bits = 64i64 - (rs as i64) * 8;
+        let shifted = b.binop_imm(BinOp::Shl, v, bits);
+        b.binop_imm(BinOp::Shr, shifted, bits)
+    }
 }
 
 /// `Token::Ty` unsigned-bit position. The compiler-side helper is

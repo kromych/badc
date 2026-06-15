@@ -50,6 +50,18 @@ pub(crate) enum Inst {
     /// records a pending func-fixup so the writer can patch
     /// against the callee's body offset.
     ImmCode(usize),
+    /// Address of a dynamically-imported function, by binding
+    /// index. The operand is the same `Symbol::val` binding index a
+    /// `Terminator::CallExt` carries. The per-arch lowering emits an
+    /// address-materialization placeholder (`lea` rip-relative on
+    /// x86_64, `adrp + add` on aarch64) and records an address-of
+    /// PLT-call fixup so the writer resolves it to the import's
+    /// shared per-import stub (the same `jmp [GOT]` / `adrp+ldr+br`
+    /// stub a call to the import reaches). Taking `&strcmp` therefore
+    /// yields the stub address rather than a per-TU forwarding
+    /// trampoline; the deduped stub forwards every register class
+    /// unchanged so an FP-returning import stays correct.
+    ImmExtCode(i64),
     /// Address of a basic block within the current function, as a
     /// code pointer (GCC labels-as-values, `&&label`). The per-arch
     /// lowering materializes the block's native address with a
@@ -243,6 +255,12 @@ pub(crate) enum Inst {
         /// the value is FP-classed. Mirrors [`Self::Call::fp_return`];
         /// without it an FP libc result is force-bridged through a GPR.
         fp_return: bool,
+        /// Per-argument aggregate tags, as for [`Self::Call::arg_aggs`]:
+        /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of a
+        /// by-value struct laid out by `agg_descs[i]`, so the emitter packs
+        /// its bytes into the platform-ABI argument registers. Empty for the
+        /// common scalar-only libc call.
+        arg_aggs: Vec<Option<u32>>,
     },
     /// Tail-jump to an external symbol. Used only as the body
     /// of an address-take trampoline; never has a defined value
@@ -392,10 +410,23 @@ pub(crate) enum BinOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FpCastKind {
-    /// Truncating f64 to i64.
+    /// Truncating f64 to signed i64.
     FpToInt,
-    /// i64 to f64.
+    /// Truncating f64 to unsigned u64. A separate kind because a
+    /// double in [2^63, 2^64) exceeds the signed range, where the
+    /// signed truncate instruction saturates to the integer
+    /// indefinite (C99 6.3.1.4). x86_64 SSE2 `cvttsd2si` is signed
+    /// only, so the lowering subtracts 2^63 when the value is at or
+    /// above it, truncates, and sets bit 63; aarch64 uses `FCVTZU`.
+    UFpToInt,
+    /// Signed i64 to f64.
     IntToFp,
+    /// Unsigned u64 to f64. A separate kind because the unsigned
+    /// value can exceed the signed 64-bit range, where the signed
+    /// convert would produce a negative result (C99 6.3.1.4). x86_64
+    /// SSE2 has no unsigned convert before AVX512, so the lowering
+    /// tests the high bit and halves/doubles; aarch64 uses `UCVTF`.
+    UIntToFp,
     /// Widen f32 to f64 (C99 6.3.1.5). The single-precision source
     /// value is converted to double; the result is f64. Emitted at a
     /// `float` operand mixed with a `double` operand, an explicit

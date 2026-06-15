@@ -25,6 +25,8 @@
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::pthread_create,           "_pthread_create")
 #pragma binding(libc::pthread_join,             "_pthread_join")
+#pragma binding(libc::pthread_exit,             "_pthread_exit")
+#pragma binding(libc::pthread_detach,           "_pthread_detach")
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_mutex_init,       "_pthread_mutex_init")
@@ -45,6 +47,8 @@
 #pragma binding(libc::pthread_attr_destroy,     "_pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "_pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "_pthread_attr_setstacksize")
+#pragma binding(libc::pthread_attr_setscope,    "_pthread_attr_setscope")
+#pragma binding(libc::pthread_atfork,           "_pthread_atfork")
 #pragma binding(libc::pthread_key_create,       "_pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
@@ -58,12 +62,16 @@
 // macOS detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 2
 #define PTHREAD_CREATE_JOINABLE 1
+#define PTHREAD_SCOPE_SYSTEM  1
+#define PTHREAD_SCOPE_PROCESS 2
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::pthread_create,           "pthread_create")
 #pragma binding(libc::pthread_join,             "pthread_join")
+#pragma binding(libc::pthread_exit,             "pthread_exit")
+#pragma binding(libc::pthread_detach,           "pthread_detach")
 #pragma binding(libc::pthread_self,             "pthread_self")
 #pragma binding(libc::pthread_equal,            "pthread_equal")
 #pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
@@ -84,6 +92,13 @@
 #pragma binding(libc::pthread_attr_destroy,     "pthread_attr_destroy")
 #pragma binding(libc::pthread_attr_setdetachstate, "pthread_attr_setdetachstate")
 #pragma binding(libc::pthread_attr_setstacksize, "pthread_attr_setstacksize")
+#pragma binding(libc::pthread_attr_setscope,    "pthread_attr_setscope")
+// glibc's pthread_atfork lives in libc_nonshared.a (a static stub),
+// not as a dynamic export of libc.so.6 -- x86_64 keeps a weak legacy
+// alias but aarch64 does not, so a dynamic import resolves on one and
+// not the other. Bind the underlying dynamic symbol the stub forwards
+// to; the inline below supplies pthread_atfork in terms of it.
+#pragma binding(libc::__register_atfork,        "__register_atfork")
 #pragma binding(libc::pthread_key_create,       "pthread_key_create")
 #pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
 #pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
@@ -97,6 +112,8 @@
 // glibc detach-state value passed to pthread_attr_setdetachstate.
 #define PTHREAD_CREATE_DETACHED 1
 #define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_SCOPE_SYSTEM  0
+#define PTHREAD_SCOPE_PROCESS 1
 #endif
 
 #ifdef _WIN32
@@ -109,27 +126,36 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #endif
 
-// Static-storage initialisers for the opaque-buffer mutex /
-// condition variable types. Real libc uses a complex per-type
-// expansion; c5 only stores zero bytes (the buffers are uninit-
-// detectable at runtime), so a single zero-fill is enough.
-#define PTHREAD_MUTEX_INITIALIZER {0}
-#define PTHREAD_COND_INITIALIZER  {0}
-#define PTHREAD_ONCE_INIT          0
-
-// Opaque-buffer typedefs for the POSIX thread types. Each is a
-// struct wrapping a fixed-size byte buffer big enough for the
-// underlying libc layout on every supported target. c5 code
-// passes pointers to these into the bindings; the libc side
-// reads the actual platform layout.
-struct __c5_pthread_mutex { char __opaque[64]; };
+// Opaque-buffer typedefs for the POSIX thread types. Each wraps a
+// leading signature word plus a fixed-size buffer big enough for the
+// underlying libc layout on every supported target. c5 code passes
+// pointers to these into the bindings; the libc side reads the actual
+// platform layout. The signature word is exposed (rather than folded
+// into the buffer) so the static initialisers below can set it.
+struct __c5_pthread_mutex { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_mutex pthread_mutex_t;
 
 struct __c5_pthread_mutexattr { char __opaque[16]; };
 typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
 
-struct __c5_pthread_cond { char __opaque[64]; };
+struct __c5_pthread_cond { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_cond pthread_cond_t;
+
+// Static-storage initialisers for the mutex / condition variable
+// types. Darwin's libpthread checks a signature word at offset 0 and
+// rejects a zero-signature object from pthread_mutex_lock /
+// pthread_cond_wait (EINVAL), so the macro must seed the magic the
+// system <pthread/pthread_impl.h> uses for a statically initialised
+// object. glibc and Windows take an all-zero object, so the signature
+// word stays zero there.
+#if defined(__APPLE__)
+#define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
+#define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
+#else
+#define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
+#define PTHREAD_COND_INITIALIZER  { 0, {0} }
+#endif
+#define PTHREAD_ONCE_INIT          0
 
 struct __c5_pthread_condattr { char __opaque[16]; };
 typedef struct __c5_pthread_condattr pthread_condattr_t;
@@ -157,6 +183,8 @@ typedef long long pthread_once_t;
 
 int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
 int pthread_join(pthread_t thread, int **retval);
+void pthread_exit(void *retval);
+int pthread_detach(pthread_t thread);
 pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 int pthread_mutex_init(char *mutex, char *attr);
@@ -177,6 +205,20 @@ int pthread_attr_init(char *attr);
 int pthread_attr_destroy(char *attr);
 int pthread_attr_setdetachstate(char *attr, int detachstate);
 int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
+int pthread_attr_setscope(char *attr, int scope);
+#ifdef __linux__
+// pthread_atfork is not a libc.so.6 dynamic symbol on every glibc port;
+// forward to __register_atfork, which is, passing a null DSO handle (the
+// process-global registration libc_nonshared.a's stub uses).
+extern int __register_atfork(void (*prepare)(void), void (*parent)(void),
+                             void (*child)(void), void *dso_handle);
+static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
+                                 void (*child)(void)) {
+    return __register_atfork(prepare, parent, child, 0);
+}
+#else
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
+#endif
 int pthread_key_create(pthread_key_t *key, int *destructor);
 int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, char *val);

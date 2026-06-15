@@ -44,26 +44,6 @@ Severity (for compiling existing C): 1 = blocks almost everything,
 2 = blocks much real code, 3 = blocks specific idioms, 4 = workaround
 exists, 5 = rare in modern source.
 
-### `struct`-by-value through a `#pragma binding` import, severity 4
-
-A struct passed or returned by value follows the host ABI for c5-to-c5
-calls and for regular `extern` declarations (System V AMD64 rax/rdx + the
-integer arg registers, AAPCS64 x0/x1, the AAPCS64 x8 indirect class for
-aggregates larger than 16 bytes), including the inline libc wrappers in the
-bundled headers (`div()` returns its `div_t` in registers). The remaining
-gap is a struct passed or returned by value across a `#pragma binding`
-import (a `Token::Sys` symbol): the call is rejected at compile time (the
-diagnostic names the argument or call) because the address-as-value
-internal convention reaches those symbols before the host-ABI packing. Pass
-`&s` or a pointer-returning variant.
-
-### Brace-wrapped string initializer for a `char` array, severity 4
-
-`char a[N] = {"abc"}` and the compound-literal form `(char[N]){"abc"}` are
-rejected. The unbraced `char a[N] = "abc"` works; the brace-wrapped variant
-shares one parse limitation. Other compound-literal shapes (scalar, struct,
-array, including non-constant element values) work at file and block scope.
-
 ### `volatile` and `const` accepted but not enforced, severity 4
 
 `volatile` is parsed at every position and discarded. c5 does not guarantee
@@ -75,13 +55,6 @@ constraint violation) or the discarding of `const` in a conversion, so a
 program that modifies a `const` object compiles without the required
 diagnostic. `restrict` is accepted as a sound no-op -- it is only an
 aliasing hint with no observable semantics.
-
-### `sizeof` an abstract function-pointer declarator, severity 5
-
-`sizeof(int(*)(int))` is rejected (the `sizeof` operand parser does not
-accept the abstract function-pointer declarator). The same declarator in
-cast position (`(int(*)(int))p`) and in typedef / parameter / struct-field
-declarators is accepted.
 
 ### Function-pointer return through a function-pointer variable, severity 5
 
@@ -97,12 +70,17 @@ type drops the return type's own function-pointer level.
 ### Not implemented, severity 4-5
 
 C99 features rejected (all rare in current source): `_Complex` /
-`_Imaginary` (6.2.5), `_Pragma` (6.10.9), universal character names
-(6.4.3), digraphs and trigraphs (6.4.6 / 5.2.1.1), K&R identifier-list
-function declarators (obsolescent, 6.11.7), and `++` / `--` on a `float`
-lvalue. `inline` / `__inline` / `__inline__` and `_Noreturn` are accepted
-but inert (no inlining, no `noreturn` propagation). `__STDC_VERSION__` /
-`__STDC_HOSTED__` are not predefined.
+`_Imaginary` (6.2.5), universal character names (6.4.3), digraphs and
+trigraphs (6.4.6 / 5.2.1.1), and K&R identifier-list function declarators
+(obsolescent, 6.11.7).
+`inline` / `__inline` / `__inline__` set a hint the `-O` inliner reads.
+`_Noreturn` is recorded on the function symbol and propagated: a call to a
+`_Noreturn` function does not reach its continuation in the fall-through
+reachability analysis (which also errors on a non-`void`, non-`main`
+function that can fall off its end without returning a value).
+`__STDC__`, `__STDC_HOSTED__`, `__DATE__`, and `__TIME__` are predefined;
+`__STDC_VERSION__` is deliberately omitted because predefining `199901L`
+might invite code to enable the unsupported C99 features above.
 
 The C11 `_Generic` selection and the GCC named-rest variadic macro
 (`#define foo(args...)`) are likewise not implemented.
@@ -169,12 +147,19 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
 ### c5-specific
 
 - `#pragma dylib` / `#pragma binding` / `#pragma export` -- per-target
-  loader symbol resolution and shared-library export.
+  loader symbol resolution and shared-library export. A struct passed by
+  value to a bound import rides the host ABI like any other call; a bound
+  import that *returns* a struct by value is rejected at compile time (the
+  host-ABI struct-return packing does not yet reach these symbols) -- pass
+  an out-buffer or use a pointer-returning variant.
 - `#pragma entrypoint(<name>)` -- override the default `main` entry point
   (e.g. `WinMain`).
 - `#pragma subsystem(console | windows | native | driver)` -- the Windows PE optional-header
   `Subsystem` field; ignored on non-PE targets.
 - `#pragma once`.
+- The C99 6.10.9 `_Pragma(<string-literal>)` operator, processed as the
+  destringized `#pragma` directive (including via the `#x` stringize
+  feeding `_Pragma(#x)`).
 - `--interp` (SSA interpreter with pointer tracking), `--jit` (in-process),
   `--dump-ssa`.
 - `-H` / `--show-includes` -- gcc-`-H`-shape `#include` resolution trace.
@@ -186,8 +171,7 @@ The C11 `_Generic` selection and the GCC named-rest variadic macro
 
 ## Roadmap
 
-1. `struct`-by-value across a `#pragma binding` import (host-ABI packing
-   reaching `Token::Sys` symbols).
-2. Brace-wrapped string initializer for `char` arrays.
-3. Abstract function-pointer declarator in `sizeof`.
-4. `volatile`-honored loads / stores.
+1. Host-ABI struct-return packing for a `#pragma binding` import that
+   returns a struct by value (the by-value argument direction already
+   rides the host ABI).
+2. `volatile`-honored loads / stores.

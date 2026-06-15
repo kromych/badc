@@ -60,7 +60,7 @@ Disassembly of section .text:
 <sink_op>:
                	movslq	%ecx, %rcx
                	xorq	%rax, %rax
-               	movzbq	(%rsi), %rdx
+               	movsbq	(%rsi), %rdx
                	addq	%rdx, %rcx
                	movl	%ecx, (%r8)
                	retq
@@ -73,6 +73,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	popq	%rbp
                	retq
 
@@ -119,3 +120,4 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	jmp	<addr>
+               	addb	%al, 0x41(%rdx)

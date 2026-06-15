@@ -11,20 +11,28 @@ fn entry_pc_points_at_main() {
 }
 
 /// Every emitted binary -- regardless of target -- carries the
-/// `BUILD_INFO` marker at the tail of the code section so a
-/// `strings` scan reveals the badc revision that produced it.
-/// The marker is appended in `codegen::lower_for` after the
-/// per-arch `lower()` returns; nothing references those bytes,
-/// so they're invisible at runtime but easy to find on disk.
+/// `OUTPUT_MARKER` at the tail of the code section so a `strings`
+/// scan reveals the badc version that produced it. The marker is
+/// appended in `codegen::lower_for` after the per-arch `lower()`
+/// returns; nothing references those bytes, so they're invisible
+/// at runtime but easy to find on disk.
+///
+/// The marker carries the release version only. The git commit /
+/// branch / remote that `--version` reports (`BUILD_INFO`) must
+/// NOT appear in output: they vary with the build environment and
+/// would make identical source/flags/target produce different
+/// bytes depending on where badc was built. This test asserts
+/// both the version marker is present and the git fields are
+/// absent.
 #[test]
-fn build_info_marker_appears_in_every_target() {
+fn output_marker_is_version_only_and_present_in_every_target() {
     use crate::{NativeOptions, Target};
     let program = super::compile_str("int main() { return 0; }");
-    // `BUILD_INFO` starts with `BADC\n\tv<version>` (see
-    // `src/lib.rs`). Probe the first line of the marker as a
-    // stable substring; the version and commit suffix change
-    // per build.
-    let needle = b"BADC\n\tv";
+    // `OUTPUT_MARKER` is `BADC\n\tv<version>` (see `src/lib.rs`).
+    let needle = crate::OUTPUT_MARKER.as_bytes();
+    // The git tail only ever appears in `BUILD_INFO`; its label
+    // `\n\tcommit ` must not reach the output.
+    let git_tail = b"\n\tcommit ";
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -41,7 +49,12 @@ fn build_info_marker_appears_in_every_target() {
         let found = bytes.windows(needle.len()).any(|w| w == needle);
         assert!(
             found,
-            "{target:?}: expected `BADC\\n\\tv` marker prefix in emitted binary"
+            "{target:?}: expected `OUTPUT_MARKER` in emitted binary"
+        );
+        let leaked = bytes.windows(git_tail.len()).any(|w| w == git_tail);
+        assert!(
+            !leaked,
+            "{target:?}: git provenance leaked into output -- breaks reproducibility"
         );
     }
 }
@@ -175,6 +188,47 @@ fn defined_functions_get_sized_symtab_entries() {
              (all FUNC symbols: {funcs:?})"
         );
     }
+}
+
+/// `#pragma binding(data libc::environ, "__environ")` (in `<unistd.h>`,
+/// `__linux__`) records a data-import copy relocation in the object's
+/// `.note.badc`, mapping the local `environ` to the host's `__environ`.
+/// The linker turns it into an `R_*_COPY` against runtime.c's environ
+/// slot (verified end to end by the native demos); here the object-level
+/// contract is locked: the host symbol name reaches the relocatable
+/// object, and a program with no environ binding carries none.
+#[test]
+fn environ_data_binding_records_copy_relocation() {
+    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let emit_obj = |src: &str| -> alloc::vec::Vec<u8> {
+        // The binding is `__linux__`-gated, so compile for a Linux
+        // target; the host may be macOS, where environ takes a different
+        // form.
+        let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit")
+    };
+    let has_host_symbol = |bytes: &[u8]| {
+        let needle = b"__environ";
+        bytes.windows(needle.len()).any(|w| w == needle)
+    };
+
+    let with_env = emit_obj("#include <unistd.h>\nint main(void){ return environ != 0; }");
+    assert!(
+        has_host_symbol(&with_env),
+        "a program referencing environ must record the __environ copy relocation"
+    );
+
+    let without_env = emit_obj("int main(void){ return 0; }");
+    assert!(
+        !has_host_symbol(&without_env),
+        "a program with no environ binding must not record __environ"
+    );
 }
 
 /// Walk an emitted ELF64 `.symtab` and return `(name, st_size)` for

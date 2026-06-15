@@ -309,16 +309,9 @@ Disassembly of section .text:
 <__c5_sys_sqrtf>:
                	jmp	<addr>
 
-<__c5_sys_fabsf>:
-               	jmp	<addr>
-
 <__c5_sys_floorf>:
                	jmp	<addr>
 
 <__c5_sys_ceilf>:
                	jmp	<addr>
-
-<__c5_sys_truncf>:
-               	jmp	<addr>
-               	addb	%al, (%rax)
                	addb	%al, 0x41(%rdx)

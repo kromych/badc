@@ -115,7 +115,7 @@ impl Compiler {
                 bt = m.int_base();
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                bt = m.char_tag();
+                bt = m.char_tag(self.target.plain_char_signed());
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // Bare `void` shares the `unsigned char` encoding
@@ -229,7 +229,14 @@ impl Compiler {
             }
 
             while self.lex.tk != ';' && self.lex.tk != '}' {
-                let (id_idx, ty, mut array_size) = self.parse_declarator(bt)?;
+                let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // Capture per this declarator before any nested parse can
+                // overwrite it (a later parameter of function type would
+                // re-set it). A bare function-type declarator is a function
+                // declaration; the routing below runs after the typedef
+                // branch so only an object/function declaration is affected.
+                let bare_function_type = self.pending.bare_function_type_declarator;
+                self.pending.bare_function_type_declarator = false;
                 // Pick up the fn-pointer indirection count
                 // the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
@@ -304,7 +311,7 @@ impl Compiler {
                 // symbol as Fun, install the captured params, then
                 // proceed straight into the body (the next token is
                 // `{`, not `(`).
-                let preconsumed_params = self.pending.fn_params.take();
+                let mut preconsumed_params = self.pending.fn_params.take();
 
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
@@ -404,6 +411,29 @@ impl Compiler {
                         self.next()?;
                     }
                     continue;
+                }
+
+                // C99 6.9.1: an identifier declared with a bare function type
+                // (a function-TYPE typedef used with no pointer) is a function
+                // declaration, not an object. The base type was pre-decayed to
+                // a function pointer; undo that level and route through the
+                // function path with the typedef's prototype, so a following
+                // definition of the same name merges as a redeclaration rather
+                // than colliding as a duplicate global.
+                if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
+                    ty -= Ty::Ptr as i64;
+                    let types = self.pending.fn_ptr_param_types.take().unwrap_or_default();
+                    let is_variadic = self
+                        .pending
+                        .typedef_fn_proto
+                        .take()
+                        .map(|(_, variadic)| variadic)
+                        .unwrap_or(false);
+                    preconsumed_params = Some(super::function::ParsedParams {
+                        indices: alloc::vec::Vec::new(),
+                        types,
+                        is_variadic,
+                    });
                 }
 
                 // Sys-class predefined symbols (the per-target
@@ -919,6 +949,14 @@ impl Compiler {
                     // frame, or parses a statement.
                     let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> =
                         alloc::vec::Vec::new();
+                    // C99 6.2.1: a tag declared in a function body has
+                    // block scope. Push a tag scope so a struct / union /
+                    // enum defined at the body top level is local to this
+                    // function -- two functions defining the same tag do
+                    // not collide, and a body-scope tag shadows a
+                    // file-scope one. Nested blocks push their own scopes
+                    // through parse_block_stmt.
+                    self.tag_scopes.push(alloc::vec::Vec::new());
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
@@ -956,6 +994,7 @@ impl Compiler {
                             top_level_ids.push(item_id);
                         }
                     }
+                    self.tag_scopes.pop();
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend

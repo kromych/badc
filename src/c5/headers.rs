@@ -56,6 +56,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("setjmp.h", include_str!("../../headers/include/setjmp.h")),
     ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
+    ("sched.h", include_str!("../../headers/include/sched.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
@@ -74,14 +75,55 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("errno.h", include_str!("../../headers/include/errno.h")),
     ("assert.h", include_str!("../../headers/include/assert.h")),
     ("time.h", include_str!("../../headers/include/time.h")),
+    ("utime.h", include_str!("../../headers/include/utime.h")),
+    ("netdb.h", include_str!("../../headers/include/netdb.h")),
+    (
+        "sys/utsname.h",
+        include_str!("../../headers/include/sys/utsname.h"),
+    ),
+    ("grp.h", include_str!("../../headers/include/grp.h")),
+    (
+        "langinfo.h",
+        include_str!("../../headers/include/langinfo.h"),
+    ),
+    (
+        "netinet/in.h",
+        include_str!("../../headers/include/netinet/in.h"),
+    ),
+    (
+        "arpa/inet.h",
+        include_str!("../../headers/include/arpa/inet.h"),
+    ),
     ("dirent.h", include_str!("../../headers/include/dirent.h")),
     ("ftw.h", include_str!("../../headers/include/ftw.h")),
+    ("fts.h", include_str!("../../headers/include/fts.h")),
     ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
     (
         "sys/types.h",
         include_str!("../../headers/include/sys/types.h"),
+    ),
+    ("sys/uio.h", include_str!("../../headers/include/sys/uio.h")),
+    (
+        "sys/attr.h",
+        include_str!("../../headers/include/sys/attr.h"),
+    ),
+    (
+        "libkern/OSByteOrder.h",
+        include_str!("../../headers/include/libkern/OSByteOrder.h"),
+    ),
+    (
+        "sys/paths.h",
+        include_str!("../../headers/include/sys/paths.h"),
+    ),
+    (
+        "copyfile.h",
+        include_str!("../../headers/include/copyfile.h"),
+    ),
+    (
+        "mach/mach_time.h",
+        include_str!("../../headers/include/mach/mach_time.h"),
     ),
     (
         "sys/stat.h",
@@ -198,6 +240,16 @@ mod tests {
     #[test]
     fn header_declaring_finds_socket() {
         assert_eq!(header_declaring("socket"), Some("sys/socket.h"));
+    }
+
+    #[test]
+    fn header_declaring_finds_pread64() {
+        // glibc large-file variants. sqlite's os_unix layer references
+        // them by name under USE_PREAD64; without the prototype they are
+        // implicitly declared and the address-of trampoline forwards no
+        // arguments.
+        assert_eq!(header_declaring("pread64"), Some("unistd.h"));
+        assert_eq!(header_declaring("pwrite64"), Some("unistd.h"));
     }
 
     #[test]

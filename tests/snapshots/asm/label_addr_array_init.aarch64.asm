@@ -53,7 +53,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	stur	w0, [x29, #0x10]
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	adr	x2, <addr>
                	str	x2, [x0]
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	stur	w0, [x29, #0x10]
                	adrp	x0, <page>
-               	add	x0, x0, #0xe8
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	adr	x2, <addr>
                	str	x2, [x0]

@@ -113,13 +113,29 @@ def main() -> int:
         (t, ["--std"]) for t in STD_TESTS
     ]:
         path = tests_dir / name
-        run = subprocess.run(
-            [str(qjs), *extra, str(path)],
-            capture_output=True,
-            text=True,
-            cwd=tests_dir,
-            timeout=120,
-        )
+        # test_std.js's os.exec case spawns `cat`, signals it, then
+        # expects a signal exit status. With an EOF stdin -- a CI
+        # runner's closed stdin -- cat reads EOF and exits 0 before the
+        # signal arrives, so the test reads exit code 0. Hand the child
+        # a stdin that blocks: a pipe whose write end the parent holds
+        # open for the run's duration. Skipped on Windows, where the
+        # POSIX os.exec path does not apply.
+        stdin_r = stdin_w = None
+        if not WIN:
+            stdin_r, stdin_w = os.pipe()
+        try:
+            run = subprocess.run(
+                [str(qjs), *extra, str(path)],
+                stdin=stdin_r,
+                capture_output=True,
+                text=True,
+                cwd=tests_dir,
+                timeout=120,
+            )
+        finally:
+            if stdin_r is not None:
+                os.close(stdin_r)
+                os.close(stdin_w)
         if run.returncode != 0:
             fail(
                 f"{name}{' --std' if extra else ''} exit {run.returncode}\n"

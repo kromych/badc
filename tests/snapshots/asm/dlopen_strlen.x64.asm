@@ -72,8 +72,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	addq	$0x20, %rsp
                	popq	%rbp
                	retq
-               	addb	%al, (%rax)
-               	addb	%al, 0x41(%rdx)

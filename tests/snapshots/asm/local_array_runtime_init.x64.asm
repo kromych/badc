@@ -190,7 +190,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	addq	$0x61, %rax
                	movslq	%eax, %rax
-               	andq	$0xff, %rax
                	leaq	-0x8(%rbp), %rcx
                	movb	%al, (%rcx)
                	movl	$0x62, %eax
@@ -199,7 +198,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	incq	%rax
                	movslq	%eax, %rax
-               	andq	$0xff, %rax
                	leaq	-0x8(%rbp), %rcx
                	movb	%al, 0x2(%rcx)
                	movl	$0x64, %eax
@@ -218,7 +216,7 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rdx
                	movslq	%ecx, %rsi
                	addq	%rsi, %rdx
-               	movzbq	(%rdx), %rdx
+               	movsbq	(%rdx), %rdx
                	addq	%rdx, %rax
                	jmp	<addr>
                	movslq	%eax, %rax
@@ -307,20 +305,16 @@ Disassembly of section .text:
                	movq	%r11, (%rax)
                	popq	%r11
                	leaq	-0x18(%rbp), %rax
-               	movzbq	(%rax), %rax
-               	xorq	$0x68, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rax
+               	cmpq	$0x68, %rax
                	setne	%al
                	movzbq	%al, %rax
                	movl	$0x1, %edx
                	testq	%rax, %rax
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
-               	movzbq	0x4(%rax), %rax
-               	xorq	$0x6f, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	0x4(%rax), %rax
+               	cmpq	$0x6f, %rax
                	setne	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax
@@ -329,7 +323,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	jne	<addr>
                	leaq	-0x18(%rbp), %rax
-               	movzbq	0x5(%rax), %rax
+               	movsbq	0x5(%rax), %rax
                	testq	%rax, %rax
                	setne	%dl
                	movzbq	%dl, %rdx

@@ -84,6 +84,20 @@ ASM_NORMALISATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # `ldr x16, [x16, #0xc0]`. The page address + offset together name
     # a fixed symbol; treat the pair as a single placeholder.
     (re.compile(r"adrp(\s+\w+,)\s+0x[0-9a-fA-F]+"), r"adrp\1 <page>"),
+    # aarch64 ADRP / ADD address materialization: `adrp x0, <page>`
+    # then `add x0, x0, #0x958`. The `add` immediate is the low 12
+    # bits of the same materialized address the (already-normalized)
+    # ADRP names, so it is layout-dependent in lock-step with the
+    # page. An `add` that reuses the ADRP's destination register on
+    # the next line is always this pattern, never arithmetic, so the
+    # immediate carries no codegen signal and is normalized to keep
+    # the snapshot stable against any earlier reflow.
+    (
+        re.compile(
+            r"(adrp\s+(\w+),\s+<page>\n\s*add\s+\2,\s+\2,\s+)#0x[0-9a-fA-F]+"
+        ),
+        r"\1<lo12>",
+    ),
 )
 
 

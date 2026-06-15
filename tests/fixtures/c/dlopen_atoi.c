@@ -14,7 +14,7 @@
 //
 // Native binaries link this through libc / libdl. The VM rejects the
 // final indirect call because Op::Jsri's decode_pc validates against
-// the c4 bytecode range -- a real libc address fails that check, and
+// the valid bytecode range -- a real libc address fails that check, and
 // the VM's runtime-error path is the documented behaviour.
 
 int main() {

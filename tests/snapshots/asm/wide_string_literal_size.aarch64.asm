@@ -86,7 +86,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x152
+               	add	x0, x0, <lo12>
                	ldrsw	x1, [x0]
                	cmp	x1, #0x61
                	cset	x1, ne

@@ -1,55 +1,50 @@
-//! Rudimentary preprocessor that runs before the lexer.
+//! Preprocessor that runs before the lexer.
 //!
-//! The c5 dialect's lexer used to silently skip lines starting with
-//! `#`, leaving every `#define` / `#ifdef` in the source as a
-//! no-op. Once per-target headers started declaring constants and
-//! libc bindings, that placeholder shape stopped serving and was
-//! replaced with the implementation below.
+//! Line-based: each input line becomes a macro-substituted line of
+//! output, or a blank line for a directive or an inactive conditional
+//! branch. Line counts are preserved one-for-one -- including the
+//! blank fillers emitted for each consumed `\` continuation -- so
+//! lexer and parser error messages keep accurate line numbers.
 //!
-//! What's supported:
+//! Directives:
 //!
-//! * `#define NAME REPLACEMENT` -- single-token replacement; macro
-//!   bodies can themselves be macros (cycle-safe).
-//! * `#ifdef NAME` / `#ifndef NAME` / `#endif`.
-//! * `#if EXPR` / `#else` / `#endif`, with `EXPR` being either
-//!   `LHS == RHS`, `LHS != RHS`, or a bare `NAME` (truthy iff
-//!   defined to a non-zero, non-empty value).
-//! * `#pragma dylib(name, "path")` -- introduces a logical dylib
-//!   the codegen can attach bindings to. `name` is the c5-side
-//!   handle (e.g. `libc`); `path` is the actual loader-search-name
-//!   or filesystem path (`libc.so.6`, `/usr/lib/libSystem.B.dylib`,
-//!   `msvcrt.dll`).
-//! * `#pragma binding(dylib_name::local_name, "real_symbol")` --
-//!   declares that the c5-side identifier `local_name`, when called
-//!   from source, should land on `real_symbol` exported by the
-//!   dylib called `dylib_name`. The earlier positional "current
-//!   dylib" form (`#pragma comment(dylib, ...)` with following
-//!   bindings inheriting it implicitly) was replaced with this
-//!   explicit cross-reference so reordering directives can't
-//!   silently rebind a function to the wrong dylib.
+//! * `#define NAME BODY` / `#define NAME(params) BODY` -- object- and
+//!   function-like macros; a body may span lines with a trailing `\`.
+//!   Expansion is recursive and cycle-safe. `#undef NAME` removes a
+//!   definition. The CLI's `-D NAME` predefines with body `1` and
+//!   `-D NAME=` with an empty body (see [`Preprocessor::define`]).
+//! * `#ifdef` / `#ifndef` / `#if` / `#elif` / `#else` / `#endif`,
+//!   nestable. The `#if` / `#elif` operand is a C integer constant
+//!   expression evaluated at 64 bits: `defined(NAME)` / `defined
+//!   NAME`, the ternary `?:`, `||`, `&&`, `| ^ &`, `== !=`,
+//!   `< > <= >=`, `<< >>`, `+ - * / %`, unary `! ~ - +`, integer and
+//!   character constants, and parentheses. An identifier that is not
+//!   a macro evaluates to 0 (C99 6.10.1).
+//! * `#include <name.h>` / `#include "name.h"` -- resolved through the
+//!   filesystem search paths first (a quoted form also searches the
+//!   including file's directory), then the embedded-header registry
+//!   (see [`super::headers`]). Cyclic `#include` is rejected; a repeat
+//!   include is dropped once the header has used `#pragma once`.
+//! * `#error MESSAGE` aborts compilation; `#warning MESSAGE` reports a
+//!   diagnostic and continues; `#line` (and the GNU `# NN "file"`
+//!   marker) adjusts the reported line number and file name.
 //!
-//! What's not:
+//! Pragmas:
 //!
-//! * Multi-line `#define` continuations.
-//! * Boolean operators (`&&`, `||`, `!`) inside `#if`.
-//!
-//! Also supported:
-//!
-//! * `#include <name.h>` / `#include "name.h"` -- pulls a header out
-//!   of the embedded-header registry (see [`super::headers`]). Both
-//!   forms hit the same registry today; a future filesystem search
-//!   path could split them. Cyclic `#include` is rejected; repeat
-//!   inclusion is silently no-op iff the included file declared
-//!   `#pragma once`.
-//! * `#pragma once` -- once seen inside a header, further `#include`
-//!   of the same header is dropped on the floor. The usual idiom
-//!   for guarding against double-inclusion of standard headers.
-//!
-//! The pass is line-based: every line of the input either becomes
-//! a (macro-substituted) line of the output or a blank line if it
-//! was a directive / inactive branch. Line counts are preserved
-//! one-for-one so error messages from the lexer keep meaningful
-//! line numbers.
+//! * `#pragma once` -- drop further `#include` of the same header.
+//! * `#pragma dylib(name, "path")` -- introduce a logical dylib the
+//!   codegen attaches bindings to. `name` is the c5-side handle (e.g.
+//!   `libc`); `path` is the loader search name or filesystem path
+//!   (`libc.so.6`, `/usr/lib/libSystem.B.dylib`, `msvcrt.dll`).
+//! * `#pragma binding(dylib_name::local_name, "real_symbol")` -- bind
+//!   the c5-side identifier `local_name` to `real_symbol` exported by
+//!   `dylib_name`, so a call to `local_name` lands on that import. The
+//!   explicit cross-reference replaced an earlier positional "current
+//!   dylib" form so reordering directives cannot rebind a function to
+//!   the wrong dylib.
+//! * `#pragma pack(push|pop|N)` -- struct field alignment.
+//! * `#pragma intrinsic("name")` -- mark a name (e.g. `alloca`) as a
+//!   compiler intrinsic.
 
 use alloc::collections::BTreeSet;
 use alloc::format;
@@ -147,6 +142,12 @@ pub struct Binding {
     /// the `ResolvedImport` view it builds during import resolution.
     #[allow(dead_code)]
     pub real_symbol: String,
+    /// `true` when the binding names a data object rather than a
+    /// callable function -- the `#pragma binding(data <lib>::<name>,
+    /// "...")` form. A data import resolves to a COPY relocation that
+    /// binds the host's data symbol into the image, not a PLT/GOT call
+    /// slot.
+    pub is_data: bool,
 }
 
 /// One function-like macro entry: parameter list + body. Object-like
@@ -161,6 +162,11 @@ struct FnMacro {
     /// `true` for `#define foo(a, ...)` -- any extra arguments are
     /// joined with `, ` and substituted for `__VA_ARGS__` in the body.
     is_variadic: bool,
+    /// The variadic-tail name for the GCC named-rest form
+    /// `#define foo(a, rest...)`: `Some("rest")`. The body reaches the
+    /// trailing arguments through this name in addition to
+    /// `__VA_ARGS__`. `None` for the standard `...` form.
+    va_name: Option<String>,
 }
 
 /// Output of a successful preprocessor run: the substituted source
@@ -401,6 +407,7 @@ impl Preprocessor {
                     params: alloc::vec!["x".to_string()],
                     body: String::new(),
                     is_variadic: false,
+                    va_name: None,
                 },
             );
         }
@@ -414,6 +421,7 @@ impl Preprocessor {
                 params: alloc::vec!["x".to_string(), "c".to_string()],
                 body: "(x)".to_string(),
                 is_variadic: false,
+                va_name: None,
             },
         );
         macros.insert(
@@ -422,9 +430,8 @@ impl Preprocessor {
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
         // Standard predefines (C99 sec 6.10.8). `__STDC_VERSION__`
-        // is omitted -- the dialect is a c4-shaped subset, not an
-        // implementation of any specific C standard year. `__DATE__`
-        // and `__TIME__` are seeded at badc build time; C99 says they
+        // is omitted, not an implementation of any specific C standard year.
+        // `__DATE__` and `__TIME__` are seeded at badc build time; C99 says they
         // reflect "the date and time of translation", and the closest
         // analogue for an embedded library is the build time of badc
         // itself. `__STDC_HOSTED__` reflects that every supported
@@ -448,6 +455,24 @@ impl Preprocessor {
                 macros.insert("__x86_64__".to_string(), "1".to_string());
                 macros.insert("__amd64__".to_string(), "1".to_string());
             }
+        }
+        // GCC/Clang define `__CHAR_UNSIGNED__` exactly when plain
+        // `char` is unsigned (C99 6.2.5p15 leaves it
+        // implementation-defined). Headers branch on it to choose
+        // sign-extension strategy, so mirror the target's choice.
+        if !target.plain_char_signed() {
+            macros.insert("__CHAR_UNSIGNED__".to_string(), "1".to_string());
+        }
+        // LP64 data model: 64-bit `long` and 64-bit pointer. GCC and
+        // Clang predefine `__LP64__` and `_LP64` on every LP64 target,
+        // and code that selects a 64-bit-wide integer type branches on
+        // them. Windows is LLP64 (32-bit `long`), so it is excluded.
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => {
+                macros.insert("__LP64__".to_string(), "1".to_string());
+                macros.insert("_LP64".to_string(), "1".to_string());
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {}
         }
         match target {
             Target::MacOSAarch64 => {
@@ -543,11 +568,13 @@ impl Preprocessor {
 
     /// Predefine an object-like macro from the build driver --
     /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
-    /// The empty body resolves to `1`, matching cpp's convention.
-    /// Late definitions in source still win, so a `-D X=0`
+    /// `-D NAME` (no `=`) reaches here with body `"1"` per cpp's
+    /// convention; `-D NAME=` (with `=`, empty value) reaches here
+    /// with an empty body and must stay empty, matching the `#define
+    /// NAME` directive -- e.g. `-DSQLITE_PRIVATE=` expands to nothing,
+    /// not `1`. Late definitions in source still win, so a `-D X=0`
     /// followed by `#define X 1` in source ends up with `X = 1`.
     pub fn define(&mut self, name: &str, body: &str) {
-        let body = if body.is_empty() { "1" } else { body };
         self.macros.insert(name.to_string(), body.to_string());
     }
 
@@ -690,14 +717,24 @@ impl Preprocessor {
                     }
                     Directive::DefineFn(name, mut params, body) => {
                         if active {
-                            // C99 variadic macro: a trailing `...` in the
-                            // parameter list opts in to `__VA_ARGS__`.
-                            // GCC's named-rest extension (`#define
-                            // foo(args...)`) is not supported -- the
-                            // parameter must be the literal `...`.
-                            let is_variadic = params.last().is_some_and(|p| *p == "...");
-                            if is_variadic {
-                                params.pop();
+                            // A trailing `...` (C99 6.10.3) or the GCC
+                            // named-rest form `name...` makes the macro
+                            // variadic; the named form additionally binds
+                            // the trailing arguments to `name`.
+                            let mut is_variadic = false;
+                            let mut va_name = None;
+                            if let Some(last) = params.last().copied() {
+                                if last == "..." {
+                                    is_variadic = true;
+                                    params.pop();
+                                } else if let Some(prefix) = last.strip_suffix("...") {
+                                    let prefix = prefix.trim();
+                                    if is_ident(prefix) {
+                                        is_variadic = true;
+                                        va_name = Some(prefix.to_string());
+                                        params.pop();
+                                    }
+                                }
                             }
                             self.fn_macros.insert(
                                 name.to_string(),
@@ -705,6 +742,7 @@ impl Preprocessor {
                                     params: params.iter().map(|s| s.to_string()).collect(),
                                     body: body.to_string(),
                                     is_variadic,
+                                    va_name,
                                 },
                             );
                             self.macros.remove(name);
@@ -1068,7 +1106,12 @@ impl Preprocessor {
                 // `__LINE__` reflects the presumed line (`source_line`),
                 // which a `#line` directive can retarget (C99 6.10.4);
                 // absent any `#line`, it equals the physical line.
-                out.push_str(&self.substitute(&buffer, filename, source_line));
+                let substituted = self.substitute(&buffer, filename, source_line);
+                // C99 6.10.9: a `_Pragma` operator in the now
+                // macro-expanded text is destringized and handled as
+                // the matching `#pragma` directive.
+                let processed = self.apply_pragma_operators(&substituted, source_line, filename)?;
+                out.push_str(&processed);
                 out.push('\n');
                 // Preserve source line numbering by emitting a blank
                 // line for each extra source line we joined into the
@@ -1106,6 +1149,94 @@ impl Preprocessor {
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
         self.substitute_with_blocklist(line, filename, line_no, &Blocklist::Nil)
+    }
+
+    /// Process C99 6.10.9 `_Pragma` operators in already-macro-expanded
+    /// text. `_Pragma ( string-literal )` is destringized (the optional
+    /// `L` prefix and the surrounding quotes are removed, `\"` becomes
+    /// `"`, and `\\` becomes `\`) and handled as the matching `#pragma`
+    /// directive; the operator itself contributes no tokens. String and
+    /// character literals in the surrounding text are copied through
+    /// unchanged so a `_Pragma` substring inside one is not mistaken for
+    /// the operator. A malformed operator is left in place for the lexer
+    /// to diagnose.
+    fn apply_pragma_operators(
+        &mut self,
+        text: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
+        if !text.contains("_Pragma") {
+            return Ok(text.to_string());
+        }
+        let bytes = text.as_bytes();
+        let mut out = String::with_capacity(text.len());
+        let mut copied = 0usize;
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if c == b'"' || c == b'\'' {
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    let closed = bytes[i] == c;
+                    i += 1;
+                    if closed {
+                        break;
+                    }
+                }
+                continue;
+            }
+            let is_operator = c == b'_'
+                && bytes[i..].starts_with(b"_Pragma")
+                && (i == 0 || !is_ident_byte(bytes[i - 1]))
+                && !bytes.get(i + 7).copied().is_some_and(is_ident_byte);
+            if let Some((args, next)) = is_operator
+                .then(|| parse_pragma_operator_args(text, i + 7))
+                .flatten()
+            {
+                out.push_str(&text[copied..i]);
+                self.dispatch_pragma_operator(&args, line_no, filename, &mut out)?;
+                i = next;
+                copied = next;
+                continue;
+            }
+            i += 1;
+        }
+        out.push_str(&text[copied..]);
+        Ok(out)
+    }
+
+    /// Apply a single destringized `_Pragma` operand through the same
+    /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
+    /// arm in `process_named`). `pack(...)` is emitted as an inline
+    /// `#pragma pack` directive on its own line so the lexer folds it
+    /// into the pack stack at this source position.
+    fn dispatch_pragma_operator(
+        &mut self,
+        args: &str,
+        line_no: usize,
+        filename: &str,
+        out: &mut String,
+    ) -> Result<(), C5Error> {
+        match parse_pragma_directive(args) {
+            PragmaDirective::Once => {
+                self.pragma_once_files.insert(filename.to_string());
+            }
+            PragmaDirective::Other => {
+                if pragma_is_pack(args) {
+                    out.push_str("\n#pragma ");
+                    out.push_str(args.trim());
+                    out.push('\n');
+                } else {
+                    self.parse_pragma(args, line_no, filename)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Scan `text` for identifiers that name a macro currently
@@ -2260,12 +2391,20 @@ impl Preprocessor {
             self.include_trace
                 .push(format!("{} {}", ".".repeat(depth), name));
         }
-        if self.include_stack.iter().any(|f| f == name) {
+        // A header may legitimately appear more than once on the active
+        // include path: a guard-protected re-include where an inner header
+        // pulls a guarded outer one back in. The include guard skips the body
+        // on the second pass, so this must process normally rather than error.
+        // Bound only the nesting depth so a truly unguarded self-include still
+        // fails fast instead of recursing without limit; C99 5.2.4.1 sets 15
+        // levels as the minimum a translator must support.
+        const MAX_INCLUDE_DEPTH: usize = 200;
+        if self.include_stack.len() >= MAX_INCLUDE_DEPTH {
             let chain = self.include_stack.join(" -> ");
             return Err(C5Error::Compile(super::error::fmt_compile_err(
                 filename,
                 line_no,
-                &format!("cyclic `#include {name}` (chain: {chain} -> {name})"),
+                &format!("`#include {name}` nested too deeply (chain: {chain} -> {name})"),
             )));
         }
         self.include_stack.push(name.to_string());
@@ -2332,6 +2471,13 @@ impl Preprocessor {
             )));
         };
         let qualified = qualified.trim();
+        // `#pragma binding(data <lib>::<name>, "sym")` marks a data
+        // object; the leading `data ` keyword distinguishes it from the
+        // function form.
+        let (is_data, qualified) = match qualified.strip_prefix("data ") {
+            Some(rest) => (true, rest.trim()),
+            None => (false, qualified),
+        };
         let real_symbol = real_symbol.trim().trim_matches('"');
         let Some((dylib_name, local_name)) = qualified.split_once("::") else {
             return Err(C5Error::Compile(super::error::fmt_compile_err(
@@ -2370,6 +2516,7 @@ impl Preprocessor {
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
+            is_data,
         });
         Ok(())
     }
@@ -2641,6 +2788,67 @@ fn is_ident(s: &str) -> bool {
         return false;
     }
     bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Parse the `( string-literal )` operand of a `_Pragma` operator,
+/// starting at `start` (just past the `_Pragma` keyword). Returns the
+/// destringized pragma text and the byte index just past the closing
+/// `)`, or `None` when the operand is malformed (C99 6.10.9). The
+/// optional `L` prefix is dropped, the surrounding quotes are removed,
+/// and `\"` / `\\` collapse to `"` / `\`.
+fn parse_pragma_operator_args(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut i = start;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i += 1;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'L' {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b'"' {
+        return None;
+    }
+    i += 1;
+    let mut content: Vec<u8> = Vec::new();
+    loop {
+        if i >= bytes.len() {
+            return None;
+        }
+        match bytes[i] {
+            b'"' => {
+                i += 1;
+                break;
+            }
+            b'\\' if i + 1 < bytes.len() && (bytes[i + 1] == b'"' || bytes[i + 1] == b'\\') => {
+                content.push(bytes[i + 1]);
+                i += 2;
+            }
+            other => {
+                content.push(other);
+                i += 1;
+            }
+        }
+    }
+    let content = String::from_utf8(content).ok()?;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+    i += 1;
+    Some((content, i))
 }
 
 struct CondFrame {
@@ -3726,6 +3934,13 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
     }
 }
 
+/// True when a body identifier names the variadic tail: the standard
+/// `__VA_ARGS__`, or the GCC named-rest parameter (`#define foo(rest...)`
+/// reaches the tail through `rest`).
+fn is_va_token(def: &FnMacro, word: &str) -> bool {
+    word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
+}
+
 fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {
     // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
     // the macro isn't variadic or no trailing args were supplied. The
@@ -3752,12 +3967,38 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
     while i < bytes.len() {
         let c = bytes[i];
         if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
-            // Token-paste: drop the `##` and any whitespace bracketing
-            // it. The C standard says `a ## b` joins the *tokens*
-            // before / after the operator; for c5's textual
-            // preprocessor that means trim trailing whitespace from
-            // what we've already emitted, then skip the operator and
-            // any leading whitespace before the next token.
+            // GNU `, ## <variadic>` comma idiom: when a comma precedes
+            // `##` and the right operand is the variadic tail, this is
+            // not an ordinary token paste. An empty tail deletes the
+            // comma (`f(fmt, ##__VA_ARGS__)` with no extra args ->
+            // `f(fmt)`); a non-empty tail keeps the comma and the tail.
+            let mut k = i + 2;
+            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                k += 1;
+            }
+            let word_start = k;
+            while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_') {
+                k += 1;
+            }
+            let right_is_va = def.is_variadic && is_va_token(def, &def.body[word_start..k]);
+            if right_is_va && out.trim_end().ends_with(',') {
+                if raw_va_args_str.is_empty() {
+                    while out.ends_with(' ') || out.ends_with('\t') {
+                        out.pop();
+                    }
+                    out.pop();
+                    i = k;
+                } else {
+                    i = word_start;
+                }
+                continue;
+            }
+            // Ordinary token-paste: drop the `##` and any whitespace
+            // bracketing it. `a ## b` joins the *tokens* before / after
+            // the operator; for c5's textual preprocessor that means
+            // trim trailing whitespace from what we've already emitted,
+            // then skip the operator and any leading whitespace before
+            // the next token.
             while out.ends_with(' ') || out.ends_with('\t') {
                 out.pop();
             }
@@ -3785,7 +4026,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
                     j += 1;
                 }
                 let name = &def.body[start..j];
-                let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
+                let arg_text: Option<&str> = if def.is_variadic && is_va_token(def, name) {
                     Some(raw_va_args_str.as_str())
                 } else if let Some(idx) = def.params.iter().position(|p| p == name) {
                     raw_args.get(idx).map(|s| s.as_str())
@@ -3832,7 +4073,7 @@ fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> Strin
             } else {
                 &va_args_str
             };
-            if word == "__VA_ARGS__" && def.is_variadic {
+            if def.is_variadic && is_va_token(def, word) {
                 out.push_str(va);
             } else {
                 match def.params.iter().position(|p| p == word) {
@@ -3891,15 +4132,115 @@ mod tests {
     }
 
     #[test]
+    fn lp64_predefined_for_lp64_targets_only() {
+        let src = "#ifdef __LP64__\nint lp64;\n#endif\n#ifdef _LP64\nint _lp64;\n#endif\n";
+        for t in [Target::MacOSAarch64, Target::LinuxAarch64, Target::LinuxX64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(src).expect("preprocessor failed");
+            assert!(out.contains("int lp64;"), "{t:?} should define __LP64__");
+            assert!(out.contains("int _lp64;"), "{t:?} should define _LP64");
+        }
+        // Windows is LLP64 (32-bit long), so neither macro is defined.
+        for t in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+            let out = pp.process(src).expect("preprocessor failed");
+            assert!(!out.contains("int lp64;"), "{t:?} must not define __LP64__");
+        }
+    }
+
+    #[test]
     fn define_substitutes_in_subsequent_lines() {
         let out = process("#define FOO 42\nint x = FOO;\n");
         assert!(out.contains("int x = 42;"));
     }
 
     #[test]
+    fn cli_empty_define_expands_to_nothing() {
+        // `-D NAME` (no `=`) is `1`; `-D NAME=` (with `=`, empty) stays
+        // empty and expands to nothing -- the cpp convention, e.g.
+        // `-DSQLITE_PRIVATE=` so `SQLITE_PRIVATE void f();` is `void f();`.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.define("EMPTY", "");
+        pp.define("ONE", "1");
+        let out = pp
+            .process("EMPTY void f(void);\nint x = ONE;\n")
+            .expect("preprocessor failed");
+        assert!(out.contains("void f(void);"), "got: {out:?}");
+        assert!(
+            !out.contains("1 void f"),
+            "empty define leaked a 1: {out:?}"
+        );
+        assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
     fn macro_to_macro_substitution_chains() {
         let out = process("#define A B\n#define B 5\nint x = A;\n");
         assert!(out.contains("int x = 5;"));
+    }
+
+    #[test]
+    fn pragma_operator_once_marks_file() {
+        // C99 6.10.9: `_Pragma("once")` in the main file is handled like
+        // `#pragma once` and leaves no tokens in the output.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let out = pp
+            .process("_Pragma(\"once\")\nint x = 1;\n")
+            .expect("preprocessor failed");
+        assert!(!out.contains("_Pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int x = 1;"));
+    }
+
+    #[test]
+    fn pragma_operator_via_macro_stringize() {
+        // The operand can be produced by the `#x` stringize feeding the
+        // operator (`_Pragma(#x)`), the common `DO_PRAGMA` idiom.
+        let out = process("#define DO_PRAGMA(x) _Pragma(#x)\nDO_PRAGMA(once)\nint y = 2;\n");
+        assert!(!out.contains("_Pragma"), "operator leaked: {out:?}");
+        assert!(out.contains("int y = 2;"));
+    }
+
+    #[test]
+    fn pragma_operator_pack_emits_inline_directive() {
+        // `pack` is position-sensitive, so the operator re-emits an
+        // inline `#pragma pack` for the lexer to fold at this point.
+        let out = process("_Pragma(\"pack(1)\")\nstruct S { char a; };\n");
+        assert!(out.contains("#pragma pack(1)"), "no inline pack: {out:?}");
+    }
+
+    #[test]
+    fn pragma_operator_ignored_inside_string_literal() {
+        // The operator name inside a string literal is ordinary text.
+        let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
+        assert!(out.contains("\"_Pragma(\\\"once\\\")\""), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_binds_tail() {
+        // `#define foo(rest...)` reaches the trailing args through `rest`.
+        let out = process("#define F(args...) g(args)\nF(1, 2, 3);\n");
+        assert!(out.contains("g(1, 2, 3);"), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_fixed_plus_tail() {
+        let out = process("#define F(a, rest...) g(a, rest)\nF(1, 2, 3);\n");
+        assert!(out.contains("g(1, 2, 3);"), "got: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_paste_elides_comma() {
+        // `, ##rest` drops the comma when the tail is empty, matching the
+        // `, ##__VA_ARGS__` GNU behaviour.
+        let out = process("#define F(a, rest...) g(a, ##rest)\nF(1);\nF(1, 2);\n");
+        assert!(out.contains("g(1);"), "empty tail not elided: {out:?}");
+        assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
+    }
+
+    #[test]
+    fn named_rest_variadic_macro_stringize() {
+        let out = process("#define S(rest...) #rest\nconst char *s = S(a, b);\n");
+        assert!(out.contains("\"a, b\""), "got: {out:?}");
     }
 
     #[test]
@@ -3928,6 +4269,42 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn guarded_mutual_include_is_not_cyclic() {
+        // Two headers may include each other when an include guard breaks the
+        // recursion: the second pass over a guarded header skips its body
+        // (C99 6.10.1 / 6.10.2). The preprocessor must process the re-include
+        // rather than reject it as a cycle on the bare observation that the
+        // name is already on the include path.
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("badc_pp_guard_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::File::create(dir.join("a.h"))
+            .unwrap()
+            .write_all(b"#ifndef A_H\n#define A_H\n#include \"b.h\"\nint a_marker;\n#endif\n")
+            .unwrap();
+        std::fs::File::create(dir.join("b.h"))
+            .unwrap()
+            .write_all(b"#ifndef B_H\n#define B_H\n#include \"a.h\"\nint b_marker;\n#endif\n")
+            .unwrap();
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.add_search_path(dir.to_str().unwrap());
+        let out = pp
+            .process("#include \"a.h\"\n")
+            .expect("guarded mutual include must not be reported cyclic");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            out.matches("a_marker").count(),
+            1,
+            "a body included once:\n{out}"
+        );
+        assert_eq!(
+            out.matches("b_marker").count(),
+            1,
+            "b body included once:\n{out}"
+        );
     }
 
     #[test]

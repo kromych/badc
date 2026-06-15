@@ -25,7 +25,7 @@ Disassembly of section .text:
                	mov	x2, #0x2d2              // =722
                	movk	x2, #0x4996, lsl #16
                	adrp	x3, <page>
-               	add	x3, x3, #0xd0
+               	add	x3, x3, <lo12>
                	sub	x4, x29, #0x30
                	mov	x5, #0x7                // =7
                	str	w5, [x4]

@@ -1,13 +1,6 @@
 #include <stdlib.h>
 
-// Tree nodes are packed as long long[3]: [value, left, right]. The
-// cells hold pointer-shaped values, so they need to be 8 bytes
-// everywhere (int is 4 bytes, and `long` is only 4 bytes on Windows
-// LLP64). `long long` is 8 bytes on every target. We cast between
-// `long long *` and `long long` at every store/load to mix value and
-// pointer cells in the same array; the c4 dialect has no
-// long-long-pointer-pointers so flat-array nodes are the natural
-// shape.
+// Tree nodes are packed as long long[3]: [value, left, right]
 long long* insert(long long *root, long long val) {
     if (root == 0) {
         root = malloc(sizeof(long long) + 2 * sizeof(long long *));

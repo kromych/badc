@@ -369,8 +369,7 @@ pub(super) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
-/// signed counterpart to `LSRV`; we use it for the c4 `>>` operator
-/// since c4 ints are signed.
+/// signed counterpart to `LSRV`
 pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -616,11 +615,27 @@ pub(super) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
     0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32)
 }
 
+/// `FCVTZU <Xd>, <Dn>` -- truncating unsigned FP-to-int. The
+/// `FCVTZS` encoding with the opcode low bit set, so a double in
+/// [2^63, 2^64) converts to the correct u64 rather than saturating.
+pub(super) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> u32 {
+    debug_assert!(dn < 32);
+    0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SCVTF <Dd>, <Xn>` -- signed int-to-FP. Emits the round-to-
 /// nearest-ties-to-even mantissa.
 pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
     debug_assert!(dd < 32);
     0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+}
+
+/// `UCVTF <Dd>, <Xn>` -- unsigned int-to-FP. The `SCVTF` encoding
+/// with the opcode low bit set, so a u64 with bit 63 set converts
+/// to a positive double rather than a negative one.
+pub(super) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
+    debug_assert!(dd < 32);
+    0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
 
 /// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
@@ -785,8 +800,7 @@ impl Cond {
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
-/// Sets `Xd` to 1 if `cond` holds, 0 otherwise. The c4 comparison
-/// ops compile to `cmp + cset`.
+/// Sets `Xd` to 1 if `cond` holds, 0 otherwise.
 pub(super) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
     0x9A80_0400
         | ((Reg::SP.0 as u32) << 16) // Rm = XZR
@@ -1024,8 +1038,7 @@ pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
-/// 64-bit register are also cleared). c4 promotes char to int on
-/// load; this matches.
+/// 64-bit register are also cleared).
 pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
     0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1041,8 +1054,7 @@ pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
-/// of `Wt` and ignores the rest, which is what c4's `Sc` opcode
-/// expects.
+/// of `Wt` and ignores the rest.
 pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm < 4096, "strb imm: {imm} > 4095");
     0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
@@ -1342,9 +1354,6 @@ pub(super) struct Fixup {
 ///   for popped operands and large-immediate scratch.
 /// * Each function's prologue is the standard AAPCS64 sequence;
 ///   epilogue moves `x19` into `x0` (the return register).
-/// * `main`'s prologue additionally pushes `x0` and `x1` (argc/argv,
-///   passed by libdyld) so the c4-style `Lea 2` / `Lea 3` lookups
-///   land on them.
 ///
 /// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
 /// a __got slot the writer fills in at link time.
@@ -1612,6 +1621,7 @@ pub(super) fn lower(
             instr_offset: f.instr_offset,
             import_index: f.import_index,
             is_tail: f.is_tail,
+            is_addr: f.is_addr,
         })
         .collect();
     // Final-image output emits one PLT trampoline per import at
@@ -1675,6 +1685,24 @@ pub(super) fn lower(
         });
     }
 
+    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
+    // local-image path resolve to the import's PLT trampoline, the
+    // same stub a call to the import reaches. A `FuncFixup` routes
+    // the `adrp + add` pair through the writer's func-fixup pass
+    // exactly like a function-pointer literal. Relocatable output
+    // (empty `plt_trampoline_offsets`) emits the reloc via
+    // `reloc_call_sites` instead.
+    if native.output_kind != super::OutputKind::Relocatable {
+        for fx in &plt_call_fixups {
+            if fx.is_addr {
+                func_fixups.push(FuncFixup {
+                    adrp_offset: fx.instr_offset,
+                    target_native_offset: plt_trampoline_offsets[fx.import_index],
+                });
+            }
+        }
+    }
+
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
         // Relocatable objects carry no entry point; the linker picks
         // it once every TU is merged. `entry_pc` may legitimately be
@@ -1704,6 +1732,7 @@ pub(super) fn lower(
     };
 
     Ok(Build {
+        copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
         entry_offset,
@@ -1820,6 +1849,12 @@ pub(super) struct PltCallFixup {
     /// `BL <tramp>` (call). Both share the same imm26 encoding;
     /// only the link bit at 0x80000000 differs.
     pub(super) is_tail: bool,
+    /// `true` -> the site is an `adrp + add` pair that takes the
+    /// import's address (`Inst::ImmExtCode`, `&strcmp`) rather than
+    /// a BL/B. The pair resolves to the import's shared stub via the
+    /// page-relative reloc rather than the imm26 branch; `is_tail`
+    /// is irrelevant.
+    pub(super) is_addr: bool,
 }
 
 /// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
@@ -1836,6 +1871,7 @@ pub(super) fn emit_got_tail_jump(
         instr_offset: code.len(),
         import_index,
         is_tail: true,
+        is_addr: false,
     });
     emit(code, enc_b(0));
 }
@@ -1876,6 +1912,13 @@ fn apply_plt_call_fixups(
     trampoline_offsets: &[usize],
 ) -> Result<(), C5Error> {
     for fx in fixups {
+        if fx.is_addr {
+            // Address-of sites (`adrp + add` taking the import's
+            // address) resolve through a `FuncFixup` to the
+            // trampoline offset in the local-image path; the writer's
+            // func-fixup pass patches the page-relative pair.
+            continue;
+        }
         let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "PLT call fixup at offset {} references import {} but only \

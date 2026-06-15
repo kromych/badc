@@ -1037,6 +1037,8 @@ mod tests {
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],
+            copy_relocs: alloc::vec![],
+            data_import_indices: alloc::collections::BTreeSet::new(),
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],

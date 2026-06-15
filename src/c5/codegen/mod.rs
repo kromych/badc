@@ -132,6 +132,19 @@ impl Target {
         matches!(self, Target::WindowsX64 | Target::WindowsAarch64)
     }
 
+    /// Whether plain `char` is signed. C99 6.2.5p15 leaves the
+    /// signedness of unqualified `char` implementation-defined; to
+    /// interoperate with the host toolchain and match the platform
+    /// ABI, c5 follows the host C compiler: signed on x86_64 (all
+    /// OSes), on Apple AArch64, and on Windows AArch64 (MSVC);
+    /// unsigned only on AArch64 ELF (the AAPCS64 default that the
+    /// Linux GCC/Clang toolchain keeps). The choice drives the
+    /// extension of an 8-bit `char` lvalue widened to a larger
+    /// integer.
+    pub fn plain_char_signed(self) -> bool {
+        !matches!(self, Target::LinuxAarch64)
+    }
+
     /// Default target -- used when callers (mostly tests) construct a
     /// [`Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running
@@ -883,6 +896,13 @@ pub(crate) struct ResolvedDylib {
 pub(crate) struct ResolvedImports {
     pub imports: Vec<ResolvedImport>,
     pub dylibs: Vec<ResolvedDylib>,
+    /// Data symbols bound to a host data object via `#pragma
+    /// binding(data <lib>::<local>, "<host>")`. Each entry is
+    /// `(local_name, host_symbol)`: the image-side symbol the source
+    /// references and the dynamic symbol it resolves to. The ELF
+    /// writer turns each into a COPY relocation; unlike `imports`,
+    /// these are not call sites and carry no GOT/PLT slot.
+    pub data_bindings: Vec<(String, String)>,
 }
 
 impl ResolvedImports {
@@ -979,15 +999,15 @@ impl ResolvedImports {
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
         for func in &program.finished_functions {
+            // Any `Sys`-class Ident denotes a reference to an
+            // imported function, whether it is the callee of a
+            // `Call` (`strcmp(a, b)`) or has its address taken
+            // (`fp = strcmp`, `&strcmp`, a dispatch-table entry).
+            // The address-of forms lower to `Inst::ImmExtCode` /
+            // a `.data` trampoline and still need a resolved import.
+            // `val` carries the binding's flat index for every form.
             for expr in &func.ast.exprs {
-                let super::ast::Expr::Call { callee, .. } = expr else {
-                    continue;
-                };
-                let callee_idx = *callee as usize;
-                if callee_idx >= func.ast.exprs.len() {
-                    continue;
-                }
-                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
+                let super::ast::Expr::Ident { class, val, .. } = expr else {
                     continue;
                 };
                 if *class != super::token::Token::Sys as i64 {
@@ -1005,6 +1025,14 @@ impl ResolvedImports {
         {
             for inst in &func.insts {
                 if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                    && seen.insert(*binding_idx)
+                {
+                    used.push(*binding_idx);
+                }
+                // An import whose address is taken (`&strcmp`,
+                // `Inst::ImmExtCode`) but never directly called still
+                // needs a resolved import + PLT stub.
+                if let crate::c5::ir::Inst::ImmExtCode(binding_idx) = inst
                     && seen.insert(*binding_idx)
                 {
                     used.push(*binding_idx);
@@ -1079,7 +1107,30 @@ impl ResolvedImports {
             }
         }
 
-        Ok(ResolvedImports { imports, dylibs })
+        // Data symbols bound via `#pragma binding(data ...)`. A data
+        // import is referenced as an object, never called, so it never
+        // appears as an `Inst::CallExt`; it is collected here instead.
+        // Every such binding in scope is carried through; synth_build
+        // emits a COPY relocation only when the final image defines the
+        // local symbol (the runtime supplies `environ` for every hosted
+        // image, so the binding binds it to the host's data object).
+        let mut data_bindings: Vec<(String, String)> = Vec::new();
+        for spec in &program.dylibs {
+            for b in &spec.bindings {
+                if b.is_data {
+                    let entry = (b.local_name.clone(), b.real_symbol.clone());
+                    if !data_bindings.contains(&entry) {
+                        data_bindings.push(entry);
+                    }
+                }
+            }
+        }
+
+        Ok(ResolvedImports {
+            imports,
+            dylibs,
+            data_bindings,
+        })
     }
 }
 
@@ -1107,6 +1158,20 @@ fn lookup_binding(
     None
 }
 
+/// One resolved data-import copy relocation. `host_symbol` is the
+/// dynamic data symbol to bind (e.g. `__environ`); the local data
+/// object the image already defines sits at `local_offset` within its
+/// `.data` (or `.bss` when `is_bss`) section, `size` bytes wide. The
+/// ELF writer exports `host_symbol` at that runtime address and emits
+/// an `R_*_COPY` so the loader binds the host's object into the image.
+#[derive(Debug, Clone)]
+pub(crate) struct CopyRelocReq {
+    pub host_symbol: String,
+    pub local_offset: u64,
+    pub is_bss: bool,
+    pub size: u64,
+}
+
 /// Where each piece of the program-being-built ends up in the final
 /// image. The codegen and image-writer halves both populate this --
 /// the codegen knows the code bytes, the pinned data bytes, and which
@@ -1117,6 +1182,11 @@ fn lookup_binding(
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
+    /// Data-import copy relocations resolved against the merged symbol
+    /// table (multi-TU link path). Each names a host data symbol to
+    /// export at a local data/bss slot the image defines, bound with an
+    /// `R_*_COPY` relocation. Empty on the single-TU and non-ELF paths.
+    pub copy_relocs: Vec<CopyRelocReq>,
     /// Initialised data segment: string literals + zero-initialised
     /// globals. Copied into `__DATA,__data` by the writer; offsets
     /// into this buffer match the SSA emit's view of the data
@@ -1468,6 +1538,14 @@ pub(crate) struct RelocCallSite {
     /// in the placeholder bytes the codegen already emitted.
     #[allow(dead_code)]
     pub is_tail: bool,
+    /// `true` for an address-of site (`lea` rip-relative on
+    /// x86_64, `adrp + add` on aarch64) materializing the import's
+    /// stub address (`Inst::ImmExtCode`). The relocatable writer
+    /// emits a PC-relative data reloc (`R_X86_64_PC32` /
+    /// `R_AARCH64_ADR_PREL_PG_HI21` + `R_AARCH64_ADD_ABS_LO12_NC`)
+    /// against the import symbol rather than the call relocation.
+    #[allow(dead_code)]
+    pub is_addr: bool,
 }
 
 /// Cross-TU user-function call site. Same shape as
@@ -1682,6 +1760,68 @@ pub fn emit_native_with_options(
     emit_native_with_options_named(program, target, options, None)
 }
 
+/// Route a single-TU final image's `#pragma binding(data ...)`
+/// references through the GOT, the same way the multi-TU linker does.
+///
+/// The walker lowers a data-binding reference to an `Inst::ImmData` that
+/// the emitter records as a [`UserExternDataRef`] -- a named undefined
+/// data reference. The relocatable (`.o`) writer turns that into an
+/// undefined symbol the linker later binds through the GOT; a single-TU
+/// final image has no link step, so resolve it here instead: register
+/// the host data symbol as a flat-namespace import and load its address
+/// from the dyld-filled GOT slot, leaving an `adrp + ldr` pair for
+/// [`mach_o`] to patch. Without this the reference stays an unresolved
+/// `.data`-relative address and faults at runtime.
+///
+/// Mach-O only: ELF binds the local copy through an `R_*_COPY`
+/// relocation and the PE writer has no data-import path.
+#[cfg(feature = "native-emit")]
+fn route_single_tu_data_imports(build: &mut Build, target: Target) {
+    if target != Target::MacOSAarch64 || build.output_kind == OutputKind::Relocatable {
+        return;
+    }
+    if build.imports.data_bindings.is_empty() || build.user_extern_data_refs.is_empty() {
+        return;
+    }
+    // (local name -> host symbol) for every data binding in scope.
+    let hosts: alloc::collections::BTreeMap<String, String> = build
+        .imports
+        .data_bindings
+        .iter()
+        .map(|(l, h)| (l.clone(), h.clone()))
+        .collect();
+    let mut import_for: alloc::collections::BTreeMap<String, usize> =
+        alloc::collections::BTreeMap::new();
+    let mut remaining = Vec::with_capacity(build.user_extern_data_refs.len());
+    for r in core::mem::take(&mut build.user_extern_data_refs) {
+        let Some(host) = hosts.get(&r.symbol_name) else {
+            remaining.push(r);
+            continue;
+        };
+        let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
+            let i = build.imports.imports.len();
+            build.imports.imports.push(ResolvedImport {
+                binding_idx: i as i64,
+                local_name: r.symbol_name.clone(),
+                real_symbol: host.clone(),
+                dylib_index: 0,
+                flat_lookup: true,
+                is_variadic: false,
+                fixed_args: 0,
+                return_type_tag: 0,
+                returns_long_double: false,
+                param_types: Vec::new(),
+            });
+            i
+        });
+        build.got_fixups.push(GotFixup {
+            adrp_offset: r.instr_offset,
+            import_index: idx,
+        });
+    }
+    build.user_extern_data_refs = remaining;
+}
+
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
@@ -1696,6 +1836,7 @@ pub fn emit_native_with_options_named(
     shared_lib_name: Option<&str>,
 ) -> Result<Vec<u8>, C5Error> {
     let mut build = lower_for(program, target, options)?;
+    route_single_tu_data_imports(&mut build, target);
     if options.output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
@@ -1817,12 +1958,14 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     Ok(build)
 }
 
-/// Append the [`crate::BUILD_INFO`] marker to the tail of
+/// Append the [`crate::OUTPUT_MARKER`] to the tail of
 /// `Build::text`. The bytes never get executed -- the entry
 /// point is at `build.entry_offset` and every function ends
 /// with a return -- so this is purely a `strings(1)`-friendly
-/// fingerprint that says which badc revision emitted the
-/// binary.
+/// fingerprint that says which badc version emitted the binary.
+/// The marker is the release version only, with no git state, so
+/// the same source/flags/target produce identical output bytes
+/// regardless of the build environment.
 ///
 /// The marker is NUL-terminated and prefixed by a 4-byte
 /// alignment pad so the start of the string sits on a 4-byte
@@ -1837,7 +1980,9 @@ fn append_build_info(build: &mut Build) {
     while !build.text.len().is_multiple_of(4) {
         build.text.push(0);
     }
-    build.text.extend_from_slice(crate::BUILD_INFO.as_bytes());
+    build
+        .text
+        .extend_from_slice(crate::OUTPUT_MARKER.as_bytes());
     build.text.push(0);
 }
 
@@ -1927,9 +2072,7 @@ pub(crate) struct Abi {
     /// patchers) carry one struct around rather than two.
     #[allow(dead_code)]
     pub arch: Arch,
-    /// Integer arg-passing registers, in declaration order. The
-    /// lowering walks c4-stack arg slots into these in order;
-    /// any args past the slice spill to the native stack at
+    /// Any args past the slice spill to the native stack at
     /// `[rsp + shadow_space + (i - regs.len()) * 8]`.
     ///
     /// AAPCS64 (Linux/macOS/Windows on aarch64): x0..x7.
@@ -1966,10 +2109,7 @@ pub(crate) struct Abi {
     /// middle of an int sequence doesn't burn an int reg slot.
     pub position_indexed_args: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
-    /// regs used at every variadic call site; c4 has no
-    /// floats so the count is always 0, which means a single
-    /// `xor eax, eax` before each variadic call. Win64 has no
-    /// such requirement.
+    /// regs used at every variadic call site.
     pub variadic_zero_xmm_count: bool,
     /// Windows commits thread stack on demand behind a guard page, so a
     /// prologue allocating more than one page must touch each page in

@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0xf8
+               	add	x21, x21, <lo12>
                	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
                	ldr	x0, [x21, x20, lsl #3]
@@ -32,15 +32,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x110
+               	add	x2, x2, <lo12>
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x116
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x11d
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	str	x19, [sp, #0x10]
                	sxtw	x2, w2
                	adrp	x3, <page>
-               	add	x3, x3, #0x124
+               	add	x3, x3, <lo12>
                	mov	x16, x3
                	mov	x3, x2
                	mov	x2, x1
@@ -98,9 +98,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0x14c
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0x153
+               	add	x1, x1, <lo12>
                	mov	x2, #0x13               // =19
                	bl	<addr>
                	mov	x1, x0
@@ -111,9 +111,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	b	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, #0x1a2
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0x1ad
+               	add	x1, x1, <lo12>
                	mov	x2, #0x14               // =20
                	bl	<addr>
                	mov	x1, x0

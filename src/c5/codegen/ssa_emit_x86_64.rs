@@ -47,17 +47,18 @@ use super::Target;
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_r_mem, emit_add_rr, emit_add_rsp_imm32, emit_addsd,
-    emit_addss, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr, emit_cvtsd2ss,
-    emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss, emit_imul_r_mem,
-    emit_imul_rr, emit_lea_r_mem, emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr,
-    emit_movapd_xmm_xmm, emit_movq_xmm_r, emit_movsd_mem_xmm, emit_movsd_xmm_mem,
-    emit_movss_mem_xmm, emit_movss_xmm_mem, emit_movsx_r_mem16, emit_movsxd_r_mem,
-    emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_or_r_mem, emit_or_rr,
-    emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
-    emit_sub_r_mem, emit_sub_rr, emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_ucomisd,
-    emit_ucomiss, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss,
-    emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem,
-    emit_xor_rr, emit_xorpd,
+    emit_addss, emit_and_r_imm32, emit_and_r_mem, emit_and_rr, emit_cmp_r_mem, emit_cmp_rr,
+    emit_cvtsd2ss, emit_cvtsi2sd, emit_cvtss2sd, emit_cvttsd2si, emit_divsd, emit_divss,
+    emit_imul_r_mem, emit_imul_rr, emit_jcc_rel8, emit_jmp_rel8, emit_lea_r_mem, emit_mov_mem_r,
+    emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr, emit_movapd_xmm_xmm, emit_movq_xmm_r,
+    emit_movsd_mem_xmm, emit_movsd_xmm_mem, emit_movss_mem_xmm, emit_movss_xmm_mem,
+    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_mulsd,
+    emit_mulss, emit_or_r_mem, emit_or_rr, emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl,
+    emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl, emit_shr_r_imm8, emit_sub_r_mem, emit_sub_rr,
+    emit_sub_rsp_imm32, emit_subsd, emit_subss, emit_test_rr, emit_ucomisd, emit_ucomiss,
+    emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd, emit_vfmsub231ss, emit_vfnmadd231sd,
+    emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss, emit_xor_r_mem, emit_xor_rr,
+    emit_xorpd,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -2103,6 +2104,7 @@ pub(super) fn emit_function(
                         instr_offset: code.len(),
                         import_index,
                         is_tail: true,
+                        is_addr: false,
                     });
                     super::x86_64::emit_jmp_rel32(code, 0);
                 }
@@ -2983,6 +2985,7 @@ fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call_ext(
             code,
@@ -2996,10 +2999,15 @@ fn emit_inst(
             target,
             plt_call_fixups,
             imports,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
         Inst::ImmCode(target_ent_pc) => {
             emit_imm_code(code, dst, *target_ent_pc, pending_func_fixups, frame)
+        }
+        Inst::ImmExtCode(binding_idx) => {
+            emit_imm_ext_code(code, dst, *binding_idx, plt_call_fixups, imports, frame)
         }
         // Inst::BlockAddr is handled in emit_function's block loop
         // (it needs the local block_offsets table for its PC-relative
@@ -3104,6 +3112,7 @@ fn inst_variant_name(inst: &super::super::ir::Inst) -> &'static str {
         Inst::Imm(_) => "Imm",
         Inst::ImmData(_) => "ImmData",
         Inst::ImmCode(_) => "ImmCode",
+        Inst::ImmExtCode(_) => "ImmExtCode",
         Inst::BlockAddr(_) => "BlockAddr",
         Inst::LocalAddr(_) => "LocalAddr",
         Inst::TlsAddr(_) => "TlsAddr",
@@ -4191,6 +4200,50 @@ fn emit_fp_cast(
             fp_spill_dst_to_slot(code, dst, dd, frame);
             true
         }
+        FpCastKind::UIntToFp => {
+            // Unsigned 64-bit to double. SSE2 has no unsigned convert
+            // before AVX512: when bit 63 is clear the signed convert is
+            // exact; otherwise halve the value -- OR-ing the discarded
+            // low bit back in as the sticky bit so the narrowing rounds
+            // correctly -- convert, and double.
+            let src = match materialize_int(code, src_place, SCRATCH_R10, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UIntToFp: value not int reg / spill");
+                    return false;
+                }
+            };
+            let dd = match fp_or_spill_dst(dst) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UIntToFp: dst not fp reg / spill");
+                    return false;
+                }
+            };
+            // Modifiable scratch copies so a live source register is not
+            // clobbered by the shift/and below.
+            let rn = SCRATCH_R10;
+            let t = SCRATCH_R13;
+            emit_mov_rr(code, rn, src);
+            emit_test_rr(code, rn, rn);
+            emit_jcc_rel8(code, Cc::S, 0);
+            let js_fixup = code.len() - 1;
+            emit_cvtsi2sd(code, dd, rn);
+            emit_jmp_rel8(code, 0);
+            let jmp_fixup = code.len() - 1;
+            let big = code.len();
+            code[js_fixup] = (big - js_fixup - 1) as i8 as u8;
+            emit_mov_rr(code, t, rn);
+            emit_shr_r_imm8(code, t, 1);
+            emit_and_r_imm32(code, rn, 1);
+            emit_or_rr(code, t, rn);
+            emit_cvtsi2sd(code, dd, t);
+            emit_addsd(code, dd, dd);
+            let done = code.len();
+            code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
+            fp_spill_dst_to_slot(code, dst, dd, frame);
+            true
+        }
         FpCastKind::FpToInt => {
             let dn = match materialize_fp(code, src_place, SCRATCH_XMM14, frame) {
                 Some(r) => r,
@@ -4204,6 +4257,47 @@ fn emit_fp_cast(
                 return false;
             };
             emit_cvttsd2si(code, rd, dn);
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
+        FpCastKind::UFpToInt => {
+            // Double to unsigned 64-bit. SSE2 `cvttsd2si` is signed: a
+            // value in [2^63, 2^64) saturates to the integer
+            // indefinite. Compare with 2^63: below it the signed
+            // truncate is exact; at or above, subtract 2^63, truncate
+            // the in-range remainder, and set bit 63.
+            let src_xmm = match materialize_fp(code, src_place, SCRATCH_XMM14, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("FpCast UFpToInt: value not fp reg / spill / int reg");
+                    return false;
+                }
+            };
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("FpCast UFpToInt: dst not int reg / spill");
+                return false;
+            };
+            // Modifiable copy so the `subsd` below cannot clobber a
+            // live source xmm.
+            let dn = SCRATCH_XMM14;
+            emit_movapd_xmm_xmm(code, dn, src_xmm);
+            let two63 = SCRATCH_XMM15;
+            emit_mov_r_imm64(code, SCRATCH_R13, 0x43E0000000000000u64 as i64);
+            emit_movq_xmm_r(code, two63, SCRATCH_R13);
+            emit_ucomisd(code, dn, two63);
+            emit_jcc_rel8(code, Cc::Ae, 0);
+            let jae_fixup = code.len() - 1;
+            emit_cvttsd2si(code, rd, dn);
+            emit_jmp_rel8(code, 0);
+            let jmp_fixup = code.len() - 1;
+            let big = code.len();
+            code[jae_fixup] = (big - jae_fixup - 1) as i8 as u8;
+            emit_subsd(code, dn, two63);
+            emit_cvttsd2si(code, rd, dn);
+            emit_mov_r_imm64(code, SCRATCH_R13, 0x8000000000000000u64 as i64);
+            emit_or_rr(code, rd, SCRATCH_R13);
+            let done = code.len();
+            code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
             spill_dst_to_slot(code, dst, rd, frame);
             true
         }
@@ -5516,6 +5610,8 @@ fn emit_call_ext(
     target: Target,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -5527,7 +5623,11 @@ fn emit_call_ext(
     } else {
         args.len()
     };
-    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    // With no by-value struct argument this reduces to the scalar
+    // `plan_call_args` placement; a tagged aggregate rides through the
+    // host-ABI argument-register packing instead.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
+    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     let xmm_used = plan
         .placements
         .iter()
@@ -5558,6 +5658,7 @@ fn emit_call_ext(
         instr_offset: call_site,
         import_index,
         is_tail: false,
+        is_addr: false,
     });
     super::x86_64::emit_call_rel32(code, 0);
     if plan.scratch_bytes > 0 {
@@ -6480,6 +6581,42 @@ fn emit_imm_code(
     };
     let instr_offset = code.len();
     pending_func_fixups.push((instr_offset, target_ent_pc));
+    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// `Inst::ImmExtCode` -- `lea rd, [rip+disp32]` taking the
+/// address of a dynamically-imported function. The disp32 resolves
+/// to the import's shared stub (the same `jmp [GOT]` a call to the
+/// import reaches), so `&strcmp` yields the stub address. Records an
+/// `is_addr` PLT-call fixup at the `lea`'s instruction offset; the
+/// disp32 sits three bytes in (REX + opcode + modrm).
+fn emit_imm_ext_code(
+    code: &mut Vec<u8>,
+    dst: Place,
+    binding_idx: i64,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("ImmExtCode: dst not int reg / spill");
+        return false;
+    };
+    let import_index = match imports.index_of_binding(binding_idx) {
+        Some(i) => i,
+        None => {
+            bail_msg("ImmExtCode: binding index has no resolved import");
+            return false;
+        }
+    };
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
+        import_index,
+        is_tail: false,
+        is_addr: true,
+    });
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true

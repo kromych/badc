@@ -47,6 +47,20 @@ struct timeval {
     long long tv_sec;
     long long tv_usec;
 };
+#elif defined(__APPLE__)
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+
+// Darwin's `tv_usec` is `__darwin_suseconds_t` (`__int32_t`), not a
+// 64-bit field as on Linux. gettimeofday / select write only the
+// 4-byte value; declaring it `long` would read 4 bytes of adjacent
+// storage as the high half and yield a garbage microsecond count.
+struct timeval {
+    long tv_sec;
+    int tv_usec;
+};
 #else
 struct timespec {
     long tv_sec;
@@ -109,6 +123,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
 #pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::strftime,      "_strftime")
+#pragma binding(libc::tzset,         "_tzset")
 #endif
 
 #ifdef __linux__
@@ -125,6 +140,7 @@ typedef long clock_t;
 #pragma binding(libc::gmtime_r,      "gmtime_r")
 #pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::strftime,      "strftime")
+#pragma binding(libc::tzset,         "tzset")
 #endif
 
 #ifdef _WIN32
@@ -136,27 +152,38 @@ typedef long clock_t;
 #pragma binding(msvcrt::localtime,"localtime")
 #pragma binding(msvcrt::gmtime,   "gmtime")
 #pragma binding(msvcrt::strftime, "strftime")
+#pragma binding(msvcrt::tzset,    "_tzset")
 // Windows doesn't ship POSIX `clock_gettime` / `gettimeofday`. SQLite
 // has its own Win32-specific code path that calls
 // `GetSystemTimeAsFileTime`; programs that want a portable shape
 // either #ifdef _WIN32 themselves or use the kernel32 surface.
 #endif
 
-int time(int *out);
-int clock();
+// C99 7.23.2: time / clock / mktime return time_t / clock_t, which are
+// 64-bit. A return wider than the declared type is narrowed to it, so an
+// `int` declaration truncates: clock() overflows int after ~35 min of CPU
+// time (CLOCKS_PER_SEC == 1e6), and time_t past 2038 loses its high half.
+// difftime takes two time_t by value; `int` parameters truncate them
+// before the subtraction. The time_t pointer parameters likewise carry a
+// 64-bit object, not an int.
+time_t time(time_t *out);
+clock_t clock();
 int clock_gettime(int clk_id, struct timespec *ts);
 int gettimeofday(struct timeval *tv, char *tz);
-double difftime(int t1, int t0);
+double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and
 // any normalisation of out-of-range fields). Returns the seconds
 // count or (time_t)-1 on failure.
-int mktime(struct tm *tm);
-struct tm *localtime(int *t);
-struct tm *localtime_r(int *t, struct tm *result);
-struct tm *gmtime(int *t);
-struct tm *gmtime_r(int *t, struct tm *result);
+time_t mktime(struct tm *tm);
+struct tm *localtime(time_t *t);
+struct tm *localtime_r(time_t *t, struct tm *result);
+struct tm *gmtime(time_t *t);
+struct tm *gmtime_r(time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
-char *ctime_r(int *t, char *buf);
+char *ctime_r(time_t *t, char *buf);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);
+// POSIX 7.24.1: initialize the timezone conversion state from the TZ
+// environment variable (or the system default). No arguments, no result.
+void tzset(void);

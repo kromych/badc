@@ -197,6 +197,7 @@ fn is_inline_candidate(func: &FunctionSsa, cap: u32) -> bool {
             Inst::Imm(_)
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
             | Inst::ParamRef { .. }
             | Inst::AllocaInit(_)
             | Inst::Binop { .. }
@@ -250,6 +251,7 @@ fn remap_caller_inst(inst: &mut Inst, remap: &[ValueId]) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
         | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)

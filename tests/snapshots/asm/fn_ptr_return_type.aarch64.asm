@@ -11,22 +11,22 @@ Disassembly of section .text:
                	b	<addr>
                	brk	#<addr>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ret
 
 <vec>:
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	ret
 
 <go_s>:
                	adrp	x0, <page>
-               	add	x0, x0, #0x238
+               	add	x0, x0, <lo12>
                	ret
 
 <go_i>:
                	adrp	x0, <page>
-               	add	x0, x0, #0x244
+               	add	x0, x0, <lo12>
                	ret
 
 <main>:
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x19, [sp, #0x10]
                	adrp	x20, <page>
-               	add	x20, x20, #0x238
+               	add	x20, x20, <lo12>
                	mov	x9, x20
                	blr	x9
                	ldrsw	x0, [x0]
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x244
+               	add	x0, x0, <lo12>
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0, #0x8]
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x244
+               	add	x0, x0, <lo12>
                	mov	x9, x0
                	blr	x9
                	ldrsw	x0, [x0]

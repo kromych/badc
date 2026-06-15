@@ -357,7 +357,9 @@ impl SsaBuilder {
     /// travels with the instruction through the optimizer.
     pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
         match &mut self.func.insts[v as usize] {
-            Inst::Call { arg_aggs: a, .. } | Inst::CallIndirect { arg_aggs: a, .. } => {
+            Inst::Call { arg_aggs: a, .. }
+            | Inst::CallIndirect { arg_aggs: a, .. }
+            | Inst::CallExt { arg_aggs: a, .. } => {
                 *a = arg_aggs;
             }
             _ => {}
@@ -452,6 +454,14 @@ impl SsaBuilder {
         let v = self.push(Inst::ImmCode(0));
         self.func.extern_imm_code_refs.push((v, sym_idx));
         v
+    }
+
+    /// `Inst::ImmExtCode` -- the address of a dynamically-imported
+    /// function (`&strcmp`, `fp = strcmp`). Not CSE'd: every site
+    /// materializes its own address with its own PLT-call fixup, the
+    /// same way each call to an import records its own call site.
+    pub(crate) fn imm_ext_code(&mut self, binding_idx: i64) -> ValueId {
+        self.push(Inst::ImmExtCode(binding_idx))
     }
 
     /// `Inst::AllocaInit` -- per-function alloca bookkeeping
@@ -969,6 +979,7 @@ impl SsaBuilder {
             args,
             fp_arg_mask,
             fp_return,
+            arg_aggs: alloc::vec::Vec::new(),
         })
     }
 

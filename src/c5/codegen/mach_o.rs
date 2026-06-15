@@ -827,7 +827,7 @@ fn segment_data(
             addr: data_addr,
             size: data_size,
             offset: data_offset,
-            align: 3, // log2 -- 8 bytes is enough for any c4 access
+            align: 3, // log2 -- 8 bytes
             reloff: 0,
             nreloc: 0,
             flags: 0, // S_REGULAR
@@ -1247,12 +1247,16 @@ fn apply_got_fixups(
             )));
         }
 
-        let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X16, imm21);
-        let ldr_word = super::aarch64::enc_ldr_imm(
-            super::aarch64::Reg::X16,
-            super::aarch64::Reg::X16,
-            in_page,
-        );
+        // The codegen emitted `adrp Rd, page` + a second instruction
+        // into the same Rd to compute the address. Preserve Rd (bits
+        // [4:0] of the adrp) so the rewritten `adrp Rd; ldr Rd, [Rd,
+        // slot]` lands the GOT pointer in the register the following
+        // dereference reads, rather than a fixed scratch register.
+        let orig_adrp =
+            u32::from_le_bytes(out[adrp_file_off..adrp_file_off + 4].try_into().unwrap());
+        let rd = super::aarch64::Reg((orig_adrp & 0x1F) as u8);
+        let adrp_word = super::aarch64::enc_adrp(rd, imm21);
+        let ldr_word = super::aarch64::enc_ldr_imm(rd, rd, in_page);
         out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
         out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
     }
@@ -1891,10 +1895,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // no trampoline offsets (no per-arch lower() ran); in that
     // case we skip the local section.
     let emit_plt_locals = !build.plt_trampoline_offsets.is_empty();
+    // One local symbol per PLT trampoline. Function imports carry a
+    // trampoline; data imports (bound through the GOT) do not, and the
+    // routing appends them after the function imports, so the first
+    // `plt_trampoline_offsets.len()` imports are exactly the trampolined
+    // ones. The remaining imports still get an undefined symtab entry +
+    // bind below.
+    let n_trampolines = build.plt_trampoline_offsets.len();
     let mut symbol_names: Vec<&str> = if emit_plt_locals {
-        build
-            .imports
-            .imports
+        build.imports.imports[..n_trampolines]
             .iter()
             .map(|imp| imp.local_name.as_str())
             .collect()
@@ -1917,16 +1926,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
 
-    // [Locals] one entry per PLT trampoline.
+    // [Locals] one entry per PLT trampoline. Data imports have no
+    // trampoline; they appear only as undefined import symbols below.
     if emit_plt_locals {
-        debug_assert_eq!(
-            build.plt_trampoline_offsets.len(),
-            build.imports.imports.len(),
-            "trampoline-offset count must match import count"
+        debug_assert!(
+            n_trampolines <= build.imports.imports.len(),
+            "more trampolines than imports"
         );
-        for (i, _imp) in build.imports.imports.iter().enumerate() {
+        for (i, &tramp_offset) in build.plt_trampoline_offsets.iter().enumerate() {
             let n_strx = str_indices[i];
-            let n_value = code_vmaddr_base + build.plt_trampoline_offsets[i] as u64;
+            let n_value = code_vmaddr_base + tramp_offset as u64;
             symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
         }
     }
@@ -2519,6 +2528,7 @@ mod tests {
     fn tiny_build() -> Build {
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
+            copy_relocs: Default::default(),
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
@@ -2536,6 +2546,7 @@ mod tests {
             user_extern_data_refs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
+                data_bindings: Default::default(),
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
                     local_name: "write".into(),

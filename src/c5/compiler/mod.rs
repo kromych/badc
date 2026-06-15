@@ -317,6 +317,13 @@ pub(in crate::c5::compiler) struct Pending {
     /// `parse_declarator`.
     pub base_is_function_type: bool,
 
+    /// Set by `parse_declarator` when the declared identifier has a bare
+    /// function type: the base came from a function-TYPE typedef and no
+    /// pointer level was added (`F name`, not `F *name`). Per C99 6.9.1 such
+    /// an identifier is a function declaration, not a function-pointer object.
+    /// Read once by the file-scope declaration path.
+    pub bare_function_type_declarator: bool,
+
     /// Override stride for the next `[i]` postfix index. When we
     /// load the address of a 2D-array variable (`T xs[N][M]`),
     /// the first subscript should scale the index by
@@ -528,6 +535,7 @@ impl Default for Pending {
             fn_params: None,
             fn_ptr_indirection: None,
             base_is_function_type: false,
+            bare_function_type_declarator: false,
             index_stride: 0,
             index_strides_tail: Vec::new(),
             end_of_expr_stride: 0,
@@ -729,9 +737,7 @@ pub struct Compiler {
 
     /// Type-mismatch warnings collected during compilation. Stored as
     /// formatted lines so the final consumer (CLI / test) can dump them
-    /// without knowing their structure. Warnings never fail the compile --
-    /// c4 was permissive by design and many idioms (NULL=0, void*~char*)
-    /// would otherwise drown the output.
+    /// without knowing their structure.
     warnings: Vec<String>,
 
     /// gcc `-H`-shape include trace produced by the preprocessor when
@@ -1449,6 +1455,34 @@ impl Compiler {
         // `target_ent_pc`.
         self.emit_sys_trampolines();
         self.resolve_code_relocs()?;
+        // macOS resolves a `#pragma binding(data ...)` import (e.g.
+        // environ) through the GOT -- a flat-namespace bind to the host
+        // data symbol -- not through a COPY-relocated local slot, so the
+        // symbol must stay undefined even in a self-contained image. The
+        // no_entry_point clear below does this for relocatable objects;
+        // do the same for a data binding's local here regardless of
+        // no_entry_point so `live_glo_addr` returns `GloAddr::Extern` and
+        // routes the reference through `imm_data_extern` to the GOT
+        // rather than an uninitialized `.data` slot.
+        if self.target == Target::MacOSAarch64 {
+            let data_locals: alloc::collections::BTreeSet<String> = self
+                .dylibs
+                .iter()
+                .flat_map(|d| d.bindings.iter())
+                .filter(|b| b.is_data)
+                .map(|b| b.local_name.clone())
+                .collect();
+            for sym in self.symbols.iter_mut() {
+                if sym.class == Token::Glo as i64
+                    && sym.is_extern_decl
+                    && !sym.has_initializer
+                    && data_locals.contains(&sym.name)
+                {
+                    sym.defined_here = false;
+                    sym.val = 0;
+                }
+            }
+        }
         // Cross-TU function imports. Every extern-declared
         // `Token::Fun` symbol with no body in this TU gets a
         // unique placeholder ent_pc (past `text.len()`), then has

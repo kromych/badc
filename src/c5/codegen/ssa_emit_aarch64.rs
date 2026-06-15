@@ -52,13 +52,13 @@ use super::aarch64::{
     Reg, emit, emit_add_sp_imm, emit_mov_reg, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm,
     enc_add_reg, enc_adr, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr,
     enc_br, enc_cbnz, enc_cbz, enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d,
-    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d,
+    enc_fcmp_d, enc_fcmp_s, enc_fcvt_d_s, enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fcvtzu_x_d, enc_fdiv_d,
     enc_fmov_d_to_x, enc_fmov_w_to_s, enc_fmov_x_to_d, enc_fmul_d, enc_fneg_d, enc_fsub_d,
     enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm, enc_ldr32_imm,
     enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_lslv, enc_lsrv,
     enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x, enc_sdiv, enc_stp_pre, enc_str_d_imm,
     enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
+    enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_ucvtf_d_x, enc_udiv, load_imm64,
 };
 use super::ssa_alloc::{Allocation, Place};
 
@@ -1874,6 +1874,36 @@ fn emit_inst(
             }
             true
         }
+        Inst::ImmExtCode(binding_idx) => {
+            // `adrp rd, page; add rd, rd, lo12` taking the address
+            // of a dynamically-imported function. The pair resolves
+            // to the import's shared stub via an `is_addr` PLT-call
+            // fixup, so `&strcmp` yields the stub address.
+            let rd = match int_or_spill_scratch(dst, scratch) {
+                Some(r) => r,
+                None => return false,
+            };
+            let import_index = match imports.index_of_binding(*binding_idx) {
+                Some(i) => i,
+                None => {
+                    bail_msg("ImmExtCode: binding index has no resolved import");
+                    return false;
+                }
+            };
+            plt_call_fixups.push(super::aarch64::PltCallFixup {
+                instr_offset: code.len(),
+                import_index,
+                is_tail: false,
+                is_addr: true,
+            });
+            emit(code, enc_adrp(rd, 0));
+            emit(code, enc_add_imm(rd, rd, 0));
+            if let Place::Spill(slot) = dst {
+                let sp_off = spill_off(frame, slot);
+                emit_sp_str_x_auto(code, rd, sp_off);
+            }
+            true
+        }
         // Inst::BlockAddr is handled in emit_function's block loop
         // (it needs the local block_offsets table for its PC-relative
         // fixup), so it never reaches emit_inst.
@@ -1959,6 +1989,7 @@ fn emit_inst(
             binding_idx,
             args,
             fp_arg_mask,
+            arg_aggs,
             ..
         } => emit_call_ext(
             code,
@@ -1973,6 +2004,8 @@ fn emit_inst(
             target,
             plt_call_fixups,
             imports,
+            arg_aggs,
+            &func.agg_descs,
         ),
         Inst::CallIndirect {
             target,
@@ -2126,7 +2159,7 @@ fn emit_inst(
                 .copied()
                 .unwrap_or(Place::None);
             match kind {
-                FpCastKind::IntToFp => {
+                FpCastKind::IntToFp | FpCastKind::UIntToFp => {
                     let rn = match materialize_int(code, src_place, scratch.primary, frame) {
                         Some(r) => r,
                         None => return false,
@@ -2139,14 +2172,19 @@ fn emit_inst(
                         Place::Spill(_) => SCRATCH_FP0,
                         _ => return false,
                     };
-                    emit(code, enc_scvtf_d_x(dd, rn));
+                    let enc = if matches!(kind, FpCastKind::UIntToFp) {
+                        enc_ucvtf_d_x(dd, rn)
+                    } else {
+                        enc_scvtf_d_x(dd, rn)
+                    };
+                    emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
                         emit_sp_str_d_auto(code, dd, sp_off);
                     }
                     true
                 }
-                FpCastKind::FpToInt => {
+                FpCastKind::FpToInt | FpCastKind::UFpToInt => {
                     let dn = match materialize_fp(code, src_place, SCRATCH_FP0, frame) {
                         Some(r) => r,
                         None => return false,
@@ -2156,7 +2194,12 @@ fn emit_inst(
                         Place::Spill(_) => scratch.primary,
                         _ => return false,
                     };
-                    emit(code, enc_fcvtzs_x_d(rd, dn));
+                    let enc = if matches!(kind, FpCastKind::UFpToInt) {
+                        enc_fcvtzu_x_d(rd, dn)
+                    } else {
+                        enc_fcvtzs_x_d(rd, dn)
+                    };
+                    emit(code, enc);
                     if let Place::Spill(slot) = dst {
                         let sp_off = spill_off(frame, slot);
                         emit_sp_str_x_auto(code, rd, sp_off);
@@ -3070,6 +3113,8 @@ fn emit_call_ext(
     target: Target,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
+    arg_aggs: &[Option<u32>],
+    agg_descs: &[super::super::ir::AggDesc],
 ) -> bool {
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
@@ -3088,7 +3133,11 @@ fn emit_call_ext(
     } else {
         args.len()
     };
-    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    // With no by-value struct argument this reduces to the scalar
+    // placement; a tagged aggregate rides through the host-ABI
+    // argument-register packing.
+    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
+    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -3099,6 +3148,7 @@ fn emit_call_ext(
         instr_offset: code.len(),
         import_index,
         is_tail: false,
+        is_addr: false,
     });
     // BL: non-tail libc call -- the AAPCS64 return goes back
     // into main below for the result handling + `return`
@@ -3135,6 +3185,7 @@ fn emit_call_ext(
             instr_offset: code.len(),
             import_index: trunc_idx,
             is_tail: false,
+            is_addr: false,
         });
         emit(code, enc_bl(0));
     }

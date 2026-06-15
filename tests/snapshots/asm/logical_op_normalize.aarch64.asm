@@ -83,7 +83,7 @@ Disassembly of section .text:
                	str	x20, [sp]
                	str	x21, [sp, #0x8]
                	adrp	x0, <page>
-               	add	x0, x0, #0xd0
+               	add	x0, x0, <lo12>
                	ldrsw	x20, [x0]
                	mov	x1, #0x0                // =0
                	mov	x0, x20
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
-               	add	x1, x1, #0xd8
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]

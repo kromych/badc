@@ -6,9 +6,7 @@
 //! pointer / integer / struct assignment is worth surfacing.
 //!
 //! Warnings are accumulated on `Compiler::warnings` and never fail
-//! the compile -- c4 is permissive by design and many idioms
-//! (`NULL = 0`, `void *` ~ `char *`) would otherwise drown the
-//! output. Errors short-circuit through `C5Error::Compile`.
+//! the compile.
 
 use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId};
 use super::super::error::C5Error;
@@ -304,26 +302,6 @@ impl Compiler {
         ))
     }
 
-    /// Test whether `actual` is assignable / passable where `declared`
-    /// is expected. Returns a human-readable warning string when they
-    /// don't match under badc's rules; `None` when they do.
-    ///
-    /// Compatibility is intentionally lax -- c4 itself does no checking,
-    /// so jumping straight to ISO-C strictness would drown the suite.
-    /// What we *do* catch:
-    ///   * pointer <-> non-zero scalar (one side a pointer, the other an
-    ///     integer that isn't a literal 0)
-    ///   * struct of different concrete types
-    ///   * struct value vs anything non-struct
-    ///
-    /// What we deliberately *don't* catch (yet):
-    ///   * pointer base mismatch (`int*` <-> `char*`); both pointers, both
-    ///     fit in a register, common in c5 idioms
-    ///   * char <-> int width difference; c convention
-    ///
-    /// `actual_is_zero_literal` is a hint from the caller -- when an
-    /// expression compiles to exactly `Imm 0`, treat the value as the
-    /// NULL pointer for the purposes of this check.
     pub(super) fn type_warning(
         declared: i64,
         actual: i64,

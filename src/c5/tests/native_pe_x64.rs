@@ -500,13 +500,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 }
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
-/// POSIX-only semantics. setenv (3-arg vs _putenv_s 2-arg), file
-/// I/O against POSIX-flavoured paths, and dlopen-against-libc-soname
-/// are intentionally skipped here -- the Windows analogues exist
-/// but the c4 fixtures expect POSIX shapes the WINE path doesn't
-/// reproduce. mprotect works through an in-text helper that
-/// translates POSIX prot bits to PAGE_* and the BOOL return to
-/// 0/-1, so `mprotect_allows_read.c` is in.
+/// POSIX-only semantics.
 const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("control_flow.c", 1),
@@ -656,6 +650,9 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
+    ("sizeof_abstract_fn_ptr.c", 0),
+    ("pragma_operator.c", 0),
+    ("variadic_macro_named_rest.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -695,7 +692,15 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
+    ("posix_unix_headers.c", 0),
+    ("socket_headers_abi.c", 0),
+    ("posix_utime_errno_headers.c", 0),
+    ("cast_fn_typedef_ptr_in_initializer.c", 0),
+    ("global_init_paren_operand.c", 0),
+    ("function_type_typedef_declaration.c", 0),
+    ("float_increment_decrement.c", 0),
     ("addr_of_libm_import.c", 0),
+    ("addr_of_libc_strcmp.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),
     ("struct_array_elided_runtime.c", 0),

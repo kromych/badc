@@ -4,13 +4,13 @@ fn ent_pc=13 n_params=0 variadic=false locals=17
   spill_count=2 gpr_used=[3, 12, 14] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmCode(ent_pc=14)                               -> x0
+    v1   ImmExtCode(binding=47)                           -> x0
     v2   Imm(0)                                           -> x1
-    v3   ImmCode(ent_pc=16)                               -> x3
+    v3   ImmExtCode(binding=49)                           -> x3
     v4   Imm(0)                                           -> x1
-    v5   ImmCode(ent_pc=17)                               -> x12
+    v5   ImmExtCode(binding=50)                           -> x12
     v6   Imm(0)                                           -> x1
-    v7   ImmCode(ent_pc=18)                               -> x14
+    v7   ImmExtCode(binding=51)                           -> x14
     v8   Imm(0)                                           -> x1
     v9   Imm(4625196817309499392)                         -> x1
     v10  FpCast { kind=F64ToF32, value=v9 }               -> d0 [f32]
@@ -60,7 +60,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=17
     v40  Imm(5)                                           -> x0
     terminator Return(v40)   (exit_acc=v40)
   block 8  start_pc=0
-    v41  ImmCode(ent_pc=15)                               -> x0
+    v41  ImmExtCode(binding=48)                           -> x0
     v42  Imm(0)                                           -> x1
     v43  Imm(4615063718147915776)                         -> x3
     v44  Fneg(v43)                                        -> d0
@@ -159,33 +159,19 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     terminator TailExt(47)
 ; --- SSA dump (ok=true) ent_pc=15 ---
-; name=__c5_sys_fabsf
+; name=__c5_sys_floorf
 fn ent_pc=15 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    terminator TailExt(48)
+    terminator TailExt(49)
 ; --- SSA dump (ok=true) ent_pc=16 ---
-; name=__c5_sys_floorf
+; name=__c5_sys_ceilf
 fn ent_pc=16 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    terminator TailExt(49)
-; --- SSA dump (ok=true) ent_pc=17 ---
-; name=__c5_sys_ceilf
-fn ent_pc=17 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
     terminator TailExt(50)
-; --- SSA dump (ok=true) ent_pc=18 ---
-; name=__c5_sys_truncf
-fn ent_pc=18 n_params=0 variadic=false locals=0
-  spill_count=0 gpr_used=[] fp_used=[]
-  block 0  start_pc=0
-    v0   AllocaInit(0)                                    -> -
-    terminator TailExt(51)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=1
@@ -221,8 +207,15 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v15  Imm(8)                                           -> x1
     v16  BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x6
     v17  Imm(0)                                           -> x1
-    v18  Extend { value=v13, kind=I32 }                   -> x7
-    v19  LoadLocal { off=-3, kind=I64 }                   -> x0
-    v20  Call { target_pc=3, args=[v18, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
-    v21  Call { target_pc=0, args=[v20], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v18  ImmData(8)                                       -> x1
+    v19  LoadLocal { off=-3, kind=I64 }                   -> x2
+    v20  Extend { value=v13, kind=I32 }                   -> x2
+    v21  BinopI { op=shl, lhs=v20, rhs_imm=3 }            -> x2
+    v22  Binop { op=add, lhs=v16, rhs=v21 }               -> x2
+    v23  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x2
+    v24  Store { addr=v18, disp=0, value=v23, kind=I64 }  -> -
+    v25  Extend { value=v13, kind=I32 }                   -> x7
+    v26  LoadLocal { off=-3, kind=I64 }                   -> x0
+    v27  Call { target_pc=3, args=[v25, v16], fixed_args=2, fp_return=false, fp_arg_mask=0x0 } -> x7
+    v28  Call { target_pc=0, args=[v27], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Return(v10)   (exit_acc=v10)

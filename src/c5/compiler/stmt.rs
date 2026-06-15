@@ -291,57 +291,92 @@ impl Compiler {
         &mut self,
         block_symbols: &mut Vec<(usize, i64, i64, i64)>,
     ) -> Result<(), C5Error> {
-        // Storage-class prefixes. `extern` is a no-op (c5 has no
-        // separate translation units); `static` at function scope
-        // promotes the declarator to a Glo symbol with persistent
-        // data-segment storage.
+        // Storage-class prefixes. `static` at function scope promotes
+        // the declarator to a Glo symbol with persistent data-segment
+        // storage; `extern` (C99 6.2.2p4) gives it external linkage
+        // referring to a definition in this or another unit, with no
+        // local storage.
         let mut is_static = false;
+        let mut is_extern = false;
         while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
             if self.lex.tk == Token::Static {
                 is_static = true;
+            } else {
+                is_extern = true;
             }
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
-        // Function-prototype declaration at block scope:
-        // `extern int foo(int);` -- the name is an identifier, the
-        // next token is `(`, and what follows is a parameter list
-        // ending with `);`. c5 has no separate translation units,
-        // so the whole declaration is a no-op; the linker /
-        // codegen-side import resolution finds the symbol via its
-        // own table. Skip to the matching `;` and return.
+        // Function declaration at block scope (C99 6.7p1):
+        // `T name(args);` or `T *name(args);` where the leading run of
+        // `*` qualifies the return type. C99 6.2.2p5: with no
+        // storage-class specifier or `extern` the name has external
+        // linkage, so register it as a function (the same shape as a
+        // file-scope prototype) and a call to it resolves; the
+        // definition is found at link time.
+        //
+        // Snapshot before the speculative `*` walk so a plain
+        // pointer-variable declaration with multiple declarators
+        // (`int *p, *q;`) keeps its leading `*` for the declarator
+        // loop below.
+        let proto_snap = self.lex.snapshot();
+        let mut ret_ptr_levels: i64 = 0;
+        while self.lex.tk == Token::MulOp {
+            ret_ptr_levels += 1;
+            self.next()?;
+        }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
-            // Counted-paren skip from the name. Walk past the
-            // identifier, then the `(`, then balance braces until
-            // the matching `)`. Function-pointer declarators
-            // (`int (*fn)(int)`) don't reach this branch -- they
-            // start with `(` rather than an identifier.
+            let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
             self.next()?; // consume `(`
-            let mut depth: i64 = 1;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        self.next()?;
-                        break;
-                    }
-                }
-                self.next()?;
+            // A prototype's parameter names have no linkage and no scope
+            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
+            // mode so the names are not shadowed: shadowing one that
+            // already names an enclosing local would corrupt that local's
+            // single saved binding and leak it past the function.
+            let saved_proto = self.pending.parsing_fn_ptr_proto;
+            self.pending.parsing_fn_ptr_proto = true;
+            let params = self.parse_function_params();
+            self.pending.parsing_fn_ptr_proto = saved_proto;
+            let params = params?;
+            // Introduce a function symbol only for an as-yet-undeclared
+            // name. A name already bound -- a libc binding (`Sys`), a
+            // function declared elsewhere (`Fun`), or a variable
+            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
+            // overriding a `Sys` binding with an external user reference
+            // would make the call unresolvable at link time.
+            // Already a resolved entity (libc binding, function, or
+            // variable)?
+            let c = self.symbols[id_idx].class;
+            let known = c == Token::Sys as i64
+                || c == Token::Fun as i64
+                || c == Token::Glo as i64
+                || c == Token::Loc as i64;
+            if !known {
+                let sym = &mut self.symbols[id_idx];
+                sym.class = Token::Fun as i64;
+                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+                sym.params = params.types;
+                sym.is_variadic = params.is_variadic;
+                sym.is_extern_decl = true;
+                sym.linkage = if is_static {
+                    crate::c5::symbol::Linkage::Internal
+                } else {
+                    crate::c5::symbol::Linkage::External
+                };
             }
-            // Trailing `;` plus an optional comma-separated list
-            // of further function prototypes are skipped: the
-            // standard form is one declaration per `;`, but the
-            // C grammar would in principle allow `int foo(int),
-            // bar(int);`. Skip until the terminator.
+            // A trailing comma list of further prototypes
+            // (`int foo(int), bar(int);`) is rare; skip any
+            // remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
             return Ok(());
         }
+        // Not a function declaration -- rewind so the declarator loop
+        // sees the leading `*`s and consumes them per declarator.
+        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
@@ -377,14 +412,40 @@ impl Compiler {
             }
             self.ty = ty;
 
-            block_symbols.push((
-                loc_idx,
-                self.symbols[loc_idx].class,
-                self.symbols[loc_idx].type_,
-                self.symbols[loc_idx].val,
-            ));
+            // A block-scope `extern` of a fresh name becomes a Glo
+            // external reference that must persist past the block: the
+            // walker's `live_glo_addr` reads the symbol's class at walk
+            // time, and a `block_symbols` restore back to the unbound
+            // `Id` class would erase the `Glo` before `&name` resolves.
+            // Skipping the restore mirrors the body-top extern path,
+            // which never shadows. An extern that names an existing Glo
+            // or function binding restores normally (nothing converted).
+            let convert_extern = is_extern
+                && self.symbols[loc_idx].class != Token::Glo as i64
+                && self.symbols[loc_idx].class != Token::Fun as i64;
+            if !convert_extern {
+                block_symbols.push((
+                    loc_idx,
+                    self.symbols[loc_idx].class,
+                    self.symbols[loc_idx].type_,
+                    self.symbols[loc_idx].val,
+                ));
+            }
 
-            if is_static {
+            if is_extern {
+                // A block-scope `extern` object refers to a file-scope
+                // definition (here or in another unit) and gets no local
+                // storage. External linkage is what routes `&name`
+                // through `live_glo_addr`'s `GloAddr::Extern` arm to a
+                // name-keyed relocation; without it every block-scope
+                // extern collapses onto the same `.data` base.
+                if convert_extern {
+                    self.symbols[loc_idx].class = Token::Glo as i64;
+                    self.symbols[loc_idx].type_ = ty;
+                    self.symbols[loc_idx].is_extern_decl = true;
+                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
+                }
+            } else if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_static_local(loc_idx, ty, array_size)?;

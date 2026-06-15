@@ -80,6 +80,7 @@ Disassembly of section .text:
                	movl	$0x15, %edi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -93,6 +94,7 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$-0x7, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -106,6 +108,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x3, %eax
@@ -119,6 +122,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	%rax, %r11
                	callq	*%r11
+               	movslq	%eax, %rax
                	cmpq	$-0x11, %rax
                	je	<addr>
                	movl	$0x4, %eax
@@ -129,10 +133,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	(%rbx), %rax
-               	movzbq	(%rax), %rax
-               	xorq	$0x64, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rax
+               	cmpq	$0x64, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	movq	%rax, %rcx
@@ -142,10 +144,8 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	0x18(%rbx), %rax
-               	movzbq	(%rax), %rax
-               	xorq	$0x6e, %rax
-               	movl	%eax, %eax
-               	testq	%rax, %rax
+               	movsbq	(%rax), %rax
+               	cmpq	$0x6e, %rax
                	je	<addr>
                	movl	$0x6, %eax
                	movq	%rax, %rcx
@@ -182,4 +182,3 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	pushq	%r11
                	retq
-               	addb	%al, (%rax)

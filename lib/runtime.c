@@ -30,7 +30,13 @@
 // tentative defs into a SHN_COMMON slot is a separate TODO; until
 // that lands, hosting the definition here side-steps the
 // multiple-definition collision.
+//
+// macOS binds `environ` as a GOT data import to libSystem's `_environ`
+// (see <unistd.h>), so the symbol must stay undefined here for the
+// reference to route through the import slot rather than a local cell.
+#ifndef __APPLE__
 char **environ;
+#endif
 
 // msvcrt's environment-vector alias on Windows. `<stdlib.h>`'s
 // `_WIN32` section declares it `extern char **_environ;` for the same
@@ -63,9 +69,7 @@ void __c5_exit(int rc) {
 // entry's offset from the image base in the second; the kernel
 // process-startup layout puts argc at sp[0] and argv at sp+1. main's
 // result goes through __c5_exit so libc's atexit chain + stdio flush
-// run before the kernel reaps the process. (Mach-O needs no such
-// entry: LC_MAIN hands argc/argv to the entry symbol via the register
-// ABI and dyld runs the startup + exit.)
+// run before the kernel reaps the process.
 extern int __BADC_ENTRY__(int argc, char **argv);
 
 void __c5_entry(void *sp, long image_off) {
@@ -73,6 +77,11 @@ void __c5_entry(void *sp, long image_off) {
     long *frame = (long *)sp;
     int argc = (int)frame[0];
     char **argv = (char **)(frame + 1);
+    // The kernel lays the environment vector right after argv's NULL
+    // terminator, so envp is `&argv[argc + 1]`. crt startup publishes it
+    // through `environ` (POSIX 8.3); without this the global stays NULL
+    // and an `environ[i]` read faults.
+    environ = argv + argc + 1;
     __c5_exit(__BADC_ENTRY__(argc, argv));
 }
 #endif

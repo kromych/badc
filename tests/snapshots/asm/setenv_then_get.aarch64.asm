@@ -15,14 +15,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	str	x19, [sp]
                	adrp	x0, <page>
-               	add	x0, x0, #0xf0
+               	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, #0x101
+               	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
                	adrp	x0, <page>
-               	add	x0, x0, #0x103
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	cmp	x0, #0x0
                	b.ne	<addr>

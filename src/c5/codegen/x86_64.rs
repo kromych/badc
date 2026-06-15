@@ -91,8 +91,7 @@ impl Reg {
 
 /// REX prefix byte (`0100WRXB`).
 ///
-/// * `w`: 1 = 64-bit operand size. Required for almost every
-///   instruction we use because c4's word size is 64 bits.
+/// * `w`: 1 = 64-bit operand size.
 /// * `r`: extends `ModR/M.reg` by 1 bit (so registers R8..R15 fit in
 ///   the 3-bit reg field).
 /// * `x`: extends `SIB.index` by 1 bit.
@@ -1191,6 +1190,12 @@ pub(super) enum Cc {
     E = 0x4,
     /// Not equal.
     Ne = 0x5,
+    /// Sign (SF=1) -- the result's high bit is set; used to test a
+    /// 64-bit value's bit 63.
+    S = 0x8,
+    /// Not sign (SF=0) -- the complement of `S`, completing the
+    /// `flip` pairing.
+    Ns = 0x9,
     /// Less than (signed).
     L = 0xC,
     /// Greater than (signed).
@@ -1238,6 +1243,8 @@ impl Cc {
             Cc::Be => Cc::A,
             Cc::P => Cc::Np,
             Cc::Np => Cc::P,
+            Cc::S => Cc::Ns,
+            Cc::Ns => Cc::S,
         }
     }
 }
@@ -2007,6 +2014,7 @@ pub(super) fn lower(
             instr_offset: f.instr_offset,
             import_index: f.import_index,
             is_tail: f.is_tail,
+            is_addr: f.is_addr,
         })
         .collect();
     // Final-image output emits one PLT trampoline per import at
@@ -2070,6 +2078,25 @@ pub(super) fn lower(
         });
     }
 
+    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
+    // local-image path resolve to the import's PLT trampoline, the
+    // same stub a call to the import reaches. The trampoline offset
+    // is known once `emit_plt_trampolines` has run; a `FuncFixup`
+    // routes the `lea`'s disp32 through the writer's func-fixup pass
+    // exactly like a function-pointer literal. Relocatable output
+    // (empty `plt_trampoline_offsets`) emits the reloc via
+    // `reloc_call_sites` instead.
+    if native.output_kind != super::OutputKind::Relocatable {
+        for fx in &plt_call_fixups {
+            if fx.is_addr {
+                func_fixups.push(FuncFixup {
+                    adrp_offset: fx.instr_offset,
+                    target_native_offset: plt_trampoline_offsets[fx.import_index],
+                });
+            }
+        }
+    }
+
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
         // Relocatable objects carry no entry point; the linker picks
         // it once every TU is merged. `entry_pc` may legitimately be
@@ -2097,6 +2124,7 @@ pub(super) fn lower(
     };
 
     Ok(Build {
+        copy_relocs: Vec::new(),
         text: code,
         data: program.data.clone(),
         entry_offset,
@@ -2195,6 +2223,13 @@ pub(super) struct PltCallFixup {
     /// Both are 5 bytes, both use the same disp32 measurement
     /// origin (one byte past the instruction).
     pub(super) is_tail: bool,
+    /// `true` -> the site is a `LEA r, [rip+disp32]` that takes
+    /// the import's address (`Inst::ImmExtCode`, `&strcmp`) rather
+    /// than a CALL/JMP that transfers control. The disp32 still
+    /// resolves to the import's shared stub, but it sits three
+    /// bytes past `instr_offset` (REX + opcode + modrm) instead of
+    /// one, and `is_tail` is irrelevant.
+    pub(super) is_addr: bool,
 }
 
 /// Append one PLT trampoline per import. Each trampoline is a
@@ -2245,6 +2280,13 @@ fn apply_plt_call_fixups(
                 trampoline_offsets.len()
             )))
         })?;
+        if fx.is_addr {
+            // Address-of sites (`lea` taking the import's address)
+            // resolve through a `FuncFixup` to the trampoline offset
+            // in the local-image path, so the writer's func-fixup
+            // pass patches them. Nothing to do here.
+            continue;
+        }
         let after = fx.instr_offset + REL32_INSTR_LEN;
         let rel32 = (tramp_off as i64 - after as i64) as i32;
         // Opcode byte at instr_offset: 0xE8 (CALL rel32) or

@@ -19,7 +19,7 @@ Disassembly of section .text:
                	mov	x20, x0
                	sxtw	x20, w20
                	adrp	x21, <page>
-               	add	x21, x21, #0x110
+               	add	x21, x21, <lo12>
                	ldr	x0, [x21, x20, lsl #3]
                	cbz	x0, <addr>
                	ldr	x0, [x21, x20, lsl #3]
@@ -32,15 +32,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
-               	add	x2, x2, #0x128
+               	add	x2, x2, <lo12>
                	str	x2, [x0]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x12e
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x8]
                	sub	x0, x29, #0x18
                	adrp	x2, <page>
-               	add	x2, x2, #0x135
+               	add	x2, x2, <lo12>
                	str	x2, [x0, #0x10]
                	sub	x0, x29, #0x18
                	ldr	x0, [x0, x20, lsl #3]
@@ -67,14 +67,14 @@ Disassembly of section .text:
                	str	x20, [sp, #0x10]
                	str	x19, [sp, #0x20]
                	adrp	x0, <page>
-               	add	x0, x0, #0x13c
+               	add	x0, x0, <lo12>
                	mov	x20, #0x0               // =0
                	mov	x1, x20
                	bl	<addr>
                	bl	<addr>
                	fmov	d8, d0
                	adrp	x0, <page>
-               	add	x0, x0, #0x147
+               	add	x0, x0, <lo12>
                	mov	x1, x20
                	bl	<addr>
                	bl	<addr>
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	add	x0, x0, #0x15c
+               	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	bl	<addr>
@@ -122,7 +122,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x38
                	adrp	x1, <page>
-               	add	x1, x1, #0x164
+               	add	x1, x1, <lo12>
                	fmov	d0, d8
                	bl	<addr>
                	sxtw	x0, w0

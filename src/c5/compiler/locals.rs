@@ -7,7 +7,7 @@
 //!   * `parse_function_body_local_decl` -- parse one declaration
 //!     line at the top of a function body. Drives the per-
 //!     declarator allocator dispatch (static-promote vs. stack-
-//!     local) and the c4-style binding-shadow on the symbol.
+//!     local).
 //!   * `allocate_static_local` -- promote a `static T name;` to a
 //!     `Glo`-class symbol with persistent data-segment storage and
 //!     parse any initializer following file-scope rules.
@@ -61,48 +61,71 @@ impl Compiler {
         } else {
             self.parse_decl_base_type()?
         };
-        // Function-prototype declaration at function-body scope
-        // (C99 6.7.1 paragraph 3 allows `extern` declarations at
-        // any scope): `extern T (*) name (args);` where `(*)` is
-        // any run of `*` qualifying the return type. c5 has no
-        // separate translation units, so the declaration is a
-        // no-op; the import resolver finds the symbol via its own
-        // table. Skip to the closing `;` and return.
+        // Function declaration at function-body scope (C99 6.7p1):
+        // `T name(args);` or `T *name(args);` where the leading run
+        // of `*` qualifies the return type. C99 6.2.2p5: with no
+        // storage-class specifier or `extern` the name has external
+        // linkage, so register it as a function (the same shape as a
+        // file-scope prototype) and a call to it resolves; the
+        // definition is found at link time.
         //
         // Snapshot before the speculative `*` walk so a plain
         // pointer-variable declaration with multiple declarators
         // (`int *p, *q;`) doesn't get its leading `*` swallowed
         // and rebound to a wider base type.
         let proto_snap = self.lex.snapshot();
+        let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
+            ret_ptr_levels += 1;
             self.next()?;
         }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
+            let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
             self.next()?; // consume `(`
-            let mut depth: i64 = 1;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        self.next()?;
-                        break;
-                    }
-                }
-                self.next()?;
+            // A prototype's parameter names have no linkage and no scope
+            // beyond the declaration (C99 6.7.6.3). Parse them in no-bind
+            // mode so the names are not shadowed: shadowing one that
+            // already names an enclosing local would corrupt that local's
+            // single saved binding and leak it past the function.
+            let saved_proto = self.pending.parsing_fn_ptr_proto;
+            self.pending.parsing_fn_ptr_proto = true;
+            let params = self.parse_function_params();
+            self.pending.parsing_fn_ptr_proto = saved_proto;
+            let params = params?;
+            // Introduce a function symbol only for an as-yet-undeclared
+            // name. A name already bound -- a libc binding (`Sys`), a
+            // function declared elsewhere (`Fun`), or a variable
+            // (`Glo` / `Loc`) -- refers to the same entity, so leave it:
+            // overriding a `Sys` binding with an external user reference
+            // would make the call unresolvable at link time.
+            // Already a resolved entity (libc binding, function, or
+            // variable)?
+            let c = self.symbols[id_idx].class;
+            let known = c == Token::Sys as i64
+                || c == Token::Fun as i64
+                || c == Token::Glo as i64
+                || c == Token::Loc as i64;
+            if !known {
+                let sym = &mut self.symbols[id_idx];
+                sym.class = Token::Fun as i64;
+                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
+                sym.params = params.types;
+                sym.is_variadic = params.is_variadic;
+                sym.is_extern_decl = true;
+                sym.linkage = if is_static {
+                    crate::c5::symbol::Linkage::Internal
+                } else {
+                    crate::c5::symbol::Linkage::External
+                };
             }
+            // A trailing comma list of further prototypes is rare;
+            // skip any remainder to the terminator.
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
-            // `lbt` was used to drive parse_decl_base_type only;
-            // for a declaration that turns out to be a function
-            // prototype, the symbol table mutation lives in the
-            // codegen-side import resolver, so the local-decl
-            // bookkeeping (shadow_symbol, allocate_*) is skipped.
-            let _ = lbt;
+            let _ = is_extern;
             return Ok(());
         }
         // Not a function prototype after all -- rewind so the
@@ -156,6 +179,14 @@ impl Compiler {
                     self.symbols[loc_idx].class = Token::Glo as i64;
                     self.symbols[loc_idx].type_ = ty;
                     self.symbols[loc_idx].is_extern_decl = true;
+                    // External linkage is what routes `&name` through
+                    // `live_glo_addr`'s `GloAddr::Extern` arm to a
+                    // name-keyed `extern_imm_data_refs` relocation. Without
+                    // it the address producer falls back to the tentative
+                    // `val` (0 for an object defined in another unit), so
+                    // every block-scope extern collapses to the same
+                    // `.data` base address.
+                    self.symbols[loc_idx].linkage = crate::c5::symbol::Linkage::External;
                 }
                 if self.lex.tk == ',' {
                     self.next()?;

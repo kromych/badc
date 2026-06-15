@@ -983,6 +983,7 @@ fn is_pure_inst(inst: &Inst) -> bool {
         Inst::Imm(_)
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
+            | Inst::ImmExtCode(_)
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::Load { .. }
@@ -1002,6 +1003,7 @@ pub(super) fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         Inst::Imm(_)
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
         | Inst::BlockAddr(_)
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
@@ -1106,9 +1108,8 @@ pub(super) fn produces_value(inst: &Inst) -> bool {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | BlockAddr(_) | LocalAddr(_) | TlsAddr(_) => {
-            ResultKind::Int
-        }
+        Imm(_) | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
+        | TlsAddr(_) => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
         // its consumers share the FP register file.
@@ -1146,8 +1147,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Fma { .. } => ResultKind::Fp,
         Extend { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
-            FpCastKind::FpToInt => ResultKind::Int,
-            FpCastKind::IntToFp | FpCastKind::F32ToF64 | FpCastKind::F64ToF32 => ResultKind::Fp,
+            FpCastKind::FpToInt | FpCastKind::UFpToInt => ResultKind::Int,
+            FpCastKind::IntToFp
+            | FpCastKind::UIntToFp
+            | FpCastKind::F32ToF64
+            | FpCastKind::F64ToF32 => ResultKind::Fp,
         },
         // C99 6.2.5p10: a call returning a floating-point scalar
         // delivers its value in the FP return register (xmm0 / d0),

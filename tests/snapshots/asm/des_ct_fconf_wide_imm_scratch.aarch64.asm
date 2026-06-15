@@ -623,7 +623,7 @@ Disassembly of section .text:
                	mov	w22, w22
                	mov	w0, w21
                	adrp	x1, <page>
-               	add	x1, x1, #0xd0
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x22, x22, x0
                	mov	w0, w21

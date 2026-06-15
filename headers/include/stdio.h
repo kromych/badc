@@ -446,8 +446,10 @@ char *tmpnam(char *s);
 void setbuf(FILE *stream, char *buf);
 int puts(char *s);
 int perror(char *s);
-int fseek(FILE *stream, int offset, int whence);
-int ftell(FILE *stream);
+// C99 7.19.9.2 / 7.19.9.4: fseek takes a long offset, ftell returns long.
+// An `int` offset/return truncates positions past 2GB.
+int fseek(FILE *stream, long offset, int whence);
+long ftell(FILE *stream);
 // POSIX large-file variants (off_t is 64-bit). Not provided on Windows
 // msvcrt under these names (`_fseeki64` / `_ftelli64` differ).
 #ifndef _WIN32

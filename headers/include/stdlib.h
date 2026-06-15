@@ -60,6 +60,7 @@
 #pragma binding(libc::strtoul, "_strtoul")
 #pragma binding(libc::strtoull, "_strtoull")
 #pragma binding(libc::mkstemp, "_mkstemp")
+#pragma binding(libc::mkstemps, "_mkstemps")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
 #pragma binding(libc::random,  "_random")
@@ -103,6 +104,7 @@
 #pragma binding(libc::strtoul, "strtoul")
 #pragma binding(libc::strtoull, "strtoull")
 #pragma binding(libc::mkstemp, "mkstemp")
+#pragma binding(libc::mkstemps, "mkstemps")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
 #pragma binding(libc::random,  "random")
@@ -161,11 +163,16 @@ char *calloc(int n, int size);
 char *realloc(char *ptr, int size);
 int free(char *ptr);
 int atoi(char *s);
-int atol(char *s);
+// C99 7.20.1.2: atol returns long. A libc return wider than the
+// declared type is truncated to that type, so declaring it `int`
+// would drop the high half on LP64.
+long atol(char *s);
 double atof(char *s);
-int strtol(char *s, char **endp, int base);
-int strtoll(char *s, char **endp, int base);
-int _strtoi64(char *s, char **endp, int base);
+// C99 7.20.1.4: strtol/strtoll return long / long long; the declared
+// width must match so the 64-bit return register is not narrowed.
+long strtol(char *s, char **endp, int base);
+long long strtoll(char *s, char **endp, int base);
+long long _strtoi64(char *s, char **endp, int base);
 double strtod(char *s, char **endp);
 // C99 7.20.1.3. c5 stores every floating literal in `f64`, so
 // the prototype declares the return as double; the binding above
@@ -247,12 +254,12 @@ int __cxa_atexit(int *handler, char *arg, char *dso);
 #else
 int atexit(int *handler);
 #endif
-int strtoul(char *s, char **endp, int base);
-// C99 7.20.1.4: `strtoull` parses an unsigned long long. The c5
-// dialect stores integers as 64-bit values regardless of width
-// so the prototype returns `int` (also 64-bit on stack).
-int strtoull(char *s, char **endp, int base);
-int _strtoui64(char *s, char **endp, int base);
+// C99 7.20.1.4: strtoul returns unsigned long, strtoull returns
+// unsigned long long. The declared width must match the libc return
+// type; an `int` declaration truncates the result to its low 32 bits.
+unsigned long strtoul(char *s, char **endp, int base);
+unsigned long long strtoull(char *s, char **endp, int base);
+unsigned long long _strtoui64(char *s, char **endp, int base);
 #ifdef _WIN32
 // msvcrt's `_spawn*` family takes a mode argument up front.
 // `P_NOWAIT` returns the child handle immediately; the other
@@ -280,6 +287,7 @@ int _cwait(int *termstat, int handle, int action);
 char *_fullpath(char *absPath, char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
+int mkstemps(char *templ, int suffixlen);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
@@ -349,9 +357,10 @@ static inline void __clear_cache(void *begin, void *end) {
 // declares each `extern` here so every TU resolves through the
 // same slot rather than contributing a tentative def of its
 // own.
-// TODO: replace this slot with a real data import once
-// `#pragma binding`'s data form lands so msvcrt's own
-// `_environ` is bound directly.
+// TODO: bind msvcrt's `_environ` directly via `#pragma binding`'s
+// data form. The form is wired for ELF (COPY relocation) and Mach-O
+// (GOT import); the PE writer has no data-import path yet, so the
+// local slot stays until that lands.
 extern char **environ;
 extern char **_environ;
 #endif

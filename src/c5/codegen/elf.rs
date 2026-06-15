@@ -114,6 +114,9 @@ const STB_GLOBAL: u8 = 1;
 /// code (dlsym only resolves `STT_FUNC` / `STT_NOTYPE`-non-undef
 /// entries).
 const STT_FUNC: u8 = 2;
+/// `STT_OBJECT` symbol type -- a data object. Used for the defined
+/// data symbols a COPY relocation binds to the host's object.
+const STT_OBJECT: u8 = 1;
 const SHN_UNDEF: u16 = 0;
 
 // Relocation types we emit.
@@ -124,6 +127,12 @@ const R_X86_64_GLOB_DAT: u64 = 6;
 // data pointer baked into static data) so it tracks the runtime load base.
 const R_AARCH64_RELATIVE: u64 = 1027;
 const R_X86_64_RELATIVE: u64 = 8;
+// `R_*_COPY`: the loader copies the named symbol's object from the
+// defining shared library into the slot at `r_offset` and binds the
+// symbol to that slot. Used for a data import (`extern char **environ`)
+// so the program and libc share one storage cell.
+const R_AARCH64_COPY: u64 = 1024;
+const R_X86_64_COPY: u64 = 5;
 
 /// Maximum supported page size, used both for `p_align` and for
 /// VA spacing between adjacent `PT_LOAD` segments. Distros build
@@ -559,10 +568,16 @@ fn emit_entry_adapter(
 /// table for the corresponding name. Exports come from
 /// `Build::exports`; their names are exposed externally so
 /// `dlsym` can find them.
+///
+/// `(dynstr_bytes, import_offsets, lib_offsets, export_offsets,
+/// copy_offsets)`.
+type DynstrTables = (Vec<u8>, Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>);
+
 fn build_dynstr(
     imports: &super::ResolvedImports,
     exports: &[crate::c5::program::ExportedFunction],
-) -> (Vec<u8>, Vec<u32>, Vec<u32>, Vec<u32>) {
+    copy_relocs: &[super::CopyRelocReq],
+) -> DynstrTables {
     let mut bytes = Vec::new();
     bytes.push(0); // index 0 is conventionally the empty string
 
@@ -587,12 +602,25 @@ fn build_dynstr(
         bytes.push(0);
     }
 
+    let mut copy_offsets = Vec::with_capacity(copy_relocs.len());
+    for cr in copy_relocs {
+        copy_offsets.push(bytes.len() as u32);
+        bytes.extend_from_slice(cr.host_symbol.as_bytes());
+        bytes.push(0);
+    }
+
     // Pad to 8 so the next section starts aligned.
     while !bytes.len().is_multiple_of(8) {
         bytes.push(0);
     }
 
-    (bytes, name_offsets, lib_offsets, export_offsets)
+    (
+        bytes,
+        name_offsets,
+        lib_offsets,
+        export_offsets,
+        copy_offsets,
+    )
 }
 
 /// Build the static `.symtab` + `.strtab`: the SHT_SYMTAB sentinel at
@@ -724,9 +752,15 @@ fn build_dynsym(
     import_name_offsets: &[u32],
     export_name_offsets: &[u32],
     export_addrs: &[u64],
+    copy_name_offsets: &[u32],
+    copy_addrs: &[u64],
+    copy_sizes: &[u64],
 ) -> Vec<u8> {
     debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
-    let n_total = 1 + import_name_offsets.len() + export_name_offsets.len();
+    debug_assert_eq!(copy_name_offsets.len(), copy_addrs.len());
+    debug_assert_eq!(copy_name_offsets.len(), copy_sizes.len());
+    let n_total =
+        1 + import_name_offsets.len() + export_name_offsets.len() + copy_name_offsets.len();
     let mut out = Vec::with_capacity(n_total * ELF64_SYM_SIZE as usize);
 
     // Sentinel at index 0 -- all zero. Required by ELF.
@@ -785,6 +819,27 @@ fn build_dynsym(
                 st_shndx: 1,
                 st_value: addr,
                 st_size: 0,
+            },
+        );
+    }
+    // Copy-relocation targets: a defined `STT_OBJECT` per data import.
+    // The loader resolves the matching `R_*_COPY` by copying the host
+    // object's initial value here and binding the host symbol to this
+    // address, so every other module's reference reaches this slot.
+    for ((&name_off, &addr), &size) in copy_name_offsets
+        .iter()
+        .zip(copy_addrs.iter())
+        .zip(copy_sizes.iter())
+    {
+        write_struct(
+            &mut out,
+            &Elf64Sym {
+                st_name: name_off,
+                st_info: (STB_GLOBAL << 4) | STT_OBJECT,
+                st_other: 0,
+                st_shndx: 1,
+                st_value: addr,
+                st_size: size,
             },
         );
     }
@@ -1194,27 +1249,36 @@ pub(super) fn write(
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets) =
-        build_dynstr(&build.imports, exports);
-    // Compute each export's runtime VA. We fill in the real
-    // values after layout is fixed and `code_vmaddr` is
-    // known; here we just reserve the slot.
+    let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
+        build_dynstr(&build.imports, exports, &build.copy_relocs);
+    let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
+    let n_copy = build.copy_relocs.len();
+    // Compute each export's and copy target's runtime VA. We fill in the
+    // real values after layout is fixed and `code_vmaddr` is known; here
+    // we just reserve the slots.
     let export_addrs_placeholder: Vec<u64> = vec![0; exports.len()];
+    let copy_addrs_placeholder: Vec<u64> = vec![0; n_copy];
     let dynsym = build_dynsym(
         &name_offsets,
         &export_name_offsets,
         &export_addrs_placeholder,
+        &copy_name_offsets,
+        &copy_addrs_placeholder,
+        &copy_sizes,
     );
     // The hash table must cover every `.dynsym` entry, in dynsym
     // order: imports occupy indices [1, 1+n_imports), exports the
-    // range after. Hashing only the imports leaves `dlsym` unable
-    // to resolve an exported symbol (its name never lands in a
-    // bucket chain). Executables export nothing, so this is the
-    // import list alone for them.
-    let mut hash_name_offsets: Vec<u32> =
-        Vec::with_capacity(name_offsets.len() + export_name_offsets.len());
+    // range after, then the copy-relocation targets. Hashing only the
+    // imports leaves `dlsym` (and the loader's COPY-reloc lookup)
+    // unable to resolve a symbol whose name never lands in a bucket
+    // chain. Executables without exports or copy relocs hash the import
+    // list alone.
+    let mut hash_name_offsets: Vec<u32> = Vec::with_capacity(
+        name_offsets.len() + export_name_offsets.len() + copy_name_offsets.len(),
+    );
     hash_name_offsets.extend_from_slice(&name_offsets);
     hash_name_offsets.extend_from_slice(&export_name_offsets);
+    hash_name_offsets.extend_from_slice(&copy_name_offsets);
     let hash = build_hash(&hash_name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
 
@@ -1258,7 +1322,7 @@ pub(super) fn write(
     } else {
         0
     };
-    let rela_size = (n_imports as u64 + n_relative as u64) * ELF64_RELA_SIZE;
+    let rela_size = (n_imports as u64 + n_relative as u64 + n_copy as u64) * ELF64_RELA_SIZE;
     let code_off = round_up(rela_off + rela_size, 16);
 
     // Build the code blob: _start stub + build.text (with shifted
@@ -1699,7 +1763,22 @@ pub(super) fn write(
             code_vmaddr + (stub_len + native_off as u64)
         })
         .collect();
-    let final_dynsym = build_dynsym(&name_offsets, &export_name_offsets, &export_addrs);
+    // Copy-relocation targets sit in the static data segment: a `.data`
+    // symbol at `data_vmaddr + offset`, or `.bss` (past the data bytes)
+    // at `data_vmaddr + data_size + offset`.
+    let copy_addrs: Vec<u64> = build
+        .copy_relocs
+        .iter()
+        .map(|cr| data_vmaddr + if cr.is_bss { data_size } else { 0 } + cr.local_offset)
+        .collect();
+    let final_dynsym = build_dynsym(
+        &name_offsets,
+        &export_name_offsets,
+        &export_addrs,
+        &copy_name_offsets,
+        &copy_addrs,
+        &copy_sizes,
+    );
     debug_assert_eq!(final_dynsym.len(), dynsym.len());
     out.extend_from_slice(&final_dynsym);
     debug_assert_eq!(out.len() as u64, dynstr_off);
@@ -1747,6 +1826,25 @@ pub(super) fn write(
                 },
             );
         }
+    }
+    // COPY relocations for data imports. The dynsym index of copy target
+    // `i` is `1 + n_imports + n_exports + i` (sentinel, imports, exports,
+    // then the copy group). `r_offset` is the target's runtime address.
+    let r_copy = match machine {
+        Machine::Aarch64 => R_AARCH64_COPY,
+        Machine::X86_64 => R_X86_64_COPY,
+    };
+    let copy_dynsym_base = (1 + n_imports + exports.len()) as u64;
+    for (i, &addr) in copy_addrs.iter().enumerate() {
+        let sym_idx = copy_dynsym_base + i as u64;
+        write_struct(
+            &mut rela,
+            &Elf64Rela {
+                r_offset: addr,
+                r_info: (sym_idx << 32) | r_copy,
+                r_addend: 0,
+            },
+        );
     }
     debug_assert_eq!(rela.len() as u64, rela_size);
     out.extend_from_slice(&rela);
@@ -2405,6 +2503,7 @@ mod tests {
     fn tiny_build() -> Build {
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
+            copy_relocs: Default::default(),
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             entry_offset: 0,
@@ -2421,6 +2520,7 @@ mod tests {
             user_extern_data_refs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
+                data_bindings: Default::default(),
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
                     local_name: "exit".into(),

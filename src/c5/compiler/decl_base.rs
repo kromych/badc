@@ -89,12 +89,21 @@ impl IntModifiers {
         }
     }
 
-    /// Pick the `char` tag. `signed char` is the only spelling
-    /// that keeps the `UNSIGNED_BIT` off; bare `char` and
-    /// `unsigned char` both carry it (c5 treats plain `char` as
-    /// unsigned so byte-array idioms see zero-extending loads).
-    pub fn char_tag(&self) -> i64 {
-        if self.saw_signed {
+    /// Pick the `char` tag. `signed char` is always signed and
+    /// `unsigned char` always unsigned; plain `char` follows the
+    /// target's implementation-defined signedness
+    /// ([`Target::plain_char_signed`], C99 6.2.5p15). The signedness
+    /// is encoded as the presence/absence of `UNSIGNED_BIT`, which
+    /// drives the load extension in `load_kind_for`.
+    pub fn char_tag(&self, plain_char_signed: bool) -> i64 {
+        let signed = if self.saw_signed {
+            true
+        } else if self.saw_unsigned {
+            false
+        } else {
+            plain_char_signed
+        };
+        if signed {
             Ty::Char as i64
         } else {
             Ty::Char as i64 | UNSIGNED_BIT
@@ -247,7 +256,7 @@ impl Compiler {
             m.int_base()
         } else if self.lex.tk == Token::Char {
             self.next()?;
-            m.char_tag()
+            m.char_tag(self.target.plain_char_signed())
         } else if self.lex.tk == Token::Void {
             self.next()?;
             // `void` collapses to the same type encoding as

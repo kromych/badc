@@ -31,14 +31,75 @@
 
 #pragma once
 
+#define AF_UNSPEC   0
+#define AF_UNIX     1
 #define AF_INET     2
-#define AF_INET6    10           // Linux value; macOS=30, Win=23 -- not used yet
+#ifdef __APPLE__
+#define AF_INET6    30
+#elif defined(_WIN32)
+#define AF_INET6    23
+#elif defined(__linux__)
+#define AF_INET6    10
+#endif
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+#define SHUT_RD     0
+#define SHUT_WR     1
+#define SHUT_RDWR   2
 #define IPPROTO_TCP 6
 #define IPPROTO_UDP 17
 #define INADDR_ANY  0
 #define SOMAXCONN   128
+
+// setsockopt / getsockopt levels and option names. The numeric values differ
+// between Linux and the BSD-derived set; Winsock inherited the BSD values, so
+// macOS and Windows share them.
+#if defined(__APPLE__) || defined(_WIN32)
+#define SOL_SOCKET    0xffff
+#define SO_REUSEADDR  0x0004
+#define SO_KEEPALIVE  0x0008
+#define SO_SNDBUF     0x1001
+#define SO_RCVBUF     0x1002
+#define SO_ERROR      0x1007
+#elif defined(__linux__)
+#define SOL_SOCKET    1
+#define SO_REUSEADDR  2
+#define SO_KEEPALIVE  9
+#define SO_SNDBUF     7
+#define SO_RCVBUF     8
+#define SO_ERROR      4
+#endif
+
+// `struct sockaddr` is the address header passed by reference to bind /
+// connect / accept and pointed at by `addrinfo.ai_addr`. It is 16 bytes on
+// all three targets; the leading family field differs (BSD/macOS prefix a
+// 1-byte length).
+#ifdef __APPLE__
+struct sockaddr {
+    unsigned char sa_len;
+    unsigned char sa_family;
+    char sa_data[14];
+};
+#elif defined(__linux__) || defined(_WIN32)
+struct sockaddr {
+    unsigned short sa_family;
+    char sa_data[14];
+};
+#endif
+
+// `struct sockaddr_storage` is the 128-byte buffer large enough for any
+// address family; callers pass its address where an address of unknown
+// family is filled in (e.g. accept / getnameinfo).
+struct sockaddr_storage {
+#ifdef __APPLE__
+    unsigned char ss_len;
+    unsigned char ss_family;
+    char ss_pad[126];
+#elif defined(__linux__) || defined(_WIN32)
+    unsigned short ss_family;
+    char ss_pad[126];
+#endif
+};
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -49,6 +110,8 @@
 #pragma binding(libc::connect,    "_connect")
 #pragma binding(libc::setsockopt, "_setsockopt")
 #pragma binding(libc::getsockopt, "_getsockopt")
+#pragma binding(libc::getpeername, "_getpeername")
+#pragma binding(libc::getsockname, "_getsockname")
 #pragma binding(libc::recv,       "_recv")
 #pragma binding(libc::send,       "_send")
 #pragma binding(libc::shutdown,   "_shutdown")
@@ -75,6 +138,8 @@
 #pragma binding(libc::connect,    "connect")
 #pragma binding(libc::setsockopt, "setsockopt")
 #pragma binding(libc::getsockopt, "getsockopt")
+#pragma binding(libc::getpeername, "getpeername")
+#pragma binding(libc::getsockname, "getsockname")
 #pragma binding(libc::recv,       "recv")
 #pragma binding(libc::send,       "send")
 #pragma binding(libc::shutdown,   "shutdown")
@@ -99,6 +164,8 @@
 #pragma binding(ws2_32::listen,      "listen")
 #pragma binding(ws2_32::accept,      "accept")
 #pragma binding(ws2_32::connect,     "connect")
+#pragma binding(ws2_32::getpeername, "getpeername")
+#pragma binding(ws2_32::getsockname, "getsockname")
 #pragma binding(ws2_32::setsockopt,  "setsockopt")
 #pragma binding(ws2_32::getsockopt,  "getsockopt")
 #pragma binding(ws2_32::recv,        "recv")
@@ -139,3 +206,5 @@ int getsockopt(int fd, int level, int optname, char *optval, int *optlen);
 int recv(int fd, char *buf, int n, int flags);
 int send(int fd, char *buf, int n, int flags);
 int shutdown(int fd, int how);
+int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);

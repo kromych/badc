@@ -712,6 +712,16 @@ impl Compiler {
             self.next()?;
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
+                // The cast type is discarded here rather than bound through a
+                // declarator, so clear the function-type side channels it may
+                // have set. A cast to a function-type-typedef pointer
+                // (`(FnT *)expr`) otherwise leaves base_is_function_type set,
+                // and the next pointer declaration absorbs its `*`.
+                self.pending.base_is_function_type = false;
+                self.pending.bare_function_type_declarator = false;
+                self.pending.fn_ptr_indirection = None;
+                self.pending.typedef_fn_proto = None;
+                self.pending.fn_ptr_param_types = None;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
@@ -882,6 +892,11 @@ impl Compiler {
                 self.symbols[idx].class = Token::Fun as i64;
                 self.symbols[idx].type_ = Ty::Int as i64;
                 self.symbols[idx].was_referenced = true;
+                // Record the reference site so `resolve_code_relocs`
+                // can diagnose the name if it is never declared or
+                // defined in the unit (a missing header or a typo --
+                // C99 6.5.1 requires a declaration before use).
+                self.symbols[idx].decl_line = self.lex.line;
                 self.next()?;
                 return Ok((0, InitElemReloc::Code(idx)));
             }
@@ -1223,6 +1238,31 @@ impl Compiler {
             //   * value-typed nested union
             // Pointer / scalar / bitfield fields read a single
             // constant-expression value via parse_constant_init_value.
+            // C99 6.7.9p14: a char-array member may be initialized by a
+            // string literal optionally enclosed in braces
+            // (`struct S { char a[N]; } x = { {"..."} };`). Unwrap a
+            // single `{ "..." }` so the string-copy path handles it; a
+            // multi-dimensional char array (`char c[2][6] = {"a","b"}`,
+            // one string per row) keeps the brace as a per-row list.
+            let mut char_array_brace_string = false;
+            if field.array_size > 0
+                && field.inner_array_size == 0
+                && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                && self.lex.tk == '{'
+            {
+                let snap = self.lex.snapshot();
+                // Peeking the inner string token appends its bytes to the
+                // data segment; restore the length too if it is not a
+                // brace-wrapped string after all.
+                let data_snap = self.data.len();
+                self.next()?;
+                if self.lex.tk == '"' {
+                    char_array_brace_string = true;
+                } else {
+                    self.lex.restore(snap);
+                    self.data.truncate(data_snap);
+                }
+            }
             if field.array_size > 0
                 && self.lex.tk == '"'
                 && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
@@ -1262,6 +1302,9 @@ impl Compiler {
                         // explicitly written (zeroed above by
                         // write_init_value when source byte is 0).
                     }
+                }
+                if char_array_brace_string {
+                    self.expect_close_brace_after_wrapped_string()?;
                 }
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;

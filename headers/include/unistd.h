@@ -48,10 +48,13 @@
 #pragma binding(libc::isatty,    "_isatty")
 #pragma binding(libc::readlink,  "_readlink")
 #pragma binding(libc::mkdir,     "_mkdir")
+#pragma binding(libc::mknod,     "_mknod")
+#pragma binding(libc::mkfifo,    "_mkfifo")
 #pragma binding(libc::dup,       "_dup")
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
 #pragma binding(libc::fork,      "_fork")
+#pragma binding(libc::vfork,     "_vfork")
 #pragma binding(libc::execvp,    "_execvp")
 #pragma binding(libc::execve,    "_execve")
 #pragma binding(libc::setgid,    "_setgid")
@@ -85,6 +88,14 @@
 // slot. Programs that walk the environment portably reach for
 // it inside a Mach-O #ifdef branch.
 #pragma binding(libc::_NSGetEnviron, "__NSGetEnviron")
+// libSystem owns the live `environ` cell; setenv / unsetenv mutate it
+// and may reallocate the array. Mach-O has no COPY relocation, so bind
+// the data symbol through the GOT: a reference to `environ` loads
+// `_environ`'s address from the dyld-filled slot, keeping every read in
+// sync with libSystem's current array (the analog of the ELF COPY
+// relocation glibc's `__environ` uses).
+#pragma binding(data libc::environ, "_environ")
+extern char **environ;
 #endif
 
 #ifdef __linux__
@@ -92,9 +103,11 @@
 #pragma binding(libc::open,      "open")
 #pragma binding(libc::read,      "read")
 #pragma binding(libc::pread,     "pread")
+#pragma binding(libc::pread64,   "pread64")
 #pragma binding(libc::close,     "close")
 #pragma binding(libc::write,     "write")
 #pragma binding(libc::pwrite,    "pwrite")
+#pragma binding(libc::pwrite64,  "pwrite64")
 #pragma binding(libc::access,    "access")
 #pragma binding(libc::lseek,     "lseek")
 #pragma binding(libc::fsync,     "fsync")
@@ -115,10 +128,13 @@
 #pragma binding(libc::isatty,    "isatty")
 #pragma binding(libc::readlink,  "readlink")
 #pragma binding(libc::mkdir,     "mkdir")
+#pragma binding(libc::mknod,     "mknod")
+#pragma binding(libc::mkfifo,    "mkfifo")
 #pragma binding(libc::dup,       "dup")
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::pipe,      "pipe")
 #pragma binding(libc::fork,      "fork")
+#pragma binding(libc::vfork,     "vfork")
 #pragma binding(libc::execvp,    "execvp")
 #pragma binding(libc::execve,    "execve")
 #pragma binding(libc::setgid,    "setgid")
@@ -146,16 +162,13 @@
 #pragma binding(libc::getopt,    "getopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
-// POSIX `environ` is exposed by glibc as a data symbol pointing
-// at the per-process environment vector. The single definition
-// lives in `lib/runtime.c` and ships with every native ELF
-// image; here we declare the extern so user code can read or
-// write it. Programs that need the real glibc environ value
-// -- e.g., to pass it through to a child process -- populate
-// it themselves from the `envp` argument of `main`.
-// TODO: replace this slot with a real data import once
-// `#pragma binding`'s data form lands so glibc's own `environ`
-// is bound directly.
+// POSIX `environ` is exposed by glibc as the data symbol `__environ`
+// (with `environ` as its alias). The `extern` slot lives in
+// `lib/runtime.c`; the data binding makes the linker emit a COPY
+// relocation so that slot and glibc's `__environ` share one cell.
+// Without it, glibc's getenv / setenv / tzset read a different cell
+// than a direct `environ = ...` assignment writes.
+#pragma binding(data libc::environ, "__environ")
 extern char **environ;
 #endif
 
@@ -176,14 +189,27 @@ extern char **environ;
 
 int open(char *path, int flags, ...);
 int read(int fd, char *buf, int n);
-int pread(int fd, char *buf, int n, int offset);
+// POSIX: pread/pwrite take an off_t offset and size_t count; an `int`
+// offset truncates positions past 2GB. Matches the pread64/pwrite64
+// signatures below.
+long pread(int fd, char *buf, unsigned long n, long offset);
 int close(int fd);
 int write(int fd, char *buf, int n);
-int pwrite(int fd, char *buf, int n, int offset);
+long pwrite(int fd, char *buf, unsigned long n, long offset);
+#ifdef __linux__
+// glibc large-file variants (`_LARGEFILE64_SOURCE`). The offset and
+// result are 64-bit; programs configured with `USE_PREAD64` (e.g.
+// sqlite) reach for these names directly.
+long pread64(int fd, void *buf, unsigned long n, long offset);
+long pwrite64(int fd, const void *buf, unsigned long n, long offset);
+#endif
 int access(char *path, int mode);
-int lseek(int fd, int offset, int whence);
+// POSIX: lseek returns off_t and takes an off_t offset; ftruncate takes an
+// off_t length. off_t is 64-bit, so `int` truncates offsets/lengths past
+// 2GB. `long` matches off_t on LP64 (the POSIX targets this block serves).
+long lseek(int fd, long offset, int whence);
 int fsync(int fd);
-int ftruncate(int fd, int len);
+int ftruncate(int fd, long len);
 int fcntl(int fd, int cmd, ...);
 int stat(char *path, char *buf);
 int lstat(char *path, char *buf);
@@ -200,10 +226,15 @@ int usleep(int microseconds);
 int isatty(int fd);
 int readlink(char *path, char *buf, int n);
 int mkdir(char *path, int mode);
+// POSIX: create a filesystem node. The device argument is unused for
+// regular / FIFO nodes; callers pass 0.
+int mknod(char *path, int mode, int dev);
+int mkfifo(char *path, int mode);
 int dup(int fd);
 int dup2(int oldfd, int newfd);
 int pipe(int *fds);
 int fork();
+int vfork();
 int execvp(char *file, char **argv);
 int execve(char *path, char **argv, char **envp);
 int setgid(int gid);
@@ -221,8 +252,9 @@ int chown(char *path, int uid, int gid);
 int truncate(char *path, int len);
 int link(char *from, char *to);
 int symlink(char *from, char *to);
-int pathconf(char *path, int name);
-int sysconf(int name);
+// POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
+long pathconf(char *path, int name);
+long sysconf(int name);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);
@@ -277,16 +309,27 @@ struct rusage {
 };
 
 #ifndef _WIN32
-// sysconf(3) selectors. Names match POSIX; the underlying value
-// is platform-specific but the bound libc reads it directly.
-// msvcrt has no `sysconf` entry, so the selector macros stay out
-// of the Windows path -- source that gates on `defined
-// _SC_PAGESIZE` falls back to its non-sysconf branch there.
+// sysconf(3) selectors. Names match POSIX; the numeric value is the
+// one the bound libc reads -- different on Darwin and Linux -- so the
+// selectors are target-specific. msvcrt has no `sysconf` entry, so the
+// selector macros stay out of the Windows path; source that gates on
+// `defined _SC_PAGESIZE` falls back to its non-sysconf branch there.
+#ifdef __APPLE__
+#define _SC_ARG_MAX       1
+#define _SC_OPEN_MAX      5
 #define _SC_PAGESIZE      29
-#define _SC_PAGE_SIZE     _SC_PAGESIZE
-#define _SC_NPROCESSORS_ONLN 84
-#define _SC_OPEN_MAX      4
+#define _SC_NPROCESSORS_ONLN 58
+#define _SC_GETPW_R_SIZE_MAX 71
+#define _SC_GETGR_R_SIZE_MAX 70
+#else
 #define _SC_ARG_MAX       0
+#define _SC_OPEN_MAX      4
+#define _SC_PAGESIZE      30
+#define _SC_NPROCESSORS_ONLN 84
+#define _SC_GETPW_R_SIZE_MAX 70
+#define _SC_GETGR_R_SIZE_MAX 69
+#endif
+#define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN
 #endif
 

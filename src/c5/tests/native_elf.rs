@@ -243,6 +243,54 @@ fn malloc_memset_memcmp_roundtrip() {
     assert_eq!(build_and_run(src, "elf-malloc"), 1);
 }
 
+/// The full-runtime startup publishes the process environment vector
+/// through `environ` (POSIX 8.3): `__c5_entry` reads envp off the initial
+/// stack (`&argv[argc + 1]`) and assigns it. Without that the global is
+/// NULL and `environ[i]` faults. The self-contained `emit_native` stub
+/// used by the fixture table does not link the runtime, so this links
+/// through `link_executable_with_runtime` and runs.
+#[test]
+fn environ_populated_through_runtime() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target};
+    // `no_entry_point` matches the CLI's `-c` path so `extern char
+    // **environ` stays an undefined reference resolved against the
+    // runtime's definition, not a tentative definition that collides.
+    let program = Compiler::with_options(
+        "extern char **environ; \
+         int main(void) { \
+             if (environ == 0) { return 1; } \
+             int n = 0; \
+             for (char **e = environ; *e != 0; e++) { n++; } \
+             return n > 0 ? 0 : 2; \
+         }"
+        .to_string(),
+        Target::LinuxAarch64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile environ program");
+    let bytes = super::link_executable_with_runtime(
+        &program,
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .expect("link LinuxAarch64 with runtime");
+    let path = unique_temp_path("badc-environ", "env");
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+        f.sync_all().expect("sync temp file");
+    }
+    set_executable(&path);
+    let output = exec_with_retry(&path).expect("exec environ binary");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "environ must be non-null and non-empty under the full runtime",
+    );
+}
+
 // ---- Fixture parity. Mirror of the `fixture_parity` test in
 //      `super::native`, against the same fixture set so a drift in
 //      either backend shows up as a Linux-specific failure. ----
@@ -460,6 +508,9 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
+    ("sizeof_abstract_fn_ptr.c", 0),
+    ("pragma_operator.c", 0),
+    ("variadic_macro_named_rest.c", 0),
     ("designator_override_and_braced_string.c", 0),
     ("multidim_array_init.c", 0),
     ("macro_paste_stringize_unexpanded.c", 0),
@@ -499,7 +550,17 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("switch_unsigned_negative_case.c", 0),
     ("enum_bitfield_unsigned.c", 0),
     ("addr_of_intrinsic_math.c", 0),
+    ("libc_struct_arg_by_value.c", 0),
+    ("posix_unix_headers.c", 0),
+    ("socket_headers_abi.c", 0),
+    ("posix_utime_errno_headers.c", 0),
+    ("cast_fn_typedef_ptr_in_initializer.c", 0),
+    ("global_init_paren_operand.c", 0),
+    ("function_type_typedef_declaration.c", 0),
+    ("float_increment_decrement.c", 0),
     ("addr_of_libm_import.c", 0),
+    ("addr_of_libc_strcmp.c", 0),
+    ("fts_and_fd_set_headers.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),
     ("struct_array_elided_runtime.c", 0),

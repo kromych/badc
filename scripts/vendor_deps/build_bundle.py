@@ -185,6 +185,19 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # Tcl 8.6.14 -- the interpreter source distribution from
+        # SourceForge. Published as a standalone tarball with no public
+        # commit identifier, so it is pinned by the tarball sha256. The
+        # distribution carries its own `tests/` directory (the suite the
+        # demo runs), so no separate test asset is needed.
+        name="tcl",
+        version="8.6.14",
+        url="https://prdownloads.sourceforge.net/tcl/tcl8.6.14-src.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="5880225babf7954c58d4fb0f5cf6279104ce1cd6aa9b71e9a6322540e1c4de66",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # QuickJS -- Fabrice Bellard's JavaScript engine. No versioned
         # release tarball; pin to the github commit. Version embeds the
         # release date from the upstream VERSION file for provenance.

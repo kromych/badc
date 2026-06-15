@@ -18,7 +18,7 @@ Disassembly of section .text:
 <two>:
                	sxtw	x0, w0
                	adrp	x1, <page>
-               	add	x1, x1, #0xd0
+               	add	x1, x1, <lo12>
                	lsl	x0, x0, #1
                	str	w0, [x1]
                	mov	x0, x1

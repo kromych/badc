@@ -277,14 +277,6 @@ pub(crate) struct Lexer {
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
 ///
-/// The original c4-style code did a linear scan over every symbol on
-/// every identifier the lexer hit; with a few thousand globals that
-/// turned the frontend into an O(N^2) hot spot (~88% of compile time
-/// on the stress fixture). This replaces the scan with a small chained
-/// hash table that lives alongside `symbols` instead of replacing it,
-/// so the rest of the compiler keeps using `&self.symbols[idx]` the
-/// way it always has.
-///
 /// Layout:
 ///    * `buckets[hash & mask]` -- head of the chain, `u32::MAX` when empty.
 ///    * `next[i]` -- previous symbol that landed in the same bucket (or `u32::MAX` to terminate).
@@ -964,8 +956,7 @@ impl Lexer {
                 //     / dylib / export pragmas the preprocessor
                 //     batches). Parse the args and fold into
                 //     `pack_stack`.
-                //   * Any other `#` line -- preserve the historical
-                //     c4 line-comment fallback (shebangs,
+                //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
                 let line_start = self.pos;
@@ -1846,6 +1837,17 @@ pub(crate) fn init_symbols(
     for spec in dylibs {
         for binding in &spec.bindings {
             let name = binding.local_name.as_str();
+            if binding.is_data {
+                // A data binding (e.g. environ) names a data object
+                // referenced through its `extern` declaration, not a
+                // callable symbol. Seeding it as `Token::Sys` would
+                // shadow the data symbol with a call entry; the COPY
+                // relocation binds it instead. Consume a binding index
+                // so the flat binding table stays aligned with
+                // `spec.bindings`.
+                binding_idx += 1;
+                continue;
+            }
             if find_symbol(symbols, index, name).is_none() {
                 let hash = hash_name(name.as_bytes());
                 symbols.push(Symbol {

@@ -2890,6 +2890,7 @@ mod tests {
     #[test]
     fn plt_pool_range_skips_when_no_imports() {
         let mut build = Build {
+            copy_relocs: Default::default(),
             text: alloc::vec![0u8; 0x100],
             ..Build::default()
         };
@@ -2946,6 +2947,7 @@ mod tests {
         let mut text = alloc::vec![0u8; 0xd8];
         text.extend(alloc::vec![0u8; 16]);
         let imports = super::super::ResolvedImports {
+            data_bindings: Default::default(),
             imports: alloc::vec![
                 super::super::ResolvedImport {
                     binding_idx: 0,
@@ -2975,6 +2977,7 @@ mod tests {
             ..Default::default()
         };
         let build = Build {
+            copy_relocs: Default::default(),
             text,
             plt_trampoline_offsets: alloc::vec![0xc0, 0xcc],
             imports,
@@ -3061,6 +3064,7 @@ mod tests {
         // lldb attribute PLT-stub hits to the closing brace of the
         // last user function (e.g. `b malloc` -> `main:34`).
         let mut build = Build {
+            copy_relocs: Default::default(),
             text: alloc::vec![0u8; 0x200],
             plt_trampoline_offsets: alloc::vec![0x180, 0x18c, 0x198],
             ..Build::default()

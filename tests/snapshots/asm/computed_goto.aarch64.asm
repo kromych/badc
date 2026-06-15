@@ -163,7 +163,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x20
                	adrp	x1, <page>
-               	add	x1, x1, #0xd0
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]

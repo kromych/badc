@@ -116,6 +116,18 @@ pub struct MergedNative {
     /// `adrp_offset` rebased into the merged `.text` and
     /// `descriptor_index` into [`Self::macho_tlv_descriptors`].
     pub macho_tlv_fixups: Vec<(usize, usize)>,
+    /// Data-import copy relocations from `#pragma binding(data ...)`,
+    /// each `(local_name, host_symbol)`, deduplicated across units. The
+    /// final-image writer binds each local data symbol it defines to the
+    /// host's data object with an `R_*_COPY` relocation.
+    pub copy_relocs: Vec<(String, String)>,
+    /// Indices into [`Self::imports`] for `#pragma binding(data ...)`
+    /// locals that reached the merge as an UNDEF (the host data symbol
+    /// lives in a dylib; Mach-O routes the reference through the GOT).
+    /// The PLT pass skips these -- a data import takes no call stub, and
+    /// its reference loads the GOT slot directly rather than branching
+    /// through a trampoline.
+    pub data_import_indices: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -464,6 +476,20 @@ pub fn link_native_objects_with_options(
     // (a shared library's references the host supplies at `dlopen`).
     let mut flat_imports: alloc::collections::BTreeSet<String> =
         alloc::collections::BTreeSet::new();
+    // Local names bound to a host data symbol via `#pragma binding(data
+    // ...)`. A unit that references such a name carries no local
+    // definition (the symbol lives in a dylib), so the reference reaches
+    // the merged table as an UNDEF. On Mach-O it routes through the GOT
+    // like a function import; ELF defines the local and uses a COPY
+    // relocation instead, so the name never reaches the UNDEF arm there.
+    let data_binding_locals: alloc::collections::BTreeSet<String> = objs
+        .iter()
+        .flat_map(|o| o.copy_relocs.iter().map(|(local, _host)| local.clone()))
+        .collect();
+    // Import indices for the data-binding locals admitted as GOT imports
+    // (Mach-O). The PLT pass consults this to skip stub creation.
+    let mut data_import_indices: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
     let record_import = |name: &str,
                          imports: &mut Vec<String>,
                          idx_for_name: &mut BTreeMap<String, usize>|
@@ -599,7 +625,13 @@ pub fn link_native_objects_with_options(
                         // flat-namespace bind (Mach-O) / undefined
                         // `.dynsym` entry (ELF) the host resolves
                         // through the `dlopen` global scope.
-                        if sym.binding == 1 && !allow_undefined {
+                        // A `#pragma binding(data ...)` local reaches the
+                        // merged table as an UNDEF where the binding's host
+                        // symbol lives in a dylib. Admit it as a flat import
+                        // so the writer binds the host symbol through the GOT,
+                        // rather than rejecting it as unresolved.
+                        let is_data_binding = data_binding_locals.contains(&sym.name);
+                        if sym.binding == 1 && !allow_undefined && !is_data_binding {
                             return Err(link_err(&format!(
                                 "undefined reference to `{}`",
                                 sym.name,
@@ -612,6 +644,9 @@ pub fn link_native_objects_with_options(
                             flat_imports.insert(sym.name.clone());
                         }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
+                        if is_data_binding {
+                            data_import_indices.insert(idx);
+                        }
                         pending_imports.push(PendingImportReloc {
                             text_offset: patch_offset as u64,
                             import_index: idx,
@@ -828,6 +863,19 @@ pub fn link_native_objects_with_options(
         }
     }
 
+    // Data-import copy relocations, deduplicated across units. The
+    // binding is declared in a header, so the same `(local, host)` pair
+    // recurs in every unit that included it.
+    let mut copy_relocs: Vec<(String, String)> = Vec::new();
+    let mut seen_copy: BTreeSet<(String, String)> = BTreeSet::new();
+    for obj in objs {
+        for pair in &obj.copy_relocs {
+            if seen_copy.insert(pair.clone()) {
+                copy_relocs.push(pair.clone());
+            }
+        }
+    }
+
     // Win64 `_tls_index` fixup sites, rebased from each unit's local
     // `.text` offset to the merged `.text` offset. The PE writer
     // patches each with the address of the `_tls_index` slot it lays
@@ -970,6 +1018,8 @@ pub fn link_native_objects_with_options(
         tls_index_fixups,
         macho_tlv_descriptors,
         macho_tlv_fixups,
+        copy_relocs,
+        data_import_indices,
         debug_info,
         debug_abbrev,
         debug_line,
@@ -1246,16 +1296,31 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
     let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
     let mut trampolines: Vec<PltTrampoline> = Vec::new();
     let pending = core::mem::take(&mut merged.pending_imports);
+    let data_imports = merged.data_import_indices.clone();
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
     for reloc in &pending {
         if reloc.import_index == usize::MAX {
             parked_back.push(reloc.clone());
             continue;
         }
-        if reloc.rtype != R_AARCH64_CALL26 {
+        // A data import takes no call stub: its reference loads the GOT
+        // slot directly. Re-park the reloc unchanged so `synth_fixups`
+        // projects it to a GotFixup (adrp + ldr) against the slot.
+        if data_imports.contains(&reloc.import_index) {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        // CALL26 reaches the stub as a branch; the address-of pair
+        // (`adrp` + `add`, `R_AARCH64_ADR_PREL_PG_HI21` +
+        // `R_AARCH64_ADD_ABS_LO12_NC`) materializes the stub's
+        // address for `&import`. Both need one stub per import.
+        if reloc.rtype != R_AARCH64_CALL26
+            && reloc.rtype != R_AARCH64_ADR_PREL_PG_HI21
+            && reloc.rtype != R_AARCH64_ADD_ABS_LO12_NC
+        {
             return Err(err(&format!(
                 "emit_aarch64_plt: pending reloc at text[{:#x}] has rtype {} \
-                 (only R_AARCH64_CALL26 supported on aarch64)",
+                 (only CALL26 / ADR_PREL_PG_HI21 / ADD_ABS_LO12_NC supported on aarch64)",
                 reloc.text_offset, reloc.rtype,
             )));
         }
@@ -1281,14 +1346,40 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
         if reloc.import_index == usize::MAX {
             continue;
         }
+        if data_imports.contains(&reloc.import_index) {
+            continue;
+        }
         let site = reloc.text_offset as usize;
         let tramp = tramp_for_import
             .get(&reloc.import_index)
             .copied()
             .expect("every reloc has a tramp entry from pass 1");
-        // CALL26 wants the absolute target; `patch_aarch64_call26`
-        // computes `(target - site) >> 2` internally.
-        patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?;
+        match reloc.rtype {
+            // CALL26 is PC-relative, so the stub's `merged.text`
+            // offset patches in directly regardless of where the
+            // text segment lands in vmaddr space.
+            R_AARCH64_CALL26 => {
+                patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?
+            }
+            // The address-of pair (`adrp` + `add`) is page-relative,
+            // so its immediates depend on the stub's final vmaddr,
+            // which the per-format writer assigns later (the text
+            // segment is not page-aligned on Mach-O / PE). Re-park
+            // the pair as a Text-section reference to the stub
+            // offset; `synth_fixups` projects it into a `FuncFixup`
+            // the writer resolves against the real vmaddr, exactly
+            // like a function-pointer literal.
+            R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC => {
+                parked_back.push(PendingImportReloc {
+                    text_offset: reloc.text_offset,
+                    import_index: usize::MAX,
+                    rtype: reloc.rtype,
+                    addend: tramp as i64,
+                    target_section: NativeSymSection::Text,
+                });
+            }
+            _ => unreachable!("pass 1 rejected every other rtype"),
+        }
     }
 
     merged.pending_imports = parked_back;
@@ -1845,6 +1936,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1910,6 +2002,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),
@@ -1950,6 +2043,7 @@ mod tests {
             tls_index_fixups: alloc::vec::Vec::new(),
             macho_tlv_descriptors: alloc::vec::Vec::new(),
             macho_tlv_fixups: alloc::vec::Vec::new(),
+            copy_relocs: alloc::vec::Vec::new(),
             debug_info: alloc::vec::Vec::new(),
             debug_abbrev: alloc::vec::Vec::new(),
             debug_line: alloc::vec::Vec::new(),

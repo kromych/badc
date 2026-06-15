@@ -70,6 +70,156 @@ fn address_taken_static_survives_dce() {
 }
 
 #[test]
+fn block_scope_externs_emit_distinct_undef_symbols() {
+    // C99 6.2.2p4: a block-scope `extern` declaration has external
+    // linkage and refers to the file-scope object of the same name in
+    // another unit. Taking the address of several such declarations must
+    // produce a distinct named relocation per object. The bug was that
+    // the block-scope path set `class=Glo` + `is_extern_decl` but not
+    // `linkage=External`, so `live_glo_addr` fell back to the tentative
+    // `val` (0) and every `&name` collapsed onto the same `.data` base.
+    // Each distinct extern must surface as its own undefined symbol.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "void use3(char *a, char *b, char *c);\n\
+         int main(void) {\n\
+         extern int g1;\n\
+         extern int g2;\n\
+         extern int g3;\n\
+         use3((char *)&g1, (char *)&g2, (char *)&g3);\n\
+         return 0;\n\
+         }\n"
+        .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    use crate::c5::linker::object::NativeSymSection;
+    for name in ["g1", "g2", "g3"] {
+        let found = obj
+            .symbols
+            .iter()
+            .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef));
+        assert!(
+            found,
+            "block-scope extern `{name}` must emit its own undefined data symbol"
+        );
+    }
+}
+
+#[test]
+fn nested_block_externs_emit_distinct_undef_symbols() {
+    // Same as the body-top case, but the `extern` declarations sit in a
+    // nested `{ }`. That path consumed `extern` as a no-op and allocated
+    // a local for the declarator; it must instead register an external
+    // reference so the address resolves to the defining unit's object.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeSymSection;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let program = Compiler::with_options(
+        "void use3(char *a, char *b, char *c);\n\
+         int main(void) {\n\
+         {\n\
+         extern int n1;\n\
+         extern int n2;\n\
+         extern int n3;\n\
+         use3((char *)&n1, (char *)&n2, (char *)&n3);\n\
+         }\n\
+         return 0;\n\
+         }\n"
+        .to_string(),
+        Target::LinuxX64,
+        CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+    for name in ["n1", "n2", "n3"] {
+        let found = obj
+            .symbols
+            .iter()
+            .any(|s| s.name == name && matches!(s.section, NativeSymSection::Undef));
+        assert!(
+            found,
+            "nested-block extern `{name}` must emit its own undefined data symbol"
+        );
+    }
+}
+
+#[test]
+fn libc_address_trampoline_is_per_tu_local() {
+    // Two translation units that each take the address of the same
+    // libc function in a `.data` function-pointer table both emit a
+    // synthetic `__c5_sys_exp` forwarding trampoline. The trampoline
+    // is referenced only within its own unit (via a `.text`-section
+    // reloc carrying its byte offset, not by name), so it must have
+    // internal linkage; binding it STB_GLOBAL would make the merge
+    // reject the second definition. Verifies the per-TU local
+    // classification in `elf_reloc::write_relocatable`.
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |table: &str, extra: &str| {
+        let program = Compiler::with_options(
+            alloc::format!(
+                "#include <math.h>\n\
+                 typedef double (*mathfn)(double);\n\
+                 const mathfn {table}[] = {{ exp, log }};\n\
+                 {extra}"
+            ),
+            Target::LinuxX64,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse ET_REL")
+    };
+    let a = unit(
+        "a_tbl",
+        "double call_a(int i, double x) { return a_tbl[i](x); }\n",
+    );
+    let b = unit(
+        "b_tbl",
+        "double call_a(int i, double x);\n\
+         int main(void) { return call_a(0, 0.0) == 1.0 ? 0 : 1; }\n",
+    );
+    // The merge must not reject the duplicate `__c5_sys_exp` /
+    // `__c5_sys_log` trampolines.
+    let merged = link_native_objects(&[a, b]).expect("link must not collide on libc trampolines");
+    // Each unit kept its own local copy: the merged static-function
+    // list carries the trampoline name from both units.
+    let exp_copies = merged
+        .local_funcs
+        .iter()
+        .filter(|(n, _)| n == "__c5_sys_exp")
+        .count();
+    assert!(
+        exp_copies >= 2,
+        "each TU must keep its own local __c5_sys_exp trampoline, got {exp_copies}"
+    );
+}
+
+#[test]
 fn unreferenced_static_function_is_dropped_from_object() {
     // C99 6.2.2p3: a file-scope `static` function has internal
     // linkage and is reachable only from the current TU. The

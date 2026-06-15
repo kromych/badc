@@ -172,7 +172,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x50
                	sub	x1, x29, #0x10
                	adrp	x3, <page>
-               	add	x3, x3, #0xd0
+               	add	x3, x3, <lo12>
                	mov	x2, x20
                	bl	<addr>
                	mov	x1, #0x0                // =0
@@ -222,7 +222,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0xa0
                	sub	x0, x29, #0x48
                	adrp	x1, <page>
-               	add	x1, x1, #0xf0
+               	add	x1, x1, <lo12>
                	str	x10, [sp, #-0x10]!
                	ldr	x10, [x1]
                	str	x10, [x0]

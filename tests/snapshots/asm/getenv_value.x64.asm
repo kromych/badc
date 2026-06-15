@@ -23,7 +23,7 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq
-               	movzbq	(%rax), %rax
+               	movsbq	(%rax), %rax
                	addq	$0x10, %rsp
                	popq	%rbp
                	retq

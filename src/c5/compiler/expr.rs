@@ -121,7 +121,12 @@ impl Compiler {
             self.size_of_type(Ty::Long as i64),
             self.size_of_type(Ty::LongLong as i64),
         ];
-        let mag = (ival as i128).unsigned_abs();
+        // An integer constant is non-negative (a leading `-` is a
+        // separate unary operator), so the magnitude is the unsigned
+        // interpretation of the lexer's 64-bit value. Treating it as
+        // signed would read a constant past `LLONG_MAX` (bit 63 set,
+        // e.g. `18446744073709551615`) as a small negative magnitude.
+        let mag = (ival as u64) as u128;
         let fits = |size_bytes: usize, signed: bool| -> bool {
             let bits = (size_bytes as u32) * 8;
             if signed {
@@ -153,7 +158,12 @@ impl Compiler {
                 break;
             }
             if rank >= 2 {
-                is_unsigned = is_unsigned || allow_unsigned_fallback;
+                // C99 6.4.4.1p5 lists only signed types for a decimal
+                // constant, but a value that exceeds the widest signed
+                // type cannot be represented there. gcc and clang type
+                // such a constant as the unsigned type at the same rank;
+                // follow that when the unsigned type fits.
+                is_unsigned = is_unsigned || allow_unsigned_fallback || fits(sizes[rank], false);
                 break;
             }
             rank += 1;
@@ -815,34 +825,11 @@ impl Compiler {
                             }
                         }
 
-                        // Refuse passing a struct by value to a
-                        // Token::Sys callee. The c5-internal "push
-                        // the address" convention works for c5-to-c5
-                        // calls (the callee copies into a fresh local
-                        // on entry); platform ABIs for libc instead
-                        // expect the bytes packed into argument
-                        // registers (SysV/AAPCS64: 1-2 GPRs for
-                        // structs <= 16 bytes; Win64: a single GPR
-                        // for <= 8 bytes, hidden pointer otherwise).
-                        // Flag the mismatch loudly.
-                        // TODO: split a small struct argument into the
-                        // ABI's argument registers instead of rejecting.
-                        if self.symbols[id_idx].class == Token::Sys as i64
-                            && is_struct_ty(self.ty)
-                            && struct_ptr_depth(self.ty) == 0
-                        {
-                            return Err(self.compile_err_at(
-                                arg_line,
-                                format!(
-                                    "argument {} of `{}` is a struct passed by value, \
-                                 but the platform-ABI struct-arg convention isn't \
-                                 implemented for Token::Sys calls. Pass `&s` (a \
-                                 pointer to the struct) instead.",
-                                    nargs + 1,
-                                    fn_name_for_warn
-                                ),
-                            ));
-                        }
+                        // A struct passed by value to a Token::Sys callee is
+                        // packed into the platform-ABI argument registers by
+                        // the walker + emitter (the same host-ABI path c5-to-c5
+                        // calls use); the by-value struct argument is no longer
+                        // rejected here.
                         // Snapshot the arg's AST ExprId before the
                         // Si consumes both vstack and acc. The Call
                         // node built below uses these in source
@@ -1055,33 +1042,21 @@ impl Compiler {
                 // the fn-ptr level" for the `*` handler.
                 self.pending.fn_ptr_chain_depth = 0;
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare libc reference -- `fp = readlink;`. There
-                // is no compile-time GOT/IAT address to fold in,
-                // so the value points at a per-Sys trampoline (a
-                // tiny synthetic c5 function that re-dispatches
-                // through `Inst::CallExt`). The walker emits
-                // `Inst::ImmCode` keyed on the trampoline's live
-                // `Symbol::val`, which
-                // [`Self::emit_sys_trampolines`] sets to the
-                // trampoline body's `ent_pc`. The codegen lowers
-                // `Inst::ImmCode` to the right ADRP/ADD
-                // (aarch64) or RIP-relative LEA (x86_64)
-                // pointing at the trampoline.
-                let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
-                // Integer-literal placeholder; the walker reads
-                // the trampoline's live `Symbol::val` through
-                // `imm_code` post-`emit_sys_trampolines` and emits
-                // the matching `Inst::ImmCode`.
+                // Bare imported-function reference -- `fp = strcmp;`.
+                // There is no compile-time address to fold in, so the
+                // walker emits `Inst::ImmExtCode(binding_idx)`; the
+                // codegen materializes the import's shared PLT-stub
+                // address (RIP-relative `lea` on x86_64, `adrp + add`
+                // on aarch64), the same stub a call to the import
+                // reaches. The Sys symbol's `val` is the binding index.
                 self.emit_imm(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
-                // Dual-emit: the trampoline symbol is Token::Fun
-                // class; the walker reads `Symbol::val` live at
-                // walk time (post-`emit_sys_trampolines`) to get
-                // the trampoline's ent_pc. Push an Ident keyed on
-                // the trampoline symbol so wrapping shapes
+                // Dual-emit: push the Sys Ident so wrapping shapes
                 // (static-init, assign, call-arg) see the address
-                // producer on `ast_acc`.
-                self.ast_emit_ident(tr_idx as u32, self.ty);
+                // producer on `ast_acc`. The walker's
+                // `address_of_ident` / `load_ident_rvalue`
+                // `Token::Sys` arm emits the `imm_ext_code(val)`.
+                self.ast_emit_ident(id_idx as u32, self.ty);
                 // Same fn-pointer decay as the `Token::Fun` branch: a
                 // following unary `*` is a no-op.
                 self.pending.fn_ptr_chain_depth = 0;
@@ -1353,49 +1328,7 @@ impl Compiler {
                 // until the cast's outer `)` so even nested fp
                 // shapes consume cleanly.
                 if self.lex.tk == '(' {
-                    let mut depth: i64 = 1;
-                    self.next()?;
-                    let mut nested_ptrs: i64 = 0;
-                    while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' {
-                            depth += 1;
-                        } else if self.lex.tk == ')' {
-                            depth -= 1;
-                            if depth == 0 {
-                                self.next()?;
-                                break;
-                            }
-                        } else if self.lex.tk == Token::MulOp && depth == 1 {
-                            nested_ptrs += 1;
-                        }
-                        self.next()?;
-                    }
-                    // C99 6.7.6 abstract declarators after the
-                    // inner `)`: a `(args)` arg-list for the
-                    // function-returning-fn shape OR a `[N]` /
-                    // `[]` array suffix for the
-                    // pointer-to-array shape (`T (*)[N]`). Both
-                    // are no-ops at c5's type-tag granularity --
-                    // the resulting type is the pointer level
-                    // already accumulated. Multiple `[N]`
-                    // suffixes (`T (*)[N][M]`) are absorbed too;
-                    // they don't change the result type beyond
-                    // what `nested_ptrs` already encodes.
-                    if self.lex.tk == '(' {
-                        self.next()?;
-                        self.skip_balanced_parens_after_open()?;
-                    }
-                    while self.lex.tk == Token::Brak {
-                        self.next()?;
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        } else {
-                            let _ = self.parse_constant_int()?;
-                            if self.lex.tk == ']' {
-                                self.next()?;
-                            }
-                        }
-                    }
+                    let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
                     t += nested_ptrs * (Ty::Ptr as i64);
                     // Abstract fn-ptr declarator: the inner `*`
                     // count IS the indirection from the cast's
@@ -1777,20 +1710,20 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Xor, -1);
-            // C99 6.5.3.3: `~` applies integer promotions; the result
-            // has the promoted operand's type. `unsigned char` /
-            // `unsigned short` promote to signed `int`, so no mask.
-            // `unsigned int` (size 4 unsigned that doesn't promote
-            // down) stays unsigned int -- mask the high half back to
-            // 32 bits so the register doesn't carry the
-            // 0xFFFFFFFF.... high pattern from `XOR -1`.
-            let operand_ty = self.ty;
-            if is_unsigned_ty(operand_ty) && self.size_of_type(operand_ty) == 4 {
+            // C99 6.5.3.3p4: `~` applies the integer promotions and the
+            // result has the promoted operand type. `unsigned char` /
+            // `unsigned short` promote to signed `int`. A `long` /
+            // `long long` (signed or unsigned) keeps its width and
+            // signedness -- forcing `Ty::Int` here would both narrow it
+            // and drop the unsigned bit, so a following `>>` would pick
+            // an arithmetic shift on `~(unsigned long)x`. A 4-byte
+            // unsigned result needs the high half masked back to 32
+            // bits because `XOR -1` sets the full 64-bit register.
+            let promoted = integer_promote(self.ty);
+            if is_unsigned_ty(promoted) && self.size_of_type(promoted) == 4 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::And, 0xffff_ffff);
-                self.ty = operand_ty;
-            } else {
-                self.ty = Ty::Int as i64;
             }
+            self.ty = promoted;
         } else if self.lex.tk == Token::AddOp {
             // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
             // type is preserved (subject to integer promotion for
@@ -1914,9 +1847,6 @@ impl Compiler {
                     self.record_local_store(idx, line);
                 }
                 self.mark_emit_other();
-                if is_floating_scalar(self.ty) {
-                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
-                }
                 self.ast_psh();
                 // A pointer-to-array (`T (*p)[N]`) looks like a plain
                 // `T*` in the flat type, so `pointee_step` would scale by
@@ -2523,24 +2453,30 @@ impl Compiler {
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::XorOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Or);
+                // Set the result type before building the AST binop node
+                // so its `ty` is the C99 6.5.12 common type, not the
+                // rhs's pre-conversion tag. The walker reads this node
+                // `ty` as the cast source type, so an order-dependent tag
+                // breaks `(int)(unsigned | int)` sign extension. Mirrors
+                // the additive path.
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::Or);
             } else if self.lex.tk == Token::XorOp {
                 // C99 6.5.11: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::AndOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::Xor);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::Xor);
             } else if self.lex.tk == Token::AndOp {
                 // C99 6.5.10: same common-type rule as `|`.
                 let lhs_ty = t;
                 self.next()?;
                 self.ast_psh();
                 self.expr(Token::EqOp as i64)?;
-                self.ast_binop(crate::c5::ir::BinOp::And);
                 self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
+                self.ast_binop(crate::c5::ir::BinOp::And);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
                 // variant and the `invert` flag handed to
@@ -2942,9 +2878,6 @@ impl Compiler {
                     self.record_local_store(idx, line);
                 }
                 self.mark_emit_other();
-                if is_floating_scalar(self.ty) {
-                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
-                }
                 self.ast_psh();
                 self.emit_imm(self.pointee_step(self.ty));
                 self.ast_binop(if self.lex.tk == Token::Inc {

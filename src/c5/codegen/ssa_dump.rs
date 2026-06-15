@@ -85,6 +85,7 @@ fn fmt_inst(inst: &Inst) -> String {
         Imm(v) => format!("Imm({v})"),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
+        ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),
         BlockAddr(b) => format!("BlockAddr(block={b})"),
         LocalAddr(n) => format!("LocalAddr({n})"),
         TlsAddr(o) => format!("TlsAddr({o})"),
@@ -178,6 +179,7 @@ fn fmt_inst(inst: &Inst) -> String {
             args,
             fp_arg_mask,
             fp_return,
+            ..
         } => {
             // Most external calls are integer-returning; show `fp_return`
             // only when set so the common case keeps a stable form.
@@ -322,7 +324,9 @@ fn fmt_binop(op: BinOp) -> &'static str {
 fn fmt_fp_cast(k: FpCastKind) -> &'static str {
     match k {
         FpCastKind::FpToInt => "FpToInt",
+        FpCastKind::UFpToInt => "UFpToInt",
         FpCastKind::IntToFp => "IntToFp",
+        FpCastKind::UIntToFp => "UIntToFp",
         FpCastKind::F32ToF64 => "F32ToF64",
         FpCastKind::F64ToF32 => "F64ToF32",
     }

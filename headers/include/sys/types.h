@@ -39,6 +39,12 @@ typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
 typedef int dev_t;
+// BSD fixed-width unsigned aliases. Present on Linux and macOS; some
+// platform sources (macOS file-attribute code) use them directly.
+typedef unsigned char u_int8_t;
+typedef unsigned short u_int16_t;
+typedef unsigned int u_int32_t;
+typedef unsigned long long u_int64_t;
 #ifdef __BADC_WINDOWS__
 typedef long long ino_t;
 typedef long long ino64_t;
@@ -69,5 +75,16 @@ typedef long fsfilcnt_t;
 #endif
 typedef int socklen_t;
 typedef int key_t;
+
+/* glibc's <sys/types.h> makes `fd_set` and the `FD_*` macros visible
+** (under __USE_MISC, on by default), so POSIX code that reaches select()
+** through <sys/types.h> alone -- without <sys/select.h> and without a
+** configure-detected HAVE_SYS_SELECT_H -- still sees the type. The
+** select surface is POSIX; on Windows `fd_set` comes from ws2_32, so
+** the transitive include is gated off there. <sys/select.h> guards with
+** `#pragma once`, so a direct include elsewhere stays a no-op. */
+#ifndef __BADC_WINDOWS__
+#include <sys/select.h>
+#endif
 
 #endif

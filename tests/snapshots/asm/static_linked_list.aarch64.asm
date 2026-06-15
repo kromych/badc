@@ -14,23 +14,23 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	adrp	x0, <page>
-               	add	x0, x0, #0xe0
+               	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	str	w1, [x0]
                	adrp	x1, <page>
-               	add	x1, x1, #0xf0
+               	add	x1, x1, <lo12>
                	str	x1, [x0, #0x8]
                	mov	x0, #0x2                // =2
                	str	w0, [x1]
                	adrp	x0, <page>
-               	add	x0, x0, #0x100
+               	add	x0, x0, <lo12>
                	str	x0, [x1, #0x8]
                	mov	x1, #0x3                // =3
                	str	w1, [x0]
                	mov	x2, #0x0                // =0
                	str	x2, [x0, #0x8]
                	adrp	x0, <page>
-               	add	x0, x0, #0x110
+               	add	x0, x0, <lo12>
                	ldr	x1, [x0]
                	cmp	x1, #0x0
                	b.eq	<addr>

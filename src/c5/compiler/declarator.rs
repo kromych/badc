@@ -32,6 +32,57 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 
 impl Compiler {
+    /// Parse an abstract parenthesized declarator tail that follows a
+    /// base type in a type-name (C99 6.7.6): the `(*)(args)` of
+    /// `int (*)(int)`, the `(*)[N]` of `int (*)[N]`, and their nested
+    /// forms. The leading `(` must be the current token. c5's flat type
+    /// tag records only a base type plus a pointer level, so the entire
+    /// declarator collapses to the pointer levels named by the inner
+    /// `*`s; the arg-list `(args)` and array `[N]` suffixes are absorbed
+    /// without affecting the result type. Returns that pointer level
+    /// (0 when the parentheses enclose no `*`). Used by both the cast
+    /// operand parser and the `sizeof` type-name parser.
+    pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
+        debug_assert!(self.lex.tk == '(');
+        let mut depth: i64 = 1;
+        self.next()?;
+        let mut nested_ptrs: i64 = 0;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?;
+                    break;
+                }
+            } else if self.lex.tk == Token::MulOp && depth == 1 {
+                nested_ptrs += 1;
+            }
+            self.next()?;
+        }
+        // After the inner `)`: a `(args)` arg-list for the
+        // function-pointer / function-returning-fn shape, or one or more
+        // `[N]` / `[]` suffixes for the pointer-to-array shape
+        // (`T (*)[N][M]`). Both are no-ops at c5's type-tag granularity.
+        if self.lex.tk == '(' {
+            self.next()?;
+            self.skip_balanced_parens_after_open()?;
+        }
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            if self.lex.tk == ']' {
+                self.next()?;
+            } else {
+                let _ = self.parse_constant_int()?;
+                if self.lex.tk == ']' {
+                    self.next()?;
+                }
+            }
+        }
+        Ok(nested_ptrs)
+    }
+
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
     /// + identifier + optional `[N]` array suffix. Returns the symbol
     /// index, the (possibly decayed) base type, and the array
@@ -76,6 +127,12 @@ impl Compiler {
         // adds normally. Consumed here so it does not leak to the next
         // declarator.
         let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
+        // A function-TYPE typedef used with no pointer level declares the
+        // identifier with function type, i.e. a function declaration (C99
+        // 6.9.1), not a function-pointer object. Flag it for the file-scope
+        // declaration path; `F *p` (a pointer) takes the absorb path above.
+        self.pending.bare_function_type_declarator =
+            self.pending.base_is_function_type && leading_ptr_count == 0;
         self.pending.base_is_function_type = false;
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;

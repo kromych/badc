@@ -28,17 +28,59 @@ typedef void (*sighandler_t)(int);
 #define SIG_IGN  ((void (*)(int))1)
 #define SIG_ERR  ((void (*)(int))-1)
 
-// Signal numbers. Values match every supported host's <signal.h>
-// for the C99-required set (SIGABRT/SIGFPE/SIGILL/SIGINT/SIGSEGV/
-// SIGTERM). Hosts differ on numbers beyond the C99 set (e.g.
-// SIGPIPE is 13 on POSIX, undefined on Windows); add only the C99
-// + POSIX-common subset here.
+// C99-required signal numbers (7.14). These values match every
+// supported host, including Windows msvcrt.
 #define SIGINT  2
 #define SIGILL  4
 #define SIGABRT 6
 #define SIGFPE  8
 #define SIGSEGV 11
 #define SIGTERM 15
+
+#if defined(__APPLE__) || defined(__linux__)
+// POSIX signal numbers. Programs gate behavior on `#ifdef SIGPIPE`,
+// `#ifdef SIGHUP`, `#ifdef SIGCHLD` and the like, so the full set must
+// be present, not just the C99 subset. The low numbers below match both
+// Linux and macOS; the job-control and asynchronous-I/O signals diverge,
+// so those are defined per target.
+#define SIGHUP    1
+#define SIGQUIT   3
+#define SIGTRAP   5
+#define SIGKILL   9
+#define SIGPIPE   13
+#define SIGALRM   14
+#define SIGTTIN   21
+#define SIGTTOU   22
+#define SIGXCPU   24
+#define SIGXFSZ   25
+#define SIGVTALRM 26
+#define SIGPROF   27
+#define SIGWINCH  28
+#ifdef __linux__
+#define SIGBUS  7
+#define SIGUSR1 10
+#define SIGUSR2 12
+#define SIGCHLD 17
+#define SIGCONT 18
+#define SIGSTOP 19
+#define SIGTSTP 20
+#define SIGURG  23
+#define SIGIO   29
+#define SIGPOLL 29
+#define SIGSYS  31
+#else /* __APPLE__ */
+#define SIGBUS  10
+#define SIGUSR1 30
+#define SIGUSR2 31
+#define SIGCHLD 20
+#define SIGCONT 19
+#define SIGSTOP 17
+#define SIGTSTP 18
+#define SIGURG  16
+#define SIGIO   23
+#define SIGSYS  12
+#endif
+#endif /* POSIX */
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

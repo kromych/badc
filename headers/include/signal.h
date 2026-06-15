@@ -138,6 +138,27 @@ int sigaction(int sig, struct sigaction *act, struct sigaction *oact);
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
 
+// `sa_flags` bits. The numeric values are target-specific: macOS and
+// Linux assign different bit positions, and `sa_flags` is passed to the
+// host libc, so each target uses its own constants.
+#ifdef __APPLE__
+#define SA_ONSTACK   0x0001
+#define SA_RESTART   0x0002
+#define SA_RESETHAND 0x0004
+#define SA_NOCLDSTOP 0x0008
+#define SA_NODEFER   0x0010
+#define SA_NOCLDWAIT 0x0020
+#define SA_SIGINFO   0x0040
+#else
+#define SA_NOCLDSTOP 0x00000001
+#define SA_NOCLDWAIT 0x00000002
+#define SA_SIGINFO   0x00000004
+#define SA_ONSTACK   0x08000000
+#define SA_RESTART   0x10000000
+#define SA_NODEFER   0x40000000
+#define SA_RESETHAND 0x80000000
+#endif
+
 // Alternate signal stack (POSIX `sigaltstack`). The structure is
 // marshalled to the host libc, so the member order must match it
 // exactly: macOS orders `ss_size` before `ss_flags`, Linux the reverse.

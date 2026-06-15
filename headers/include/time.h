@@ -114,6 +114,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "_time")
 #pragma binding(libc::clock,         "_clock")
 #pragma binding(libc::clock_gettime, "_clock_gettime")
+#pragma binding(libc::clock_getres,  "_clock_getres")
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
 #pragma binding(libc::mktime,        "_mktime")
@@ -131,6 +132,7 @@ typedef long clock_t;
 #pragma binding(libc::time,          "time")
 #pragma binding(libc::clock,         "clock")
 #pragma binding(libc::clock_gettime, "clock_gettime")
+#pragma binding(libc::clock_getres,  "clock_getres")
 #pragma binding(libc::gettimeofday,  "gettimeofday")
 #pragma binding(libc::difftime,      "difftime")
 #pragma binding(libc::mktime,        "mktime")
@@ -169,6 +171,7 @@ typedef long clock_t;
 time_t time(time_t *out);
 clock_t clock();
 int clock_gettime(int clk_id, struct timespec *ts);
+int clock_getres(int clk_id, struct timespec *res);
 int gettimeofday(struct timeval *tv, char *tz);
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The

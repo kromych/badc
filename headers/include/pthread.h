@@ -31,6 +31,7 @@
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
+#pragma binding(libc::pthread_cond_timedwait_relative_np, "_pthread_cond_timedwait_relative_np")
 #pragma binding(libc::pthread_mutex_init,       "_pthread_mutex_init")
 #pragma binding(libc::pthread_mutex_lock,       "_pthread_mutex_lock")
 #pragma binding(libc::pthread_mutex_trylock,    "_pthread_mutex_trylock")
@@ -193,6 +194,11 @@ int pthread_equal(pthread_t t1, pthread_t t2);
 // Darwin stack introspection used for native stack-overflow guards.
 void *pthread_get_stackaddr_np(pthread_t thread);
 unsigned long pthread_get_stacksize_np(pthread_t thread);
+// Darwin relative-timeout condition wait (the monotonic-clock analogue
+// of pthread_cond_timedwait, which takes an absolute time).
+int pthread_cond_timedwait_relative_np(pthread_cond_t *cond,
+                                       pthread_mutex_t *mutex,
+                                       const struct timespec *reltime);
 #endif
 int pthread_mutex_init(char *mutex, char *attr);
 int pthread_mutex_lock(char *mutex);

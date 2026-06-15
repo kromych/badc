@@ -304,6 +304,14 @@ fn stdatomic_c11() {
 }
 
 #[test]
+fn compound_literal_tagged_address() {
+    // A block-scope compound literal whose member initializer tags an
+    // address with a bitwise / shift operator takes the runtime path; a
+    // bare `&global` stays a link-time constant (C99 6.5.2.5).
+    assert_eq!(run_fixture("compound_literal_tagged_address.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

@@ -1659,6 +1659,13 @@ impl Compiler {
         // Whether the previously scanned token was `&` (address-of):
         // a global read in `&global` is a constant address.
         let mut prev_was_amp = false;
+        // Per-value tracking: a bare `&global` (or `&g + const`) is a
+        // link-time constant the data path handles, but an address
+        // combined with a bitwise / shift operator (the address-tagging
+        // idiom `(uintptr_t)&g | tag`) is not, so it needs the runtime
+        // path. Both flags reset at each value boundary.
+        let mut value_has_addr = false;
+        let mut value_has_bitop = false;
         while depth > 0 && self.lex.tk != 0 {
             // Designator skip works at any depth: nested
             // `.inner = { .x = ... }` carries its own
@@ -1695,6 +1702,8 @@ impl Compiler {
                 }
                 at_entry_start = false;
                 prev_was_amp = false;
+                value_has_addr = false;
+                value_has_bitop = false;
                 continue;
             }
             if self.lex.tk == '{' {
@@ -1711,6 +1720,8 @@ impl Compiler {
                 // depth.
                 at_entry_start = true;
                 prev_was_amp = false;
+                value_has_addr = false;
+                value_has_bitop = false;
                 self.next()?;
                 continue;
             } else if self.lex.tk == Token::Id {
@@ -1718,7 +1729,12 @@ impl Compiler {
                 if class == Token::Loc as i64 {
                     needs_runtime = true;
                 }
-                if !prev_was_amp && self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
+                if prev_was_amp {
+                    value_has_addr = true;
+                    if value_has_bitop {
+                        needs_runtime = true;
+                    }
+                } else if self.glo_value_read_is_runtime(self.lex.curr_id_idx) {
                     needs_runtime = true;
                 }
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
@@ -1731,6 +1747,16 @@ impl Compiler {
                 needs_runtime = true;
                 at_entry_start = false;
             } else {
+                if self.lex.tk == Token::OrOp
+                    || self.lex.tk == Token::XorOp
+                    || self.lex.tk == Token::ShlOp
+                    || self.lex.tk == Token::ShrOp
+                {
+                    value_has_bitop = true;
+                    if value_has_addr {
+                        needs_runtime = true;
+                    }
+                }
                 at_entry_start = false;
             }
             prev_was_amp = self.lex.tk == Token::AndOp;

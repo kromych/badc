@@ -442,6 +442,21 @@ impl Preprocessor {
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
+        // C11 6.10.8.3 conditional-feature macros. An implementation that
+        // reports `__STDC_VERSION__ == 201112L` defines each of these for an
+        // optional feature it does not provide; library code gates on them
+        // to pick a portable fallback. badc has no variable length arrays
+        // and no `_Complex` / `_Imaginary`, so it advertises both.
+        // `__STDC_NO_THREADS__` is deliberately left undefined: although
+        // badc ships no `<threads.h>`, real code gates the `_Thread_local`
+        // storage classifier on `!defined(__STDC_NO_THREADS__)` (the two are
+        // independent in C11, but the conflation is widespread), and badc
+        // does support `_Thread_local`; defining the macro would suppress
+        // thread-local storage. GCC and clang made the same choice while
+        // they lacked `<threads.h>`. `<stdatomic.h>` is provided, so
+        // `__STDC_NO_ATOMICS__` also stays undefined.
+        macros.insert("__STDC_NO_VLA__".to_string(), "1".to_string());
+        macros.insert("__STDC_NO_COMPLEX__".to_string(), "1".to_string());
         macros.insert(
             "__DATE__".to_string(),
             format!("\"{}\"", env!("BADC_BUILD_DATE")),

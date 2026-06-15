@@ -497,6 +497,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("errno_socket_constants.c", 0),
     ("gettimeofday_usec_range.c", 0),
     ("lp64_predefine.c", 0),
+    ("pthread_static_init.c", 0),
     ("fts_and_fd_set_headers.c", 0),
     ("addr_of_intrinsic_math_float.c", 0),
     ("fn_ptr_float_arg_narrow.c", 0),

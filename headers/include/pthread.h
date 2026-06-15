@@ -121,27 +121,36 @@
 #define PTHREAD_CREATE_JOINABLE 0
 #endif
 
-// Static-storage initialisers for the opaque-buffer mutex /
-// condition variable types. Real libc uses a complex per-type
-// expansion; c5 only stores zero bytes (the buffers are uninit-
-// detectable at runtime), so a single zero-fill is enough.
-#define PTHREAD_MUTEX_INITIALIZER {0}
-#define PTHREAD_COND_INITIALIZER  {0}
-#define PTHREAD_ONCE_INIT          0
-
-// Opaque-buffer typedefs for the POSIX thread types. Each is a
-// struct wrapping a fixed-size byte buffer big enough for the
-// underlying libc layout on every supported target. c5 code
-// passes pointers to these into the bindings; the libc side
-// reads the actual platform layout.
-struct __c5_pthread_mutex { char __opaque[64]; };
+// Opaque-buffer typedefs for the POSIX thread types. Each wraps a
+// leading signature word plus a fixed-size buffer big enough for the
+// underlying libc layout on every supported target. c5 code passes
+// pointers to these into the bindings; the libc side reads the actual
+// platform layout. The signature word is exposed (rather than folded
+// into the buffer) so the static initialisers below can set it.
+struct __c5_pthread_mutex { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_mutex pthread_mutex_t;
 
 struct __c5_pthread_mutexattr { char __opaque[16]; };
 typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
 
-struct __c5_pthread_cond { char __opaque[64]; };
+struct __c5_pthread_cond { long __sig; char __opaque[56]; };
 typedef struct __c5_pthread_cond pthread_cond_t;
+
+// Static-storage initialisers for the mutex / condition variable
+// types. Darwin's libpthread checks a signature word at offset 0 and
+// rejects a zero-signature object from pthread_mutex_lock /
+// pthread_cond_wait (EINVAL), so the macro must seed the magic the
+// system <pthread/pthread_impl.h> uses for a statically initialised
+// object. glibc and Windows take an all-zero object, so the signature
+// word stays zero there.
+#if defined(__APPLE__)
+#define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
+#define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
+#else
+#define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
+#define PTHREAD_COND_INITIALIZER  { 0, {0} }
+#endif
+#define PTHREAD_ONCE_INIT          0
 
 struct __c5_pthread_condattr { char __opaque[16]; };
 typedef struct __c5_pthread_condattr pthread_condattr_t;

@@ -357,9 +357,10 @@ static inline void __clear_cache(void *begin, void *end) {
 // declares each `extern` here so every TU resolves through the
 // same slot rather than contributing a tentative def of its
 // own.
-// TODO: replace this slot with a real data import once
-// `#pragma binding`'s data form lands so msvcrt's own
-// `_environ` is bound directly.
+// TODO: bind msvcrt's `_environ` directly via `#pragma binding`'s
+// data form. The form is wired for ELF (COPY relocation) and Mach-O
+// (GOT import); the PE writer has no data-import path yet, so the
+// local slot stays until that lands.
 extern char **environ;
 extern char **_environ;
 #endif

@@ -19,6 +19,52 @@ typedef int wint_t;
 // it wrote, so an oversized zeroed buffer is safe across libcs.
 typedef struct { unsigned char __opaque[128]; } mbstate_t;
 
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libc::wcslen,   "_wcslen")
+#pragma binding(libc::wcscmp,   "_wcscmp")
+#pragma binding(libc::wcsncmp,  "_wcsncmp")
+#pragma binding(libc::wcschr,   "_wcschr")
+#pragma binding(libc::wcsrchr,  "_wcsrchr")
+#pragma binding(libc::wcscpy,   "_wcscpy")
+#pragma binding(libc::wcsncpy,  "_wcsncpy")
+#pragma binding(libc::wcscat,   "_wcscat")
+#pragma binding(libc::wcstol,   "_wcstol")
+#pragma binding(libc::wcstoul,  "_wcstoul")
+#pragma binding(libc::wcstod,   "_wcstod")
+#pragma binding(libc::wcstok,   "_wcstok")
+#pragma binding(libc::wmemchr,  "_wmemchr")
+#pragma binding(libc::wmemcmp,  "_wmemcmp")
+#pragma binding(libc::wmemcpy,  "_wmemcpy")
+#pragma binding(libc::wmemmove, "_wmemmove")
+#pragma binding(libc::wmemset,  "_wmemset")
+#pragma binding(libc::mbrtowc,  "_mbrtowc")
+#pragma binding(libc::wcrtomb,  "_wcrtomb")
+#endif
+
+#ifdef __linux__
+#pragma dylib(libc, "libc.so.6")
+#pragma binding(libc::wcslen,   "wcslen")
+#pragma binding(libc::wcscmp,   "wcscmp")
+#pragma binding(libc::wcsncmp,  "wcsncmp")
+#pragma binding(libc::wcschr,   "wcschr")
+#pragma binding(libc::wcsrchr,  "wcsrchr")
+#pragma binding(libc::wcscpy,   "wcscpy")
+#pragma binding(libc::wcsncpy,  "wcsncpy")
+#pragma binding(libc::wcscat,   "wcscat")
+#pragma binding(libc::wcstol,   "wcstol")
+#pragma binding(libc::wcstoul,  "wcstoul")
+#pragma binding(libc::wcstod,   "wcstod")
+#pragma binding(libc::wcstok,   "wcstok")
+#pragma binding(libc::wmemchr,  "wmemchr")
+#pragma binding(libc::wmemcmp,  "wmemcmp")
+#pragma binding(libc::wmemcpy,  "wmemcpy")
+#pragma binding(libc::wmemmove, "wmemmove")
+#pragma binding(libc::wmemset,  "wmemset")
+#pragma binding(libc::mbrtowc,  "mbrtowc")
+#pragma binding(libc::wcrtomb,  "wcrtomb")
+#endif
+
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::wcslen, "wcslen")
@@ -44,6 +90,13 @@ wchar_t *wcsrchr(const wchar_t *s, wchar_t c);
 wchar_t *wcscpy(wchar_t *dest, const wchar_t *src);
 wchar_t *wcsncpy(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wcscat(wchar_t *dest, const wchar_t *src);
+
+// Wide-character array handling (C99 7.24.4.4).
+wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n);
+int wmemcmp(const wchar_t *s1, const wchar_t *s2, size_t n);
+wchar_t *wmemcpy(wchar_t *s1, const wchar_t *s2, size_t n);
+wchar_t *wmemmove(wchar_t *s1, const wchar_t *s2, size_t n);
+wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
 
 // Wide-string numeric conversion (C99 7.24.4.1).
 long wcstol(const wchar_t *nptr, wchar_t **endptr, int base);

@@ -55,6 +55,7 @@
 #pragma binding(libc::geteuid,   "_geteuid")
 #pragma binding(libc::getpid,    "_getpid")
 #pragma binding(libc::sleep,     "_sleep")
+#pragma binding(libc::pause,     "_pause")
 #pragma binding(libc::usleep,    "_usleep")
 #pragma binding(libc::isatty,    "_isatty")
 #pragma binding(libc::readlink,  "_readlink")
@@ -82,6 +83,7 @@
 #pragma binding(libc::symlink,   "_symlink")
 #pragma binding(libc::pathconf,  "_pathconf")
 #pragma binding(libc::sysconf,   "_sysconf")
+#pragma binding(libc::getpagesize, "_getpagesize")
 #pragma binding(libc::getentropy, "_getentropy")
 #pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
@@ -136,6 +138,7 @@ extern char **environ;
 #pragma binding(libc::geteuid,   "geteuid")
 #pragma binding(libc::getpid,    "getpid")
 #pragma binding(libc::sleep,     "sleep")
+#pragma binding(libc::pause,     "pause")
 #pragma binding(libc::usleep,    "usleep")
 #pragma binding(libc::isatty,    "isatty")
 #pragma binding(libc::readlink,  "readlink")
@@ -163,6 +166,7 @@ extern char **environ;
 #pragma binding(libc::symlink,   "symlink")
 #pragma binding(libc::pathconf,  "pathconf")
 #pragma binding(libc::sysconf,   "sysconf")
+#pragma binding(libc::getpagesize, "getpagesize")
 #pragma binding(libc::getentropy, "getentropy")
 #pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
@@ -239,6 +243,8 @@ int geteuid();
 int getpid();
 int sleep(int seconds);
 int usleep(int microseconds);
+// Suspend until a signal is delivered; always returns -1 with EINTR.
+int pause(void);
 int isatty(int fd);
 int readlink(char *path, char *buf, int n);
 int mkdir(char *path, int mode);
@@ -271,6 +277,8 @@ int symlink(char *from, char *to);
 // POSIX: pathconf / sysconf return long; some limits exceed 32 bits.
 long pathconf(char *path, int name);
 long sysconf(int name);
+// Legacy BSD/POSIX page-size query; returns the system page size.
+int getpagesize(void);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);

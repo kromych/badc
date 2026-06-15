@@ -30,6 +30,7 @@
 #pragma binding(libc::pthread_self,             "_pthread_self")
 #pragma binding(libc::pthread_equal,            "_pthread_equal")
 #pragma binding(libc::pthread_getname_np,       "_pthread_getname_np")
+#pragma binding(libc::pthread_threadid_np,      "_pthread_threadid_np")
 #pragma binding(libc::pthread_get_stackaddr_np, "_pthread_get_stackaddr_np")
 #pragma binding(libc::pthread_get_stacksize_np, "_pthread_get_stacksize_np")
 #pragma binding(libc::pthread_cond_timedwait_relative_np, "_pthread_cond_timedwait_relative_np")
@@ -193,6 +194,8 @@ pthread_t pthread_self();
 int pthread_equal(pthread_t t1, pthread_t t2);
 #ifdef __APPLE__
 int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
+// Darwin per-thread 64-bit id (`uint64_t *` out-parameter).
+int pthread_threadid_np(pthread_t thread, unsigned long long *thread_id);
 // Darwin stack introspection used for native stack-overflow guards.
 void *pthread_get_stackaddr_np(pthread_t thread);
 unsigned long pthread_get_stacksize_np(pthread_t thread);

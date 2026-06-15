@@ -1209,6 +1209,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_float_arg.c", 0),
     ("variadic_fn_ptr_init.c", 0),
     ("flexible_array_member.c", 0),
+    ("wmem_functions.c", 0),
     ("flex_array_member_static_init.c", 0),
     ("sizeof_array_type_and_binding.c", 0),
     ("sizeof_abstract_fn_ptr.c", 0),

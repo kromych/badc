@@ -1224,6 +1224,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_tagged_address.c", 0),
     ("function_typed_parameter.c", 0),
     ("static_init_braced_scalar.c", 0),
+    ("paren_string_char_array_init.c", 0),
     ("static_init_paren_relocation.c", 0),
     ("do_while_zero_returns.c", 0),
     ("self_referential_macro.c", 0),

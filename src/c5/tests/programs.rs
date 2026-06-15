@@ -335,6 +335,14 @@ fn static_init_braced_scalar() {
 }
 
 #[test]
+fn paren_string_char_array_init() {
+    // C99 6.7.9p14 + 6.5.1: a parenthesized string literal initializes a
+    // char array by copying its bytes (the `_PyASCIIObject_INIT` macro
+    // shape `._data = (LITERAL)`), not by storing the literal's pointer.
+    assert_eq!(run_fixture("paren_string_char_array_init.c"), 0);
+}
+
+#[test]
 fn static_init_paren_relocation() {
     // A relocation-bearing initializer leaf (function / `&global`) may be
     // wrapped in redundant parentheses and casts (the method-table idiom).

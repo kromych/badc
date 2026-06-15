@@ -209,6 +209,20 @@ impl Compiler {
         Ok(())
     }
 
+    /// Consume `depth` closing parentheses after a parenthesized string
+    /// literal initializer (`char x[] = ("abc")`).
+    fn expect_close_parens(&mut self, depth: usize) -> Result<(), C5Error> {
+        for _ in 0..depth {
+            if self.lex.tk != ')' {
+                return Err(
+                    self.compile_err("`)` expected to close a parenthesized string initializer")
+                );
+            }
+            self.next()?;
+        }
+        Ok(())
+    }
+
     pub(super) fn collect_array_initializer(
         &mut self,
         elem_ty: i64,
@@ -258,6 +272,27 @@ impl Compiler {
                 self.data.truncate(data_snap);
             }
         }
+        // A string-literal array initializer may be parenthesized
+        // (`char x[] = ("abc")`, the form a macro produces). Skip the
+        // leading `(` so the string paths below see the literal; the
+        // matching `)`s are consumed before each return.
+        let mut paren_depth = 0usize;
+        if inner_dims.is_empty() && self.lex.tk == '(' {
+            let snap = self.lex.snapshot();
+            let data_snap = self.data.len();
+            let mut depth = 0usize;
+            while self.lex.tk == '(' {
+                depth += 1;
+                self.next()?;
+            }
+            let is_char_array = (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64;
+            if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
+                paren_depth = depth;
+            } else {
+                self.lex.restore(snap);
+                self.data.truncate(data_snap);
+            }
+        }
         if self.lex.tk == '"' && self.lex.str_is_wide {
             // C99 6.4.5 / 6.7.8p14: a wide string literal initializes a
             // `wchar_t`-shaped array. The lexer stored one code point
@@ -295,6 +330,7 @@ impl Compiler {
             if brace_wrapped {
                 self.expect_close_brace_after_wrapped_string()?;
             }
+            self.expect_close_parens(paren_depth)?;
             return Ok(elems);
         }
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
@@ -321,6 +357,7 @@ impl Compiler {
             if brace_wrapped {
                 self.expect_close_brace_after_wrapped_string()?;
             }
+            self.expect_close_parens(paren_depth)?;
             return Ok(elems);
         }
         if self.lex.tk != '{' {
@@ -1687,6 +1724,33 @@ impl Compiler {
                     self.data.truncate(data_snap);
                 }
             }
+            // A string literal initializing a char array may be enclosed
+            // in parentheses (C99 6.5.1 -- a parenthesized expression has
+            // the same value; `._data = ("str")` is the form a macro
+            // produces). Skip the leading `(` so the string-copy path
+            // below sees the literal; the matching `)`s are consumed after
+            // the copy. Without this the parenthesized leaf falls into the
+            // single-value path and stores the string's pointer.
+            let mut char_array_paren_depth = 0usize;
+            if field.array_size > 0
+                && field.inner_array_size == 0
+                && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+                && self.lex.tk == '('
+            {
+                let snap = self.lex.snapshot();
+                let data_snap = self.data.len();
+                let mut depth = 0usize;
+                while self.lex.tk == '(' {
+                    depth += 1;
+                    self.next()?;
+                }
+                if self.lex.tk == '"' {
+                    char_array_paren_depth = depth;
+                } else {
+                    self.lex.restore(snap);
+                    self.data.truncate(data_snap);
+                }
+            }
             if field.array_size > 0
                 && self.lex.tk == '"'
                 && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
@@ -1729,6 +1793,14 @@ impl Compiler {
                 }
                 if char_array_brace_string {
                     self.expect_close_brace_after_wrapped_string()?;
+                }
+                for _ in 0..char_array_paren_depth {
+                    if self.lex.tk != ')' {
+                        return Err(self.compile_err(
+                            "`)` expected to close a parenthesized string initializer",
+                        ));
+                    }
+                    self.next()?;
                 }
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;

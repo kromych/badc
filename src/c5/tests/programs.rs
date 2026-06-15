@@ -273,6 +273,14 @@ fn sizeof_array_type_and_binding() {
 }
 
 #[test]
+fn sizeof_abstract_fn_ptr() {
+    // `sizeof` of an abstract function-pointer type-name `int (*)(int)`
+    // is the pointer width, in both the runtime and constant-expression
+    // forms (C99 6.5.3.4 / 6.7.6).
+    assert_eq!(run_fixture("sizeof_abstract_fn_ptr.c"), 0);
+}
+
+#[test]
 fn designator_override_and_braced_string() {
     // A duplicate designator re-initializes the whole subobject; a
     // character array accepts a brace-wrapped string literal.

@@ -57,13 +57,6 @@ diagnostic names the argument or call) because the address-as-value
 internal convention reaches those symbols before the host-ABI packing. Pass
 `&s` or a pointer-returning variant.
 
-### Brace-wrapped string initializer for a `char` array, severity 4
-
-`char a[N] = {"abc"}` and the compound-literal form `(char[N]){"abc"}` are
-rejected. The unbraced `char a[N] = "abc"` works; the brace-wrapped variant
-shares one parse limitation. Other compound-literal shapes (scalar, struct,
-array, including non-constant element values) work at file and block scope.
-
 ### `volatile` and `const` accepted but not enforced, severity 4
 
 `volatile` is parsed at every position and discarded. c5 does not guarantee
@@ -75,13 +68,6 @@ constraint violation) or the discarding of `const` in a conversion, so a
 program that modifies a `const` object compiles without the required
 diagnostic. `restrict` is accepted as a sound no-op -- it is only an
 aliasing hint with no observable semantics.
-
-### `sizeof` an abstract function-pointer declarator, severity 5
-
-`sizeof(int(*)(int))` is rejected (the `sizeof` operand parser does not
-accept the abstract function-pointer declarator). The same declarator in
-cast position (`(int(*)(int))p`) and in typedef / parameter / struct-field
-declarators is accepted.
 
 ### Function-pointer return through a function-pointer variable, severity 5
 

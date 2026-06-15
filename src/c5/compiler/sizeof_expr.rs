@@ -96,6 +96,19 @@ impl Compiler {
                     self.next()?;
                 }
             }
+            // Abstract function-pointer / pointer-to-array declarator:
+            // `sizeof(int (*)(int))`, `sizeof(void (*)(void))`,
+            // `sizeof(int (*)[N])` (C99 6.7.6 / 6.5.3.4). c5's flat
+            // type tag records base + pointer level, so the declarator
+            // collapses to the pointer levels its inner `*`s name; the
+            // result is then the size of a pointer.
+            if self.lex.tk == '(' {
+                let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
+                if nested_ptrs > 0 {
+                    self.ty += nested_ptrs * (Ty::Ptr as i64);
+                    decayed_to_ptr = true;
+                }
+            }
             // Abstract array declarator: `sizeof(T [N])` /
             // `sizeof(T [N][M])` (C99 6.7.6 / 6.5.3.4). Each
             // dimension multiplies the element count; the result is

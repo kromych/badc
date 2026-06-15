@@ -1328,49 +1328,7 @@ impl Compiler {
                 // until the cast's outer `)` so even nested fp
                 // shapes consume cleanly.
                 if self.lex.tk == '(' {
-                    let mut depth: i64 = 1;
-                    self.next()?;
-                    let mut nested_ptrs: i64 = 0;
-                    while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' {
-                            depth += 1;
-                        } else if self.lex.tk == ')' {
-                            depth -= 1;
-                            if depth == 0 {
-                                self.next()?;
-                                break;
-                            }
-                        } else if self.lex.tk == Token::MulOp && depth == 1 {
-                            nested_ptrs += 1;
-                        }
-                        self.next()?;
-                    }
-                    // C99 6.7.6 abstract declarators after the
-                    // inner `)`: a `(args)` arg-list for the
-                    // function-returning-fn shape OR a `[N]` /
-                    // `[]` array suffix for the
-                    // pointer-to-array shape (`T (*)[N]`). Both
-                    // are no-ops at c5's type-tag granularity --
-                    // the resulting type is the pointer level
-                    // already accumulated. Multiple `[N]`
-                    // suffixes (`T (*)[N][M]`) are absorbed too;
-                    // they don't change the result type beyond
-                    // what `nested_ptrs` already encodes.
-                    if self.lex.tk == '(' {
-                        self.next()?;
-                        self.skip_balanced_parens_after_open()?;
-                    }
-                    while self.lex.tk == Token::Brak {
-                        self.next()?;
-                        if self.lex.tk == ']' {
-                            self.next()?;
-                        } else {
-                            let _ = self.parse_constant_int()?;
-                            if self.lex.tk == ']' {
-                                self.next()?;
-                            }
-                        }
-                    }
+                    let nested_ptrs = self.parse_abstract_ptr_declarator_levels()?;
                     t += nested_ptrs * (Ty::Ptr as i64);
                     // Abstract fn-ptr declarator: the inner `*`
                     // count IS the indirection from the cast's

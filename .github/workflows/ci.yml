@@ -966,9 +966,9 @@ jobs:
           - ubuntu-24.04-arm
           - macos-latest
     runs-on: ${{ matrix.os }}
-    # TODO: 30 is temporary headroom to measure the real CI duration;
-    # tighten once the wall-clock per runner is known.
-    timeout-minutes: 30
+    # The build + full suite runs ~4-5 min warm, ~8-10 min on a cold
+    # rust-cache; 15 leaves headroom without masking a hang.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

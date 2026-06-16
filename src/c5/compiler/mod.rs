@@ -194,9 +194,20 @@ pub struct CompileOptions {
     /// matching the default visibility of a system toolchain's shared
     /// library.
     pub export_all_functions: bool,
+    /// `--gnu` -- when true the preprocessor defines the GCC identity
+    /// macros (`__GNUC__` and the rest, via
+    /// [`Preprocessor::enable_gnu`]). Off by default: badc implements
+    /// most but not all of the GNU C surface, so it claims `__GNUC__`
+    /// only when the caller opts in.
+    pub gnu: bool,
 }
 
 impl CompileOptions {
+    /// Enable the `--gnu` GCC identity predefines.
+    pub fn with_gnu(mut self, gnu: bool) -> Self {
+        self.gnu = gnu;
+        self
+    }
     /// Replace the `-D` predefine list.
     pub fn with_defines(mut self, defines: Vec<(String, String)>) -> Self {
         self.defines = defines;
@@ -1070,6 +1081,9 @@ impl Compiler {
         opts: CompileOptions,
     ) -> Result<String, C5Error> {
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        if opts.gnu {
+            pp.enable_gnu();
+        }
         pp.set_source_label(&opts.source_label);
         pp.set_show_includes(opts.show_includes);
         for path in &opts.include_paths {
@@ -1117,6 +1131,9 @@ impl Compiler {
         // error out of the codegen's import resolver, not a
         // mysterious link-time mismatch.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        if opts.gnu {
+            pp.enable_gnu();
+        }
         pp.set_source_label(&opts.source_label);
         pp.set_show_includes(opts.show_includes);
         for path in &opts.include_paths {
@@ -1424,37 +1441,48 @@ impl Compiler {
     pub fn compile(mut self) -> Result<Program, C5Error> {
         let retry_state = self.retry_state.take();
         let target = self.target;
-        match self.compile_one_pass() {
-            Ok(p) => Ok(p),
-            Err(e) => {
-                let Some((source, opts)) = retry_state else {
-                    return Err(e);
-                };
-                let Some(name) = Self::parse_unknown_function_name_from(&e) else {
-                    return Err(e);
-                };
-                let header = match super::headers::header_declaring(&name) {
-                    Some(h) => h,
-                    None => return Err(e),
-                };
-                if opts.force_includes.iter().any(|h| h == header) {
-                    return Err(e);
+        let mut result = self.compile_one_pass();
+        let Some((source, mut opts)) = retry_state else {
+            return result;
+        };
+        // Auto-include retry. Each pass that fails on an undeclared
+        // function names the header declaring it; force-include that
+        // header and run again. Looping (rather than retrying once)
+        // resolves a chain -- a `__builtin_*` thunk header pulling in
+        // the library function's header -- and several independent
+        // missing headers. The force-include set only grows, and a
+        // header already in it ends the loop, so progress is monotone.
+        let mut infos: Vec<String> = Vec::new();
+        loop {
+            let e = match result {
+                Ok(mut prog) => {
+                    // Surface each recovery through the same diagnostic
+                    // pipeline the CLI colourises (`info:` -> bold
+                    // green), oldest first above the retry pass's own
+                    // warnings.
+                    for info in infos.into_iter().rev() {
+                        prog.warnings.insert(0, info);
+                    }
+                    return Ok(prog);
                 }
-                let mut opts2 = opts;
-                opts2.force_includes.push(header.to_string());
-                let mut prog = Compiler::with_options_inner(source, target, opts2, false)
-                    .compile_one_pass()?;
-                // Surface the recovery through the same diagnostic
-                // pipeline the CLI colourises (`info:` -> bold green).
-                // Insert at the head so it lands above any
-                // preprocessor / parser warnings that fired during
-                // the successful retry pass.
-                prog.warnings.insert(
-                    0,
-                    format!("info: auto-including <{header}> for undeclared `{name}`"),
-                );
-                Ok(prog)
+                Err(e) => e,
+            };
+            let Some(name) = Self::parse_unknown_function_name_from(&e) else {
+                return Err(e);
+            };
+            let header = match super::headers::header_declaring(&name) {
+                Some(h) => h,
+                None => return Err(e),
+            };
+            if opts.force_includes.iter().any(|h| h == header) {
+                return Err(e);
             }
+            opts.force_includes.push(header.to_string());
+            infos.push(format!(
+                "info: auto-including <{header}> for undeclared `{name}`"
+            ));
+            result = Compiler::with_options_inner(source.clone(), target, opts.clone(), false)
+                .compile_one_pass();
         }
     }
 

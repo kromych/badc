@@ -364,7 +364,7 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
         // GCC bit-count / byte-swap builtins are available with no header
         // (they are compiler builtins, not library functions), matching
         // gcc/clang. The call-site lowering in the walker expands each to a
@@ -417,19 +417,6 @@ impl Preprocessor {
         // layout. Both are lexer tokens parsed by
         // `skip_attribute_specifiers` rather than preprocessed away, so
         // `packed` reaches the parser and the rest is consumed in place.
-        // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
-        // evaluates to its first operand. The dialect does not consume the
-        // hint, so it expands to the operand. Defined here (not via a
-        // header) to match gcc/clang, where it needs no include.
-        fn_macros.insert(
-            "__builtin_expect".to_string(),
-            FnMacro {
-                params: alloc::vec!["x".to_string(), "c".to_string()],
-                body: "(x)".to_string(),
-                is_variadic: false,
-                va_name: None,
-            },
-        );
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -448,6 +435,21 @@ impl Preprocessor {
         macros.insert("__STDC__".to_string(), "1".to_string());
         macros.insert("__STDC_HOSTED__".to_string(), "1".to_string());
         macros.insert("__STDC_VERSION__".to_string(), "201112L".to_string());
+        // `__GNUC__` and the rest of the GCC identity are opt-in
+        // (`--gnu`, [`Self::enable_gnu`]). badc implements the GNU C
+        // extensions real code gates on `__GNUC__`, but not all of them
+        // (`__int128` is absent), so it does not claim the macro by
+        // default; code that gates a 128-bit path on `__GNUC__` plus a
+        // 64-bit target would otherwise fail to compile.
+        // Byte-order predefines (GCC/clang form). Every supported target
+        // is little-endian.
+        macros.insert("__ORDER_LITTLE_ENDIAN__".to_string(), "1234".to_string());
+        macros.insert("__ORDER_BIG_ENDIAN__".to_string(), "4321".to_string());
+        macros.insert("__ORDER_PDP_ENDIAN__".to_string(), "3412".to_string());
+        macros.insert(
+            "__BYTE_ORDER__".to_string(),
+            "__ORDER_LITTLE_ENDIAN__".to_string(),
+        );
         // C11 6.10.8.3 conditional-feature macros. An implementation that
         // reports `__STDC_VERSION__ == 201112L` defines each of these for an
         // optional feature it does not provide; library code gates on them
@@ -546,6 +548,28 @@ impl Preprocessor {
             warn_disabled: BTreeSet::new(),
             intrinsics,
         }
+    }
+
+    /// Define the GCC identity macros (`--gnu`). badc claims `__GNUC__`
+    /// only on request because it implements most, but not all, of the
+    /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
+    /// reports ISO C99 inline semantics (not the GNU89 dialect);
+    /// `__VERSION__` is the compiler-identification string embedded by
+    /// code such as `Py_GetCompiler`; `__extension__` prefixes an
+    /// expression or declaration to suppress a GNU-extension diagnostic
+    /// and has no semantic effect, so it expands to nothing.
+    pub fn enable_gnu(&mut self) {
+        self.macros.insert("__GNUC__".to_string(), "4".to_string());
+        self.macros
+            .insert("__GNUC_MINOR__".to_string(), "2".to_string());
+        self.macros
+            .insert("__GNUC_PATCHLEVEL__".to_string(), "1".to_string());
+        self.macros
+            .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
+        self.macros
+            .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
+        self.macros
+            .insert("__extension__".to_string(), String::new());
     }
 
     /// Enable / disable gcc-`-H`-style include tracing. When on,
@@ -4311,6 +4335,46 @@ mod tests {
         let out = process("char *t = __BADC_TARGET__;\nchar *v = __BADC_VERSION__;\n");
         assert!(out.contains("\"macos-aarch64\""));
         assert!(out.contains("\"0.1.0\""));
+    }
+
+    #[test]
+    fn gnu_identity_macros_are_opt_in() {
+        // `__GNUC__` is undefined by default: the conditional keeps its
+        // false branch, and a bare `__extension__` is not removed.
+        let out = process(
+            "#ifdef __GNUC__\nint gnuc = 1;\n#else\nint gnuc = 0;\n#endif\n\
+             __extension__ int x = 1;\n",
+        );
+        assert!(
+            out.contains("int gnuc = 0;"),
+            "default defined __GNUC__: {out}"
+        );
+        assert!(
+            out.contains("__extension__ int x"),
+            "default removed __extension__: {out}"
+        );
+
+        // `enable_gnu` (the `--gnu` flag) defines them.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.enable_gnu();
+        let out = pp
+            .process(
+                "#ifdef __GNUC__\nint gnuc = __GNUC__;\n#endif\n\
+                 __extension__ int x = 1;\n",
+            )
+            .expect("preprocessor failed");
+        assert!(
+            out.contains("int gnuc = 4;"),
+            "--gnu missing __GNUC__: {out}"
+        );
+        assert!(
+            out.contains(" int x = 1;"),
+            "--gnu kept __extension__: {out}"
+        );
+        assert!(
+            !out.contains("__extension__"),
+            "--gnu left __extension__: {out}"
+        );
     }
 
     #[test]

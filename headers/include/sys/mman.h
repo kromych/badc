@@ -36,6 +36,10 @@
 #endif
 
 #ifdef __linux__
+// `mremap` flags (Linux-only call).
+#define MREMAP_MAYMOVE   1
+#define MREMAP_FIXED     2
+#define MREMAP_DONTUNMAP 4
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::mmap,     "mmap")
 #pragma binding(libc::munmap,   "munmap")

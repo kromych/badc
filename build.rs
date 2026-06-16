@@ -112,6 +112,9 @@ fn emit_binding_to_header_index() {
         for name in extract_prototype_names(&body) {
             index.entry(name).or_insert_with(|| rel.clone());
         }
+        for name in extract_builtin_macro_names(&body) {
+            index.entry(name).or_insert_with(|| rel.clone());
+        }
     }
 
     let mut out = String::new();
@@ -148,6 +151,30 @@ fn collect_headers(root: &Path, dir: &Path, out: &mut Vec<(PathBuf, String)>) {
             out.push((path, rel));
         }
     }
+}
+
+fn extract_builtin_macro_names(body: &str) -> Vec<String> {
+    // `#define __builtin_<name>` -- the GCC builtin thunks in
+    // `_builtins.h`. Indexing them lets the "unknown function"
+    // auto-include resolve a `__builtin_*` call to the header that
+    // defines its thunk, the same way a library function resolves to
+    // the header that declares it.
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("#define ") else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(rest.len());
+        let name = &rest[..end];
+        if name.starts_with("__builtin_") {
+            out.push(name.to_string());
+        }
+    }
+    out
 }
 
 fn extract_binding_names(body: &str) -> Vec<String> {

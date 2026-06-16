@@ -48,6 +48,10 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     (
+        "_builtins.h",
+        include_str!("../../headers/include/_builtins.h"),
+    ),
+    (
         "stdalign.h",
         include_str!("../../headers/include/stdalign.h"),
     ),

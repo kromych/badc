@@ -96,6 +96,12 @@ Compile knobs:
                            dlopen consumer can dlsym it without a
                            #pragma export. Applies to --shared and
                            executable output.
+  --gnu                    Define the GCC identity macros (__GNUC__,
+                           __VERSION__, __extension__, ...). Off by
+                           default: badc implements most but not all of
+                           the GNU C surface, so code gating a feature
+                           badc lacks (__int128) on __GNUC__ keeps
+                           compiling unless this is requested.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -218,6 +224,8 @@ fn main() {
     // native target (Mach-O / ELF / PE); a host executable that loads
     // plugin modules sets it so the modules resolve the host's symbols.
     let mut export_all = false;
+    // `--gnu` -- define the GCC identity macros (`__GNUC__` etc.).
+    let mut gnu = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -380,6 +388,12 @@ fn main() {
             "-q" | "--quiet" => quiet = true,
             // Export every non-static function (dlopen/dlsym visibility).
             "--export-all" => export_all = true,
+            // Define the GCC identity macros (`__GNUC__`, `__VERSION__`,
+            // `__extension__`, ...). Off by default: badc implements
+            // most but not all of the GNU C surface, so code that gates
+            // a feature badc lacks (`__int128`) on `__GNUC__` keeps
+            // compiling unless this is requested.
+            "--gnu" => gnu = true,
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -597,6 +611,7 @@ fn main() {
             }
         };
         let copts = badc::CompileOptions::default()
+            .with_gnu(gnu)
             .with_defines(defines.clone())
             .with_undefines(undefines.clone())
             .with_include_paths(include_paths.clone())
@@ -680,6 +695,7 @@ fn main() {
                 }
             };
             let opts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -759,6 +775,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -806,6 +823,7 @@ fn main() {
                 copts_defines.push((k.to_string(), v.to_string()));
             }
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(copts_defines)
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1126,6 +1144,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())
@@ -1229,6 +1248,7 @@ fn main() {
                 }
             };
             let copts = badc::CompileOptions::default()
+                .with_gnu(gnu)
                 .with_defines(defines.clone())
                 .with_undefines(undefines.clone())
                 .with_include_paths(include_paths.clone())

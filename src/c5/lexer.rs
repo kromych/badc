@@ -1719,7 +1719,11 @@ const KEYWORDS: &[(&str, Token)] = &[
     // Type qualifiers -- consumed everywhere a type qualifier
     // may appear; no semantic effect.
     ("const", Token::TypeQual),
+    ("__const", Token::TypeQual),
+    ("__const__", Token::TypeQual),
     ("volatile", Token::TypeQual),
+    ("__volatile", Token::TypeQual),
+    ("__volatile__", Token::TypeQual),
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
@@ -1731,6 +1735,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     // 64-bit `Ty::Long` storage class (otherwise an `int`
     // declaration yields a 32-bit slot).
     ("signed", Token::Signed),
+    ("__signed", Token::Signed),
+    ("__signed__", Token::Signed),
     ("unsigned", Token::Unsigned),
     ("short", Token::Short),
     ("long", Token::Long),

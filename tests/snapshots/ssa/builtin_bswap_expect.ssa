@@ -1,3 +1,4 @@
+info: auto-including <_builtins.h> for undeclared `__builtin_expect`
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
 fn ent_pc=0 n_params=0 variadic=false locals=2

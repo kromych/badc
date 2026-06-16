@@ -47,6 +47,8 @@ struct sched_param {
 #pragma binding(libc::sched_rr_get_interval, "sched_rr_get_interval")
 #pragma binding(libc::sched_setaffinity, "sched_setaffinity")
 #pragma binding(libc::sched_getaffinity, "sched_getaffinity")
+#pragma binding(libc::setns,    "setns")
+#pragma binding(libc::unshare,  "unshare")
 #endif
 
 int sched_yield(void);
@@ -63,4 +65,7 @@ int sched_rr_get_interval(int pid, char *interval);
 // CPU affinity (Linux; `cpu_set_t` is opaque to c5, passed by address).
 int sched_setaffinity(int pid, unsigned long cpusetsize, char *mask);
 int sched_getaffinity(int pid, unsigned long cpusetsize, char *mask);
+// Namespace control (Linux).
+int setns(int fd, int nstype);
+int unshare(int flags);
 #endif

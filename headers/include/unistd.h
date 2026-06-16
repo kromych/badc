@@ -210,7 +210,9 @@ extern char **environ;
 #pragma binding(libc::mkfifo,    "mkfifo")
 #pragma binding(libc::dup,       "dup")
 #pragma binding(libc::dup2,      "dup2")
+#pragma binding(libc::dup3,      "dup3")
 #pragma binding(libc::pipe,      "pipe")
+#pragma binding(libc::pipe2,     "pipe2")
 #pragma binding(libc::fork,      "fork")
 #pragma binding(libc::vfork,     "vfork")
 #pragma binding(libc::execvp,    "execvp")
@@ -376,6 +378,10 @@ int mknod(char *path, int mode, int dev);
 int mkfifo(char *path, int mode);
 int dup(int fd);
 int dup2(int oldfd, int newfd);
+#ifdef __linux__
+int dup3(int oldfd, int newfd, int flags);
+int pipe2(int *pipefd, int flags);
+#endif
 int pipe(int *fds);
 int fork();
 int vfork();

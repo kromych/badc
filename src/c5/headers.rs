@@ -173,6 +173,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("libintl.h", include_str!("../../headers/include/libintl.h")),
     ("elf.h", include_str!("../../headers/include/elf.h")),
     ("link.h", include_str!("../../headers/include/link.h")),
+    ("pty.h", include_str!("../../headers/include/pty.h")),
     (
         "sys/mount.h",
         include_str!("../../headers/include/sys/mount.h"),

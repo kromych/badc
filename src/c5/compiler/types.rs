@@ -560,6 +560,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
         || tk == Token::Inline
         || tk == Token::Noreturn
         || tk == Token::Atomic
+        || tk == Token::Attribute
 }
 
 /// True for any token that may start a c5 declaration -- a base-type

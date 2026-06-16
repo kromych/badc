@@ -104,6 +104,8 @@ impl Compiler {
                     // the inner type-name names the base type (distinct from
                     // the `_Atomic` qualifier consumed as a no-op below).
                     atomic_base = self.try_parse_atomic_type_specifier()?;
+                } else if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
                 } else if is_decl_modifier(self.lex.tk) {
                     if self.lex.tk == Token::Inline {
                         self.pending_is_inline = true;
@@ -233,11 +235,19 @@ impl Compiler {
             // x`, etc. The base type is already chosen; these are
             // pure no-ops in c5 but appear in real C source.
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
                 self.next()?;
             }
 
             while self.lex.tk != ';' && self.lex.tk != '}' {
                 let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+                // A declarator may carry a trailing attribute before the
+                // terminator (`name(args) __attribute__((...));`, an
+                // initializer, a comma, or a function body's `{`).
+                self.skip_attribute_specifiers()?;
                 // Capture per this declarator before any nested parse can
                 // overwrite it (a later parameter of function type would
                 // re-set it). A bare function-type declarator is a function
@@ -580,6 +590,10 @@ impl Compiler {
                         self.next()?;
                         self.parse_function_params()?
                     };
+                    // A function declarator may carry a trailing attribute
+                    // before the prototype's `;` or the body's `{`
+                    // (`RET name(args) __attribute__((noreturn));`).
+                    self.skip_attribute_specifiers()?;
 
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For

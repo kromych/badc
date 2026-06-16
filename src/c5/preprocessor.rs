@@ -411,26 +411,24 @@ impl Preprocessor {
         intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
         intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
         intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
-        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
-        // common implementation-defined extensions used throughout
-        // real-world C source for hints the c5 dialect doesn't act
-        // on (printf-format checks, alignment, packing, calling
-        // convention). Absorbing them as empty function-like
-        // macros lets the parser see attribute-free declarations
-        // without losing the surrounding tokens. C99 6.10.3 paragraph
-        // 11 keeps the inner `(...)` payload as one macro argument
-        // because commas inside balanced parens are not separators.
-        for name in ["__attribute__", "__attribute", "__declspec"] {
-            fn_macros.insert(
-                name.to_string(),
-                FnMacro {
-                    params: alloc::vec!["x".to_string()],
-                    body: String::new(),
-                    is_variadic: false,
-                    va_name: None,
-                },
-            );
-        }
+        // MSVC `__declspec(...)` carries hints the dialect does not act
+        // on (alignment, calling convention, dll linkage). Absorbing it
+        // as an empty function-like macro drops the payload without
+        // losing the surrounding declaration. C99 6.10.3p11 keeps the
+        // inner `(...)` as one macro argument because commas inside
+        // balanced parens are not separators. GCC `__attribute__` is a
+        // lexer token instead, parsed by `skip_attribute_specifiers`,
+        // because the `packed` attribute changes aggregate layout and
+        // so must reach the parser rather than being preprocessed away.
+        fn_macros.insert(
+            "__declspec".to_string(),
+            FnMacro {
+                params: alloc::vec!["x".to_string()],
+                body: String::new(),
+                is_variadic: false,
+                va_name: None,
+            },
+        );
         // GCC `__builtin_expect(exp, c)` is a branch-prediction hint that
         // evaluates to its first operand. The dialect does not consume the
         // hint, so it expands to the operand. Defined here (not via a
@@ -1438,17 +1436,7 @@ impl Preprocessor {
                                 self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
-                        // `__attribute__((packed))` (and the `__packed__`
-                        // spelling) rewrites to a reserved marker the
-                        // aggregate parser acts on; every other attribute
-                        // payload still expands to nothing.
-                        let expanded = if (ident == "__attribute__" || ident == "__attribute")
-                            && args.iter().any(|a| attribute_arg_names_packed(a))
-                        {
-                            " __c5_attr_packed ".to_string()
-                        } else {
-                            expand_fn_macro(macro_def, &expanded_args, &args)
-                        };
+                        let expanded = expand_fn_macro(macro_def, &expanded_args, &args);
                         // C99 6.10.3.4 "blue paint": any macro that
                         // fired during arg pre-expansion stays on
                         // the blocklist for the body rescan, so a
@@ -4145,15 +4133,6 @@ fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
 /// reaches the tail through `rest`).
 fn is_va_token(def: &FnMacro, word: &str) -> bool {
     word == "__VA_ARGS__" || def.va_name.as_deref() == Some(word)
-}
-
-/// True when an `__attribute__` argument names the `packed` attribute
-/// (`packed` or the `__packed__` spelling). The whole-token comparison
-/// rejects substrings, so `aligned(8)` or `section("packed_data")` do
-/// not match.
-fn attribute_arg_names_packed(arg: &str) -> bool {
-    arg.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .any(|tok| tok == "packed" || tok == "__packed__")
 }
 
 fn expand_fn_macro(def: &FnMacro, args: &[String], raw_args: &[String]) -> String {

@@ -144,6 +144,10 @@ impl Compiler {
             let mut anon_aggregate_inner_id: Option<usize> = None;
             let mut atomic_field_base: Option<i64> = None;
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
                 if self.lex.tk == Token::Atomic && self.lex.peek_after_whitespace(b'(') {
                     // C11 6.7.2.4 atomic type specifier `_Atomic(type-name)`
                     // as a field base type (distinct from the `_Atomic`
@@ -241,11 +245,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
-                let mut nested_packed = false;
-                if self.lex.tk == Token::Packed {
-                    nested_packed = true;
-                    self.next()?;
-                }
+                let nested_packed = self.skip_attribute_specifiers()?;
                 // Three shapes:
                 //   * `struct Foo { ... }` -- named definition.
                 //   * `struct Foo`         -- type use.
@@ -280,8 +280,7 @@ impl Compiler {
                 let inner_id = if self.lex.tk == '{' {
                     let id =
                         self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
-                    if self.lex.tk == Token::Packed {
-                        self.next()?;
+                    if self.skip_attribute_specifiers()? {
                         self.repack_struct(id);
                     }
                     id
@@ -368,6 +367,10 @@ impl Compiler {
 
             // Trailing modifiers: `int long`, `unsigned long long`, etc.
             while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                    continue;
+                }
                 self.next()?;
             }
 
@@ -517,6 +520,9 @@ impl Compiler {
 
                 let (id_idx, mut field_ty, mut field_array_size) =
                     self.parse_declarator(field_base)?;
+                // A member may carry a trailing attribute
+                // (`int x __attribute__((deprecated));`).
+                self.skip_attribute_specifiers()?;
                 // A typedef whose alias is an array contributes
                 // its dimension when the declarator stayed at the
                 // typedef's element type (`jmp_buf b;` ->

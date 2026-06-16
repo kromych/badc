@@ -107,9 +107,17 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
-            // `char *restrict s`. Consumed; no semantic effect.
-            while self.lex.tk == Token::TypeQual {
-                self.next()?;
+            // `char *restrict s`. Consumed; no semantic effect. An
+            // attribute may sit here too (`void * __attribute__((malloc))
+            // p`).
+            loop {
+                if self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                } else if self.lex.tk == Token::Attribute {
+                    self.skip_attribute_specifiers()?;
+                } else {
+                    break;
+                }
             }
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded

@@ -1681,10 +1681,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("typeof", Token::Typeof),
     ("__typeof__", Token::Typeof),
     ("__typeof", Token::Typeof),
-    // Reserved marker emitted by the preprocessor for a `packed`
-    // attribute; not a name a program can spell (the preprocessor
-    // never leaves it for user identifiers to collide with).
-    ("__c5_attr_packed", Token::Packed),
+    ("__attribute__", Token::Attribute),
+    ("__attribute", Token::Attribute),
     ("while", Token::While),
     ("do", Token::Do),
     ("break", Token::Break),

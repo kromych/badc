@@ -156,14 +156,9 @@ impl Compiler {
         let is_union = self.lex.tk == Token::Union;
         let kind = if is_union { "union" } else { "struct" };
         self.next()?;
-        // `__attribute__((packed))` may sit between the keyword and the
-        // tag (`struct __attribute__((packed)) name`). The preprocessor
-        // rewrote it to a single marker token.
-        let mut packed = false;
-        if self.lex.tk == Token::Packed {
-            packed = true;
-            self.next()?;
-        }
+        // An attribute may sit between the keyword and the tag
+        // (`struct __attribute__((packed)) name`).
+        let packed = self.skip_attribute_specifiers()?;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
@@ -178,14 +173,16 @@ impl Compiler {
         };
         let id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&name, is_union, packed)?;
-            // `struct name { ... } __attribute__((packed))`: the marker
+            // `struct name { ... } __attribute__((packed))`: the attribute
             // follows the body. Re-pack the already-laid-out fields.
-            if self.lex.tk == Token::Packed {
-                self.next()?;
+            if self.skip_attribute_specifiers()? {
                 self.repack_struct(id);
             }
             id
         } else {
+            // A trailing attribute on a tag use without a body
+            // (`struct name __attribute__((...))`); consume it.
+            self.skip_attribute_specifiers()?;
             self.find_or_forward_declare_struct(&name)
         };
         Ok(struct_ty_for(id))
@@ -283,6 +280,46 @@ impl Compiler {
         Ok(ty)
     }
 
+    /// Consume a run of GCC `__attribute__ (( ... ))` specifiers, if any.
+    /// Returns true when one names the `packed` attribute, which sets an
+    /// aggregate's layout; every other attribute is an advisory hint the
+    /// dialect does not act on and is discarded. The doubled parentheses
+    /// are matched by balance, so any payload -- nested calls, string
+    /// literals, comma-separated lists -- is consumed.
+    pub(super) fn skip_attribute_specifiers(&mut self) -> Result<bool, C5Error> {
+        let mut packed = false;
+        while self.lex.tk == Token::Attribute {
+            self.next()?; // __attribute__
+            if self.lex.tk != '(' {
+                return Err(self.compile_err("`((` expected after `__attribute__`"));
+            }
+            let mut depth = 0i32;
+            loop {
+                if self.lex.tk == '(' {
+                    depth += 1;
+                    self.next()?;
+                } else if self.lex.tk == ')' {
+                    depth -= 1;
+                    self.next()?;
+                    if depth == 0 {
+                        break;
+                    }
+                } else if self.lex.tk == 0 {
+                    return Err(self.compile_err("unterminated `__attribute__`"));
+                } else {
+                    if self.lex.tk == Token::Id {
+                        let n = self.symbols[self.lex.curr_id_idx].name.as_str();
+                        if n == "packed" || n == "__packed__" {
+                            packed = true;
+                        }
+                    }
+                    self.next()?;
+                }
+            }
+        }
+        Ok(packed)
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -309,6 +346,10 @@ impl Compiler {
         // for the type keyword.
         let mut m = IntModifiers::default();
         while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::Attribute {
+                self.skip_attribute_specifiers()?;
+                continue;
+            }
             // C11 6.7.2.4 atomic type specifier `_Atomic ( type-name )`.
             // Distinct from the `_Atomic` qualifier handled below: here
             // `_Atomic` names the type rather than qualifying a later
@@ -455,6 +496,10 @@ impl Compiler {
         // `unsigned int long long`, etc. all collapse to the base type
         // already chosen.
         while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::Attribute {
+                self.skip_attribute_specifiers()?;
+                continue;
+            }
             self.next()?;
         }
 

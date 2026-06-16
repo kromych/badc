@@ -1152,12 +1152,99 @@ impl Preprocessor {
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
+                // A function-like macro call may span lines whose arguments
+                // carry conditional directives (C99 6.10.3p11 leaves this
+                // undefined, but the common toolchains evaluate them and
+                // real code relies on it). Track a local conditional state
+                // so only the active branch's lines join the argument
+                // buffer; directive lines never become argument text.
+                let mut join_stack: Vec<CondFrame> = Vec::new();
+                let mut join_active = true;
                 while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
                     && idx + consumed < lines.len()
                 {
-                    buffer.push('\n');
-                    buffer.push_str(lines[idx + consumed]);
+                    let cont = lines[idx + consumed];
                     consumed += 1;
+                    let cont_trimmed = cont.trim_start();
+                    if let Some(rest) = cont_trimmed.strip_prefix('#') {
+                        match parse_directive(rest.trim_start()) {
+                            Directive::Ifdef(name) => {
+                                let taken = join_active
+                                    && (self.macros.contains_key(name)
+                                        || self.fn_macros.contains_key(name));
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::Ifndef(name) => {
+                                let taken = join_active
+                                    && !(self.macros.contains_key(name)
+                                        || self.fn_macros.contains_key(name));
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::If(expr) => {
+                                let taken =
+                                    join_active && self.eval_condition(expr, source_line)?;
+                                join_stack.push(CondFrame {
+                                    parent_active: join_active,
+                                    this_branch_taken: taken,
+                                    any_branch_taken: taken,
+                                    saw_else: false,
+                                });
+                                join_active = taken;
+                            }
+                            Directive::Elif(expr) => {
+                                let parent_active =
+                                    join_stack.last().map(|f| f.parent_active).unwrap_or(false);
+                                let any_taken = join_stack
+                                    .last()
+                                    .map(|f| f.any_branch_taken)
+                                    .unwrap_or(true);
+                                let eligible = parent_active && !any_taken;
+                                let cond = if eligible {
+                                    self.eval_condition(expr, source_line)?
+                                } else {
+                                    false
+                                };
+                                if let Some(frame) = join_stack.last_mut() {
+                                    frame.this_branch_taken = cond;
+                                    frame.any_branch_taken |= cond;
+                                }
+                                join_active = cond;
+                            }
+                            Directive::Else => {
+                                if let Some(frame) = join_stack.last_mut() {
+                                    let taken = frame.parent_active && !frame.any_branch_taken;
+                                    frame.saw_else = true;
+                                    frame.this_branch_taken = taken;
+                                    frame.any_branch_taken |= taken;
+                                    join_active = taken;
+                                }
+                            }
+                            Directive::Endif => {
+                                if let Some(frame) = join_stack.pop() {
+                                    join_active = frame.parent_active;
+                                }
+                            }
+                            // Other directives inside a macro argument are
+                            // rare and undefined; consume the line without
+                            // adding it to the argument text.
+                            _ => {}
+                        }
+                    } else if join_active {
+                        buffer.push('\n');
+                        buffer.push_str(cont);
+                    }
                 }
                 // `__LINE__` reflects the presumed line (`source_line`),
                 // which a `#line` directive can retarget (C99 6.10.4);

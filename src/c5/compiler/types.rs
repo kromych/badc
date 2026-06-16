@@ -578,6 +578,7 @@ pub(super) fn is_type_start_token(tk: Tok) -> bool {
         || tk == Token::Enum
         || tk == Token::Extern
         || tk == Token::Static
+        || tk == Token::Typeof
         || is_decl_modifier(tk)
 }
 

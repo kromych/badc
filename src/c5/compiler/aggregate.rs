@@ -178,6 +178,10 @@ impl Compiler {
             let mut field_base_is_enum = false;
             let field_base = if let Some(inner) = atomic_field_base {
                 inner
+            } else if self.lex.tk == Token::Typeof {
+                // `typeof ( ... ) member;` (C23 6.7.2.5): the operand's
+                // type is the member's type.
+                self.parse_typeof_specifier()?
             } else if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {

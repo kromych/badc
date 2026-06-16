@@ -354,6 +354,12 @@ pub(crate) enum Token {
     /// keeping the encoding untouched and carrying void-ness on
     /// the side avoids that collision.
     Void,
+    /// `typeof` (C23 6.7.2.5) and its GCC `__typeof__` / `__typeof`
+    /// spellings: a type specifier naming the type of a parenthesized
+    /// type-name or unevaluated expression operand. Added at the end of
+    /// the enum so the operator variants keep their precedence-ordinal
+    /// values.
+    Typeof,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a

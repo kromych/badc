@@ -218,6 +218,56 @@ impl Compiler {
         Ok(Some(inner))
     }
 
+    /// `typeof ( type-name )` / `typeof ( expression )` (C23 6.7.2.5,
+    /// the GCC `__typeof__` extension). The result is the operand's
+    /// type. A type-name operand parses as a base type plus any
+    /// abstract pointer decoration; an expression operand is parsed
+    /// unevaluated and its type recovered, mirroring `sizeof`'s
+    /// expression branch. Only the flat scalar / pointer / aggregate
+    /// type the rest of the parser carries is recovered; an array
+    /// operand's element type is returned (the dimension is dropped,
+    /// matching the decay the value contexts already apply).
+    pub(super) fn parse_typeof_specifier(&mut self) -> Result<i64, C5Error> {
+        self.next()?; // typeof
+        if self.lex.tk != '(' {
+            return Err(self.compile_err("`(` expected after `typeof`"));
+        }
+        self.next()?; // (
+        let ty = if self.lex_is_type_start() {
+            let mut inner = self.parse_decl_base_type()?;
+            core::mem::take(&mut self.pending.typedef_base_array_size);
+            while self.lex.tk == Token::MulOp {
+                self.next()?;
+                inner += Ty::Ptr as i64;
+                while self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
+            }
+            inner
+        } else {
+            // Unevaluated expression operand: parse it to learn the
+            // type, then discard everything the parse pushed so no
+            // live code, AST node, or PC reservation survives.
+            let saved_text_len = self.next_ent_pc;
+            let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
+            let saved_ast_acc = self.ast_acc;
+            let saved_vstack = self.ast_vstack.len();
+            self.expr(Token::Inc as i64)?;
+            let expr_ty = self.ty;
+            self.next_ent_pc = saved_text_len;
+            self.clear_recent_emits();
+            self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
+            self.ast_acc = saved_ast_acc;
+            self.ast_vstack.truncate(saved_vstack);
+            expr_ty
+        };
+        if self.lex.tk != ')' {
+            return Err(self.compile_err("`)` expected after `typeof` operand"));
+        }
+        self.next()?; // )
+        Ok(ty)
+    }
+
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
@@ -264,6 +314,14 @@ impl Compiler {
                 // all no-ops in c5, just consume.
                 self.next()?;
             }
+        }
+
+        // `typeof` / `__typeof__` (C23 6.7.2.5) names the type of a
+        // parenthesized type-name or unevaluated expression operand.
+        // The operand supplies the complete type, so the int-modifier
+        // soup collected above does not apply.
+        if self.lex.tk == Token::Typeof {
+            return self.parse_typeof_specifier();
         }
 
         let bt = if self.lex.tk == Token::Int {

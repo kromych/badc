@@ -391,6 +391,26 @@ impl Preprocessor {
         ] {
             intrinsics.insert(name.to_string(), kind as i64);
         }
+        // The `l` (long) bit-builtins operate on `unsigned long`, whose
+        // width is the target's: 8 bytes on LP64 (so they match the
+        // `ll` 64-bit intrinsics), 4 bytes on LLP64 (so they match the
+        // plain 32-bit intrinsics).
+        let (clzl, ctzl, popcountl) = if target.long_width_bytes() == 8 {
+            (
+                super::op::Intrinsic::Clzll,
+                super::op::Intrinsic::Ctzll,
+                super::op::Intrinsic::Popcountll,
+            )
+        } else {
+            (
+                super::op::Intrinsic::Clz,
+                super::op::Intrinsic::Ctz,
+                super::op::Intrinsic::Popcount,
+            )
+        };
+        intrinsics.insert("__builtin_clzl".to_string(), clzl as i64);
+        intrinsics.insert("__builtin_ctzl".to_string(), ctzl as i64);
+        intrinsics.insert("__builtin_popcountl".to_string(), popcountl as i64);
         // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
         // common implementation-defined extensions used throughout
         // real-world C source for hints the c5 dialect doesn't act

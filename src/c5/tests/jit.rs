@@ -1257,6 +1257,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("local_struct_array_runtime_init.c", 0),
     ("scanf_fscanf_binding.c", 0),
     ("builtin_bit_count.c", 0),
+    ("typeof_operator.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),

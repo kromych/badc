@@ -555,9 +555,10 @@ impl Preprocessor {
     /// GNU C surface (`__int128` is absent). `__GNUC_STDC_INLINE__`
     /// reports ISO C99 inline semantics (not the GNU89 dialect);
     /// `__VERSION__` is the compiler-identification string embedded by
-    /// code such as `Py_GetCompiler`; `__extension__` prefixes an
-    /// expression or declaration to suppress a GNU-extension diagnostic
-    /// and has no semantic effect, so it expands to nothing.
+    /// code such as `Py_GetCompiler`. `__STRICT_ANSI__` reports strict
+    /// ISO conformance alongside `__GNUC__`, exactly as
+    /// `gcc`/`clang -std=c11` does, so portable code uses the standard
+    /// path for the GNU-only features badc lacks.
     pub fn enable_gnu(&mut self) {
         self.macros.insert("__GNUC__".to_string(), "4".to_string());
         self.macros
@@ -568,8 +569,14 @@ impl Preprocessor {
             .insert("__GNUC_STDC_INLINE__".to_string(), "1".to_string());
         self.macros
             .insert("__VERSION__".to_string(), "\"4.2.1\"".to_string());
+        // badc backs the `__`-prefixed GNU extensions but not the ones a
+        // GNU dialect gates on `!__STRICT_ANSI__` (`typeof` of an array,
+        // `__builtin_types_compatible_p`, `__int128`). Reporting strict
+        // ISO conformance alongside `__GNUC__` -- exactly `gcc`/`clang
+        // -std=c11` -- routes portable code to the standard path for
+        // those, while keeping the `__`-prefixed surface available.
         self.macros
-            .insert("__extension__".to_string(), String::new());
+            .insert("__STRICT_ANSI__".to_string(), "1".to_string());
     }
 
     /// Enable / disable gcc-`-H`-style include tracing. When on,
@@ -4339,41 +4346,22 @@ mod tests {
 
     #[test]
     fn gnu_identity_macros_are_opt_in() {
-        // `__GNUC__` is undefined by default: the conditional keeps its
-        // false branch, and a bare `__extension__` is not removed.
-        let out = process(
-            "#ifdef __GNUC__\nint gnuc = 1;\n#else\nint gnuc = 0;\n#endif\n\
-             __extension__ int x = 1;\n",
-        );
+        // `__GNUC__` and `__STRICT_ANSI__` are undefined by default.
+        let probe = "#ifdef __GNUC__\nG yes\n#else\nG no\n#endif\n\
+                     #ifdef __STRICT_ANSI__\nS yes\n#else\nS no\n#endif\n";
+        let out = process(probe);
         assert!(
-            out.contains("int gnuc = 0;"),
-            "default defined __GNUC__: {out}"
-        );
-        assert!(
-            out.contains("__extension__ int x"),
-            "default removed __extension__: {out}"
+            out.contains("G no") && out.contains("S no"),
+            "default: {out}"
         );
 
-        // `enable_gnu` (the `--gnu` flag) defines them.
+        // `enable_gnu` (the `--gnu` flag) defines both.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.enable_gnu();
-        let out = pp
-            .process(
-                "#ifdef __GNUC__\nint gnuc = __GNUC__;\n#endif\n\
-                 __extension__ int x = 1;\n",
-            )
-            .expect("preprocessor failed");
+        let out = pp.process(probe).expect("preprocessor failed");
         assert!(
-            out.contains("int gnuc = 4;"),
-            "--gnu missing __GNUC__: {out}"
-        );
-        assert!(
-            out.contains(" int x = 1;"),
-            "--gnu kept __extension__: {out}"
-        );
-        assert!(
-            !out.contains("__extension__"),
-            "--gnu left __extension__: {out}"
+            out.contains("G yes") && out.contains("S yes"),
+            "--gnu: {out}"
         );
     }
 

@@ -1002,6 +1002,11 @@ impl Lexer {
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
+                // `__extension__` is a no-op annotation; skip it so it
+                // never reaches the parser, whatever it prefixes.
+                if symbols[self.curr_id_idx].token == Token::Extension as i64 {
+                    continue;
+                }
                 self.tk = Tok(symbols[self.curr_id_idx].token);
                 return Ok(());
             } else if c.is_ascii_digit() {
@@ -1737,6 +1742,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("signed", Token::Signed),
     ("__signed", Token::Signed),
     ("__signed__", Token::Signed),
+    ("__extension__", Token::Extension),
     ("unsigned", Token::Unsigned),
     ("short", Token::Short),
     ("long", Token::Long),

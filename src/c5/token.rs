@@ -366,6 +366,11 @@ pub(crate) enum Token {
     /// (aggregate layout), and ignores the rest. Added at the end so the
     /// operator ordinals are unchanged.
     Attribute,
+    /// GCC `__extension__` -- a no-op annotation that prefixes an
+    /// expression or declaration to suppress a GNU-extension diagnostic.
+    /// The lexer skips it, so it never reaches the parser. Added at the
+    /// end so the operator ordinals are unchanged.
+    Extension,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a

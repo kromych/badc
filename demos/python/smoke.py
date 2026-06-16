@@ -163,7 +163,14 @@ def compile_and_link(badc: str, trace: Path, out: Path, log) -> Path:
         src, flags = compiles[obj]
         dst = out / (obj.replace("/", "_"))
         dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-        cmd = [badc, "-c", "-UHAVE_GCC_UINT128_T", *dbg, *flags, str(SRC / src), "-o", str(dst)]
+        # `--gnu` mirrors the reference clang build: __GNUC__ makes the
+        # struct layouts (packed tracemalloc) match the clang-built
+        # extension modules, and the __STRICT_ANSI__ it implies routes
+        # Py_ARRAY_LENGTH off __builtin_types_compatible_p.
+        cmd = [
+            badc, "--gnu", "-c", "-UHAVE_GCC_UINT128_T",
+            *dbg, *flags, str(SRC / src), "-o", str(dst),
+        ]
         r = run(cmd, cwd=SRC, timeout=240)
         if r.returncode != 0:
             msg = ((r.stderr or r.stdout).strip().splitlines() or [f"rc{r.returncode}"])[-1]

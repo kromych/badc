@@ -28,6 +28,11 @@
 #define O_NOFOLLOW   0x0100
 #endif
 #ifdef __linux__
+// splice() flags.
+#define SPLICE_F_MOVE     1
+#define SPLICE_F_NONBLOCK 2
+#define SPLICE_F_MORE     4
+#define SPLICE_F_GIFT     8
 #define O_CREAT      0100
 #define O_EXCL       0200
 #define O_NOCTTY     0400
@@ -160,6 +165,17 @@ int openat(int dirfd, const char *path, int flags, ...);
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::fcntl, "fcntl")
 #pragma binding(libc::openat, "openat")
+#pragma binding(libc::splice, "splice")
+#pragma binding(libc::posix_fadvise, "posix_fadvise")
+#pragma binding(libc::posix_fallocate, "posix_fallocate")
 int fcntl(int fd, int cmd, int arg);
 int openat(int dirfd, const char *path, int flags, ...);
+// Move data between two descriptors, one of which must be a pipe; the
+// `off_*` parameters are in/out file offsets or null.
+long splice(int fd_in, long *off_in, int fd_out, long *off_out,
+            unsigned long len, unsigned int flags);
+// Advise the kernel about a file region's expected access pattern, and
+// reserve backing store for a region (POSIX).
+int posix_fadvise(int fd, long offset, long len, int advice);
+int posix_fallocate(int fd, long offset, long len);
 #endif

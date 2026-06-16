@@ -46,6 +46,12 @@
 #pragma binding(libc::mremap,   "mremap")
 #pragma binding(libc::msync,    "msync")
 #pragma binding(libc::mprotect, "mprotect")
+#pragma binding(libc::memfd_create, "memfd_create")
+// memfd_create flags.
+#define MFD_CLOEXEC       0x0001
+#define MFD_ALLOW_SEALING 0x0002
+#define MFD_HUGETLB       0x0004
+int memfd_create(const char *name, unsigned int flags);
 #endif
 
 // POSIX: the mapping length is size_t and the file offset is off_t, both

@@ -8,9 +8,11 @@
 #pragma binding(libc::syscall, "syscall")
 
 #if defined(__aarch64__)
-#define SYS_gettid 178
+#define SYS_gettid     178
+#define SYS_getrandom  278
 #else
-#define SYS_gettid 186
+#define SYS_gettid     186
+#define SYS_getrandom  318
 #endif
 
 long syscall(long number, ...);

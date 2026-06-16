@@ -173,11 +173,31 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("libintl.h", include_str!("../../headers/include/libintl.h")),
     ("elf.h", include_str!("../../headers/include/elf.h")),
     ("link.h", include_str!("../../headers/include/link.h")),
+    (
+        "linux/random.h",
+        include_str!("../../headers/include/linux/random.h"),
+    ),
     ("pty.h", include_str!("../../headers/include/pty.h")),
     ("utmp.h", include_str!("../../headers/include/utmp.h")),
     (
         "sys/timerfd.h",
         include_str!("../../headers/include/sys/timerfd.h"),
+    ),
+    (
+        "sys/sendfile.h",
+        include_str!("../../headers/include/sys/sendfile.h"),
+    ),
+    (
+        "sys/eventfd.h",
+        include_str!("../../headers/include/sys/eventfd.h"),
+    ),
+    (
+        "sys/sysmacros.h",
+        include_str!("../../headers/include/sys/sysmacros.h"),
+    ),
+    (
+        "sys/xattr.h",
+        include_str!("../../headers/include/sys/xattr.h"),
     ),
     (
         "sys/mount.h",

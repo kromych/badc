@@ -213,6 +213,11 @@ extern char **environ;
 #pragma binding(libc::dup3,      "dup3")
 #pragma binding(libc::pipe,      "pipe")
 #pragma binding(libc::pipe2,     "pipe2")
+#pragma binding(libc::copy_file_range, "copy_file_range")
+#pragma binding(libc::setresuid, "setresuid")
+#pragma binding(libc::setresgid, "setresgid")
+#pragma binding(libc::getresuid, "getresuid")
+#pragma binding(libc::getresgid, "getresgid")
 #pragma binding(libc::fork,      "fork")
 #pragma binding(libc::vfork,     "vfork")
 #pragma binding(libc::execvp,    "execvp")
@@ -381,6 +386,12 @@ int dup2(int oldfd, int newfd);
 #ifdef __linux__
 int dup3(int oldfd, int newfd, int flags);
 int pipe2(int *pipefd, int flags);
+long copy_file_range(int fd_in, long *off_in, int fd_out, long *off_out,
+                     unsigned long len, unsigned int flags);
+int setresuid(int ruid, int euid, int suid);
+int setresgid(int rgid, int egid, int sgid);
+int getresuid(int *ruid, int *euid, int *suid);
+int getresgid(int *rgid, int *egid, int *sgid);
 #endif
 int pipe(int *fds);
 int fork();

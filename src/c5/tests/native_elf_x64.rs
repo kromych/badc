@@ -520,6 +520,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("float_condition_negative_zero.c", 0),
     ("tentative_array_definition.c", 0),
     ("directive_in_macro_argument.c", 0),
+    ("x87_control_word.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),

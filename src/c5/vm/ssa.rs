@@ -1614,6 +1614,18 @@ fn run_intrinsic(
             frame.regs[v as usize] = 0;
             Ok(())
         }
+        Intrinsic::X87StoreControlWord => {
+            // The interpreter evaluates floats with host doubles, so it
+            // has no x87 control word to read; store the architectural
+            // default so a caller that round-trips it sees a sane value.
+            let addr = frame.regs[args[0] as usize] as usize;
+            store_to_memory(mem, addr, 0x037f, StoreKind::I16)
+        }
+        Intrinsic::X87LoadControlWord => {
+            // Setting the control word has no effect on host-double
+            // arithmetic.
+            Ok(())
+        }
         Intrinsic::FrameAddress => {
             // The interpreter has no native frame pointer; return this
             // frame's base in the byte arena. It is non-zero, stable

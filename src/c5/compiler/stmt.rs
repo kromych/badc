@@ -708,6 +708,23 @@ impl Compiler {
         let tstart = self.lex.ival as usize;
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
         self.next()?; // consume the template string
+        // The x87 FPU control-word forms carry exactly one memory operand.
+        // Detect them from the template before the operand-rejection loop.
+        let tmpl_lc = core::str::from_utf8(&template)
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .to_ascii_lowercase();
+        let x87_kind = match tmpl_lc.as_str() {
+            "fnstcw %0" => Some(super::super::op::Intrinsic::X87StoreControlWord),
+            "fldcw %0" => Some(super::super::op::Intrinsic::X87LoadControlWord),
+            _ => None,
+        };
+        if let Some(kind) = x87_kind {
+            self.data.truncate(tstart);
+            return self.parse_x87_control_word_asm(kind);
+        }
         // Optional `: outputs : inputs : clobbers`. An operand binding
         // (`"constraint"(expr)`) introduces a `(` and is rejected; bare
         // clobber strings and the separating colons are accepted.
@@ -755,6 +772,58 @@ impl Compiler {
             return Ok(());
         }
         Err(self.compile_err(format!("inline asm instruction `{t}` is not supported")))
+    }
+
+    /// `asm("fnstcw %0":"=m"(cw))` / `asm("fldcw %0"::"m"(cw))` -- the two
+    /// x87 control-word forms CPython's pymath reaches for. Parse the
+    /// single memory operand, take its address, and emit the matching
+    /// intrinsic. The constraint text is ignored: both forms reach the
+    /// op as the operand's address.
+    fn parse_x87_control_word_asm(
+        &mut self,
+        kind: super::super::op::Intrinsic,
+    ) -> Result<(), C5Error> {
+        // Skip the colons and constraint strings up to the `(operand)`.
+        while self.lex.tk != '(' as i64 && self.lex.tk != ')' as i64 {
+            if self.lex.tk == ':' as i64 || self.lex.tk == ',' as i64 || self.lex.tk == '"' as i64 {
+                self.next()?;
+            } else {
+                return Err(self.compile_err("unsupported x87 control-word asm operand"));
+            }
+        }
+        if self.lex.tk != '(' as i64 {
+            return Err(self.compile_err("x87 control-word asm expects a memory operand"));
+        }
+        self.next()?; // consume '('
+        self.ast_psh();
+        self.expr(Token::Assign as i64)?;
+        self.ty += Ty::Ptr as i64;
+        self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
+        let addr_id = self.ast_acc.take();
+        self.consume(b')', "`)` expected after x87 asm operand")?;
+        // Consume any remaining `: inputs : clobbers` up to the close.
+        while self.lex.tk != ')' as i64 {
+            self.next()?;
+        }
+        self.next()?; // consume ')'
+        self.consume(b';', "`;` expected after `asm(...)`")?;
+        let Some(addr) = addr_id else {
+            return Err(self.compile_err("x87 control-word asm operand missing"));
+        };
+        self.mark_emit_other();
+        self.ty = Ty::Int as i64;
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            super::super::ast::Expr::Intrinsic {
+                kind: kind as i64,
+                args: alloc::vec![addr],
+                ty: Ty::Int as i64,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+        let _ = self.ast_emit_expr_stmt();
+        Ok(())
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {

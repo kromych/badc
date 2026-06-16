@@ -6545,6 +6545,36 @@ fn emit_intrinsic(
             code.push(0x90);
             true
         }
+        I::X87StoreControlWord | I::X87LoadControlWord => {
+            // `fnstcw m16` (D9 /7) stores the x87 control word, `fldcw m16`
+            // (D9 /5) loads it. The single argument is the operand's
+            // address; force it into r10 so the ModRM byte needs no
+            // SIB / displacement (r10 = rm 010 under REX.B).
+            if args.len() != 1 {
+                bail_msg("x87 control word intrinsic expects 1 arg");
+                return false;
+            }
+            let Some(place) = alloc.places.get(args[0] as usize).copied() else {
+                bail_msg("x87 control word intrinsic: arg place missing");
+                return false;
+            };
+            let Some(addr) = materialize_int(code, place, SCRATCH_R10, frame) else {
+                bail_msg("x87 control word intrinsic: arg not an int register");
+                return false;
+            };
+            if addr.0 != SCRATCH_R10.0 {
+                super::x86_64::emit_mov_rr(code, SCRATCH_R10, addr);
+            }
+            let reg_field: u8 = if matches!(intrinsic, I::X87StoreControlWord) {
+                7
+            } else {
+                5
+            };
+            code.push(0x41); // REX.B for r10
+            code.push(0xD9);
+            code.push((reg_field << 3) | 0x02); // mod=00, reg=field, rm=r10
+            true
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

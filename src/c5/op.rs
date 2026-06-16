@@ -156,6 +156,17 @@ pub enum Intrinsic {
     AtomicFetchOr = 38,
     AtomicFetchXor = 39,
     AtomicCompareExchangeStrong = 40,
+    /// `asm("fnstcw %0" : "=m"(cw))` -- store the x87 FPU control word to
+    /// the 16-bit memory operand. The op takes the operand's address;
+    /// codegen emits `fnstcw m16` (x86_64 only). The interpreter writes
+    /// the default control word (0x037f) since it evaluates floats with
+    /// host doubles.
+    X87StoreControlWord = 41,
+    /// `asm("fldcw %0" : : "m"(cw))` -- load the x87 FPU control word from
+    /// the 16-bit memory operand. The op takes the operand's address;
+    /// codegen emits `fldcw m16` (x86_64 only). A no-op in the
+    /// interpreter.
+    X87LoadControlWord = 42,
 }
 
 impl Intrinsic {
@@ -201,6 +212,8 @@ impl Intrinsic {
             38 => Some(Intrinsic::AtomicFetchOr),
             39 => Some(Intrinsic::AtomicFetchXor),
             40 => Some(Intrinsic::AtomicCompareExchangeStrong),
+            41 => Some(Intrinsic::X87StoreControlWord),
+            42 => Some(Intrinsic::X87LoadControlWord),
             _ => None,
         }
     }

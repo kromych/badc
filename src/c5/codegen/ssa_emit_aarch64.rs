@@ -3045,6 +3045,12 @@ fn emit_intrinsic(
             emit(code, 0xD503_203Fu32);
             true
         }
+        I::X87StoreControlWord | I::X87LoadControlWord => {
+            // The x87 FPU control word is x86-only; AArch64 source never
+            // reaches for it (the guarding HAVE_GCC_ASM_FOR_X87 is unset).
+            bail_msg("x87 control word intrinsic is x86-only");
+            false
+        }
         I::Sqrt
         | I::Sqrtf
         | I::Fabs

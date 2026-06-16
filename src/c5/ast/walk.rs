@@ -3157,6 +3157,38 @@ impl<'a> Walker<'a> {
     /// (`||` -> 1, `&&` -> 0) and `rhs != 0` on the evaluated path. In a
     /// branch condition only the truthiness is observed, so the raw
     /// operands are stored and the `!= 0` and the constant are skipped.
+    /// True when `cond` is observed for truthiness as a floating value,
+    /// i.e. the C99 controlling-expression comparison is `!= 0.0`. A
+    /// comparison's result is `int`, so it is excluded even though its
+    /// node may carry the operand type.
+    fn cond_is_float(&self, cond: ExprId) -> bool {
+        let e = self.ast.expr(cond);
+        if let Expr::Binary { op, .. } = e
+            && is_comparison_op(*op)
+        {
+            return false;
+        }
+        expr_ty(e).is_some_and(is_floating_scalar)
+    }
+
+    /// Value to test against zero for `cond`'s truthiness. A floating
+    /// operand is reduced to `cond != 0.0` (0 or 1) so `-0.0` reads as
+    /// false; an integer operand passes through and is tested directly.
+    fn cond_truthy(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        val: super::super::ir::ValueId,
+        cond: ExprId,
+    ) -> super::super::ir::ValueId {
+        if self.cond_is_float(cond) {
+            let d = b.fp_widen_to_f64(val);
+            let zero = b.imm(0);
+            b.binop(BinOp::Fne, d, zero)
+        } else {
+            val
+        }
+    }
+
     fn walk_short_circuit(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -3171,31 +3203,36 @@ impl<'a> Walker<'a> {
         let kind_l = super::super::ir::LoadKind::I64;
         let kind_s = super::super::ir::StoreKind::I64;
         let lhs_val = self.walk_expr_rvalue(b, lhs)?;
-        // On the short-circuit path the lhs already carries the deciding
-        // truth value, so in branch context its raw value suffices.
+        // The deciding value is the lhs truthiness; a floating operand
+        // compares against 0.0 so `-0.0` is false rather than a non-zero
+        // bit pattern.
+        let lhs_t = self.cond_truthy(b, lhs_val, lhs);
+        // On the short-circuit path the lhs truthiness is the result, so
+        // in branch context that value suffices.
         let short_val = if normalize {
             match op {
                 super::ShortCircuitOp::Lor => b.imm(1),
                 super::ShortCircuitOp::Lan => b.imm(0),
             }
         } else {
-            lhs_val
+            lhs_t
         };
         b.store_local(slot, short_val, kind_s);
         let rhs_blk = b.new_block();
         let after_blk = b.new_block();
         match op {
             // `a && b`: skip rhs when lhs == 0.
-            super::ShortCircuitOp::Lan => b.branch_zero(lhs_val, after_blk, rhs_blk),
+            super::ShortCircuitOp::Lan => b.branch_zero(lhs_t, after_blk, rhs_blk),
             // `a || b`: skip rhs when lhs != 0.
-            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_val, after_blk, rhs_blk),
+            super::ShortCircuitOp::Lor => b.branch_nonzero(lhs_t, after_blk, rhs_blk),
         }
         b.switch_to(rhs_blk);
         let rhs_val = self.walk_expr_rvalue(b, rhs)?;
+        let rhs_t = self.cond_truthy(b, rhs_val, rhs);
         let stored = if normalize {
-            b.binop_imm(super::super::ir::BinOp::Ne, rhs_val, 0)
+            b.binop_imm(super::super::ir::BinOp::Ne, rhs_t, 0)
         } else {
-            rhs_val
+            rhs_t
         };
         b.store_local(slot, stored, kind_s);
         b.jmp(after_blk);
@@ -3213,10 +3250,14 @@ impl<'a> Walker<'a> {
         cond: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         if matches!(self.ast.expr(cond), Expr::ShortCircuit { .. }) {
-            self.walk_short_circuit(b, cond, false)
-        } else {
-            self.walk_expr_rvalue(b, cond)
+            return self.walk_short_circuit(b, cond, false);
         }
+        // C99 6.8.4.1 / 6.8.5: a controlling expression is compared
+        // against 0. A floating operand uses the FP comparison
+        // `v != 0.0`; testing the register bits directly would read
+        // `-0.0` (sign bit set) as true.
+        let v = self.walk_expr_rvalue(b, cond)?;
+        Ok(self.cond_truthy(b, v, cond))
     }
 
     /// Neg / BitNot / LogNot lower to a binop against an

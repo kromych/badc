@@ -1334,10 +1334,31 @@ impl Compiler {
                                 }
                                 continue;
                             }
-                            return Err(self.compile_err(format!(
-                                "array `{}` declared with empty brackets needs an initializer",
-                                self.symbols[id_idx].name
-                            )));
+                            // C99 6.9.2: a file-scope `T x[];` with no
+                            // `extern` and no initializer is a tentative
+                            // definition. An array type left incomplete at
+                            // the end of the unit is completed to one
+                            // element, so reserve a single zero-filled
+                            // element here.
+                            self.symbols[id_idx].array_size = 1;
+                            if let Some(first) = self.symbols[id_idx].array_dims.first_mut() {
+                                *first = 1;
+                            }
+                            let elem = self.size_of_type(ty) as i64;
+                            let aligned = ((elem + 7) / 8) * 8;
+                            if self.size_of_type(ty) > 1 {
+                                self.align_data_to_8();
+                            }
+                            let off = self.data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            for _ in 0..aligned {
+                                self.data.push(0);
+                            }
+                            self.symbols[id_idx].defined_here = true;
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                            }
+                            continue;
                         }
                         if thread_local {
                             return Err(self.compile_err(

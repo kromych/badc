@@ -560,6 +560,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_struct_by_value_arg.c", 0),
     ("fn_ptr_ternary_call_return.c", 0),
     ("float_condition_negative_zero.c", 0),
+    ("tentative_array_definition.c", 0),
     ("builtin_bswap_expect.c", 0),
     ("builtin_frame_address.c", 0),
     ("zero_length_array.c", 0),
